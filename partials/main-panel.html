@@ -1,0 +1,163 @@
+    <!-- PAINEL PRINCIPAL (Oculto antes do login) -->
+    <div id="main-panel" class="hidden flex flex-col flex-1">
+        <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md">
+            <div>
+                <h1 class="text-lg font-bold tracking-tight">FORMIGHIERI</h1>
+                <p class="text-xs text-slate-400" id="user-display">Usuário: -</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" id="btn-conversations-query"
+                    class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta</button>
+                <button type="button" id="btn-manage-users"
+                    class="hidden text-xs bg-amber-600 text-white hover:bg-amber-700 px-3 py-1.5 rounded-lg">Usuários</button>
+                <button type="button" id="btn-back-dashboard"
+                    class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Pedidos</button>
+                <button type="button" id="btn-logout"
+                    class="text-xs bg-slate-800 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg">Sair</button>
+            </div>
+        </header>
+
+        <!-- PAINEL DE PEDIDOS -->
+        <main id="dashboard-view" class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- 2. TELA / COLUNA DE PEDIDOS -->
+            <section
+                class="lg:col-span-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-140px)]">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <h2 class="font-bold text-sm text-slate-900">Pedidos de Venda</h2>
+                    <button type="button" onclick="openOrderModal()"
+                        class="bg-amber-600 text-white text-xs px-2.5 py-1 rounded-md font-semibold hover:bg-amber-700">+
+                        Novo Pedido</button>
+                </div>
+                <div class="overflow-y-auto flex-1 divide-y divide-slate-100" id="orders-list"></div>
+            </section>
+
+            <!-- 3. TELA DE DETALHES E CONVERSAS -->
+            <section class="lg:col-span-2 flex flex-col h-[calc(100vh-140px)] overflow-y-auto" id="detail-section">
+                <div id="empty-state"
+                    class="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center h-full text-slate-400">
+                    <p class="text-sm font-medium">Selecione um pedido para gerenciar as conversas técnicas.</p>
+                </div>
+
+                <div id="order-content" class="hidden flex flex-col gap-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span
+                                        class="text-xs font-bold bg-slate-900 text-amber-500 px-2 py-0.5 rounded font-mono"
+                                        id="det-code">#PV</span>
+                                    <h3 class="text-lg font-bold text-slate-900" id="det-client">Cliente</h3>
+                                </div>
+                                <p class="text-xs text-slate-400 mt-1" id="det-info">Consultor: - | Criado por: -</p>
+                            </div>
+                            <button type="button" onclick="openConvModal()"
+                                class="bg-slate-900 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">+
+                                Abrir Nova Conversa</button>
+                        </div>
+                    </div>
+
+                    <!-- Lista de Conversas do Pedido -->
+                    <div class="space-y-4" id="conversations-list"></div>
+                </div>
+            </section>
+        </main>
+
+        <!-- TELA ADMIN: EDITAR USUÁRIOS -->
+        <main id="users-admin-view" class="hidden flex-1 max-w-4xl w-full mx-auto p-4 md:p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                    <h2 class="font-bold text-sm text-slate-900">Gerenciar Usuários</h2>
+                    <p class="text-xs text-slate-400 mt-1">Defina o perfil (Admin, Projetista ou Consultor) e gerencie o acesso.</p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="text-left p-3 font-semibold">Nome</th>
+                                <th class="text-left p-3 font-semibold">E-mail</th>
+                                <th class="text-left p-3 font-semibold">Status</th>
+                                <th class="text-left p-3 font-semibold">Perfil atual</th>
+                                <th class="text-left p-3 font-semibold">Novo perfil</th>
+                                <th class="p-3 font-semibold">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-admin-list" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- TELA CONSULTA DE CONVERSAS -->
+        <main id="conversations-query-view" class="hidden flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-4">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-5">
+                <h2 class="font-bold text-sm text-slate-900">Consulta de Conversas</h2>
+                <p class="text-xs text-slate-400 mt-1">Filtre e visualize todas as conversas técnicas do sistema.</p>
+                <form id="conversations-query-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Pedido</label>
+                        <input type="text" id="filter-pedido" placeholder="Ex: PV-4050"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Cliente</label>
+                        <input type="text" id="filter-cliente" placeholder="Nome do cliente"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label>
+                        <select id="filter-status"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
+                            <option value="">Todos</option>
+                            <option value="Aberto">Aberto</option>
+                            <option value="Encerrado">Encerrado</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Consultor</label>
+                        <select id="filter-consultor"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Projetista</label>
+                        <select id="filter-projetista"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button type="submit"
+                            class="flex-1 bg-slate-900 text-white text-xs py-2 rounded-lg font-semibold hover:bg-slate-800">Buscar</button>
+                        <button type="button" id="btn-clear-filters"
+                            class="flex-1 bg-slate-100 text-slate-600 text-xs py-2 rounded-lg font-medium hover:bg-slate-200">Limpar</button>
+                    </div>
+                </form>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <span class="text-xs text-slate-500" id="query-results-count">0 conversas</span>
+                </div>
+                <div class="overflow-x-auto max-h-[calc(100vh-340px)] overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 text-xs uppercase text-slate-500 sticky top-0">
+                            <tr>
+                                <th class="text-left p-3 font-semibold">Pedido</th>
+                                <th class="text-left p-3 font-semibold">Cliente</th>
+                                <th class="text-left p-3 font-semibold">Consultor</th>
+                                <th class="text-left p-3 font-semibold">Projetista</th>
+                                <th class="text-left p-3 font-semibold">Status</th>
+                                <th class="text-left p-3 font-semibold">Solicitação</th>
+                                <th class="text-left p-3 font-semibold">Resposta</th>
+                                <th class="text-left p-3 font-semibold">Data de criação</th>
+                                <th class="text-left p-3 font-semibold">Data da resposta</th>
+                                <th class="text-left p-3 font-semibold w-24">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="conversations-query-list" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
