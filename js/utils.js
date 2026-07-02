@@ -24,8 +24,76 @@ function canEditConsultorResponse() {
     return currentUser?.role === 'Admin' || currentUser?.role === 'Consultor';
 }
 
+function canEditProjetistaResponse(conv) {
+    if (currentUser?.role === 'Admin') return true;
+    return currentUser?.role === 'Projetista' && conv?.designerId === currentUser.id;
+}
+
+function getOrderConsultantName(orderId) {
+    if (!orderId || typeof ordersCache === 'undefined') return null;
+    return ordersCache.find(o => o.id === orderId)?.consultantName || null;
+}
+
+function isOrderConsultorForRequest(conv) {
+    if (currentUser?.role === 'Admin') return true;
+    if (currentUser?.role !== 'Consultor') return false;
+    const consultantName = getOrderConsultantName(conv?.orderId);
+    return Boolean(consultantName && currentUser.name === consultantName);
+}
+
+function normalizeRequestStatus(conv) {
+    const status = conv?.status;
+    if (status === 'Aberto') {
+        return conv?.requestProfile === 'Consultor'
+            ? 'Aguardando Projetista'
+            : 'Aguardando Consultor';
+    }
+    return status;
+}
+
+function getInitialRequestStatus(requestProfile) {
+    return requestProfile === 'Consultor'
+        ? 'Aguardando Projetista'
+        : 'Aguardando Consultor';
+}
+
+function isRequestClosed(conv) {
+    return normalizeRequestStatus(conv) === 'Encerrado';
+}
+
+function isRequestOpen(conv) {
+    return !isRequestClosed(conv);
+}
+
+function isRequestWaitingConsultor(conv) {
+    return normalizeRequestStatus(conv) === 'Aguardando Consultor';
+}
+
+function isRequestWaitingProjetista(conv) {
+    return normalizeRequestStatus(conv) === 'Aguardando Projetista';
+}
+
+function getRequestStatusBadgeClass(status) {
+    const normalized = status === 'Aberto'
+        ? 'Aguardando Consultor'
+        : status;
+    if (normalized === 'Encerrado') return 'bg-slate-100 text-slate-600';
+    if (normalized === 'Aguardando Consultor') return 'bg-amber-100 text-amber-800';
+    if (normalized === 'Aguardando Projetista') return 'bg-sky-100 text-sky-800';
+    return 'bg-amber-100 text-amber-800';
+}
+
+function getRequestResponseSummary(conv) {
+    const parts = [];
+    if (conv?.commercialResponse) parts.push(`Consultor: ${conv.commercialResponse}`);
+    if (conv?.designerResponse) parts.push(`Projetista: ${conv.designerResponse}`);
+    return parts.length ? parts.join(' | ') : '-';
+}
+
 function getResponseDisplayDate(conv) {
-    return conv.responseAt || (conv.commercialResponse ? conv.updatedAt : null);
+    if (conv.responseAt) return conv.responseAt;
+    if (conv.commercialResponse || conv.designerResponse) return conv.updatedAt;
+    return null;
 }
 
 function formatDate(dateStr) {
@@ -39,6 +107,16 @@ function formatDate(dateStr) {
 function truncateText(text, max = 60) {
     if (!text) return '-';
     return text.length > max ? text.slice(0, max) + '…' : text;
+}
+
+function getApprovalStatusLabel(status) {
+    return status || 'Aguardando Aprovação';
+}
+
+function getApprovalStatusBadgeClass(status) {
+    if (status === 'Aprovado') return 'bg-emerald-100 text-emerald-800';
+    if (status === 'Em revisão') return 'bg-sky-100 text-sky-800';
+    return 'bg-amber-100 text-amber-800';
 }
 
 function isAdmin() {
@@ -61,7 +139,7 @@ function updateConvRequestLabel(profile) {
     if (profile === 'Consultor') {
         label.textContent = 'Solicitação do Consultor';
     } else if (profile === 'Projetista') {
-        label.textContent = 'Solicitação Técnica';
+        label.textContent = 'Solicitação do Projetista';
     } else {
         label.textContent = 'Solicitação';
     }

@@ -18,7 +18,9 @@ function initAppEvents() {
     bindAuthEvents();
     bindNavigationEvents();
     bindConversationsQueryEvents();
+    bindCommercialApprovalQueryEvents();
     bindOrderEvents();
     bindConversationEvents();
     bindCommercialApprovalEvents();
+    bindCommercialRevisionEvents();
 }

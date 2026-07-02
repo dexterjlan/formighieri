@@ -1,3 +1,5 @@
+let ordersCache = [];
+
 function initApp() {
     loadOrders();
     loadConsultants();
@@ -10,20 +12,40 @@ async function loadOrders() {
         .select('*')
         .order('createdAt', { ascending: false });
 
+    if (error || !orders) {
+        ordersCache = [];
+    } else {
+        ordersCache = orders;
+    }
+
+    renderOrdersList();
+}
+
+function renderOrdersList() {
     const list = document.getElementById("orders-list");
     list.innerHTML = "";
 
-    if (error || !orders) return;
+    const filter = document.getElementById("filter-order-client")?.value.trim().toLowerCase() || '';
+    const orders = ordersCache.filter(o =>
+        !filter || (o.clientName || '').toLowerCase().includes(filter)
+    );
+
+    if (orders.length === 0) {
+        list.innerHTML = `<p class="p-4 text-xs text-slate-400 text-center">${filter ? 'Nenhum pedido encontrado para este cliente.' : 'Nenhum pedido cadastrado.'}</p>`;
+        return;
+    }
 
     orders.forEach(o => {
         const isSelected = o.id === activeOrderId;
         const div = document.createElement("div");
-        div.className = `p-4 cursor-pointer hover:bg-slate-50 transition flex flex-col gap-1 ${isSelected ? 'bg-amber-50/60 border-l-4 border-amber-600' : ''}`;
+        div.className = `p-4 cursor-pointer hover:bg-slate-50 transition grid grid-cols-[72px_1fr] gap-2 items-start ${isSelected ? 'bg-amber-50/60 border-l-4 border-amber-600' : ''}`;
         div.onclick = () => selectOrder(o.id);
         div.innerHTML = `
             <div class="text-xs font-mono font-bold text-slate-400">${o.orderCode}</div>
-            <div class="text-sm font-bold text-slate-900">${o.clientName}</div>
-            <div class="text-xs text-slate-500">Consultor: ${o.consultantName}</div>
+            <div>
+                <div class="text-sm font-bold text-slate-900">${o.clientName}</div>
+                <div class="text-xs text-slate-500 mt-1">Consultor: ${o.consultantName}</div>
+            </div>
         `;
         list.appendChild(div);
     });
@@ -61,6 +83,66 @@ async function loadConsultants() {
     });
 }
 
+function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount) {
+    const approvalsCountEl = document.getElementById('order-tab-approvals-count');
+    const requestsCountEl = document.getElementById('order-tab-requests-count');
+
+    if (approvalsCountEl && pendingApprovalsCount !== undefined) {
+        approvalsCountEl.textContent = `(${pendingApprovalsCount})`;
+    }
+    if (requestsCountEl && openRequestsCount !== undefined) {
+        requestsCountEl.textContent = `(${openRequestsCount})`;
+    }
+}
+
+function countPendingCommercialApprovals(approvals) {
+    if (!approvals || approvals.length === 0) return 0;
+    return approvals
+        .map(a => normalizeCommercialApproval(a))
+        .filter(a => a.status !== 'Aprovado')
+        .length;
+}
+
+function countOpenOrderRequests(conversations) {
+    if (!conversations || conversations.length === 0) return 0;
+    return conversations.filter(c => isRequestOpen(c)).length;
+}
+
+function updateOrderDetailActionButtons() {
+    const approvalsPanel = document.getElementById('order-tab-panel-approvals');
+    const onApprovalsTab = approvalsPanel && !approvalsPanel.classList.contains('hidden');
+    const approvalBtn = document.getElementById('btn-commercial-approval');
+    const requestBtn = document.getElementById('btn-new-request');
+
+    if (approvalBtn) {
+        approvalBtn.classList.toggle('hidden', !onApprovalsTab || !canOpenCommercialApprovalModal());
+    }
+    if (requestBtn) {
+        requestBtn.classList.toggle('hidden', onApprovalsTab);
+    }
+}
+
+function switchOrderDetailTab(tab) {
+    const isApprovals = tab === 'approvals';
+    const approvalsTab = document.getElementById('order-tab-approvals');
+    const requestsTab = document.getElementById('order-tab-requests');
+    const approvalsPanel = document.getElementById('order-tab-panel-approvals');
+    const requestsPanel = document.getElementById('order-tab-panel-requests');
+
+    if (!approvalsTab || !requestsTab || !approvalsPanel || !requestsPanel) return;
+
+    approvalsTab.className = isApprovals
+        ? 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-emerald-600 text-emerald-800 bg-white'
+        : 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800';
+    requestsTab.className = !isApprovals
+        ? 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-amber-600 text-amber-800 bg-white'
+        : 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800';
+
+    approvalsPanel.classList.toggle('hidden', !isApprovals);
+    requestsPanel.classList.toggle('hidden', isApprovals);
+    updateOrderDetailActionButtons();
+}
+
 async function openOrderModal() {
     await loadConsultants();
     toggleModal('order-modal', true);
@@ -88,10 +170,19 @@ async function selectOrder(id) {
     loadOrders();
     loadConversations(id);
     loadCommercialApprovals(id);
-    updateCommercialApprovalButtonVisibility();
+    switchOrderDetailTab('approvals');
 }
 
 function bindOrderEvents() {
+    document.getElementById('order-tab-approvals').addEventListener('click', function () {
+        switchOrderDetailTab('approvals');
+    });
+    document.getElementById('order-tab-requests').addEventListener('click', function () {
+        switchOrderDetailTab('requests');
+    });
+
+    document.getElementById('filter-order-client').addEventListener('input', renderOrdersList);
+
     document.getElementById("ord-code").addEventListener("input", function () {
         this.value = this.value.replace(/\D/g, '');
     });

@@ -79,7 +79,7 @@ async function searchConversations() {
         rows = rows.filter(r => (r.order.clientName || '').toLowerCase().includes(cliente));
     }
     if (status) {
-        rows = rows.filter(r => r.status === status);
+        rows = rows.filter(r => normalizeRequestStatus(r) === status);
     }
     if (consultor) {
         rows = rows.filter(r => r.order.consultantName === consultor);
@@ -97,12 +97,13 @@ async function searchConversations() {
     }
 
     rows.forEach(r => {
-        const isOpen = r.status === 'Aberto';
+        const status = normalizeRequestStatus(r);
         const canEdit = canEditConversation(r);
         const rowBg = getQueryRowBgColor(r);
         const cellStyle = `background-color: ${rowBg};`;
         const profile = formatRequestProfile(r.requestProfile);
         const profileClass = getRequestProfileBadgeClass(r.requestProfile);
+        const statusClass = getRequestStatusBadgeClass(status);
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td class="p-3 font-mono text-xs font-bold text-slate-600" style="${cellStyle}">${r.order.orderCode || '-'}</td>
@@ -110,13 +111,13 @@ async function searchConversations() {
             <td class="p-3 text-slate-500" style="${cellStyle}">${r.order.consultantName || '-'}</td>
             <td class="p-3 text-slate-700" style="${cellStyle}">${r.projetistaName}</td>
             <td class="p-3" style="${cellStyle}">
-                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${isOpen ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}">${r.status}</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
             </td>
             <td class="p-3" style="${cellStyle}">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${profileClass}">${profile}</span>
             </td>
             <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${r.designerRequest || ''}">${truncateText(r.designerRequest)}</td>
-            <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${r.commercialResponse || ''}">${truncateText(r.commercialResponse)}</td>
+            <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${getRequestResponseSummary(r)}">${truncateText(getRequestResponseSummary(r))}</td>
             <td class="p-3 text-xs text-slate-400 whitespace-nowrap" style="${cellStyle}">${formatDate(r.createdAt)}</td>
             <td class="p-3 text-xs text-slate-500 whitespace-nowrap" style="${cellStyle}">${formatDate(getResponseDisplayDate(r))}</td>
             <td class="p-3 whitespace-nowrap" style="${cellStyle}">
@@ -129,7 +130,7 @@ async function searchConversations() {
 }
 
 function getQueryRowBgColor(conv) {
-    if (conv.status === 'Encerrado') {
+    if (isRequestClosed(conv)) {
         return '#bbf7d0';
     }
 

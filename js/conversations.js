@@ -30,11 +30,33 @@ async function loadProjetistas() {
     });
 }
 
-function setConvResponseFieldVisible(show) {
-    document.getElementById("conv-response-wrap").classList.toggle("hidden", !show);
-    if (!show) {
-        document.getElementById("conv-response").value = "";
-        document.getElementById("conv-response-date-display").textContent = "—";
+function resetConvResponseFields() {
+    document.getElementById('conv-response-wrap').classList.add('hidden');
+    document.getElementById('conv-designer-response-wrap').classList.add('hidden');
+    document.getElementById('conv-response').value = '';
+    document.getElementById('conv-designer-response').value = '';
+    document.getElementById('conv-response-date-display').textContent = '—';
+    document.getElementById('conv-designer-response-date-display').textContent = '—';
+}
+
+function setupConvResponseFields(conv) {
+    resetConvResponseFields();
+    if (!conv) return;
+
+    if (isRequestWaitingConsultor(conv) && canRespondAsConsultor(conv)) {
+        document.getElementById('conv-response-wrap').classList.remove('hidden');
+        document.getElementById('conv-response').value = conv.commercialResponse || '';
+        const responseDate = conv.commercialResponse ? getResponseDisplayDate(conv) : null;
+        document.getElementById('conv-response-date-display').textContent =
+            responseDate ? formatDate(responseDate) : '—';
+    }
+
+    if (isRequestWaitingProjetista(conv) && canEditProjetistaResponse(conv)) {
+        document.getElementById('conv-designer-response-wrap').classList.remove('hidden');
+        document.getElementById('conv-designer-response').value = conv.designerResponse || '';
+        const responseDate = conv.designerResponse ? getResponseDisplayDate(conv) : null;
+        document.getElementById('conv-designer-response-date-display').textContent =
+            responseDate ? formatDate(responseDate) : '—';
     }
 }
 
@@ -43,7 +65,7 @@ async function openConvModal() {
     document.getElementById("conv-modal-title").textContent = "Nova Requisição Técnica";
     document.getElementById("conv-form-submit").textContent = "Criar Requisição";
     document.getElementById("conv-form").reset();
-    setConvResponseFieldVisible(false);
+    resetConvResponseFields();
     setupConvProfileFields(false);
     await loadProjetistas();
     toggleModal('conv-modal', true);
@@ -55,10 +77,28 @@ function closeConvModal() {
 }
 
 function canEditConversation(conv) {
-    if (currentUser.role === 'Admin' || currentUser.role === 'Consultor') return true;
-    if (conv.status !== 'Aberto') return false;
-    if (currentUser.role === 'Projetista' && conv.designerId === currentUser.id) return true;
+    if (isRequestClosed(conv)) return false;
+    if (currentUser.role === 'Admin') return true;
+
+    const requestProfile = conv.requestProfile || 'Projetista';
+
+    if (currentUser.role === 'Projetista') {
+        return requestProfile === 'Projetista' && conv.designerId === currentUser.id;
+    }
+
+    if (currentUser.role === 'Consultor') {
+        return requestProfile === 'Consultor' && isOrderConsultorForRequest(conv);
+    }
+
     return false;
+}
+
+function canRespondAsConsultor(conv) {
+    return isRequestWaitingConsultor(conv) && isOrderConsultorForRequest(conv);
+}
+
+function canRespondAsProjetista(conv) {
+    return isRequestWaitingProjetista(conv) && canEditProjetistaResponse(conv);
 }
 
 async function editConversation(id) {
@@ -68,16 +108,75 @@ async function editConversation(id) {
     editingConversationId = id;
     document.getElementById("conv-modal-title").textContent = "Editar Requisição";
     document.getElementById("conv-form-submit").textContent = "Salvar Alterações";
-    setConvResponseFieldVisible(canEditConsultorResponse());
     setupConvProfileFields(true, conv);
+    setupConvResponseFields(conv);
     await loadProjetistas();
     document.getElementById("conv-designer").value = String(conv.designerId);
     document.getElementById("conv-request").value = conv.designerRequest;
-    document.getElementById("conv-response").value = conv.commercialResponse || "";
-    const responseDate = getResponseDisplayDate(conv);
-    document.getElementById("conv-response-date-display").textContent =
-        responseDate ? formatDate(responseDate) : "—";
     toggleModal('conv-modal', true);
+}
+
+function buildRequestResponseSection(conv) {
+    const status = normalizeRequestStatus(conv);
+
+    if (status === 'Encerrado') {
+        const sections = [];
+        if (conv.commercialResponse) {
+            sections.push(`
+                <div class="bg-emerald-50 p-3 rounded-lg text-xs">
+                    <p class="font-bold text-emerald-600 uppercase text-[9px] mb-1">Resposta do Consultor:</p>
+                    <p class="text-slate-800 font-medium">${conv.commercialResponse}</p>
+                </div>
+            `);
+        }
+        if (conv.designerResponse) {
+            sections.push(`
+                <div class="bg-sky-50 p-3 rounded-lg text-xs">
+                    <p class="font-bold text-sky-600 uppercase text-[9px] mb-1">Resposta do Projetista:</p>
+                    <p class="text-slate-800 font-medium">${conv.designerResponse}</p>
+                </div>
+            `);
+        }
+        const responseDate = getResponseDisplayDate(conv);
+        if (responseDate) {
+            sections.push(`<p class="text-[10px] text-slate-500">Respondido em: ${formatDate(responseDate)}</p>`);
+        }
+        return sections.join('') || '<p class="text-xs text-slate-400 italic">Requisição encerrada.</p>';
+    }
+
+    if (canRespondAsConsultor(conv)) {
+        return `
+            <div class="space-y-2">
+                <textarea id="reply-consultor-${conv.id}" rows="2"
+                    class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                    placeholder="Digite a resposta do consultor..."></textarea>
+                <button type="button" onclick="replyConsultorConversation('${conv.id}')"
+                    class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-amber-700">
+                    Responder e Encerrar
+                </button>
+            </div>
+        `;
+    }
+
+    if (canRespondAsProjetista(conv)) {
+        return `
+            <div class="space-y-2">
+                <textarea id="reply-projetista-${conv.id}" rows="2"
+                    class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-sky-600"
+                    placeholder="Digite a resposta do projetista..."></textarea>
+                <button type="button" onclick="replyProjetistaConversation('${conv.id}')"
+                    class="bg-sky-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800">
+                    Responder e Encerrar
+                </button>
+            </div>
+        `;
+    }
+
+    if (status === 'Aguardando Consultor') {
+        return '<p class="text-xs text-slate-400 italic">Aguardando retorno do consultor...</p>';
+    }
+
+    return '<p class="text-xs text-slate-400 italic">Aguardando retorno do projetista...</p>';
 }
 
 window.openConvModal = openConvModal;
@@ -85,21 +184,32 @@ window.closeConvModal = closeConvModal;
 window.editConversation = editConversation;
 
 async function loadConversations(orderId) {
-    const { data: convs, error } = await supabaseClient
-        .from('OrderRequest')
-        .select('*')
-        .eq('orderId', orderId)
-        .order('createdAt', { ascending: true });
+    const [{ data: convs, error }, { data: orderInfo }] = await Promise.all([
+        supabaseClient
+            .from('OrderRequest')
+            .select('*')
+            .eq('orderId', orderId)
+            .order('createdAt', { ascending: true }),
+        supabaseClient
+            .from('salesOrders')
+            .select('consultantName')
+            .eq('id', orderId)
+            .single()
+    ]);
+
+    const consultantName = orderInfo?.consultantName || getOrderConsultantName(orderId) || '-';
 
     const list = document.getElementById("conversations-list");
 
     if (error || !convs || convs.length === 0) {
         conversationsCache = [];
         list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-slate-200 shadow-sm">Nenhuma requisição técnica para este pedido.</p>';
+        updateOrderTabCounts(undefined, 0);
         return;
     }
 
     conversationsCache = convs;
+    updateOrderTabCounts(undefined, countOpenOrderRequests(convs));
 
     const designerIds = [...new Set(convs.map(c => c.designerId).filter(Boolean))];
     let projetistaNames = {};
@@ -118,71 +228,44 @@ async function loadConversations(orderId) {
     list.innerHTML = "";
 
     convs.forEach(c => {
-        const isOpen = c.status === 'Aberto';
+        const status = normalizeRequestStatus(c);
         const canEdit = canEditConversation(c);
-        const profile = formatRequestProfile(c.requestProfile);
-        const profileClass = getRequestProfileBadgeClass(c.requestProfile);
+        const statusClass = getRequestStatusBadgeClass(status);
         const div = document.createElement("div");
         div.className = "bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3";
 
-        let responseSection;
-        const responseDate = getResponseDisplayDate(c);
-        if (c.commercialResponse) {
-            responseSection = `
-                <div class="bg-emerald-50 p-3 rounded-lg text-xs">
-                    <p class="font-bold text-emerald-600 uppercase text-[9px] mb-1">Resposta do Consultor:</p>
-                    <p class="text-slate-800 font-medium">${c.commercialResponse}</p>
-                    <p class="text-[10px] text-emerald-700 mt-2">Respondido em: ${formatDate(responseDate)}</p>
-                </div>
-            `;
-        } else if (isOpen && currentUser.role === 'Consultor') {
-            responseSection = `
-                <div class="space-y-2">
-                    <textarea id="reply-${c.id}" rows="2"
-                        class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                        placeholder="Digite a resposta do consultor..."></textarea>
-                    <button type="button" onclick="replyConversation('${c.id}')"
-                        class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-amber-700">
-                        Responder e Encerrar
-                    </button>
-                </div>
-            `;
-        } else {
-            responseSection = '<p class="text-xs text-slate-400 italic">Aguardando retorno do consultor...</p>';
-        }
-
         const requestTitle = c.requestProfile === 'Consultor'
             ? 'Solicitação do Consultor'
-            : 'Solicitação Técnica';
+            : 'Solicitação do Projetista';
 
         div.innerHTML = `
             <div class="flex justify-between items-center border-b border-slate-100 pb-2">
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-col gap-0.5">
                     <div class="text-xs font-bold text-slate-700">👤 Projetista: ${projetistaNames[c.designerId] || '-'}</div>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase w-fit ${profileClass}">Perfil: ${profile}</span>
+                    <div class="text-xs font-bold text-slate-600">📋 Consultor: ${consultantName}</div>
                 </div>
                 <div class="flex items-center gap-2">
                     ${canEdit ? `<button type="button" onclick="editConversation(${c.id})"
                         class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium">Editar</button>` : ''}
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${isOpen ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}">${c.status}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
                 </div>
             </div>
             <div class="bg-slate-50 p-3 rounded-lg text-xs">
                 <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">${requestTitle}:</p>
                 <p class="text-slate-800 font-medium">${c.designerRequest}</p>
             </div>
-            ${responseSection}
+            ${buildRequestResponseSection(c)}
         `;
         list.appendChild(div);
     });
 }
 
-async function replyConversation(id) {
-    const input = document.getElementById(`reply-${id}`);
+async function replyConsultorConversation(id) {
+    const input = document.getElementById(`reply-consultor-${id}`);
     if (!input || !input.value.trim()) return;
 
     const now = new Date().toISOString();
-    await supabaseClient
+    const { error } = await supabaseClient
         .from('OrderRequest')
         .update({
             commercialResponse: input.value.trim(),
@@ -193,9 +276,56 @@ async function replyConversation(id) {
         })
         .eq('id', id);
 
+    if (error) {
+        alert('Erro ao responder requisição: ' + error.message);
+        return;
+    }
+
     loadConversations(activeOrderId);
 }
-window.replyConversation = replyConversation;
+
+async function replyProjetistaConversation(id) {
+    const input = document.getElementById(`reply-projetista-${id}`);
+    if (!input || !input.value.trim()) return;
+
+    const now = new Date().toISOString();
+    let payload = {
+        designerResponse: input.value.trim(),
+        responseAt: now,
+        status: 'Encerrado',
+        updatedAt: now,
+        updatedById: currentUser.id
+    };
+
+    let { error } = await supabaseClient
+        .from('OrderRequest')
+        .update(payload)
+        .eq('id', id);
+
+    if (error && error.message?.includes('designerResponse')) {
+        ({ error } = await supabaseClient
+            .from('OrderRequest')
+            .update({
+                commercialResponse: input.value.trim(),
+                responseAt: now,
+                status: 'Encerrado',
+                updatedAt: now,
+                updatedById: currentUser.id
+            })
+            .eq('id', id));
+    }
+
+    if (error) {
+        alert('Erro ao responder requisição: ' + error.message);
+        return;
+    }
+
+    loadConversations(activeOrderId);
+}
+
+window.replyConsultorConversation = replyConsultorConversation;
+window.replyProjetistaConversation = replyProjetistaConversation;
+window.replyConversation = replyConsultorConversation;
 
 function bindConversationEvents() {
     document.getElementById("conv-form").addEventListener("submit", async function (e) {
@@ -210,6 +340,7 @@ function bindConversationEvents() {
         }
 
         if (editingConversationId) {
+            const existing = conversationsCache.find(c => c.id === editingConversationId);
             const updatePayload = {
                 designerId,
                 designerRequest,
@@ -217,22 +348,27 @@ function bindConversationEvents() {
                 updatedById: currentUser.id
             };
 
-            if (canEditConsultorResponse()) {
+            if (existing && isRequestWaitingConsultor(existing) && canRespondAsConsultor(existing)) {
                 const commercialResponse = document.getElementById("conv-response").value.trim();
                 updatePayload.commercialResponse = commercialResponse || null;
                 if (commercialResponse) {
-                    const existing = conversationsCache.find(c => c.id === editingConversationId);
-                    if (existing?.responseAt) {
-                        updatePayload.responseAt = existing.responseAt;
-                    } else if (existing?.commercialResponse?.trim()) {
-                        updatePayload.responseAt = getResponseDisplayDate(existing) || new Date().toISOString();
-                    } else {
-                        updatePayload.responseAt = new Date().toISOString();
-                    }
+                    updatePayload.responseAt = existing.responseAt || new Date().toISOString();
                     updatePayload.status = 'Encerrado';
                 } else {
                     updatePayload.responseAt = null;
-                    updatePayload.status = 'Aberto';
+                    updatePayload.status = getInitialRequestStatus(existing.requestProfile);
+                }
+            }
+
+            if (existing && isRequestWaitingProjetista(existing) && canEditProjetistaResponse(existing)) {
+                const designerResponse = document.getElementById("conv-designer-response").value.trim();
+                updatePayload.designerResponse = designerResponse || null;
+                if (designerResponse) {
+                    updatePayload.responseAt = existing.responseAt || new Date().toISOString();
+                    updatePayload.status = 'Encerrado';
+                } else {
+                    updatePayload.responseAt = null;
+                    updatePayload.status = getInitialRequestStatus(existing.requestProfile);
                 }
             }
 
@@ -258,7 +394,7 @@ function bindConversationEvents() {
                 designerId,
                 designerRequest,
                 requestProfile,
-                status: 'Aberto',
+                status: getInitialRequestStatus(requestProfile),
                 createdById: currentUser.id,
                 updatedById: currentUser.id
             };

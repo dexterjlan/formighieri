@@ -7,7 +7,9 @@
             </div>
             <div class="flex items-center gap-2">
                 <button type="button" id="btn-conversations-query"
-                    class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta</button>
+                    class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Requisições</button>
+                <button type="button" id="btn-approvals-query"
+                    class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Aprovações</button>
                 <button type="button" id="btn-manage-users"
                     class="hidden text-xs bg-amber-600 text-white hover:bg-amber-700 px-3 py-1.5 rounded-lg">Usuários</button>
                 <button type="button" id="btn-back-dashboard"
@@ -23,11 +25,19 @@
             <!-- 2. TELA / COLUNA DE PEDIDOS -->
             <section
                 class="lg:col-span-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-140px)]">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <h2 class="font-bold text-sm text-slate-900">Pedidos de Venda</h2>
-                    <button type="button" onclick="openOrderModal()"
-                        class="bg-amber-600 text-white text-xs px-2.5 py-1 rounded-md font-semibold hover:bg-amber-700">+
-                        Novo Pedido</button>
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <h2 class="font-bold text-sm text-slate-900">Pedidos de Venda</h2>
+                        <button type="button" onclick="openOrderModal()"
+                            class="bg-amber-600 text-white text-xs px-2.5 py-1 rounded-md font-semibold hover:bg-amber-700">+
+                            Novo Pedido</button>
+                    </div>
+                    <input type="text" id="filter-order-client" placeholder="Filtrar por cliente..."
+                        class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                </div>
+                <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 text-[10px] uppercase font-semibold text-slate-500 grid grid-cols-[72px_1fr] gap-2">
+                    <span>Pedido</span>
+                    <span>Cliente</span>
                 </div>
                 <div class="overflow-y-auto flex-1 divide-y divide-slate-100" id="orders-list"></div>
             </section>
@@ -54,18 +64,31 @@
                             <div class="flex flex-wrap gap-2 justify-end">
                             <button type="button" id="btn-commercial-approval" onclick="openCommercialApprovalModal()"
                                 class="hidden bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-800">Solicitar Aprovação Comercial</button>
-                            <button type="button" onclick="openConvModal()"
-                                class="bg-slate-900 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">+
+                            <button type="button" id="btn-new-request" onclick="openConvModal()"
+                                class="hidden bg-slate-900 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">+
                                 Abrir Nova Requisição</button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Lista de Aprovações Comerciais -->
-                    <div class="space-y-4" id="commercial-approvals-list"></div>
-
-                    <!-- Lista de Requisições do Pedido -->
-                    <div class="space-y-4" id="conversations-list"></div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="flex border-b border-slate-200 bg-slate-50/50">
+                            <button type="button" id="order-tab-approvals"
+                                class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-emerald-600 text-emerald-800 bg-white">
+                                Aprovações Comerciais <span id="order-tab-approvals-count" class="font-normal opacity-80">(0)</span>
+                            </button>
+                            <button type="button" id="order-tab-requests"
+                                class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
+                                Requisições <span id="order-tab-requests-count" class="font-normal opacity-80">(0)</span>
+                            </button>
+                        </div>
+                        <div id="order-tab-panel-approvals" class="p-4">
+                            <div class="space-y-4" id="commercial-approvals-list"></div>
+                        </div>
+                        <div id="order-tab-panel-requests" class="hidden p-4">
+                            <div class="space-y-4" id="conversations-list"></div>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
@@ -116,7 +139,8 @@
                         <select id="filter-status"
                             class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
                             <option value="">Todos</option>
-                            <option value="Aberto">Aberto</option>
+                            <option value="Aguardando Consultor">Aguardando Consultor</option>
+                            <option value="Aguardando Projetista">Aguardando Projetista</option>
                             <option value="Encerrado">Encerrado</option>
                         </select>
                     </div>
@@ -164,6 +188,73 @@
                             </tr>
                         </thead>
                         <tbody id="conversations-query-list" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- TELA CONSULTA DE APROVAÇÕES -->
+        <main id="approvals-query-view" class="hidden flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-4">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-5">
+                <h2 class="font-bold text-sm text-slate-900">Consulta de Aprovações</h2>
+                <p class="text-xs text-slate-400 mt-1">Filtre e visualize as solicitações de aprovação comercial.</p>
+                <form id="approvals-query-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Pedido</label>
+                        <input type="text" id="approval-filter-pedido" placeholder="Ex: 4050"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Consultor</label>
+                        <select id="approval-filter-consultor"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-600">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Projetista</label>
+                        <select id="approval-filter-projetista"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-600">
+                            <option value="">Todos</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label>
+                        <select id="approval-filter-status"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-600">
+                            <option value="">Todos</option>
+                            <option value="Aguardando Aprovação">Aguardando Aprovação</option>
+                            <option value="Em revisão">Em revisão</option>
+                            <option value="Aprovado">Aprovado</option>
+                        </select>
+                    </div>
+                    <div class="flex items-end gap-2 md:col-span-2 lg:col-span-2">
+                        <button type="submit"
+                            class="flex-1 bg-emerald-700 text-white text-xs py-2 rounded-lg font-semibold hover:bg-emerald-800">Buscar</button>
+                        <button type="button" id="btn-clear-approval-filters"
+                            class="flex-1 bg-slate-100 text-slate-600 text-xs py-2 rounded-lg font-medium hover:bg-slate-200">Limpar</button>
+                    </div>
+                </form>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <span class="text-xs text-slate-500" id="approval-query-results-count">0 aprovações</span>
+                </div>
+                <div class="overflow-x-auto max-h-[calc(100vh-340px)] overflow-y-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-50 text-xs uppercase text-slate-500 sticky top-0">
+                            <tr>
+                                <th class="text-left p-3 font-semibold">Pedido</th>
+                                <th class="text-left p-3 font-semibold">Cliente</th>
+                                <th class="text-left p-3 font-semibold">Consultor</th>
+                                <th class="text-left p-3 font-semibold">Projetista</th>
+                                <th class="text-left p-3 font-semibold">Projeto</th>
+                                <th class="text-left p-3 font-semibold">Status</th>
+                                <th class="text-left p-3 font-semibold">Data de aprovação</th>
+                                <th class="text-left p-3 font-semibold w-28">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="approvals-query-list" class="divide-y divide-slate-100"></tbody>
                     </table>
                 </div>
             </div>

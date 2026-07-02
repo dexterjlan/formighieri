@@ -15,6 +15,8 @@ const SCRIPTS = [
     'js/orders.js',
     'js/conversations.js',
     'js/commercial-approval.js',
+    'js/commercial-revision.js',
+    'js/commercial-approval-query.js',
     'js/main.js'
 ];
 
