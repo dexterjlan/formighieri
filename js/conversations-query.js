@@ -100,7 +100,7 @@ async function searchConversations() {
         const isOpen = r.status === 'Aberto';
         const canEdit = canEditConversation(r);
         const tr = document.createElement("tr");
-        tr.className = "hover:bg-slate-50/80";
+        tr.className = getQueryRowBgClass(r);
         tr.innerHTML = `
             <td class="p-3 font-mono text-xs font-bold text-slate-600">${r.order.orderCode || '-'}</td>
             <td class="p-3 text-slate-800">${r.order.clientName || '-'}</td>
@@ -120,6 +120,22 @@ async function searchConversations() {
         `;
         tbody.appendChild(tr);
     });
+}
+
+function getQueryRowBgClass(conv) {
+    if (conv.status === 'Encerrado') {
+        return 'bg-emerald-50 hover:bg-emerald-100';
+    }
+
+    const created = new Date(conv.createdAt);
+    if (!Number.isNaN(created.getTime())) {
+        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysOpen > 5) {
+            return 'bg-red-50 hover:bg-red-100';
+        }
+    }
+
+    return 'bg-amber-50 hover:bg-amber-100';
 }
 
 function bindConversationsQueryEvents() {
