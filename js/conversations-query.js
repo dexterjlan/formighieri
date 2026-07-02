@@ -99,43 +99,44 @@ async function searchConversations() {
     rows.forEach(r => {
         const isOpen = r.status === 'Aberto';
         const canEdit = canEditConversation(r);
+        const rowBg = getQueryRowBgColor(r);
+        const cellStyle = `background-color: ${rowBg};`;
         const tr = document.createElement("tr");
-        tr.className = getQueryRowBgClass(r);
         tr.innerHTML = `
-            <td class="p-3 font-mono text-xs font-bold text-slate-600">${r.order.orderCode || '-'}</td>
-            <td class="p-3 text-slate-800">${r.order.clientName || '-'}</td>
-            <td class="p-3 text-slate-500">${r.order.consultantName || '-'}</td>
-            <td class="p-3 text-slate-700">${r.projetistaName}</td>
-            <td class="p-3">
+            <td class="p-3 font-mono text-xs font-bold text-slate-600" style="${cellStyle}">${r.order.orderCode || '-'}</td>
+            <td class="p-3 text-slate-800" style="${cellStyle}">${r.order.clientName || '-'}</td>
+            <td class="p-3 text-slate-500" style="${cellStyle}">${r.order.consultantName || '-'}</td>
+            <td class="p-3 text-slate-700" style="${cellStyle}">${r.projetistaName}</td>
+            <td class="p-3" style="${cellStyle}">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${isOpen ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}">${r.status}</span>
             </td>
-            <td class="p-3 text-xs text-slate-600 max-w-[180px]" title="${r.designerRequest || ''}">${truncateText(r.designerRequest)}</td>
-            <td class="p-3 text-xs text-slate-600 max-w-[180px]" title="${r.commercialResponse || ''}">${truncateText(r.commercialResponse)}</td>
-            <td class="p-3 text-xs text-slate-400 whitespace-nowrap">${formatDate(r.createdAt)}</td>
-            <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${formatDate(getResponseDisplayDate(r))}</td>
-            <td class="p-3 whitespace-nowrap">
+            <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${r.designerRequest || ''}">${truncateText(r.designerRequest)}</td>
+            <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${r.commercialResponse || ''}">${truncateText(r.commercialResponse)}</td>
+            <td class="p-3 text-xs text-slate-400 whitespace-nowrap" style="${cellStyle}">${formatDate(r.createdAt)}</td>
+            <td class="p-3 text-xs text-slate-500 whitespace-nowrap" style="${cellStyle}">${formatDate(getResponseDisplayDate(r))}</td>
+            <td class="p-3 whitespace-nowrap" style="${cellStyle}">
                 ${canEdit ? `<button type="button" onclick="editConversation(${r.id})"
-                    class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium">Editar</button>` : '<span class="text-xs text-slate-300">—</span>'}
+                    class="text-xs bg-white/80 text-slate-600 hover:bg-white px-2.5 py-1 rounded-lg font-medium">Editar</button>` : '<span class="text-xs text-slate-300">—</span>'}
             </td>
         `;
         tbody.appendChild(tr);
     });
 }
 
-function getQueryRowBgClass(conv) {
+function getQueryRowBgColor(conv) {
     if (conv.status === 'Encerrado') {
-        return 'bg-emerald-50 hover:bg-emerald-100';
+        return '#bbf7d0';
     }
 
     const created = new Date(conv.createdAt);
     if (!Number.isNaN(created.getTime())) {
         const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
         if (daysOpen > 5) {
-            return 'bg-red-50 hover:bg-red-100';
+            return '#fecaca';
         }
     }
 
-    return 'bg-amber-50 hover:bg-amber-100';
+    return '#fde68a';
 }
 
 function bindConversationsQueryEvents() {
