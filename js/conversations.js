@@ -40,10 +40,11 @@ function setConvResponseFieldVisible(show) {
 
 async function openConvModal() {
     editingConversationId = null;
-    document.getElementById("conv-modal-title").textContent = "Nova Conversa / Solicitação Técnica";
-    document.getElementById("conv-form-submit").textContent = "Iniciar Conversa";
+    document.getElementById("conv-modal-title").textContent = "Nova Requisição Técnica";
+    document.getElementById("conv-form-submit").textContent = "Criar Requisição";
     document.getElementById("conv-form").reset();
     setConvResponseFieldVisible(false);
+    setupConvProfileFields(false);
     await loadProjetistas();
     toggleModal('conv-modal', true);
 }
@@ -65,9 +66,10 @@ async function editConversation(id) {
     if (!conv || !canEditConversation(conv)) return;
 
     editingConversationId = id;
-    document.getElementById("conv-modal-title").textContent = "Editar Conversa";
+    document.getElementById("conv-modal-title").textContent = "Editar Requisição";
     document.getElementById("conv-form-submit").textContent = "Salvar Alterações";
     setConvResponseFieldVisible(canEditConsultorResponse());
+    setupConvProfileFields(true, conv);
     await loadProjetistas();
     document.getElementById("conv-designer").value = String(conv.designerId);
     document.getElementById("conv-request").value = conv.designerRequest;
@@ -84,7 +86,7 @@ window.editConversation = editConversation;
 
 async function loadConversations(orderId) {
     const { data: convs, error } = await supabaseClient
-        .from('orderConversations')
+        .from('OrderRequest')
         .select('*')
         .eq('orderId', orderId)
         .order('createdAt', { ascending: true });
@@ -93,7 +95,7 @@ async function loadConversations(orderId) {
 
     if (error || !convs || convs.length === 0) {
         conversationsCache = [];
-        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-slate-200 shadow-sm">Nenhuma conversa técnica aberta para este pedido.</p>';
+        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-slate-200 shadow-sm">Nenhuma requisição técnica para este pedido.</p>';
         return;
     }
 
@@ -118,6 +120,8 @@ async function loadConversations(orderId) {
     convs.forEach(c => {
         const isOpen = c.status === 'Aberto';
         const canEdit = canEditConversation(c);
+        const profile = formatRequestProfile(c.requestProfile);
+        const profileClass = getRequestProfileBadgeClass(c.requestProfile);
         const div = document.createElement("div");
         div.className = "bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3";
 
@@ -147,9 +151,16 @@ async function loadConversations(orderId) {
             responseSection = '<p class="text-xs text-slate-400 italic">Aguardando retorno do consultor...</p>';
         }
 
+        const requestTitle = c.requestProfile === 'Consultor'
+            ? 'Solicitação do Consultor'
+            : 'Solicitação Técnica';
+
         div.innerHTML = `
             <div class="flex justify-between items-center border-b border-slate-100 pb-2">
-                <div class="text-xs font-bold text-slate-700">👤 Projetista: ${projetistaNames[c.designerId] || '-'}</div>
+                <div class="flex flex-col gap-1">
+                    <div class="text-xs font-bold text-slate-700">👤 Projetista: ${projetistaNames[c.designerId] || '-'}</div>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase w-fit ${profileClass}">Perfil: ${profile}</span>
+                </div>
                 <div class="flex items-center gap-2">
                     ${canEdit ? `<button type="button" onclick="editConversation(${c.id})"
                         class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium">Editar</button>` : ''}
@@ -157,7 +168,7 @@ async function loadConversations(orderId) {
                 </div>
             </div>
             <div class="bg-slate-50 p-3 rounded-lg text-xs">
-                <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">Solicitação Técnica:</p>
+                <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">${requestTitle}:</p>
                 <p class="text-slate-800 font-medium">${c.designerRequest}</p>
             </div>
             ${responseSection}
@@ -172,7 +183,7 @@ async function replyConversation(id) {
 
     const now = new Date().toISOString();
     await supabaseClient
-        .from('orderConversations')
+        .from('OrderRequest')
         .update({
             commercialResponse: input.value.trim(),
             responseAt: now,
@@ -194,7 +205,7 @@ function bindConversationEvents() {
         const designerRequest = document.getElementById("conv-request").value.trim();
 
         if (!designerRequest) {
-            alert("Informe a solicitação técnica.");
+            alert("Informe a solicitação.");
             return;
         }
 
@@ -226,27 +237,35 @@ function bindConversationEvents() {
             }
 
             const { error } = await supabaseClient
-                .from('orderConversations')
+                .from('OrderRequest')
                 .update(updatePayload)
                 .eq('id', editingConversationId);
 
             if (error) {
-                alert("Erro ao salvar conversa: " + error.message);
+                alert("Erro ao salvar requisição: " + error.message);
                 return;
             }
         } else {
+            const requestProfile = getRequestProfileForCreate();
+            if (!requestProfile) {
+                alert("Selecione o perfil da requisição (Projetista ou Consultor).");
+                document.getElementById("conv-profile")?.focus();
+                return;
+            }
+
             const payload = {
                 orderId: activeOrderId,
                 designerId,
                 designerRequest,
+                requestProfile,
                 status: 'Aberto',
                 createdById: currentUser.id,
                 updatedById: currentUser.id
             };
 
-            const { error } = await supabaseClient.from('orderConversations').insert([payload]);
+            const { error } = await supabaseClient.from('OrderRequest').insert([payload]);
             if (error) {
-                alert("Erro ao criar conversa: " + error.message);
+                alert("Erro ao criar requisição: " + error.message);
                 return;
             }
         }

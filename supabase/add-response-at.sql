@@ -1,3 +1,3 @@
 -- Execute uma vez no Supabase SQL Editor
-ALTER TABLE "orderConversations"
+ALTER TABLE "OrderRequest"
 ADD COLUMN IF NOT EXISTS "responseAt" timestamptz;

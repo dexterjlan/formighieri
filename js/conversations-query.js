@@ -28,7 +28,7 @@ async function loadQueryFilterOptions() {
 
 async function searchConversations() {
     const { data: convs, error } = await supabaseClient
-        .from('orderConversations')
+        .from('OrderRequest')
         .select('*')
         .order('createdAt', { ascending: false });
 
@@ -36,8 +36,8 @@ async function searchConversations() {
     const countEl = document.getElementById("query-results-count");
 
     if (error || !convs) {
-        tbody.innerHTML = '<tr><td colspan="10" class="p-4 text-xs text-red-500">Erro ao carregar conversas.</td></tr>';
-        countEl.textContent = '0 conversas';
+        tbody.innerHTML = '<tr><td colspan="11" class="p-4 text-xs text-red-500">Erro ao carregar requisições.</td></tr>';
+        countEl.textContent = '0 requisições';
         return;
     }
 
@@ -89,10 +89,10 @@ async function searchConversations() {
     }
 
     tbody.innerHTML = "";
-    countEl.textContent = `${rows.length} conversa${rows.length === 1 ? '' : 's'}`;
+    countEl.textContent = `${rows.length} requisiç${rows.length === 1 ? 'ão' : 'ões'}`;
 
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="p-6 text-center text-xs text-slate-400">Nenhuma conversa encontrada.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="p-6 text-center text-xs text-slate-400">Nenhuma requisição encontrada.</td></tr>';
         return;
     }
 
@@ -101,6 +101,8 @@ async function searchConversations() {
         const canEdit = canEditConversation(r);
         const rowBg = getQueryRowBgColor(r);
         const cellStyle = `background-color: ${rowBg};`;
+        const profile = formatRequestProfile(r.requestProfile);
+        const profileClass = getRequestProfileBadgeClass(r.requestProfile);
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td class="p-3 font-mono text-xs font-bold text-slate-600" style="${cellStyle}">${r.order.orderCode || '-'}</td>
@@ -109,6 +111,9 @@ async function searchConversations() {
             <td class="p-3 text-slate-700" style="${cellStyle}">${r.projetistaName}</td>
             <td class="p-3" style="${cellStyle}">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${isOpen ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}">${r.status}</span>
+            </td>
+            <td class="p-3" style="${cellStyle}">
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${profileClass}">${profile}</span>
             </td>
             <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${r.designerRequest || ''}">${truncateText(r.designerRequest)}</td>
             <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${r.commercialResponse || ''}">${truncateText(r.commercialResponse)}</td>

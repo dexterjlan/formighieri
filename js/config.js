@@ -8,4 +8,6 @@ let currentUser = null;
 let activeOrderId = null;
 let editingConversationId = null;
 let conversationsCache = [];
+let editingCommercialApprovalId = null;
+let commercialApprovalsCache = [];
 let enterAppInProgress = null;

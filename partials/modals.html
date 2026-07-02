@@ -27,20 +27,38 @@
         </div>
     </div>
 
-    <!-- MODAL: CRIAR CONVERSA -->
+    <!-- MODAL: CRIAR REQUISIÇÃO -->
     <div id="conv-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
         <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl">
-            <h3 id="conv-modal-title" class="font-bold text-base text-slate-900 mb-4">Nova Conversa / Solicitação Técnica</h3>
+            <h3 id="conv-modal-title" class="font-bold text-base text-slate-900 mb-4">Nova Requisição Técnica</h3>
             <form id="conv-form" class="space-y-3">
+                <div id="conv-profile-wrap" class="hidden">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Perfil da requisição <span class="text-red-500">*</span></label>
+                    <select id="conv-profile"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none">
+                        <option value="">Selecione...</option>
+                        <option value="Projetista">Projetista</option>
+                        <option value="Consultor">Consultor</option>
+                    </select>
+                </div>
+                <div id="conv-creator-profile-wrap" class="hidden bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    <p class="text-xs text-slate-500">Criando requisição como:
+                        <span id="conv-creator-profile-label" class="font-semibold text-slate-800"></span>
+                    </p>
+                </div>
+                <div id="conv-profile-readonly-wrap" class="hidden bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    <p class="text-xs text-slate-500">Perfil da requisição:
+                        <span id="conv-profile-readonly-label" class="font-semibold text-slate-800"></span>
+                    </p>
+                </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 mb-1">Selecione o Projetista</label>
                     <select id="conv-designer"
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none"
                         required></select>
                 </div>
-                <div><label class="block text-xs font-semibold text-slate-500 mb-1">Solicitação do
-                        Projetista</label><textarea id="conv-request" rows="3"
+                <div><label id="conv-request-label" class="block text-xs font-semibold text-slate-500 mb-1">Solicitação</label><textarea id="conv-request" rows="3"
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none"
                         required></textarea></div>
                 <div id="conv-response-wrap" class="hidden">
@@ -55,13 +73,65 @@
                             —
                         </p>
                     </div>
-                    <p class="text-[10px] text-slate-400 mt-1">Ao salvar com resposta preenchida, a conversa será encerrada.</p>
+                    <p class="text-[10px] text-slate-400 mt-1">Ao salvar com resposta preenchida, a requisição será encerrada.</p>
                 </div>
                 <div class="flex gap-2 pt-2"><button type="button" onclick="closeConvModal()"
                         class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button><button
                         type="submit" id="conv-form-submit"
-                        class="flex-1 bg-slate-900 text-white py-2 rounded-lg text-xs font-medium">Iniciar
-                        Conversa</button></div>
+                        class="flex-1 bg-slate-900 text-white py-2 rounded-lg text-xs font-medium">Criar
+                        Requisição</button></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: APROVAÇÃO COMERCIAL -->
+    <div id="commercial-approval-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 id="commercial-approval-modal-title" class="font-bold text-base text-slate-900 mb-4">Aprovação Comercial</h3>
+            <form id="commercial-approval-form" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Nome do Projeto <span class="text-red-500">*</span></label>
+                    <input type="text" id="approval-project-name"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                        required>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Projetista <span class="text-red-500">*</span></label>
+                    <select id="approval-designer"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
+                        required></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Revisão solicitada pelo Comercial</label>
+                    <textarea id="approval-commercial-revision" rows="3"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                        placeholder="Descreva o que deve ser revisado..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Resposta da Revisão (Projetista)</label>
+                    <textarea id="approval-designer-response" rows="3"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                        placeholder="Resposta do projetista à revisão..."></textarea>
+                </div>
+                <div class="flex items-center gap-2 pt-1">
+                    <input type="checkbox" id="approval-approved"
+                        class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                    <label for="approval-approved" class="text-sm font-medium text-slate-700">Aprovado</label>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Data de Aprovação</label>
+                    <p id="approval-approved-at-display"
+                        class="w-full px-3 py-2 text-sm border border-slate-100 rounded-lg bg-slate-50 text-slate-600">
+                        —
+                    </p>
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeCommercialApprovalModal()"
+                        class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
+                    <button type="submit" id="commercial-approval-form-submit"
+                        class="flex-1 bg-emerald-700 text-white py-2 rounded-lg text-xs font-medium">Salvar</button>
+                </div>
             </form>
         </div>
     </div>

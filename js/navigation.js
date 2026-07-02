@@ -8,6 +8,7 @@ function showMainPanel() {
     document.getElementById("user-display").innerText =
         `Logado como: ${currentUser.name} (${roleLabel})`;
     updateAdminNav();
+    updateCommercialApprovalButtonVisibility();
     showDashboard();
     initApp();
 }

@@ -36,7 +36,7 @@
             <section class="lg:col-span-2 flex flex-col h-[calc(100vh-140px)] overflow-y-auto" id="detail-section">
                 <div id="empty-state"
                     class="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center h-full text-slate-400">
-                    <p class="text-sm font-medium">Selecione um pedido para gerenciar as conversas técnicas.</p>
+                    <p class="text-sm font-medium">Selecione um pedido para gerenciar as requisições técnicas.</p>
                 </div>
 
                 <div id="order-content" class="hidden flex flex-col gap-6">
@@ -51,13 +51,20 @@
                                 </div>
                                 <p class="text-xs text-slate-400 mt-1" id="det-info">Consultor: - | Criado por: -</p>
                             </div>
+                            <div class="flex flex-wrap gap-2 justify-end">
+                            <button type="button" id="btn-commercial-approval" onclick="openCommercialApprovalModal()"
+                                class="hidden bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-800">Solicitar Aprovação Comercial</button>
                             <button type="button" onclick="openConvModal()"
                                 class="bg-slate-900 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">+
-                                Abrir Nova Conversa</button>
+                                Abrir Nova Requisição</button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Lista de Conversas do Pedido -->
+                    <!-- Lista de Aprovações Comerciais -->
+                    <div class="space-y-4" id="commercial-approvals-list"></div>
+
+                    <!-- Lista de Requisições do Pedido -->
                     <div class="space-y-4" id="conversations-list"></div>
                 </div>
             </section>
@@ -88,11 +95,11 @@
             </div>
         </main>
 
-        <!-- TELA CONSULTA DE CONVERSAS -->
+        <!-- TELA CONSULTA DE REQUISIÇÕES -->
         <main id="conversations-query-view" class="hidden flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 space-y-4">
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-5">
-                <h2 class="font-bold text-sm text-slate-900">Consulta de Conversas</h2>
-                <p class="text-xs text-slate-400 mt-1">Filtre e visualize todas as conversas técnicas do sistema.</p>
+                <h2 class="font-bold text-sm text-slate-900">Consulta de Requisições</h2>
+                <p class="text-xs text-slate-400 mt-1">Filtre e visualize todas as requisições técnicas do sistema.</p>
                 <form id="conversations-query-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Pedido</label>
@@ -137,7 +144,7 @@
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                    <span class="text-xs text-slate-500" id="query-results-count">0 conversas</span>
+                    <span class="text-xs text-slate-500" id="query-results-count">0 requisições</span>
                 </div>
                 <div class="overflow-x-auto max-h-[calc(100vh-340px)] overflow-y-auto">
                     <table class="w-full text-sm">
@@ -148,6 +155,7 @@
                                 <th class="text-left p-3 font-semibold">Consultor</th>
                                 <th class="text-left p-3 font-semibold">Projetista</th>
                                 <th class="text-left p-3 font-semibold">Status</th>
+                                <th class="text-left p-3 font-semibold">Perfil</th>
                                 <th class="text-left p-3 font-semibold">Solicitação</th>
                                 <th class="text-left p-3 font-semibold">Resposta</th>
                                 <th class="text-left p-3 font-semibold">Data de criação</th>

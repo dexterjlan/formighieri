@@ -44,3 +44,70 @@ function truncateText(text, max = 60) {
 function isAdmin() {
     return currentUser?.role === 'Admin';
 }
+
+function formatRequestProfile(profile) {
+    return profile || '—';
+}
+
+function getRequestProfileBadgeClass(profile) {
+    if (profile === 'Projetista') return 'bg-sky-100 text-sky-800';
+    if (profile === 'Consultor') return 'bg-amber-100 text-amber-800';
+    return 'bg-slate-100 text-slate-600';
+}
+
+function updateConvRequestLabel(profile) {
+    const label = document.getElementById('conv-request-label');
+    if (!label) return;
+    if (profile === 'Consultor') {
+        label.textContent = 'Solicitação do Consultor';
+    } else if (profile === 'Projetista') {
+        label.textContent = 'Solicitação Técnica';
+    } else {
+        label.textContent = 'Solicitação';
+    }
+}
+
+function setupConvProfileFields(isEdit, conv) {
+    const adminWrap = document.getElementById('conv-profile-wrap');
+    const autoWrap = document.getElementById('conv-creator-profile-wrap');
+    const autoLabel = document.getElementById('conv-creator-profile-label');
+    const profileSelect = document.getElementById('conv-profile');
+    const readOnlyWrap = document.getElementById('conv-profile-readonly-wrap');
+    const readOnlyLabel = document.getElementById('conv-profile-readonly-label');
+
+    adminWrap.classList.add('hidden');
+    autoWrap.classList.add('hidden');
+    readOnlyWrap.classList.add('hidden');
+    profileSelect.required = false;
+    profileSelect.onchange = null;
+
+    if (isEdit) {
+        readOnlyWrap.classList.remove('hidden');
+        readOnlyLabel.textContent = formatRequestProfile(conv?.requestProfile);
+        updateConvRequestLabel(conv?.requestProfile);
+        return;
+    }
+
+    if (currentUser.role === 'Admin') {
+        adminWrap.classList.remove('hidden');
+        profileSelect.required = true;
+        profileSelect.value = '';
+        updateConvRequestLabel('');
+        profileSelect.onchange = () => updateConvRequestLabel(profileSelect.value);
+        return;
+    }
+
+    autoWrap.classList.remove('hidden');
+    autoLabel.textContent = currentUser.role;
+    updateConvRequestLabel(currentUser.role);
+}
+
+function getRequestProfileForCreate() {
+    if (currentUser.role === 'Admin') {
+        return document.getElementById('conv-profile').value.trim();
+    }
+    if (currentUser.role === 'Consultor' || currentUser.role === 'Projetista') {
+        return currentUser.role;
+    }
+    return '';
+}

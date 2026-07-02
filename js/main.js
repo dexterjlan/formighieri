@@ -20,4 +20,5 @@ function initAppEvents() {
     bindConversationsQueryEvents();
     bindOrderEvents();
     bindConversationEvents();
+    bindCommercialApprovalEvents();
 }

@@ -87,6 +87,8 @@ async function selectOrder(id) {
 
     loadOrders();
     loadConversations(id);
+    loadCommercialApprovals(id);
+    updateCommercialApprovalButtonVisibility();
 }
 
 function bindOrderEvents() {
