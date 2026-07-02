@@ -36,6 +36,16 @@ npx serve .
 
 Depois acesse `http://localhost:3000`.
 
+## Publicar no GitHub Pages
+
+1. Faça push deste repositório para o GitHub (branch `main`).
+2. No repositório: **Settings → Pages → Build and deployment**.
+3. Em **Source**, selecione **GitHub Actions** (não "Deploy from branch").
+4. O workflow `.github/workflows/deploy-pages.yml` publica o site a cada push na `main`.
+5. URL do projeto: `https://<usuario>.github.io/formighieri/`
+
+Se o workflow falhar, abra a aba **Actions** no GitHub e confira o log da execução.
+
 ## Supabase
 
 Execute migrations em `supabase/` conforme necessário (ex.: `add-response-at.sql`).
