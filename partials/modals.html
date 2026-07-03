@@ -27,6 +27,36 @@
         </div>
     </div>
 
+    <!-- MODAL: ADICIONAR PROJETO -->
+    <div id="order-project-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 class="font-bold text-base text-slate-900 mb-4">Adicionar Projeto</h3>
+            <form id="order-project-form" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Nome do Projeto <span class="text-red-500">*</span></label>
+                    <input type="text" id="project-name"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-violet-600"
+                        required>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Tipo de Ambiente <span class="text-red-500">*</span></label>
+                    <select id="project-environment-type"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                        required>
+                        <option value="">Selecione...</option>
+                    </select>
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeOrderProjectModal()"
+                        class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
+                    <button type="submit"
+                        class="flex-1 bg-violet-700 text-white py-2 rounded-lg text-xs font-medium">Salvar Projeto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL: CRIAR REQUISIÇÃO -->
     <div id="conv-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -104,11 +134,17 @@
         <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 id="commercial-approval-modal-title" class="font-bold text-base text-slate-900 mb-4">Aprovação Comercial</h3>
             <form id="commercial-approval-form" class="space-y-3">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1">Nome do Projeto <span class="text-red-500">*</span></label>
-                    <input type="text" id="approval-project-name"
-                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                        required>
+                <div id="approval-create-wrap">
+                    <label class="block text-xs font-semibold text-slate-500 mb-2">Projetos do pedido <span class="text-red-500">*</span></label>
+                    <p class="text-[10px] text-slate-400 mb-2">Marque os projetos para solicitar aprovação. Projetos com solicitação existente já aparecem selecionados.</p>
+                    <div id="approval-projects-list" class="space-y-1 max-h-36 overflow-y-auto border border-slate-200 rounded-lg p-2 bg-slate-50/50"></div>
+                </div>
+                <div id="approval-edit-wrap" class="hidden space-y-3">
+                    <div class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                        <p class="text-xs text-slate-500">Projeto:
+                            <span id="approval-edit-project-name" class="font-semibold text-slate-800"></span>
+                        </p>
+                    </div>
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 mb-1">Projetista <span class="text-red-500">*</span></label>

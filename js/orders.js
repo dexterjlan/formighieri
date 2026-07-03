@@ -83,15 +83,19 @@ async function loadConsultants() {
     });
 }
 
-function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount) {
+function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount) {
     const approvalsCountEl = document.getElementById('order-tab-approvals-count');
     const requestsCountEl = document.getElementById('order-tab-requests-count');
+    const projectsCountEl = document.getElementById('order-projects-count');
 
     if (approvalsCountEl && pendingApprovalsCount !== undefined) {
         approvalsCountEl.textContent = `(${pendingApprovalsCount})`;
     }
     if (requestsCountEl && openRequestsCount !== undefined) {
         requestsCountEl.textContent = `(${openRequestsCount})`;
+    }
+    if (projectsCountEl && projectsCount !== undefined) {
+        projectsCountEl.textContent = `(${projectsCount})`;
     }
 }
 
@@ -112,34 +116,41 @@ function updateOrderDetailActionButtons() {
     const approvalsPanel = document.getElementById('order-tab-panel-approvals');
     const onApprovalsTab = approvalsPanel && !approvalsPanel.classList.contains('hidden');
     const approvalBtn = document.getElementById('btn-commercial-approval');
-    const requestBtn = document.getElementById('btn-new-request');
 
     if (approvalBtn) {
         approvalBtn.classList.toggle('hidden', !onApprovalsTab || !canOpenCommercialApprovalModal());
     }
-    if (requestBtn) {
-        requestBtn.classList.toggle('hidden', onApprovalsTab);
-    }
 }
 
+const ORDER_DETAIL_TABS = {
+    approvals: {
+        tabId: 'order-tab-approvals',
+        panelId: 'order-tab-panel-approvals',
+        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-emerald-600 text-emerald-800 bg-white',
+        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+    },
+    requests: {
+        tabId: 'order-tab-requests',
+        panelId: 'order-tab-panel-requests',
+        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-amber-600 text-amber-800 bg-white',
+        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+    }
+};
+
 function switchOrderDetailTab(tab) {
-    const isApprovals = tab === 'approvals';
-    const approvalsTab = document.getElementById('order-tab-approvals');
-    const requestsTab = document.getElementById('order-tab-requests');
-    const approvalsPanel = document.getElementById('order-tab-panel-approvals');
-    const requestsPanel = document.getElementById('order-tab-panel-requests');
+    Object.entries(ORDER_DETAIL_TABS).forEach(([key, config]) => {
+        const isActive = key === tab;
+        const tabEl = document.getElementById(config.tabId);
+        const panelEl = document.getElementById(config.panelId);
 
-    if (!approvalsTab || !requestsTab || !approvalsPanel || !requestsPanel) return;
+        if (tabEl) {
+            tabEl.className = isActive ? config.activeClass : config.inactiveClass;
+        }
+        if (panelEl) {
+            panelEl.classList.toggle('hidden', !isActive);
+        }
+    });
 
-    approvalsTab.className = isApprovals
-        ? 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-emerald-600 text-emerald-800 bg-white'
-        : 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800';
-    requestsTab.className = !isApprovals
-        ? 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-amber-600 text-amber-800 bg-white'
-        : 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800';
-
-    approvalsPanel.classList.toggle('hidden', !isApprovals);
-    requestsPanel.classList.toggle('hidden', isApprovals);
     updateOrderDetailActionButtons();
 }
 
@@ -168,6 +179,7 @@ async function selectOrder(id) {
         `Consultor: ${order.consultantName} | Criado por: ${order.creator?.name || 'Sistema'}`;
 
     loadOrders();
+    loadOrderProjects(id);
     loadConversations(id);
     loadCommercialApprovals(id);
     switchOrderDetailTab('approvals');

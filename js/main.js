@@ -20,6 +20,7 @@ function initAppEvents() {
     bindConversationsQueryEvents();
     bindCommercialApprovalQueryEvents();
     bindOrderEvents();
+    bindOrderProjectEvents();
     bindConversationEvents();
     bindCommercialApprovalEvents();
     bindCommercialRevisionEvents();

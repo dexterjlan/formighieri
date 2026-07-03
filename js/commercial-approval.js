@@ -84,20 +84,100 @@ async function loadApprovalProjetistas(selectedId) {
     }
 }
 
-function setupCommercialApprovalFormFields(approval) {
+function setupCommercialApprovalFormFields(approval, isEditMode) {
     const commercialCanEdit = canEditCommercialApprovalCommercialFieldsOnly(approval);
     const statusWrap = document.getElementById('approval-status-readonly-wrap');
     const statusLabel = document.getElementById('approval-status-readonly-label');
+    const createWrap = document.getElementById('approval-create-wrap');
+    const editWrap = document.getElementById('approval-edit-wrap');
 
-    document.getElementById('approval-project-name').disabled = !commercialCanEdit;
     document.getElementById('approval-designer').disabled = !commercialCanEdit || currentUser?.role === 'Projetista';
 
-    if (approval) {
+    if (isEditMode) {
+        createWrap.classList.add('hidden');
+        editWrap.classList.remove('hidden');
         statusWrap.classList.remove('hidden');
         statusLabel.textContent = getApprovalStatusLabel(approval.status);
-    } else {
-        statusWrap.classList.add('hidden');
+        return;
     }
+
+    createWrap.classList.remove('hidden');
+    editWrap.classList.add('hidden');
+    statusWrap.classList.add('hidden');
+}
+
+function getExistingApprovalsByProjectId(approvals, projects) {
+    const byProjectId = {};
+
+    approvals.forEach(approval => {
+        if (approval.orderProjectId) {
+            byProjectId[approval.orderProjectId] = approval;
+            return;
+        }
+
+        const match = projects.find(p => p.name === approval.projectName);
+        if (match) {
+            byProjectId[match.id] = approval;
+        }
+    });
+
+    return byProjectId;
+}
+
+async function loadApprovalProjectCheckboxes() {
+    const container = document.getElementById('approval-projects-list');
+    const projects = await fetchOrderProjectsForOrder(activeOrderId);
+
+    if (!projects.length) {
+        container.innerHTML = '<p class="text-xs text-slate-400 text-center py-2">Cadastre projetos no pedido antes de solicitar aprovação.</p>';
+        return;
+    }
+
+    const existingByProjectId = getExistingApprovalsByProjectId(commercialApprovalsCache, projects);
+    const sortedProjects = [...projects].sort((a, b) =>
+        a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' })
+    );
+
+    container.innerHTML = '';
+
+    sortedProjects.forEach(project => {
+        const existing = existingByProjectId[project.id];
+        const hasApproval = Boolean(existing);
+        const statusLabel = hasApproval ? getApprovalStatusLabel(normalizeCommercialApproval(existing).status) : '';
+
+        const label = document.createElement('label');
+        label.className = `flex items-center gap-2 px-2 py-1.5 rounded-md border ${hasApproval ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-white'} cursor-pointer hover:bg-white transition`;
+
+        label.innerHTML = `
+            <input type="checkbox" name="approval-project" value="${project.id}"
+                data-project-name="${project.name.replace(/"/g, '&quot;')}"
+                class="rounded border-slate-300 text-emerald-700 focus:ring-emerald-600 shrink-0"
+                ${hasApproval ? 'checked disabled' : ''}>
+            <span class="flex-1 min-w-0 text-xs leading-tight">
+                <span class="font-semibold text-slate-800">${project.name}</span>
+                <span class="text-slate-400"> · ${project.environmentType?.name || '-'}</span>
+                ${hasApproval ? `<span class="text-[10px] text-emerald-700 font-medium"> · ${statusLabel}</span>` : ''}
+            </span>
+        `;
+
+        container.appendChild(label);
+    });
+}
+
+function getSelectedNewApprovalProjectIds() {
+    return [...document.querySelectorAll('input[name="approval-project"]:checked:not(:disabled)')]
+        .map(input => Number(input.value));
+}
+
+async function insertCommercialApprovals(payloads) {
+    let { error } = await supabaseClient.from('CommercialApproval').insert(payloads);
+
+    if (error && payloads.some(p => p.status)) {
+        const withoutStatus = payloads.map(({ status, ...rest }) => rest);
+        ({ error } = await supabaseClient.from('CommercialApproval').insert(withoutStatus));
+    }
+
+    return error;
 }
 
 function updateCommercialApprovalButtonVisibility() {
@@ -118,12 +198,24 @@ async function openCommercialApprovalModal() {
         return;
     }
 
+    if (!activeOrderId) {
+        alert('Selecione um pedido primeiro.');
+        return;
+    }
+
     editingCommercialApprovalId = null;
     document.getElementById('commercial-approval-modal-title').textContent = 'Solicitar Aprovação Comercial';
     document.getElementById('commercial-approval-form-submit').textContent = 'Salvar Solicitação';
     document.getElementById('commercial-approval-form').reset();
-    setupCommercialApprovalFormFields(null);
-    await loadApprovalProjetistas();
+    setupCommercialApprovalFormFields(null, false);
+
+    const { data: approvals } = await queryCommercialApprovals(activeOrderId);
+    commercialApprovalsCache = (approvals || []).map(a => normalizeCommercialApproval(a));
+
+    await Promise.all([
+        loadApprovalProjetistas(),
+        loadApprovalProjectCheckboxes()
+    ]);
     toggleModal('commercial-approval-modal', true);
 }
 
@@ -134,8 +226,8 @@ async function editCommercialApproval(id) {
     editingCommercialApprovalId = id;
     document.getElementById('commercial-approval-modal-title').textContent = 'Aprovação Comercial';
     document.getElementById('commercial-approval-form-submit').textContent = 'Salvar Alterações';
-    document.getElementById('approval-project-name').value = approval.projectName || '';
-    setupCommercialApprovalFormFields(approval);
+    document.getElementById('approval-edit-project-name').textContent = approval.projectName || '-';
+    setupCommercialApprovalFormFields(approval, true);
     await loadApprovalProjetistas(approval.designerId);
     toggleModal('commercial-approval-modal', true);
 }
@@ -202,6 +294,7 @@ function normalizeCommercialApproval(record) {
 
 async function queryCommercialApprovals(orderId) {
     const columnSets = [
+        'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status',
         'id, orderId, projectName, designerId, approved, approvedAt, status',
         'id, orderId, projectName, designerId, approved, approvedAt',
         'id, orderId, projectName, designerId, approved',
@@ -329,23 +422,15 @@ function bindCommercialApprovalEvents() {
     document.getElementById('commercial-approval-form').addEventListener('submit', async function (e) {
         e.preventDefault();
 
-        const projectName = document.getElementById('approval-project-name').value.trim();
         const designerId = document.getElementById('approval-designer').value;
         const existing = editingCommercialApprovalId
             ? commercialApprovalsCache.find(a => a.id === editingCommercialApprovalId)
             : null;
-        const commercialCanEdit = isAdminOrOrderConsultorForApproval(existing || { orderId: activeOrderId });
 
-        if (commercialCanEdit && !projectName) {
-            alert('Informe o nome do projeto.');
-            return;
-        }
-        if (commercialCanEdit && !designerId) {
+        if (!designerId) {
             alert('Selecione o projetista.');
             return;
         }
-
-        let payload;
 
         if (editingCommercialApprovalId && existing) {
             if (!canEditCommercialApprovalCommercialFieldsOnly(existing)) {
@@ -353,56 +438,49 @@ function bindCommercialApprovalEvents() {
                 return;
             }
 
-            payload = {
-                projectName,
-                designerId
-            };
+            const payload = { designerId };
+            let { error } = await supabaseClient
+                .from('CommercialApproval')
+                .update(payload)
+                .eq('id', editingCommercialApprovalId);
+
+            if (error) {
+                alert('Erro ao salvar aprovação comercial: ' + error.message);
+                return;
+            }
         } else {
             if (!canOpenCommercialApprovalModal()) {
                 alert('Somente Admin ou Projetista pode criar aprovação comercial.');
                 return;
             }
 
-            payload = {
-                orderId: activeOrderId,
-                projectName,
-                designerId,
-                approved: false,
-                approvedAt: null,
-                status: 'Aguardando Aprovação'
-            };
-        }
+            const selectedProjectIds = getSelectedNewApprovalProjectIds();
 
-        let error;
-        if (editingCommercialApprovalId) {
-            ({ error } = await supabaseClient
-                .from('CommercialApproval')
-                .update(payload)
-                .eq('id', editingCommercialApprovalId));
-
-            if (error && payload.status) {
-                const { status, ...payloadWithoutStatus } = payload;
-                ({ error } = await supabaseClient
-                    .from('CommercialApproval')
-                    .update(payloadWithoutStatus)
-                    .eq('id', editingCommercialApprovalId));
+            if (!selectedProjectIds.length) {
+                alert('Selecione ao menos um projeto que ainda não possui solicitação de aprovação.');
+                return;
             }
-        } else {
-            ({ error } = await supabaseClient
-                .from('CommercialApproval')
-                .insert([payload]));
 
-            if (error && payload.status) {
-                const { status, ...payloadWithoutStatus } = payload;
-                ({ error } = await supabaseClient
-                    .from('CommercialApproval')
-                    .insert([payloadWithoutStatus]));
+            const projects = await fetchOrderProjectsForOrder(activeOrderId);
+            const payloads = selectedProjectIds.map(projectId => {
+                const project = projects.find(p => p.id === projectId);
+                return {
+                    orderId: activeOrderId,
+                    orderProjectId: projectId,
+                    projectName: project?.name || '',
+                    designerId,
+                    approved: false,
+                    approvedAt: null,
+                    status: 'Aguardando Aprovação'
+                };
+            }).filter(p => p.projectName);
+
+            const error = await insertCommercialApprovals(payloads);
+
+            if (error) {
+                alert('Erro ao salvar aprovação comercial: ' + error.message);
+                return;
             }
-        }
-
-        if (error) {
-            alert('Erro ao salvar aprovação comercial: ' + error.message);
-            return;
         }
 
         closeCommercialApprovalModal();
