@@ -12,7 +12,7 @@ const NOTIFICATION_FROM_NAME = 'Formighieri Notificações';
 
 // Google Apps Script — envia pelo Gmail formighieri.notificacoes@gmail.com
 // Cole o script de google-apps-script/FormighieriNotificacoes.gs e publique como Web App
-const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwRGNzgQ-f66UoGN0ynMm4krUViWjKxuqKzh8hT5mE8HOmW-9VlJufJcmZx7ItysgY/exec';
+const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP1IkfR8OfsYRQEq3IGB_VF_XSGnTQkN5WAjngfTCNGHohp4IcEd4fzaxb3a_o72A/exec';
 const NOTIFICATION_SCRIPT_SECRET = 'Hanna@2020';
 
 let currentUser = null;
