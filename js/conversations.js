@@ -249,100 +249,108 @@ window.closeConvModal = closeConvModal;
 window.editConversation = editConversation;
 
 async function loadConversations(orderId) {
-    let convsResult = await supabaseClient
-        .from('OrderRequest')
-        .select('*, orderProject:OrderProject(id, name, environmentType:EnvironmentType(name))')
-        .eq('orderId', orderId)
-        .order('createdAt', { ascending: true });
+    await ensureSystemSettingsLoaded();
 
-    if (convsResult.error?.message?.includes('orderProject')) {
-        convsResult = await supabaseClient
+    try {
+        let convsResult = await supabaseClient
             .from('OrderRequest')
-            .select('*')
+            .select('*, orderProject:OrderProject(id, name, environmentType:EnvironmentType(name))')
             .eq('orderId', orderId)
             .order('createdAt', { ascending: true });
-    }
 
-    const [{ data: convs, error }, { data: orderInfo }] = await Promise.all([
-        Promise.resolve(convsResult),
-        supabaseClient
-            .from('salesOrders')
-            .select('consultantName')
-            .eq('id', orderId)
-            .single()
-    ]);
+        if (convsResult.error?.message?.includes('orderProject')) {
+            convsResult = await supabaseClient
+                .from('OrderRequest')
+                .select('*')
+                .eq('orderId', orderId)
+                .order('createdAt', { ascending: true });
+        }
 
-    const consultantName = orderInfo?.consultantName || getOrderConsultantName(orderId) || '-';
+        const [{ data: convs, error }, { data: orderInfo }] = await Promise.all([
+            Promise.resolve(convsResult),
+            supabaseClient
+                .from('salesOrders')
+                .select('consultantName')
+                .eq('id', orderId)
+                .single()
+        ]);
 
-    const list = document.getElementById("conversations-list");
+        const consultantName = orderInfo?.consultantName || getOrderConsultantName(orderId) || '-';
 
-    if (error || !convs || convs.length === 0) {
-        conversationsCache = [];
-        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-slate-200 shadow-sm">Nenhuma requisição técnica para este pedido.</p>';
-        updateOrderTabCounts(undefined, 0);
-        return;
-    }
+        const list = document.getElementById("conversations-list");
 
-    conversationsCache = convs;
-    updateOrderTabCounts(undefined, countOpenOrderRequests(convs));
+        if (error || !convs || convs.length === 0) {
+            conversationsCache = [];
+            list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-slate-200 shadow-sm">Nenhuma requisição técnica para este pedido.</p>';
+            updateOrderTabCounts(undefined, 0);
+            return;
+        }
 
-    const designerIds = [...new Set(convs.map(c => c.designerId).filter(Boolean))];
-    let projetistaNames = {};
+        conversationsCache = convs;
+        updateOrderTabCounts(undefined, countOpenOrderRequests(convs));
 
-    if (designerIds.length) {
-        const { data: users } = await supabaseClient
-            .from('appUsers')
-            .select('id, name')
-            .in('id', designerIds);
+        const designerIds = [...new Set(convs.map(c => c.designerId).filter(Boolean))];
+        let projetistaNames = {};
 
-        users?.forEach(u => {
-            projetistaNames[u.id] = u.name;
+        if (designerIds.length) {
+            const { data: users } = await supabaseClient
+                .from('appUsers')
+                .select('id, name')
+                .in('id', designerIds);
+
+            users?.forEach(u => {
+                projetistaNames[u.id] = u.name;
+            });
+        }
+
+        const requestIds = convs.map(c => c.id);
+        const activitiesByRequest = await fetchRequestActivitiesByRequestIds(requestIds);
+
+        list.innerHTML = "";
+
+        sortOrderRequests(convs).forEach(c => {
+            const status = normalizeRequestStatus(c);
+            const canEdit = canEditConversation(c);
+            const statusClass = getRequestStatusBadgeClass(status);
+            const cardBgClass = getRequestHighlightBgClass(c);
+            const div = document.createElement("div");
+            div.className = `${cardBgClass} p-5 rounded-xl border shadow-sm space-y-3`;
+
+            const requestTitle = c.requestProfile === 'Consultor'
+                ? 'Solicitação do Consultor'
+                : 'Solicitação do Projetista';
+
+            const projectLabel = c.orderProject?.name
+                ? `<div class="text-xs font-medium text-violet-700">🏠 Projeto: ${c.orderProject.name}${c.orderProject.environmentType?.name ? ` · ${c.orderProject.environmentType.name}` : ''}</div>`
+                : '';
+
+            div.innerHTML = `
+                <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                    <div class="flex flex-col gap-0.5">
+                        <div class="text-xs font-bold text-slate-700">👤 Projetista: ${projetistaNames[c.designerId] || '-'}</div>
+                        <div class="text-xs font-bold text-slate-600">📋 Consultor: ${consultantName}</div>
+                        ${projectLabel}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        ${canEdit ? `<button type="button" onclick="editConversation(${c.id})"
+                            class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium">Editar</button>` : ''}
+                        <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
+                    </div>
+                </div>
+                <div class="bg-white/70 p-3 rounded-lg text-xs">
+                    <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">${requestTitle}:</p>
+                    <p class="text-slate-800 font-medium">${c.designerRequest}</p>
+                </div>
+            `;
+            appendRequestActivitiesToCard(div, c, activitiesByRequest[c.id] || []);
+            div.insertAdjacentHTML('beforeend', buildRequestResponseSection(c, activitiesByRequest[c.id] || []));
+            list.appendChild(div);
         });
+    } finally {
+        if (typeof refreshOrdersListSummary === 'function') {
+            await refreshOrdersListSummary();
+        }
     }
-
-    const requestIds = convs.map(c => c.id);
-    const activitiesByRequest = await fetchRequestActivitiesByRequestIds(requestIds);
-
-    list.innerHTML = "";
-
-    sortOrderRequests(convs).forEach(c => {
-        const status = normalizeRequestStatus(c);
-        const canEdit = canEditConversation(c);
-        const statusClass = getRequestStatusBadgeClass(status);
-        const cardBgClass = getRequestHighlightBgClass(c);
-        const div = document.createElement("div");
-        div.className = `${cardBgClass} p-5 rounded-xl border shadow-sm space-y-3`;
-
-        const requestTitle = c.requestProfile === 'Consultor'
-            ? 'Solicitação do Consultor'
-            : 'Solicitação do Projetista';
-
-        const projectLabel = c.orderProject?.name
-            ? `<div class="text-xs font-medium text-violet-700">🏠 Projeto: ${c.orderProject.name}${c.orderProject.environmentType?.name ? ` · ${c.orderProject.environmentType.name}` : ''}</div>`
-            : '';
-
-        div.innerHTML = `
-            <div class="flex justify-between items-center border-b border-slate-100 pb-2">
-                <div class="flex flex-col gap-0.5">
-                    <div class="text-xs font-bold text-slate-700">👤 Projetista: ${projetistaNames[c.designerId] || '-'}</div>
-                    <div class="text-xs font-bold text-slate-600">📋 Consultor: ${consultantName}</div>
-                    ${projectLabel}
-                </div>
-                <div class="flex items-center gap-2">
-                    ${canEdit ? `<button type="button" onclick="editConversation(${c.id})"
-                        class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium">Editar</button>` : ''}
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
-                </div>
-            </div>
-            <div class="bg-white/70 p-3 rounded-lg text-xs">
-                <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">${requestTitle}:</p>
-                <p class="text-slate-800 font-medium">${c.designerRequest}</p>
-            </div>
-        `;
-        appendRequestActivitiesToCard(div, c, activitiesByRequest[c.id] || []);
-        div.insertAdjacentHTML('beforeend', buildRequestResponseSection(c, activitiesByRequest[c.id] || []));
-        list.appendChild(div);
-    });
 }
 
 async function replyConsultorConversation(id) {

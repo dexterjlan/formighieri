@@ -15,6 +15,11 @@ const NOTIFICATION_FROM_NAME = 'Formighieri Notificações';
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP1IkfR8OfsYRQEq3IGB_VF_XSGnTQkN5WAjngfTCNGHohp4IcEd4fzaxb3a_o72A/exec';
 const NOTIFICATION_SCRIPT_SECRET = 'Hanna@2020';
 
+const SYSTEM_SETTINGS_DEFAULTS = {
+    approvalOverdueDays: 5,
+    requestOverdueDays: 5
+};
+
 let currentUser = null;
 let activeOrderId = null;
 let editingConversationId = null;
@@ -26,4 +31,5 @@ let currentRevisionApprovalId = null;
 let revisionActivityRowCounter = 0;
 let revisionModalViewOnly = false;
 let requestActivityRowCounter = 0;
+let systemSettingsCache = null;
 let enterAppInProgress = null;

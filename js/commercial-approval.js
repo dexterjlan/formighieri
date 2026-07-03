@@ -539,66 +539,68 @@ function renderCommercialApprovalCard(approval, context) {
 }
 
 async function loadCommercialApprovals(orderId) {
+    await ensureSystemSettingsLoaded();
+
     const list = document.getElementById('commercial-approvals-list');
     if (!list) return;
 
-    const { data: approvals, error } = await queryCommercialApprovals(orderId);
-
-    if (error) {
-        console.error('loadCommercialApprovals:', error);
-        list.innerHTML = `<p class="text-xs text-red-500 text-center py-4 bg-white rounded-xl border border-red-100">Erro ao carregar aprovações comerciais: ${error.message}</p>`;
-        updateOrderTabCounts(0, undefined);
-        return;
-    }
-
-    if (!approvals || approvals.length === 0) {
-        commercialApprovalsCache = [];
-        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-emerald-100">Nenhuma aprovação comercial para este pedido.</p>';
-        updateOrderTabCounts(0, undefined);
-        return;
-    }
-
-    commercialApprovalsCache = approvals.map(a => normalizeCommercialApproval(a));
-    updateOrderTabCounts(countPendingCommercialApprovals(approvals), undefined);
-
-    const { data: orderInfo } = await supabaseClient
-        .from('salesOrders')
-        .select('consultantName')
-        .eq('id', orderId)
-        .maybeSingle();
-
-    if (orderInfo?.consultantName) {
-        commercialApprovalsCache = commercialApprovalsCache.map(a => ({
-            ...a,
-            orderConsultantName: orderInfo.consultantName
-        }));
-    }
-
-    const designerIds = [...new Set(approvals.map(a => a.designerId).filter(Boolean))];
-    const projetistaNames = {};
-
-    if (designerIds.length) {
-        const { data: users } = await supabaseClient
-            .from('appUsers')
-            .select('id, name')
-            .in('id', designerIds);
-        users?.forEach(u => { projetistaNames[u.id] = u.name; });
-    }
-
-    const approvalIds = approvals.map(a => a.id);
-    const revisionsByApproval = typeof fetchCommercialRevisionsByApprovalIds === 'function'
-        ? await fetchCommercialRevisionsByApprovalIds(approvalIds)
-        : {};
-
-    const projects = typeof fetchOrderProjectsForOrder === 'function'
-        ? await fetchOrderProjectsForOrder(orderId)
-        : [];
-    const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
-
-    list.innerHTML = '';
-    list.className = 'space-y-3';
-
     try {
+        const { data: approvals, error } = await queryCommercialApprovals(orderId);
+
+        if (error) {
+            console.error('loadCommercialApprovals:', error);
+            list.innerHTML = `<p class="text-xs text-red-500 text-center py-4 bg-white rounded-xl border border-red-100">Erro ao carregar aprovações comerciais: ${error.message}</p>`;
+            updateOrderTabCounts(0, undefined);
+            return;
+        }
+
+        if (!approvals || approvals.length === 0) {
+            commercialApprovalsCache = [];
+            list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-emerald-100">Nenhuma aprovação comercial para este pedido.</p>';
+            updateOrderTabCounts(0, undefined);
+            return;
+        }
+
+        commercialApprovalsCache = approvals.map(a => normalizeCommercialApproval(a));
+        updateOrderTabCounts(countPendingCommercialApprovals(approvals), undefined);
+
+        const { data: orderInfo } = await supabaseClient
+            .from('salesOrders')
+            .select('consultantName')
+            .eq('id', orderId)
+            .maybeSingle();
+
+        if (orderInfo?.consultantName) {
+            commercialApprovalsCache = commercialApprovalsCache.map(a => ({
+                ...a,
+                orderConsultantName: orderInfo.consultantName
+            }));
+        }
+
+        const designerIds = [...new Set(approvals.map(a => a.designerId).filter(Boolean))];
+        const projetistaNames = {};
+
+        if (designerIds.length) {
+            const { data: users } = await supabaseClient
+                .from('appUsers')
+                .select('id, name')
+                .in('id', designerIds);
+            users?.forEach(u => { projetistaNames[u.id] = u.name; });
+        }
+
+        const approvalIds = approvals.map(a => a.id);
+        const revisionsByApproval = typeof fetchCommercialRevisionsByApprovalIds === 'function'
+            ? await fetchCommercialRevisionsByApprovalIds(approvalIds)
+            : {};
+
+        const projects = typeof fetchOrderProjectsForOrder === 'function'
+            ? await fetchOrderProjectsForOrder(orderId)
+            : [];
+        const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
+
+        list.innerHTML = '';
+        list.className = 'space-y-3';
+
         sortCommercialApprovals(approvals).forEach(a => {
             const approval = normalizeCommercialApproval(a);
             list.appendChild(renderCommercialApprovalCard(approval, {
@@ -610,6 +612,10 @@ async function loadCommercialApprovals(orderId) {
     } catch (renderError) {
         console.error('loadCommercialApprovals render:', renderError);
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-4 bg-white rounded-xl border border-red-100">Erro ao exibir aprovações comerciais: ${renderError.message}</p>`;
+    } finally {
+        if (typeof refreshOrdersListSummary === 'function') {
+            await refreshOrdersListSummary();
+        }
     }
 }
 

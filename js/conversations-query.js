@@ -27,6 +27,8 @@ async function loadQueryFilterOptions() {
 }
 
 async function searchConversations() {
+    await ensureSystemSettingsLoaded();
+
     const { data: convs, error } = await supabaseClient
         .from('OrderRequest')
         .select('*')

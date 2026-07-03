@@ -5,6 +5,7 @@ async function enterApp(authUserId) {
 
     enterAppInProgress = (async () => {
         await loadUserProfile(authUserId);
+        await loadSystemSettings();
         showMainPanel();
     })();
 
@@ -19,15 +20,25 @@ async function enterApp(authUserId) {
     }
 }
 
-async function ensureAppUserOnRegister(user, name, email, role) {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) {
-        return { error: null };
+async function ensureAppUserOnRegister(user, name, email, role, session = null) {
+    let activeSession = session;
+    if (!activeSession) {
+        ({ data: { session: activeSession } } = await supabaseClient.auth.getSession());
     }
+    if (!activeSession) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+        ({ data: { session: activeSession } } = await supabaseClient.auth.getSession());
+    }
+    if (!activeSession) {
+        return { error: null, deferred: true };
+    }
+
+    // Aguarda o trigger handle_new_user criar o registro em appUsers, se necessário.
+    await new Promise(resolve => setTimeout(resolve, 400));
 
     const { data: byAuth, error: readByAuthError } = await supabaseClient
         .from('appUsers')
-        .select('id')
+        .select('id, role')
         .eq('authId', user.id)
         .maybeSingle();
 
@@ -65,12 +76,20 @@ async function ensureAppUserOnRegister(user, name, email, role) {
         .from('appUsers')
         .insert({ authId: user.id, email, name, role, isActive: true });
 
+    if (error?.code === '23505') {
+        const { error: updateError } = await supabaseClient
+            .from('appUsers')
+            .update({ name, email, role })
+            .eq('authId', user.id);
+        return { error: updateError };
+    }
+
     return { error };
 }
 
-async function syncRegisteredUserProfile(user, name, email, role) {
-    const { error } = await ensureAppUserOnRegister(user, name, email, role);
-    if (!error) return null;
+async function syncRegisteredUserProfile(user, name, email, role, session = null) {
+    const result = await ensureAppUserOnRegister(user, name, email, role, session);
+    if (!result.error) return null;
 
     const { data: existing } = await supabaseClient
         .from('appUsers')
@@ -86,7 +105,28 @@ async function syncRegisteredUserProfile(user, name, email, role) {
         return updateError;
     }
 
-    return error;
+    return result.error;
+}
+
+async function applyMissingRoleFromMetadata(profile, user) {
+    if (!profile || profile.role) return profile;
+
+    const metadataRole = user?.user_metadata?.role || null;
+    if (!metadataRole) return profile;
+
+    const { data: updated, error } = await supabaseClient
+        .from('appUsers')
+        .update({ role: metadataRole })
+        .eq('id', profile.id)
+        .select('*')
+        .single();
+
+    if (error) {
+        console.warn('applyMissingRoleFromMetadata:', error.message);
+        return profile;
+    }
+
+    return updated || profile;
 }
 
 async function loadUserProfile(authUserId) {
@@ -109,17 +149,7 @@ async function loadUserProfile(authUserId) {
             throw new Error("Usuário desativado. Entre em contato com o administrador.");
         }
 
-        if (!profile.role && metadataRole) {
-            const { data: updated } = await supabaseClient
-                .from('appUsers')
-                .update({ role: metadataRole })
-                .eq('id', profile.id)
-                .select('*')
-                .single();
-            currentUser = updated || profile;
-        } else {
-            currentUser = profile;
-        }
+        currentUser = await applyMissingRoleFromMetadata(profile, user);
         return;
     }
 
@@ -246,7 +276,19 @@ function bindAuthEvents() {
             return;
         }
 
-        const profileError = await syncRegisteredUserProfile(data.user, name, email, role);
+        if (data.session) {
+            await supabaseClient.auth.updateUser({
+                data: { name, role }
+            });
+        }
+
+        const profileError = await syncRegisteredUserProfile(
+            data.user,
+            name,
+            email,
+            role,
+            data.session
+        );
         if (profileError) {
             console.error("syncRegisteredUserProfile:", profileError);
             alert("Conta criada no login, mas falhou ao salvar o perfil: " + formatAuthError(profileError)

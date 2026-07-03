@@ -2,9 +2,22 @@ function hasOrderProject(projectName) {
     return Boolean(projectName && projectName !== 'Sem projeto');
 }
 
-function buildOrderRequestEmailSubject(eventType, orderCode, projectName) {
+const EMAIL_NO_REPLY_FOOTER_TEXT = 'Este é um e-mail automático. Por favor, não responda esta mensagem.';
+
+function appendEmailNoReplyFooterText(body) {
+    return `${body}\n\n---\n${EMAIL_NO_REPLY_FOOTER_TEXT}`;
+}
+
+function buildEmailNoReplyFooterHtml() {
+    return `<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;text-align:center;">${escapeHtml(EMAIL_NO_REPLY_FOOTER_TEXT)}</p>`;
+}
+
+function buildOrderRequestEmailSubject(eventType, orderCode, clientName, projectName) {
     const eventLabel = eventType === 'created' ? 'Criada' : 'Respondida';
-    let subject = `Requisicao ${eventLabel} Pedido ${orderCode}`;
+    let subject = `Requisição ${eventLabel}: Pedido ${orderCode}`;
+    if (clientName && clientName !== '-') {
+        subject += `, ${clientName}`;
+    }
     if (hasOrderProject(projectName)) {
         subject += `, ${projectName}`;
     }
@@ -57,10 +70,8 @@ function buildOrderRequestEmailBody(payload) {
         });
     }
 
-    return lines.join('\n');
+    return appendEmailNoReplyFooterText(lines.join('\n'));
 }
-
-function buildOrderRequestEmailHtml(payload) {
     const requestTitle = payload.requestProfile === 'Consultor'
         ? 'Solicitação do Consultor'
         : 'Solicitação do Projetista';
@@ -131,13 +142,12 @@ function buildOrderRequestEmailHtml(payload) {
       ${commercialBlock}
       ${designerBlock}
       ${activitiesBlock}
+      ${buildEmailNoReplyFooterHtml()}
     </div>
   </div>
 </body>
 </html>`;
 }
-
-async function fetchOrderRequestNotificationContext(orderId, orderProjectId, designerId) {
     let order = typeof ordersCache !== 'undefined'
         ? ordersCache.find(o => o.id === orderId)
         : null;
@@ -208,7 +218,8 @@ async function sendEmailViaGoogleAppsScript(payload) {
                 reply_to: payload.reply_to,
                 subject: payload.subject,
                 message_body: payload.message_body,
-                message_html: payload.message_html
+                message_html: payload.message_html,
+                cc_email: payload.cc_email || ''
             }),
             signal: controller.signal
         });
@@ -217,13 +228,6 @@ async function sendEmailViaGoogleAppsScript(payload) {
     }
 }
 
-const APPROVAL_EMAIL_SUBJECT_PREFIX = {
-    approval_requested: 'Aprovacao Solicitada',
-    revision_created: 'Revisao Criada',
-    sent_back_to_approval: 'Aprovacao Reenviada',
-    approved: 'Aprovacao Aprovada'
-};
-
 const APPROVAL_EMAIL_TITLE = {
     approval_requested: 'Aprovação Solicitada',
     revision_created: 'Revisão Criada',
@@ -231,9 +235,12 @@ const APPROVAL_EMAIL_TITLE = {
     approved: 'Aprovação Aprovada'
 };
 
-function buildApprovalEmailSubject(eventType, orderCode, projectName) {
-    const prefix = APPROVAL_EMAIL_SUBJECT_PREFIX[eventType] || 'Aprovacao Atualizada';
-    let subject = `${prefix} Pedido ${orderCode}`;
+function buildApprovalEmailSubject(eventType, orderCode, clientName, projectName) {
+    const prefix = APPROVAL_EMAIL_TITLE[eventType] || 'Aprovação Atualizada';
+    let subject = `${prefix}: Pedido ${orderCode}`;
+    if (clientName && clientName !== '-') {
+        subject += `, ${clientName}`;
+    }
     if (hasOrderProject(projectName)) {
         subject += `, ${projectName}`;
     }
@@ -271,7 +278,7 @@ function buildApprovalEmailBody(payload) {
         });
     }
 
-    return lines.join('\n');
+    return appendEmailNoReplyFooterText(lines.join('\n'));
 }
 
 function buildActivitiesEmailHtml(activities, title = 'Atividades') {
@@ -351,6 +358,7 @@ function buildApprovalEmailHtml(payload) {
         </tr>
       </table>
       ${activitiesBlock}
+      ${buildEmailNoReplyFooterHtml()}
     </div>
   </div>
 </body>
@@ -395,7 +403,12 @@ async function notifyApprovalEmail(eventType, approval, options = {}) {
             activities: options.activities || null
         };
 
-        const subject = buildApprovalEmailSubject(eventType, payload.orderCode, payload.projectName);
+        const subject = buildApprovalEmailSubject(
+            eventType,
+            payload.orderCode,
+            payload.clientName,
+            payload.projectName
+        );
         const body = buildApprovalEmailBody(payload);
         const html = buildApprovalEmailHtml(payload);
         const toEmail = NOTIFICATION_TEST_MODE ? NOTIFICATION_TEST_EMAIL : NOTIFICATION_TEST_EMAIL;
@@ -406,7 +419,8 @@ async function notifyApprovalEmail(eventType, approval, options = {}) {
             reply_to: NOTIFICATION_FROM_EMAIL,
             subject,
             message_body: body,
-            message_html: html
+            message_html: html,
+            cc_email: getApprovalCcEmailsPayload()
         });
     } catch (err) {
         console.warn('notifyApprovalEmail:', err);
@@ -447,7 +461,12 @@ async function notifyOrderRequestEmail(eventType, requestData) {
             activities: requestData.activities || null
         };
 
-        const subject = buildOrderRequestEmailSubject(eventType, payload.orderCode, payload.projectName);
+        const subject = buildOrderRequestEmailSubject(
+            eventType,
+            payload.orderCode,
+            payload.clientName,
+            payload.projectName
+        );
         const body = buildOrderRequestEmailBody(payload);
         const html = buildOrderRequestEmailHtml(payload);
         const toEmail = NOTIFICATION_TEST_MODE ? NOTIFICATION_TEST_EMAIL : NOTIFICATION_TEST_EMAIL;
@@ -458,7 +477,8 @@ async function notifyOrderRequestEmail(eventType, requestData) {
             reply_to: NOTIFICATION_FROM_EMAIL,
             subject,
             message_body: body,
-            message_html: html
+            message_html: html,
+            cc_email: getRequestCcEmailsPayload()
         });
     } catch (err) {
         console.warn('notifyOrderRequestEmail:', err);

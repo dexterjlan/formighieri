@@ -88,19 +88,44 @@ function getRequestStatusBadgeClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function getRequestOverdueDays() {
+    const days = Number(
+        systemSettingsCache?.requestOverdueDays ?? SYSTEM_SETTINGS_DEFAULTS.requestOverdueDays
+    );
+    return Number.isFinite(days) && days > 0 ? days : SYSTEM_SETTINGS_DEFAULTS.requestOverdueDays;
+}
+
+function getApprovalOverdueDays() {
+    const days = Number(
+        systemSettingsCache?.approvalOverdueDays ?? SYSTEM_SETTINGS_DEFAULTS.approvalOverdueDays
+    );
+    return Number.isFinite(days) && days > 0 ? days : SYSTEM_SETTINGS_DEFAULTS.approvalOverdueDays;
+}
+
+function getDaysOpenSince(dateStr) {
+    if (!dateStr) return 0;
+    const created = new Date(dateStr);
+    if (Number.isNaN(created.getTime())) return 0;
+    return (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+}
+
+function isRequestOverdue(conv) {
+    if (isRequestClosed(conv)) return false;
+    return getDaysOpenSince(conv?.createdAt) > getRequestOverdueDays();
+}
+
+function isApprovalOverdue(approval) {
+    if (isCommercialApprovalApproved(approval)) return false;
+    return getDaysOpenSince(getCommercialApprovalReferenceDate(approval)) > getApprovalOverdueDays();
+}
+
 function getRequestHighlightBgHex(conv) {
     if (isRequestClosed(conv)) {
         return '#bbf7d0';
     }
-
-    const created = new Date(conv.createdAt);
-    if (!Number.isNaN(created.getTime())) {
-        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysOpen > 5) {
-            return '#fecaca';
-        }
+    if (isRequestOverdue(conv)) {
+        return '#fecaca';
     }
-
     return '#fde68a';
 }
 
@@ -108,15 +133,9 @@ function getRequestHighlightBgClass(conv) {
     if (isRequestClosed(conv)) {
         return 'bg-emerald-100 border-emerald-200';
     }
-
-    const created = new Date(conv.createdAt);
-    if (!Number.isNaN(created.getTime())) {
-        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysOpen > 5) {
-            return 'bg-red-100 border-red-200';
-        }
+    if (isRequestOverdue(conv)) {
+        return 'bg-red-100 border-red-200';
     }
-
     return 'bg-amber-100 border-amber-200';
 }
 
@@ -147,16 +166,9 @@ function getCommercialApprovalHighlightBgHex(approval) {
     if (isCommercialApprovalApproved(approval)) {
         return '#bbf7d0';
     }
-
-    const refDate = getCommercialApprovalReferenceDate(approval);
-    const created = new Date(refDate);
-    if (!Number.isNaN(created.getTime())) {
-        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysOpen > 5) {
-            return '#fecaca';
-        }
+    if (isApprovalOverdue(approval)) {
+        return '#fecaca';
     }
-
     return '#fde68a';
 }
 
@@ -164,16 +176,9 @@ function getCommercialApprovalHighlightBgClass(approval) {
     if (isCommercialApprovalApproved(approval)) {
         return 'bg-emerald-100 border-emerald-200';
     }
-
-    const refDate = getCommercialApprovalReferenceDate(approval);
-    const created = new Date(refDate);
-    if (!Number.isNaN(created.getTime())) {
-        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysOpen > 5) {
-            return 'bg-red-100 border-red-200';
-        }
+    if (isApprovalOverdue(approval)) {
+        return 'bg-red-100 border-red-200';
     }
-
     return 'bg-amber-100 border-amber-200';
 }
 

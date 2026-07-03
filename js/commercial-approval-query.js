@@ -52,6 +52,8 @@ async function queryAllCommercialApprovals() {
 }
 
 async function searchCommercialApprovalsQuery() {
+    await ensureSystemSettingsLoaded();
+
     const tbody = document.getElementById('approvals-query-list');
     const countEl = document.getElementById('approval-query-results-count');
 

@@ -1,6 +1,97 @@
 let ordersCache = [];
+let orderSummaryCounts = {};
+
+async function fetchOrderSummaryApprovals() {
+    const columnSets = ['orderId, status, approved', 'orderId, approved'];
+
+    for (const columns of columnSets) {
+        const { data, error } = await supabaseClient
+            .from('CommercialApproval')
+            .select(columns);
+
+        if (!error) return data || [];
+    }
+
+    return [];
+}
+
+async function loadOrderSummaryCounts() {
+    const [approvals, requests] = await Promise.all([
+        fetchOrderSummaryApprovals(),
+        supabaseClient
+            .from('OrderRequest')
+            .select('orderId, status, requestProfile')
+            .then(({ data }) => data || [])
+    ]);
+
+    const counts = {};
+
+    approvals.forEach(approval => {
+        if (!approval.orderId) return;
+        if (!counts[approval.orderId]) {
+            counts[approval.orderId] = { approvals: 0, requests: 0 };
+        }
+        if (normalizeCommercialApproval(approval).status !== 'Aprovado') {
+            counts[approval.orderId].approvals += 1;
+        }
+    });
+
+    requests.forEach(request => {
+        if (!request.orderId) return;
+        if (!counts[request.orderId]) {
+            counts[request.orderId] = { approvals: 0, requests: 0 };
+        }
+        if (isRequestOpen(request)) {
+            counts[request.orderId].requests += 1;
+        }
+    });
+
+    orderSummaryCounts = counts;
+}
+
+async function refreshOrdersListSummary() {
+    await loadOrderSummaryCounts();
+    renderOrdersList();
+}
+
+function renderOrderSummaryBadges(orderId) {
+    const counts = orderSummaryCounts[orderId];
+    if (!counts || (counts.approvals === 0 && counts.requests === 0)) {
+        return '';
+    }
+
+    const badges = [];
+    if (counts.approvals > 0) {
+        badges.push(
+            `<span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800" title="Aprovações em aberto">${counts.approvals} aprov.</span>`
+        );
+    }
+    if (counts.requests > 0) {
+        badges.push(
+            `<span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="Requisições em aberto">${counts.requests} req.</span>`
+        );
+    }
+
+    return `<div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
+        <span class="text-[10px] font-semibold text-slate-500">⏳ Pendências:</span>
+        ${badges.join('')}
+    </div>`;
+}
+
+function setupOrderConsultantFilter() {
+    const wrap = document.getElementById('filter-order-mine-wrap');
+    const checkbox = document.getElementById('filter-order-mine');
+    if (!wrap || !checkbox) return;
+
+    const isConsultor = currentUser?.role === 'Consultor';
+    wrap.classList.toggle('hidden', !isConsultor);
+    if (!isConsultor) {
+        checkbox.checked = false;
+    }
+}
 
 function initApp() {
+    setupOrderConsultantFilter();
     loadOrders();
     loadConsultants();
     loadProjetistas();
@@ -18,6 +109,7 @@ async function loadOrders() {
         ordersCache = orders;
     }
 
+    await loadOrderSummaryCounts();
     renderOrdersList();
 }
 
@@ -26,25 +118,42 @@ function renderOrdersList() {
     list.innerHTML = "";
 
     const filter = document.getElementById("filter-order-client")?.value.trim().toLowerCase() || '';
-    const orders = ordersCache.filter(o =>
-        !filter || (o.clientName || '').toLowerCase().includes(filter)
-    );
+    const filterMine = document.getElementById('filter-order-mine')?.checked
+        && currentUser?.role === 'Consultor';
+
+    let orders = ordersCache;
+    if (filterMine) {
+        orders = orders.filter(o => o.consultantName === currentUser.name);
+    }
+    if (filter) {
+        orders = orders.filter(o => (o.clientName || '').toLowerCase().includes(filter));
+    }
 
     if (orders.length === 0) {
-        list.innerHTML = `<p class="p-4 text-xs text-slate-400 text-center">${filter ? 'Nenhum pedido encontrado para este cliente.' : 'Nenhum pedido cadastrado.'}</p>`;
+        const hasFilter = filter || filterMine;
+        list.innerHTML = `<p class="p-4 text-xs text-slate-400 text-center">${hasFilter ? 'Nenhum pedido encontrado com os filtros aplicados.' : 'Nenhum pedido cadastrado.'}</p>`;
         return;
     }
 
     orders.forEach(o => {
         const isSelected = o.id === activeOrderId;
         const div = document.createElement("div");
-        div.className = `p-4 cursor-pointer hover:bg-slate-50 transition grid grid-cols-[72px_1fr] gap-2 items-start ${isSelected ? 'bg-amber-50/60 border-l-4 border-amber-600' : ''}`;
+        div.className = [
+            'cursor-pointer rounded-lg border p-3 transition shadow-sm',
+            'grid grid-cols-[76px_1fr] gap-3 items-start',
+            isSelected
+                ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-200 shadow-md'
+                : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 hover:shadow'
+        ].join(' ');
         div.onclick = () => selectOrder(o.id);
         div.innerHTML = `
-            <div class="text-xs font-mono font-bold text-slate-400">${o.orderCode}</div>
-            <div>
-                <div class="text-sm font-bold text-slate-900">${o.clientName}</div>
-                <div class="text-xs text-slate-500 mt-1">Consultor: ${o.consultantName}</div>
+            <div class="text-[11px] font-mono font-bold bg-slate-900 text-amber-500 px-2 py-1.5 rounded text-center leading-tight">
+                <div>${o.orderCode}</div>
+                <div class="text-[9px] font-sans font-medium text-slate-300 mt-1 leading-snug">${o.clientName}</div>
+            </div>
+            <div class="min-w-0">
+                <div class="text-[11px] text-slate-500">📋 Consultor: ${o.consultantName}</div>
+                ${renderOrderSummaryBadges(o.id)}
             </div>
         `;
         list.appendChild(div);
@@ -176,7 +285,7 @@ async function selectOrder(id) {
     document.getElementById("det-code").innerText = order.orderCode;
     document.getElementById("det-client").innerText = order.clientName;
     document.getElementById("det-info").innerText =
-        `Consultor: ${order.consultantName} | Criado por: ${order.creator?.name || 'Sistema'}`;
+        `📋 Consultor: ${order.consultantName} | Criado por: ${order.creator?.name || 'Sistema'}`;
 
     loadOrders();
     loadOrderProjects(id);
@@ -194,6 +303,7 @@ function bindOrderEvents() {
     });
 
     document.getElementById('filter-order-client').addEventListener('input', renderOrdersList);
+    document.getElementById('filter-order-mine')?.addEventListener('change', renderOrdersList);
 
     document.getElementById("ord-code").addEventListener("input", function () {
         this.value = this.value.replace(/\D/g, '');
