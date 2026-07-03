@@ -20,35 +20,73 @@ async function enterApp(authUserId) {
 }
 
 async function ensureAppUserOnRegister(user, name, email, role) {
-    const { data: byAuth } = await supabaseClient
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
+        return { error: null };
+    }
+
+    const { data: byAuth, error: readByAuthError } = await supabaseClient
         .from('appUsers')
         .select('id')
         .eq('authId', user.id)
         .maybeSingle();
 
+    if (readByAuthError) {
+        return { error: readByAuthError };
+    }
+
     if (byAuth) {
-        return supabaseClient
+        const { error } = await supabaseClient
             .from('appUsers')
             .update({ name, email, role })
             .eq('id', byAuth.id);
+        return { error };
     }
 
-    const { data: byEmail } = await supabaseClient
+    const { data: byEmail, error: readByEmailError } = await supabaseClient
         .from('appUsers')
         .select('id')
         .eq('email', email)
         .maybeSingle();
 
+    if (readByEmailError) {
+        return { error: readByEmailError };
+    }
+
     if (byEmail) {
-        return supabaseClient
+        const { error } = await supabaseClient
             .from('appUsers')
             .update({ authId: user.id, name, role })
             .eq('id', byEmail.id);
+        return { error };
     }
 
-    return supabaseClient
+    const { error } = await supabaseClient
         .from('appUsers')
         .insert({ authId: user.id, email, name, role, isActive: true });
+
+    return { error };
+}
+
+async function syncRegisteredUserProfile(user, name, email, role) {
+    const { error } = await ensureAppUserOnRegister(user, name, email, role);
+    if (!error) return null;
+
+    const { data: existing } = await supabaseClient
+        .from('appUsers')
+        .select('id')
+        .eq('authId', user.id)
+        .maybeSingle();
+
+    if (existing) {
+        const { error: updateError } = await supabaseClient
+            .from('appUsers')
+            .update({ name, email, role })
+            .eq('id', existing.id);
+        return updateError;
+    }
+
+    return error;
 }
 
 async function loadUserProfile(authUserId) {
@@ -208,10 +246,11 @@ function bindAuthEvents() {
             return;
         }
 
-        const { error: profileError } = await ensureAppUserOnRegister(data.user, name, email, role);
+        const profileError = await syncRegisteredUserProfile(data.user, name, email, role);
         if (profileError) {
-            console.error("ensureAppUserOnRegister:", profileError);
-            alert("Conta criada no login, mas falhou ao salvar o perfil: " + formatAuthError(profileError));
+            console.error("syncRegisteredUserProfile:", profileError);
+            alert("Conta criada no login, mas falhou ao salvar o perfil: " + formatAuthError(profileError)
+                + " — Execute supabase/rls-policies.sql no SQL Editor do Supabase.");
         }
 
         if (data.session) {

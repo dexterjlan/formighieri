@@ -5,8 +5,13 @@ function formatAuthError(error) {
 
     if (code === 500 || code === '500') {
         return message && message !== '{}'
-            ? message + " — Erro no banco ao criar perfil. Rode o SQL atualizado em supabase/rls-policies.sql."
-            : "Erro no servidor ao salvar perfil (500). Rode o SQL atualizado no Supabase. Se o e-mail já existir em appUsers, vincule ou remova o registro duplicado.";
+            ? message + " — Erro no banco ao criar perfil. Rode o SQL em supabase/rls-policies.sql."
+            : "Erro no servidor ao salvar perfil (500). Rode supabase/rls-policies.sql no Supabase. Se o e-mail já existir em appUsers, vincule ou remova o registro duplicado.";
+    }
+
+    if (code === 42501 || code === '42501' || message?.includes('row-level security')) {
+        return (message || 'Política RLS bloqueou a operação.')
+            + " — Execute supabase/rls-policies.sql no SQL Editor do Supabase.";
     }
 
     if (message && code) return `${message} (${code})`;

@@ -60,7 +60,12 @@
     <!-- MODAL: CRIAR REQUISIÇÃO -->
     <div id="conv-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl relative">
+            <div id="conv-form-loading"
+                class="hidden absolute inset-0 bg-white/85 rounded-2xl flex flex-col items-center justify-center gap-3 z-10">
+                <div class="h-8 w-8 border-2 border-slate-300 border-t-slate-900 rounded-full animate-spin"></div>
+                <p id="conv-form-loading-msg" class="text-xs text-slate-600 font-medium">Salvando requisição...</p>
+            </div>
             <h3 id="conv-modal-title" class="font-bold text-base text-slate-900 mb-4">Nova Requisição</h3>
             <form id="conv-form" class="space-y-3">
                 <div id="conv-profile-wrap" class="hidden">

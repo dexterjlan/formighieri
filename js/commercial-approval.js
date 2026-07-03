@@ -481,7 +481,7 @@ function renderCommercialApprovalCard(approval, context) {
         ? formatDate(approval.approvedAt)
         : '—';
     const revisionsLabel = revisions.length
-        ? `${revisions.length} revisão${revisions.length > 1 ? 'ões' : ''}`
+        ? `${revisions.length} ${revisions.length > 1 ? 'revisões' : 'revisão'}`
         : 'Nenhuma';
 
     const actionsHtml = renderCommercialApprovalActions(approval, {
