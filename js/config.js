@@ -25,4 +25,5 @@ let editingRevisionId = null;
 let currentRevisionApprovalId = null;
 let revisionActivityRowCounter = 0;
 let revisionModalViewOnly = false;
+let requestActivityRowCounter = 0;
 let enterAppInProgress = null;

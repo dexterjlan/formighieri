@@ -151,6 +151,7 @@ async function loadApprovalProjectCheckboxes() {
         label.innerHTML = `
             <input type="checkbox" name="approval-project" value="${project.id}"
                 data-project-name="${project.name.replace(/"/g, '&quot;')}"
+                ${hasApproval ? 'data-existing-approval="true"' : ''}
                 class="rounded border-slate-300 text-emerald-700 focus:ring-emerald-600 shrink-0"
                 ${hasApproval ? 'checked disabled' : ''}>
             <span class="flex-1 min-w-0 text-xs leading-tight">
@@ -165,7 +166,8 @@ async function loadApprovalProjectCheckboxes() {
 }
 
 function getSelectedNewApprovalProjectIds() {
-    return [...document.querySelectorAll('input[name="approval-project"]:checked:not(:disabled)')]
+    return [...document.querySelectorAll('input[name="approval-project"]:checked')]
+        .filter(input => !input.dataset.existingApproval)
         .map(input => Number(input.value));
 }
 
@@ -262,14 +264,21 @@ async function validateConsultorRequestAgainstOpenApproval(orderProjectId, exist
 }
 
 async function insertCommercialApprovals(payloads) {
-    let { error } = await supabaseClient.from('CommercialApproval').insert(payloads);
+    const selectColumns = 'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status';
+    let { data, error } = await supabaseClient
+        .from('CommercialApproval')
+        .insert(payloads)
+        .select(selectColumns);
 
     if (error && payloads.some(p => p.status)) {
         const withoutStatus = payloads.map(({ status, ...rest }) => rest);
-        ({ error } = await supabaseClient.from('CommercialApproval').insert(withoutStatus));
+        ({ data, error } = await supabaseClient
+            .from('CommercialApproval')
+            .insert(withoutStatus)
+            .select(selectColumns));
     }
 
-    return error;
+    return { error, data: data || [] };
 }
 
 function updateCommercialApprovalButtonVisibility() {
@@ -349,29 +358,43 @@ async function approveCommercialApproval(id) {
         status: 'Aprovado'
     };
 
-    let { error } = await supabaseClient
-        .from('CommercialApproval')
-        .update(payload)
-        .eq('id', id);
+    setApproveButtonLoading(id, true, 'Aprovando...');
 
-    if (error && payload.status) {
-        const { status, ...payloadWithoutStatus } = payload;
-        ({ error } = await supabaseClient
+    try {
+        let { error } = await supabaseClient
             .from('CommercialApproval')
-            .update(payloadWithoutStatus)
-            .eq('id', id));
-    }
+            .update(payload)
+            .eq('id', id);
 
-    if (error) {
-        alert('Erro ao aprovar solicitação: ' + error.message);
-        return;
-    }
+        if (error && payload.status) {
+            const { status, ...payloadWithoutStatus } = payload;
+            ({ error } = await supabaseClient
+                .from('CommercialApproval')
+                .update(payloadWithoutStatus)
+                .eq('id', id));
+        }
 
-    if (activeOrderId) {
-        loadCommercialApprovals(activeOrderId);
-    }
-    if (typeof refreshApprovalsQueryIfVisible === 'function') {
-        refreshApprovalsQueryIfVisible();
+        if (error) {
+            alert('Erro ao aprovar solicitação: ' + error.message);
+            return;
+        }
+
+        setApproveButtonLoading(id, true, 'Enviando notificação por e-mail...');
+        await notifyApprovalEmail('approved', {
+            ...approval,
+            status: 'Aprovado',
+            approved: true,
+            approvedAt: now
+        });
+
+        if (activeOrderId) {
+            loadCommercialApprovals(activeOrderId);
+        }
+        if (typeof refreshApprovalsQueryIfVisible === 'function') {
+            refreshApprovalsQueryIfVisible();
+        }
+    } finally {
+        setApproveButtonLoading(id, false);
     }
 }
 
@@ -438,7 +461,7 @@ function renderCommercialApprovalActions(approval, { showApprove, showRequestRev
     const buttons = [];
 
     if (showApprove) {
-        buttons.push(`<button type="button" onclick="approveCommercialApproval(${approval.id})"
+        buttons.push(`<button type="button" data-approve-btn="${approval.id}" onclick="approveCommercialApproval(${approval.id})"
             class="text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-1.5 rounded-lg font-medium">Aprovar</button>`);
     }
     if (showRequestRevision) {
@@ -590,6 +613,41 @@ async function loadCommercialApprovals(orderId) {
     }
 }
 
+function setCommercialApprovalFormLoading(isLoading, message = 'Salvando solicitação...') {
+    const overlay = document.getElementById('commercial-approval-loading');
+    const messageEl = document.getElementById('commercial-approval-loading-msg');
+    const submitBtn = document.getElementById('commercial-approval-form-submit');
+    const cancelBtn = document.querySelector('#commercial-approval-form button[type="button"]');
+    const fields = document.querySelectorAll('#commercial-approval-form input, #commercial-approval-form select');
+
+    overlay?.classList.toggle('hidden', !isLoading);
+    if (messageEl) messageEl.textContent = message;
+    if (submitBtn) {
+        submitBtn.disabled = isLoading;
+        submitBtn.classList.toggle('opacity-60', isLoading);
+        submitBtn.classList.toggle('cursor-not-allowed', isLoading);
+    }
+    if (cancelBtn) {
+        cancelBtn.disabled = isLoading;
+        cancelBtn.classList.toggle('opacity-60', isLoading);
+        cancelBtn.classList.toggle('cursor-not-allowed', isLoading);
+    }
+    fields.forEach(field => { field.disabled = isLoading; });
+}
+
+function setApproveButtonLoading(approvalId, isLoading, message = 'Aprovando...') {
+    const btn = document.querySelector(`[data-approve-btn="${approvalId}"]`);
+    if (!btn) return;
+
+    if (!btn.dataset.originalText) {
+        btn.dataset.originalText = btn.textContent.trim();
+    }
+    btn.disabled = isLoading;
+    btn.textContent = isLoading ? message : btn.dataset.originalText;
+    btn.classList.toggle('opacity-60', isLoading);
+    btn.classList.toggle('cursor-not-allowed', isLoading);
+}
+
 function bindCommercialApprovalEvents() {
     document.getElementById('commercial-approval-form').addEventListener('submit', async function (e) {
         e.preventDefault();
@@ -604,66 +662,82 @@ function bindCommercialApprovalEvents() {
             return;
         }
 
-        if (editingCommercialApprovalId && existing) {
-            if (!canEditCommercialApprovalCommercialFieldsOnly(existing)) {
-                alert('Esta solicitação não pode mais ser editada.');
-                return;
-            }
+        const isCreateMode = !editingCommercialApprovalId || !existing;
+        let selectedProjectIds = [];
 
-            const payload = { designerId };
-            let { error } = await supabaseClient
-                .from('CommercialApproval')
-                .update(payload)
-                .eq('id', editingCommercialApprovalId);
-
-            if (error) {
-                alert('Erro ao salvar aprovação comercial: ' + error.message);
-                return;
-            }
-        } else {
+        if (isCreateMode) {
             if (!canOpenCommercialApprovalModal()) {
                 alert('Somente Admin ou Projetista pode criar aprovação comercial.');
                 return;
             }
 
-            const selectedProjectIds = getSelectedNewApprovalProjectIds();
+            selectedProjectIds = getSelectedNewApprovalProjectIds();
 
             if (!selectedProjectIds.length) {
                 alert('Selecione ao menos um projeto que ainda não possui solicitação de aprovação.');
                 return;
             }
-
-            const projects = await fetchOrderProjectsForOrder(activeOrderId);
-            const openRequests = await getOpenRequestsForProjects(activeOrderId, selectedProjectIds);
-
-            if (openRequests.length) {
-                const shouldContinue = confirmApprovalDespiteOpenRequests(openRequests, projects);
-                if (!shouldContinue) return;
-            }
-
-            const payloads = selectedProjectIds.map(projectId => {
-                const project = projects.find(p => p.id === projectId);
-                return {
-                    orderId: activeOrderId,
-                    orderProjectId: projectId,
-                    projectName: project?.name || '',
-                    designerId,
-                    approved: false,
-                    approvedAt: null,
-                    status: 'Aguardando Aprovação'
-                };
-            }).filter(p => p.projectName);
-
-            const error = await insertCommercialApprovals(payloads);
-
-            if (error) {
-                alert('Erro ao salvar aprovação comercial: ' + error.message);
-                return;
-            }
         }
 
-        closeCommercialApprovalModal();
-        document.getElementById('commercial-approval-form').reset();
-        loadCommercialApprovals(activeOrderId);
+        setCommercialApprovalFormLoading(true, 'Salvando solicitação...');
+
+        try {
+            if (editingCommercialApprovalId && existing) {
+                if (!canEditCommercialApprovalCommercialFieldsOnly(existing)) {
+                    alert('Esta solicitação não pode mais ser editada.');
+                    return;
+                }
+
+                const payload = { designerId };
+                let { error } = await supabaseClient
+                    .from('CommercialApproval')
+                    .update(payload)
+                    .eq('id', editingCommercialApprovalId);
+
+                if (error) {
+                    alert('Erro ao salvar aprovação comercial: ' + error.message);
+                    return;
+                }
+            } else {
+                const projects = await fetchOrderProjectsForOrder(activeOrderId);
+                const openRequests = await getOpenRequestsForProjects(activeOrderId, selectedProjectIds);
+
+                if (openRequests.length) {
+                    const shouldContinue = confirmApprovalDespiteOpenRequests(openRequests, projects);
+                    if (!shouldContinue) return;
+                }
+
+                const payloads = selectedProjectIds.map(projectId => {
+                    const project = projects.find(p => p.id === projectId);
+                    return {
+                        orderId: activeOrderId,
+                        orderProjectId: projectId,
+                        projectName: project?.name || '',
+                        designerId,
+                        approved: false,
+                        approvedAt: null,
+                        status: 'Aguardando Aprovação'
+                    };
+                }).filter(p => p.projectName);
+
+                const { error, data: insertedApprovals } = await insertCommercialApprovals(payloads);
+
+                if (error) {
+                    alert('Erro ao salvar aprovação comercial: ' + error.message);
+                    return;
+                }
+
+                setCommercialApprovalFormLoading(true, 'Enviando notificação por e-mail...');
+                for (const inserted of insertedApprovals) {
+                    await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
+                }
+            }
+
+            closeCommercialApprovalModal();
+            document.getElementById('commercial-approval-form').reset();
+            loadCommercialApprovals(activeOrderId);
+        } finally {
+            setCommercialApprovalFormLoading(false);
+        }
     });
 }

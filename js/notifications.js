@@ -45,6 +45,18 @@ function buildOrderRequestEmailBody(payload) {
         lines.push('', 'Resposta do Projetista', payload.designerResponse);
     }
 
+    if (payload.activities?.length) {
+        lines.push('', 'Atividades');
+        payload.activities.forEach((activity, index) => {
+            lines.push(
+                '',
+                `${index + 1}. ${activity.description || '-'}`,
+                `   Realizado: ${activity.completed ? 'Sim' : 'Não'}`,
+                `   Observação: ${activity.observation || '—'}`
+            );
+        });
+    }
+
     return lines.join('\n');
 }
 
@@ -73,6 +85,8 @@ function buildOrderRequestEmailHtml(payload) {
             <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:14px;color:#0f172a;white-space:pre-wrap;">${escapeHtml(payload.designerResponse)}</div>
            </div>`
         : '';
+
+    const activitiesBlock = buildActivitiesEmailHtml(payload.activities);
 
     return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -116,6 +130,7 @@ function buildOrderRequestEmailHtml(payload) {
       </div>
       ${commercialBlock}
       ${designerBlock}
+      ${activitiesBlock}
     </div>
   </div>
 </body>
@@ -202,6 +217,202 @@ async function sendEmailViaGoogleAppsScript(payload) {
     }
 }
 
+const APPROVAL_EMAIL_SUBJECT_PREFIX = {
+    approval_requested: 'Aprovacao Solicitada',
+    revision_created: 'Revisao Criada',
+    sent_back_to_approval: 'Aprovacao Reenviada',
+    approved: 'Aprovacao Aprovada'
+};
+
+const APPROVAL_EMAIL_TITLE = {
+    approval_requested: 'Aprovação Solicitada',
+    revision_created: 'Revisão Criada',
+    sent_back_to_approval: 'Aprovação Reenviada',
+    approved: 'Aprovação Aprovada'
+};
+
+function buildApprovalEmailSubject(eventType, orderCode, projectName) {
+    const prefix = APPROVAL_EMAIL_SUBJECT_PREFIX[eventType] || 'Aprovacao Atualizada';
+    let subject = `${prefix} Pedido ${orderCode}`;
+    if (hasOrderProject(projectName)) {
+        subject += `, ${projectName}`;
+    }
+    return subject;
+}
+
+function buildApprovalEmailBody(payload) {
+    const lines = [
+        payload.eventTitle,
+        '',
+        `Pedido: ${payload.orderCode}`,
+    ];
+
+    if (hasOrderProject(payload.projectName)) {
+        lines.push(`Projeto: ${payload.projectName}`);
+    }
+
+    lines.push(
+        `Cliente: ${payload.clientName}`,
+        `Consultor: ${payload.consultantName}`,
+        `Projetista: ${payload.projetistaName}`,
+        `Status: ${payload.status}`,
+        `Ação por: ${payload.actedByName} (${payload.actedByRole})`
+    );
+
+    if (payload.activities?.length) {
+        lines.push('', 'Atividades da revisão');
+        payload.activities.forEach((activity, index) => {
+            lines.push(
+                '',
+                `${index + 1}. ${activity.description || '-'}`,
+                `   Realizado: ${activity.completed ? 'Sim' : 'Não'}`,
+                `   Observação: ${activity.observation || '—'}`
+            );
+        });
+    }
+
+    return lines.join('\n');
+}
+
+function buildActivitiesEmailHtml(activities, title = 'Atividades') {
+    if (!activities?.length) return '';
+
+    const rows = activities.map(activity => `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;">${escapeHtml(activity.description || '-')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;vertical-align:middle;white-space:nowrap;">${activity.completed ? '<span style="color:#047857;font-weight:600;">Sim</span>' : '<span style="color:#94a3b8;">Não</span>'}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;">${escapeHtml(activity.observation || '—')}</td>
+        </tr>
+    `).join('');
+
+    return `<div style="margin-top:16px;">
+        <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(title)}</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+          <thead>
+            <tr style="background:#f5f3ff;">
+              <th style="padding:8px 12px;text-align:left;font-size:10px;color:#64748b;text-transform:uppercase;">Atividade</th>
+              <th style="padding:8px 12px;text-align:center;font-size:10px;color:#64748b;text-transform:uppercase;">Realizado</th>
+              <th style="padding:8px 12px;text-align:left;font-size:10px;color:#64748b;text-transform:uppercase;">Observação</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+}
+
+function buildApprovalActivitiesHtml(activities) {
+    return buildActivitiesEmailHtml(activities, 'Atividades da Revisão');
+}
+
+function buildApprovalEmailHtml(payload) {
+    const projectRow = hasOrderProject(payload.projectName)
+        ? `<tr>
+            <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Projeto</td>
+            <td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.projectName)}</td>
+           </tr>`
+        : '';
+
+    const activitiesBlock = buildApprovalActivitiesHtml(payload.activities);
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
+  <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
+    <div style="background:#0f172a;color:#10b981;padding:18px 24px;">
+      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Formighieri</p>
+      <h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff;">${escapeHtml(payload.eventTitle)}</h1>
+    </div>
+    <div style="padding:24px;">
+      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;width:120px;">Pedido</td>
+          <td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.orderCode)}</td>
+        </tr>
+        ${projectRow}
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Cliente</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.clientName)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Consultor</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.consultantName)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Projetista</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.projetistaName)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Status</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.status)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;">Ação por</td>
+          <td style="padding:8px 12px;">${escapeHtml(payload.actedByName)} <span style="color:#64748b;">(${escapeHtml(payload.actedByRole)})</span></td>
+        </tr>
+      </table>
+      ${activitiesBlock}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+async function fetchApprovalNotificationContext(approval) {
+    const context = await fetchOrderRequestNotificationContext(
+        approval.orderId,
+        approval.orderProjectId,
+        approval.designerId
+    );
+
+    return {
+        ...context,
+        projectName: approval.projectName || context.projectName
+    };
+}
+
+async function notifyApprovalEmail(eventType, approval, options = {}) {
+    if (!NOTIFICATIONS_ENABLED || !approval) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyApprovalEmail: Google Apps Script não configurado em js/config.js');
+        return;
+    }
+
+    try {
+        const context = await fetchApprovalNotificationContext(approval);
+        const eventTitle = APPROVAL_EMAIL_TITLE[eventType] || 'Aprovação Atualizada';
+        const payload = {
+            eventType,
+            eventTitle,
+            orderCode: context.orderCode,
+            projectName: context.projectName,
+            clientName: context.clientName,
+            consultantName: context.consultantName,
+            projetistaName: context.projetistaName,
+            status: getApprovalStatusLabel(approval.status),
+            actedByName: currentUser?.name || '-',
+            actedByRole: currentUser?.role || '-',
+            activities: options.activities || null
+        };
+
+        const subject = buildApprovalEmailSubject(eventType, payload.orderCode, payload.projectName);
+        const body = buildApprovalEmailBody(payload);
+        const html = buildApprovalEmailHtml(payload);
+        const toEmail = NOTIFICATION_TEST_MODE ? NOTIFICATION_TEST_EMAIL : NOTIFICATION_TEST_EMAIL;
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: toEmail,
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject,
+            message_body: body,
+            message_html: html
+        });
+    } catch (err) {
+        console.warn('notifyApprovalEmail:', err);
+    }
+}
+
 async function notifyOrderRequestEmail(eventType, requestData) {
     if (!NOTIFICATIONS_ENABLED || !requestData) return;
 
@@ -232,7 +443,8 @@ async function notifyOrderRequestEmail(eventType, requestData) {
             designerResponse: requestData.designerResponse || '',
             status: normalizeRequestStatus(requestData),
             actedByName: currentUser?.name || '-',
-            actedByRole: currentUser?.role || '-'
+            actedByRole: currentUser?.role || '-',
+            activities: requestData.activities || null
         };
 
         const subject = buildOrderRequestEmailSubject(eventType, payload.orderCode, payload.projectName);

@@ -137,7 +137,7 @@ async function searchCommercialApprovalsQuery() {
         const actionButtons = [];
 
         if (showApprove) {
-            actionButtons.push(`<button type="button" onclick="approveCommercialApproval(${r.id})"
+            actionButtons.push(`<button type="button" data-approve-btn="${r.id}" onclick="approveCommercialApproval(${r.id})"
                 class="text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-2.5 py-1 rounded-lg font-medium">Aprovar</button>`);
         }
         if (showRequestRevision) {

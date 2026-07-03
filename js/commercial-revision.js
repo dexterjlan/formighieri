@@ -368,16 +368,17 @@ function closeCommercialRevisionModal() {
 
 async function persistCommercialRevision() {
     const approval = getCurrentApproval();
-    if (!approval) return false;
+    if (!approval) return { ok: false };
 
     const activities = collectRevisionActivitiesFromDom().filter(a => a.description);
     if (activities.length === 0) {
         alert('Adicione ao menos uma atividade.');
-        return false;
+        return { ok: false };
     }
 
     const now = new Date().toISOString();
     let revisionId = editingRevisionId;
+    const createdRevision = !revisionId;
 
     if (!revisionId) {
         const { data: revision, error: revisionError } = await supabaseClient
@@ -390,7 +391,7 @@ async function persistCommercialRevision() {
 
         if (revisionError || !revision) {
             alert('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
-            return false;
+            return { ok: false };
         }
 
         revisionId = revision.id;
@@ -412,7 +413,7 @@ async function persistCommercialRevision() {
                 .eq('id', approval.id);
         } else if (statusError) {
             alert('Erro ao atualizar status da aprovação: ' + statusError.message);
-            return false;
+            return { ok: false };
         }
     }
 
@@ -433,7 +434,7 @@ async function persistCommercialRevision() {
                 .eq('id', activity.id);
             if (error) {
                 alert('Erro ao salvar atividade: ' + error.message);
-                return false;
+                return { ok: false };
             }
         } else {
             const { error } = await supabaseClient
@@ -441,7 +442,7 @@ async function persistCommercialRevision() {
                 .insert([{ ...payload, revisionId }]);
             if (error) {
                 alert('Erro ao salvar atividade: ' + error.message);
-                return false;
+                return { ok: false };
             }
         }
     }
@@ -451,7 +452,7 @@ async function persistCommercialRevision() {
         .update({ updatedAt: now })
         .eq('id', revisionId);
 
-    return true;
+    return { ok: true, createdRevision, activities };
 }
 
 function refreshCommercialApprovalViews() {
@@ -463,12 +464,47 @@ function refreshCommercialApprovalViews() {
     }
 }
 
-async function saveCommercialRevision() {
-    const saved = await persistCommercialRevision();
-    if (!saved) return;
+function setCommercialRevisionModalLoading(isLoading, message = 'Salvando revisão...') {
+    const overlay = document.getElementById('commercial-revision-loading');
+    const messageEl = document.getElementById('commercial-revision-loading-msg');
+    const saveBtn = document.getElementById('btn-save-revision');
+    const sendBackBtn = document.getElementById('btn-send-back-approval');
+    const addBtn = document.getElementById('btn-add-revision-activity');
+    const cancelBtn = document.querySelector('#commercial-revision-modal button[onclick="closeCommercialRevisionModal()"]');
+    const fields = document.querySelectorAll('#commercial-revision-modal textarea, #commercial-revision-modal input');
 
-    closeCommercialRevisionModal();
-    refreshCommercialApprovalViews();
+    overlay?.classList.toggle('hidden', !isLoading);
+    if (messageEl) messageEl.textContent = message;
+    [saveBtn, sendBackBtn, addBtn, cancelBtn].forEach(btn => {
+        if (!btn) return;
+        btn.disabled = isLoading;
+        btn.classList.toggle('opacity-60', isLoading);
+        btn.classList.toggle('cursor-not-allowed', isLoading);
+    });
+    fields.forEach(field => { field.disabled = isLoading; });
+}
+
+async function saveCommercialRevision() {
+    setCommercialRevisionModalLoading(true, 'Salvando revisão...');
+
+    try {
+        const result = await persistCommercialRevision();
+        if (!result.ok) return;
+
+        const approval = getCurrentApproval();
+        if (result.createdRevision && approval) {
+            setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+            await notifyApprovalEmail('revision_created', {
+                ...approval,
+                status: 'Em revisão'
+            }, { activities: result.activities });
+        }
+
+        closeCommercialRevisionModal();
+        refreshCommercialApprovalViews();
+    } finally {
+        setCommercialRevisionModalLoading(false);
+    }
 }
 
 async function sendRevisionBackToApproval() {
@@ -482,32 +518,48 @@ async function sendRevisionBackToApproval() {
 
     if (!confirm('Enviar esta solicitação novamente para aprovação comercial?')) return;
 
-    const saved = await persistCommercialRevision();
-    if (!saved) return;
+    setCommercialRevisionModalLoading(true, 'Salvando revisão...');
 
-    let { error } = await supabaseClient
-        .from('CommercialApproval')
-        .update({
+    try {
+        const result = await persistCommercialRevision();
+        if (!result.ok) return;
+
+        setCommercialRevisionModalLoading(true, 'Atualizando aprovação...');
+
+        let { error } = await supabaseClient
+            .from('CommercialApproval')
+            .update({
+                status: 'Aguardando Aprovação',
+                approved: false,
+                approvedAt: null
+            })
+            .eq('id', approval.id);
+
+        if (error && error.message?.includes('status')) {
+            ({ error } = await supabaseClient
+                .from('CommercialApproval')
+                .update({ approved: false, approvedAt: null })
+                .eq('id', approval.id));
+        }
+
+        if (error) {
+            alert('Erro ao enviar para aprovação: ' + error.message);
+            return;
+        }
+
+        setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+        await notifyApprovalEmail('sent_back_to_approval', {
+            ...approval,
             status: 'Aguardando Aprovação',
             approved: false,
             approvedAt: null
-        })
-        .eq('id', approval.id);
+        }, { activities: result.activities });
 
-    if (error && error.message?.includes('status')) {
-        ({ error } = await supabaseClient
-            .from('CommercialApproval')
-            .update({ approved: false, approvedAt: null })
-            .eq('id', approval.id));
+        closeCommercialRevisionModal();
+        refreshCommercialApprovalViews();
+    } finally {
+        setCommercialRevisionModalLoading(false);
     }
-
-    if (error) {
-        alert('Erro ao enviar para aprovação: ' + error.message);
-        return;
-    }
-
-    closeCommercialRevisionModal();
-    refreshCommercialApprovalViews();
 }
 
 window.openCommercialRevisionModal = openCommercialRevisionModal;

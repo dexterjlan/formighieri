@@ -22,6 +22,7 @@ function initAppEvents() {
     bindOrderEvents();
     bindOrderProjectEvents();
     bindConversationEvents();
+    bindRequestActivityEvents();
     bindCommercialApprovalEvents();
     bindCommercialRevisionEvents();
 }

@@ -96,7 +96,9 @@ async function openConvModal() {
     document.getElementById("conv-form-submit").textContent = "Criar Requisição";
     document.getElementById("conv-form").reset();
     resetConvResponseFields();
+    resetConvActivities();
     setupConvProfileFields(false);
+    updateRequestActivityModalControls(null);
     await Promise.all([
         loadProjetistas(),
         loadConvOrderProjects()
@@ -145,15 +147,24 @@ async function editConversation(id) {
     setupConvResponseFields(conv);
     await Promise.all([
         loadProjetistas(),
-        loadConvOrderProjects(conv.orderProjectId)
+        loadConvOrderProjects(conv.orderProjectId),
+        loadRequestActivitiesForModal(id)
     ]);
     document.getElementById("conv-designer").value = String(conv.designerId);
     document.getElementById("conv-request").value = conv.designerRequest;
+    updateRequestActivityModalControls(conv);
+    updateConvModalActivitiesHint();
     toggleModal('conv-modal', true);
 }
 
-function buildRequestResponseSection(conv) {
+function buildRequestResponseSection(conv, activities = []) {
     const status = normalizeRequestStatus(conv);
+    const hasActivities = activities.length > 0;
+    const allComplete = allRequestActivitiesCompleted(activities);
+    const replyBlocked = hasActivities && !allComplete;
+    const replyHint = hasActivities
+        ? `<p data-reply-hint="${conv.id}" class="${allComplete ? 'hidden' : ''} text-[10px] text-amber-700">Marque todas as atividades como realizadas para responder.</p>`
+        : '';
 
     if (status === 'Encerrado') {
         const sections = [];
@@ -183,13 +194,22 @@ function buildRequestResponseSection(conv) {
     if (canRespondAsConsultor(conv)) {
         return `
             <div class="space-y-2">
+                <label class="block text-xs font-semibold text-slate-500">Resposta do Consultor</label>
                 <textarea id="reply-consultor-${conv.id}" rows="2"
                     class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                    placeholder="Digite a resposta do consultor..."></textarea>
-                <button type="button" data-reply-btn="consultor-${conv.id}" onclick="replyConsultorConversation('${conv.id}')"
-                    class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-amber-700">
-                    Responder e Encerrar
-                </button>
+                    placeholder="Digite a resposta do consultor...">${escapeHtml(conv.commercialResponse || '')}</textarea>
+                ${replyHint}
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-save-request-activities="${conv.id}" onclick="saveRequestActivitiesFromCard(${conv.id})"
+                        class="bg-slate-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-700">
+                        Salvar
+                    </button>
+                    <button type="button" data-reply-btn="consultor-${conv.id}" onclick="replyConsultorConversation('${conv.id}')"
+                        class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-amber-700 ${replyBlocked ? 'opacity-50 cursor-not-allowed' : ''}"
+                        ${replyBlocked ? 'disabled' : ''}>
+                        Responder e Encerrar
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -197,13 +217,22 @@ function buildRequestResponseSection(conv) {
     if (canRespondAsProjetista(conv)) {
         return `
             <div class="space-y-2">
+                <label class="block text-xs font-semibold text-slate-500">Resposta do Projetista</label>
                 <textarea id="reply-projetista-${conv.id}" rows="2"
                     class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-sky-600"
-                    placeholder="Digite a resposta do projetista..."></textarea>
-                <button type="button" data-reply-btn="projetista-${conv.id}" onclick="replyProjetistaConversation('${conv.id}')"
-                    class="bg-sky-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800">
-                    Responder e Encerrar
-                </button>
+                    placeholder="Digite a resposta do projetista...">${escapeHtml(conv.designerResponse || '')}</textarea>
+                ${replyHint}
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-save-request-activities="${conv.id}" onclick="saveRequestActivitiesFromCard(${conv.id})"
+                        class="bg-slate-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-700">
+                        Salvar
+                    </button>
+                    <button type="button" data-reply-btn="projetista-${conv.id}" onclick="replyProjetistaConversation('${conv.id}')"
+                        class="bg-sky-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800 ${replyBlocked ? 'opacity-50 cursor-not-allowed' : ''}"
+                        ${replyBlocked ? 'disabled' : ''}>
+                        Responder e Encerrar
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -271,6 +300,9 @@ async function loadConversations(orderId) {
         });
     }
 
+    const requestIds = convs.map(c => c.id);
+    const activitiesByRequest = await fetchRequestActivitiesByRequestIds(requestIds);
+
     list.innerHTML = "";
 
     sortOrderRequests(convs).forEach(c => {
@@ -306,8 +338,9 @@ async function loadConversations(orderId) {
                 <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">${requestTitle}:</p>
                 <p class="text-slate-800 font-medium">${c.designerRequest}</p>
             </div>
-            ${buildRequestResponseSection(c)}
         `;
+        appendRequestActivitiesToCard(div, c, activitiesByRequest[c.id] || []);
+        div.insertAdjacentHTML('beforeend', buildRequestResponseSection(c, activitiesByRequest[c.id] || []));
         list.appendChild(div);
     });
 }
@@ -318,11 +351,18 @@ async function replyConsultorConversation(id) {
 
     const conv = conversationsCache.find(c => String(c.id) === String(id));
     const responseText = input.value.trim();
+    const cardActivities = collectRequestActivitiesFromCard(id);
+
+    if (!validateRequestActivitiesBeforeReply(cardActivities)) return;
 
     setRequestReplyLoading(id, 'consultor', true, 'Salvando resposta...');
 
     try {
         const now = new Date().toISOString();
+        if (cardActivities.length) {
+            await persistRequestActivities(id, cardActivities);
+        }
+
         const { error } = await supabaseClient
             .from('OrderRequest')
             .update({
@@ -344,7 +384,8 @@ async function replyConsultorConversation(id) {
             await notifyOrderRequestEmail('answered', {
                 ...conv,
                 commercialResponse: responseText,
-                status: 'Encerrado'
+                status: 'Encerrado',
+                activities: cardActivities
             });
         }
 
@@ -360,11 +401,18 @@ async function replyProjetistaConversation(id) {
 
     const conv = conversationsCache.find(c => String(c.id) === String(id));
     const responseText = input.value.trim();
+    const cardActivities = collectRequestActivitiesFromCard(id);
+
+    if (!validateRequestActivitiesBeforeReply(cardActivities)) return;
 
     setRequestReplyLoading(id, 'projetista', true, 'Salvando resposta...');
 
     try {
         const now = new Date().toISOString();
+        if (cardActivities.length) {
+            await persistRequestActivities(id, cardActivities);
+        }
+
         let payload = {
             designerResponse: responseText,
             responseAt: now,
@@ -404,7 +452,8 @@ async function replyProjetistaConversation(id) {
                 ...conv,
                 designerResponse: usedDesignerResponseField ? responseText : null,
                 commercialResponse: usedDesignerResponseField ? conv.commercialResponse : responseText,
-                status: 'Encerrado'
+                status: 'Encerrado',
+                activities: cardActivities
             });
         }
 
@@ -443,6 +492,8 @@ function setConvFormLoading(isLoading, message = 'Salvando requisição...') {
     const messageEl = document.getElementById('conv-form-loading-msg');
     const submitBtn = document.getElementById('conv-form-submit');
     const cancelBtn = document.querySelector('#conv-form button[type="button"]');
+    const addActivityBtn = document.getElementById('btn-add-request-activity');
+    const saveActivitiesBtn = document.getElementById('btn-save-conv-activities');
     const fields = document.querySelectorAll('#conv-form input, #conv-form select, #conv-form textarea');
 
     overlay?.classList.toggle('hidden', !isLoading);
@@ -457,6 +508,16 @@ function setConvFormLoading(isLoading, message = 'Salvando requisição...') {
         cancelBtn.classList.toggle('opacity-60', isLoading);
         cancelBtn.classList.toggle('cursor-not-allowed', isLoading);
     }
+    if (addActivityBtn) {
+        addActivityBtn.disabled = isLoading;
+        addActivityBtn.classList.toggle('opacity-60', isLoading);
+        addActivityBtn.classList.toggle('cursor-not-allowed', isLoading);
+    }
+    if (saveActivitiesBtn) {
+        saveActivitiesBtn.disabled = isLoading;
+        saveActivitiesBtn.classList.toggle('opacity-60', isLoading);
+        saveActivitiesBtn.classList.toggle('cursor-not-allowed', isLoading);
+    }
     fields.forEach(field => { field.disabled = isLoading; });
 }
 
@@ -467,6 +528,7 @@ function bindConversationEvents() {
         const designerId = document.getElementById("conv-designer").value;
         const designerRequest = document.getElementById("conv-request").value.trim();
         const orderProjectId = getConvOrderProjectIdValue();
+        const requestActivities = collectRequestActivitiesFromDom().filter(a => a.description);
 
         if (!designerRequest) {
             alert("Informe a solicitação.");
@@ -518,6 +580,11 @@ function bindConversationEvents() {
                     }
                 }
 
+                if (updatePayload.status === 'Encerrado'
+                    && !validateRequestActivitiesBeforeReply(requestActivities)) {
+                    return;
+                }
+
                 let { error } = await supabaseClient
                     .from('OrderRequest')
                     .update(updatePayload)
@@ -536,6 +603,8 @@ function bindConversationEvents() {
                     return;
                 }
 
+                await persistRequestActivities(editingConversationId, requestActivities);
+
                 if (existing && updatePayload.status === 'Encerrado') {
                     setConvFormLoading(true, 'Enviando notificação por e-mail...');
                     await notifyOrderRequestEmail('answered', {
@@ -544,7 +613,8 @@ function bindConversationEvents() {
                         orderProjectId,
                         commercialResponse: updatePayload.commercialResponse ?? existing.commercialResponse,
                         designerResponse: updatePayload.designerResponse ?? existing.designerResponse,
-                        status: 'Encerrado'
+                        status: 'Encerrado',
+                        activities: requestActivities
                     });
                 }
             } else {
@@ -592,8 +662,12 @@ function bindConversationEvents() {
                 }
 
                 if (createdRequest) {
+                    await persistRequestActivities(createdRequest.id, requestActivities);
                     setConvFormLoading(true, 'Enviando notificação por e-mail...');
-                    await notifyOrderRequestEmail('created', createdRequest);
+                    await notifyOrderRequestEmail('created', {
+                        ...createdRequest,
+                        activities: requestActivities
+                    });
                 }
             }
 
