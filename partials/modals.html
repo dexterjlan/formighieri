@@ -266,3 +266,88 @@
             </div>
         </div>
     </div>
+
+    <!-- MODAL: CONFERÊNCIA ANTEPROJETO -->
+    <div id="anteprojeto-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-5xl shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 id="anteprojeto-modal-title" class="font-bold text-base text-slate-900 mb-4">Nova Conferência de Anteprojeto</h3>
+            <form id="anteprojeto-form" class="space-y-4">
+                <div id="anteprojeto-designer-wrap">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Projetista <span class="text-red-500">*</span></label>
+                    <select id="anteprojeto-designer"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-sky-600"
+                        required></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Arquivo SketchUp</label>
+                    <input type="text" id="anteprojeto-sketchup-path"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-sky-600"
+                        placeholder="Caminho do arquivo SketchUp da conferência">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Observação da conferência</label>
+                    <textarea id="anteprojeto-conference-observation" rows="3"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-sky-600 resize-y"
+                        placeholder="Observações gerais sobre esta conferência de anteprojeto"></textarea>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex flex-wrap justify-between items-center gap-2">
+                        <p class="text-xs font-semibold text-slate-500 uppercase">Projetos e módulos</p>
+                        <div class="flex gap-2 items-center">
+                            <select id="anteprojeto-add-project-select"
+                                class="px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-sky-600 min-w-[180px]">
+                                <option value="">Selecione projeto...</option>
+                            </select>
+                            <button type="button" id="btn-add-anteprojeto-project"
+                                class="text-xs bg-sky-700 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800 whitespace-nowrap">+ Adicionar projeto</button>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-400">Adicione cada projeto, depois informe o nome do módulo e clique em Adicionar módulo. Em seguida, abra Observações e cadastre cada uma separadamente.</p>
+                    <datalist id="anteprojeto-observation-options"></datalist>
+                    <div id="anteprojeto-projects-structure" class="space-y-4"></div>
+                    <p id="anteprojeto-projects-empty-msg" class="text-xs text-slate-400 text-center py-2">Nenhum projeto adicionado.</p>
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeAnteprojetoModal()"
+                        class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
+                    <button type="submit" id="anteprojeto-form-submit"
+                        class="flex-1 bg-sky-700 text-white py-2 rounded-lg text-xs font-medium">Criar Conferência</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: MEDIÇÃO -->
+    <div id="medicao-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 id="medicao-modal-title" class="font-bold text-base text-slate-900 mb-4">Nova Medição</h3>
+            <form id="medicao-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Data da medição <span class="text-red-500">*</span></label>
+                    <input type="date" id="medicao-default-date" required
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600">
+                    <p class="text-[10px] text-slate-400 mt-1">Data padrão ao marcar projetos abaixo. Cada projeto pode ter data individual.</p>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Observação da medição</label>
+                    <textarea id="medicao-observation" rows="3"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600 resize-y"
+                        placeholder="Observações sobre a medição"></textarea>
+                </div>
+                <div class="space-y-2">
+                    <p class="text-xs font-semibold text-slate-500 uppercase">Projetos medidos</p>
+                    <p class="text-[10px] text-slate-400">Marque os projetos, informe data da medição e, por projeto, se a planta já foi levantada e a data.</p>
+                    <div id="medicao-projects-picker" class="space-y-2 border border-slate-200 rounded-lg p-3 bg-white max-h-72 overflow-y-auto"></div>
+                    <p id="medicao-projects-empty-msg" class="text-xs text-slate-400 text-center py-2 hidden">Nenhum projeto cadastrado neste pedido.</p>
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="closeMedicaoModal()"
+                        class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
+                    <button type="submit" id="medicao-form-submit"
+                        class="flex-1 bg-teal-700 text-white py-2 rounded-lg text-xs font-medium">Salvar Medição</button>
+                </div>
+            </form>
+        </div>
+    </div>

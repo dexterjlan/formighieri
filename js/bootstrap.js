@@ -15,6 +15,8 @@ const SCRIPTS = [
     'js/auth.js',
     'js/orders.js',
     'js/order-projects.js',
+    'js/anteprojeto.js',
+    'js/mediciao.js',
     'js/notifications.js',
     'js/request-activities.js',
     'js/conversations.js',
@@ -50,7 +52,7 @@ async function bootstrap() {
         mount.innerHTML = htmlParts.join('\n');
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260723`);
+            await loadScript(`${src}?v=20260750`);
         }
 
         initAppEvents();

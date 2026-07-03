@@ -40,6 +40,11 @@ async function searchConversations() {
     if (error || !convs) {
         tbody.innerHTML = '<tr><td colspan="11" class="p-4 text-xs text-red-500">Erro ao carregar requisições.</td></tr>';
         countEl.textContent = '0 requisições';
+        updateQueryResultsPanelToggle(
+            'btn-toggle-conversations-query-results',
+            'conversations-query-results-panel',
+            conversationsQueryResultsExpanded
+        );
         return;
     }
 
@@ -97,6 +102,11 @@ async function searchConversations() {
 
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="11" class="p-6 text-center text-xs text-slate-400">Nenhuma requisição encontrada.</td></tr>';
+        updateQueryResultsPanelToggle(
+            'btn-toggle-conversations-query-results',
+            'conversations-query-results-panel',
+            conversationsQueryResultsExpanded
+        );
         return;
     }
 
@@ -131,6 +141,12 @@ async function searchConversations() {
         `;
         tbody.appendChild(tr);
     });
+
+    updateQueryResultsPanelToggle(
+        'btn-toggle-conversations-query-results',
+        'conversations-query-results-panel',
+        conversationsQueryResultsExpanded
+    );
 }
 
 function bindConversationsQueryEvents() {
@@ -146,4 +162,5 @@ function bindConversationsQueryEvents() {
         document.getElementById("filter-projetista").value = "";
         searchConversations();
     });
+    document.getElementById('btn-toggle-conversations-query-results')?.addEventListener('click', toggleConversationsQueryResults);
 }

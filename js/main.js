@@ -22,6 +22,8 @@ function initAppEvents() {
     bindCommercialApprovalQueryEvents();
     bindOrderEvents();
     bindOrderProjectEvents();
+    bindAnteprojetoEvents();
+    bindMedicaoEvents();
     bindConversationEvents();
     bindRequestActivityEvents();
     bindCommercialApprovalEvents();

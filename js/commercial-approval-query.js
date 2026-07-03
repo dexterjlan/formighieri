@@ -62,6 +62,11 @@ async function searchCommercialApprovalsQuery() {
     if (error || !approvals) {
         tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-xs text-red-500">Erro ao carregar aprovações.</td></tr>';
         countEl.textContent = '0 aprovações';
+        updateQueryResultsPanelToggle(
+            'btn-toggle-approvals-query-results',
+            'approvals-query-results-panel',
+            approvalsQueryResultsExpanded
+        );
         return;
     }
 
@@ -119,6 +124,11 @@ async function searchCommercialApprovalsQuery() {
 
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="p-6 text-center text-xs text-slate-400">Nenhuma aprovação encontrada.</td></tr>';
+        updateQueryResultsPanelToggle(
+            'btn-toggle-approvals-query-results',
+            'approvals-query-results-panel',
+            approvalsQueryResultsExpanded
+        );
         return;
     }
 
@@ -170,6 +180,12 @@ async function searchCommercialApprovalsQuery() {
         `;
         tbody.appendChild(tr);
     });
+
+    updateQueryResultsPanelToggle(
+        'btn-toggle-approvals-query-results',
+        'approvals-query-results-panel',
+        approvalsQueryResultsExpanded
+    );
 }
 
 function refreshApprovalsQueryIfVisible() {
@@ -191,4 +207,5 @@ function bindCommercialApprovalQueryEvents() {
         document.getElementById('approval-filter-status').value = '';
         searchCommercialApprovalsQuery();
     });
+    document.getElementById('btn-toggle-approvals-query-results')?.addEventListener('click', toggleApprovalsQueryResults);
 }

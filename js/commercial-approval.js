@@ -515,25 +515,31 @@ function renderCommercialApprovalCard(approval, context) {
 
     const cardBgClass = getCommercialApprovalHighlightBgClass(approval);
     const div = document.createElement('div');
-    div.className = `${cardBgClass} rounded-xl border overflow-hidden shadow-sm`;
+    div.className = `${cardBgClass} collapsible-list-card rounded-xl border overflow-hidden shadow-sm`;
     div.innerHTML = `
-        <div class="px-4 py-3 bg-white/50 border-b border-white/60">
+        <div class="collapsible-list-header px-4 py-3 bg-white/50 border-b border-white/60 cursor-pointer">
             <div class="flex justify-between items-start gap-3">
-                <div class="min-w-0 flex-1">
-                    <p class="text-[10px] uppercase font-semibold text-slate-500 tracking-wide">Projeto</p>
-                    <p class="text-sm font-bold text-slate-900 truncate" title="${approval.projectName || ''}">${approval.projectName || '—'}</p>
-                    ${environmentName ? `<p class="text-xs text-slate-500 mt-0.5">${environmentName}</p>` : ''}
-                    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                        <span class="text-slate-600"><span class="text-slate-400">👤 Projetista:</span> <span class="font-medium text-slate-800">${projetistaName}</span></span>
-                        <span class="text-slate-600"><span class="text-slate-400">Data de aprovação:</span> <span class="font-medium text-slate-800">${approvalDate}</span></span>
-                        <span class="text-slate-600"><span class="text-slate-400">Revisões:</span> <span class="font-medium text-slate-800">${revisionsLabel}</span></span>
+                <div class="flex items-start gap-2 min-w-0 flex-1">
+                    <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px] mt-0.5"
+                        aria-label="Expandir">▶</button>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-[10px] uppercase font-semibold text-slate-500 tracking-wide">Projeto</p>
+                        <p class="text-sm font-bold text-slate-900 truncate" title="${approval.projectName || ''}">${approval.projectName || '—'}</p>
+                        ${environmentName ? `<p class="text-xs text-slate-500 mt-0.5">${environmentName}</p>` : ''}
+                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                            <span class="text-slate-600"><span class="text-slate-400">👤 Projetista:</span> <span class="font-medium text-slate-800">${projetistaName}</span></span>
+                            <span class="text-slate-600"><span class="text-slate-400">Data de aprovação:</span> <span class="font-medium text-slate-800">${approvalDate}</span></span>
+                            <span class="text-slate-600"><span class="text-slate-400">Revisões:</span> <span class="font-medium text-slate-800">${revisionsLabel}</span></span>
+                        </div>
                     </div>
                 </div>
                 <span class="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase whitespace-nowrap shrink-0 ${statusClass}">${status}</span>
             </div>
         </div>
-        ${actionsHtml}
-        ${revisionsHtml ? `<div class="px-4 pb-4">${revisionsHtml}</div>` : ''}
+        <div class="collapsible-list-body hidden">
+            ${actionsHtml}
+            ${revisionsHtml ? `<div class="px-4 pb-4">${revisionsHtml}</div>` : ''}
+        </div>
     `;
     return div;
 }
@@ -609,6 +615,8 @@ async function loadCommercialApprovals(orderId) {
                 revisionsByApproval
             }));
         });
+
+        bindCollapsibleListCardToggles(list);
     } catch (renderError) {
         console.error('loadCommercialApprovals render:', renderError);
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-4 bg-white rounded-xl border border-red-100">Erro ao exibir aprovações comerciais: ${renderError.message}</p>`;

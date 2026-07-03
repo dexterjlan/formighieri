@@ -230,6 +230,75 @@ function isAdmin() {
     return currentUser?.role === 'Admin';
 }
 
+function isConferente(user = currentUser) {
+    return Boolean(user?.conferente);
+}
+
+function canCreateAsAdminOrConferente() {
+    return isAdmin() || isConferente();
+}
+
+let conversationsQueryResultsExpanded = false;
+let approvalsQueryResultsExpanded = false;
+
+function updateQueryResultsPanelToggle(buttonId, panelId, expanded) {
+    const btn = document.getElementById(buttonId);
+    const panel = document.getElementById(panelId);
+    if (!btn || !panel) return;
+
+    panel.classList.toggle('hidden', !expanded);
+    btn.textContent = expanded ? 'Recolher' : 'Expandir';
+    btn.setAttribute('aria-label', expanded ? 'Recolher lista' : 'Expandir lista');
+}
+
+function toggleConversationsQueryResults() {
+    conversationsQueryResultsExpanded = !conversationsQueryResultsExpanded;
+    updateQueryResultsPanelToggle(
+        'btn-toggle-conversations-query-results',
+        'conversations-query-results-panel',
+        conversationsQueryResultsExpanded
+    );
+}
+
+function toggleApprovalsQueryResults() {
+    approvalsQueryResultsExpanded = !approvalsQueryResultsExpanded;
+    updateQueryResultsPanelToggle(
+        'btn-toggle-approvals-query-results',
+        'approvals-query-results-panel',
+        approvalsQueryResultsExpanded
+    );
+}
+
+function bindCollapsibleListCardToggles(root, options = {}) {
+    const { defaultCollapsed = true } = options;
+
+    root.querySelectorAll('.collapsible-list-card').forEach(card => {
+        const btn = card.querySelector('.list-card-toggle');
+        const body = card.querySelector('.collapsible-list-body');
+        const header = card.querySelector('.collapsible-list-header');
+        if (!btn || !body) return;
+
+        const setCollapsed = (collapsed) => {
+            body.classList.toggle('hidden', collapsed);
+            btn.textContent = collapsed ? '▶' : '▼';
+            btn.setAttribute('aria-label', collapsed ? 'Expandir' : 'Recolher');
+        };
+
+        setCollapsed(defaultCollapsed);
+
+        const toggle = (event) => {
+            if (event) event.stopPropagation();
+            setCollapsed(body.classList.contains('hidden') === false);
+        };
+
+        btn.addEventListener('click', toggle);
+        header?.addEventListener('click', (event) => {
+            if (event.target.closest('button:not(.list-card-toggle), a, input, select, textarea, label')) return;
+            toggle(event);
+        });
+    });
+}
+
 function formatRequestProfile(profile) {
     return profile || '—';
 }

@@ -314,7 +314,7 @@ async function loadConversations(orderId) {
             const statusClass = getRequestStatusBadgeClass(status);
             const cardBgClass = getRequestHighlightBgClass(c);
             const div = document.createElement("div");
-            div.className = `${cardBgClass} p-5 rounded-xl border shadow-sm space-y-3`;
+            div.className = `${cardBgClass} collapsible-list-card rounded-xl border shadow-sm overflow-hidden`;
 
             const requestTitle = c.requestProfile === 'Consultor'
                 ? 'Solicitação do Consultor'
@@ -325,27 +325,37 @@ async function loadConversations(orderId) {
                 : '';
 
             div.innerHTML = `
-                <div class="flex justify-between items-center border-b border-slate-100 pb-2">
-                    <div class="flex flex-col gap-0.5">
-                        <div class="text-xs font-bold text-slate-700">👤 Projetista: ${projetistaNames[c.designerId] || '-'}</div>
-                        <div class="text-xs font-bold text-slate-600">📋 Consultor: ${consultantName}</div>
-                        ${projectLabel}
+                <div class="collapsible-list-header flex justify-between items-center gap-2 border-b border-slate-100 px-5 py-3 bg-white/40 cursor-pointer">
+                    <div class="flex items-start gap-2 min-w-0 flex-1">
+                        <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
+                            aria-label="Expandir">▶</button>
+                        <div class="flex flex-col gap-0.5 min-w-0">
+                            <div class="text-xs font-bold text-slate-700">👤 Projetista: ${projetistaNames[c.designerId] || '-'}</div>
+                            <div class="text-xs font-bold text-slate-600">📋 Consultor: ${consultantName}</div>
+                            ${projectLabel}
+                        </div>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 shrink-0">
                         ${canEdit ? `<button type="button" onclick="editConversation(${c.id})"
                             class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium">Editar</button>` : ''}
                         <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
                     </div>
                 </div>
-                <div class="bg-white/70 p-3 rounded-lg text-xs">
-                    <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">${requestTitle}:</p>
-                    <p class="text-slate-800 font-medium">${c.designerRequest}</p>
+                <div class="collapsible-list-body hidden px-5 py-4 space-y-3">
+                    <div class="bg-white/70 p-3 rounded-lg text-xs">
+                        <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">${requestTitle}:</p>
+                        <p class="text-slate-800 font-medium">${c.designerRequest}</p>
+                    </div>
                 </div>
             `;
-            appendRequestActivitiesToCard(div, c, activitiesByRequest[c.id] || []);
-            div.insertAdjacentHTML('beforeend', buildRequestResponseSection(c, activitiesByRequest[c.id] || []));
+
+            const body = div.querySelector('.collapsible-list-body');
+            appendRequestActivitiesToCard(body, c, activitiesByRequest[c.id] || []);
+            body.insertAdjacentHTML('beforeend', buildRequestResponseSection(c, activitiesByRequest[c.id] || []));
             list.appendChild(div);
         });
+
+        bindCollapsibleListCardToggles(list);
     } finally {
         if (typeof refreshOrdersListSummary === 'function') {
             await refreshOrdersListSummary();

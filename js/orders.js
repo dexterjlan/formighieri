@@ -147,12 +147,10 @@ function renderOrdersList() {
         ].join(' ');
         div.onclick = () => selectOrder(o.id);
         div.innerHTML = `
-            <div class="text-[11px] font-mono font-bold bg-slate-900 text-amber-500 px-2 py-1.5 rounded text-center leading-tight">
-                <div>${o.orderCode}</div>
-                <div class="text-[9px] font-sans font-medium text-slate-300 mt-1 leading-snug">${o.clientName}</div>
-            </div>
+            <div class="text-[11px] font-mono font-bold bg-slate-900 text-amber-500 px-2 py-1.5 rounded text-center leading-tight">${o.orderCode}</div>
             <div class="min-w-0">
-                <div class="text-[11px] text-slate-500">📋 Consultor: ${o.consultantName}</div>
+                <div class="text-sm font-bold text-slate-900 leading-snug">${o.clientName}</div>
+                <div class="text-[11px] text-slate-500 mt-1">📋 Consultor: ${o.consultantName}</div>
                 ${renderOrderSummaryBadges(o.id)}
             </div>
         `;
@@ -192,10 +190,12 @@ async function loadConsultants() {
     });
 }
 
-function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount) {
+function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount) {
     const approvalsCountEl = document.getElementById('order-tab-approvals-count');
     const requestsCountEl = document.getElementById('order-tab-requests-count');
     const projectsCountEl = document.getElementById('order-projects-count');
+    const anteprojetoCountEl = document.getElementById('order-tab-anteprojeto-count');
+    const medicaoCountEl = document.getElementById('order-tab-medicao-count');
 
     if (approvalsCountEl && pendingApprovalsCount !== undefined) {
         approvalsCountEl.textContent = `(${pendingApprovalsCount})`;
@@ -205,6 +205,12 @@ function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projects
     }
     if (projectsCountEl && projectsCount !== undefined) {
         projectsCountEl.textContent = `(${projectsCount})`;
+    }
+    if (anteprojetoCountEl && openAnteprojetoCount !== undefined) {
+        anteprojetoCountEl.textContent = `(${openAnteprojetoCount})`;
+    }
+    if (medicaoCountEl && medicoesCount !== undefined) {
+        medicaoCountEl.textContent = `(${medicoesCount})`;
     }
 }
 
@@ -229,6 +235,14 @@ function updateOrderDetailActionButtons() {
     if (approvalBtn) {
         approvalBtn.classList.toggle('hidden', !onApprovalsTab || !canOpenCommercialApprovalModal());
     }
+
+    if (typeof updateAnteprojetoActionButtons === 'function') {
+        updateAnteprojetoActionButtons();
+    }
+
+    if (typeof updateMedicaoActionButtons === 'function') {
+        updateMedicaoActionButtons();
+    }
 }
 
 const ORDER_DETAIL_TABS = {
@@ -242,6 +256,18 @@ const ORDER_DETAIL_TABS = {
         tabId: 'order-tab-requests',
         panelId: 'order-tab-panel-requests',
         activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-amber-600 text-amber-800 bg-white',
+        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+    },
+    anteprojeto: {
+        tabId: 'order-tab-anteprojeto',
+        panelId: 'order-tab-panel-anteprojeto',
+        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-sky-600 text-sky-800 bg-white',
+        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+    },
+    medicao: {
+        tabId: 'order-tab-medicao',
+        panelId: 'order-tab-panel-medicao',
+        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-teal-600 text-teal-800 bg-white',
         inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
     }
 };
@@ -291,6 +317,12 @@ async function selectOrder(id) {
     loadOrderProjects(id);
     loadConversations(id);
     loadCommercialApprovals(id);
+    if (typeof loadAnteprojetoConferences === 'function') {
+        loadAnteprojetoConferences(id);
+    }
+    if (typeof loadMedicoes === 'function') {
+        loadMedicoes(id);
+    }
     switchOrderDetailTab('approvals');
 }
 
@@ -300,6 +332,12 @@ function bindOrderEvents() {
     });
     document.getElementById('order-tab-requests').addEventListener('click', function () {
         switchOrderDetailTab('requests');
+    });
+    document.getElementById('order-tab-anteprojeto').addEventListener('click', function () {
+        switchOrderDetailTab('anteprojeto');
+    });
+    document.getElementById('order-tab-medicao').addEventListener('click', function () {
+        switchOrderDetailTab('medicao');
     });
 
     document.getElementById('filter-order-client').addEventListener('input', renderOrdersList);
