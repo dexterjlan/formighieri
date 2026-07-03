@@ -169,6 +169,98 @@ function getSelectedNewApprovalProjectIds() {
         .map(input => Number(input.value));
 }
 
+async function getOpenRequestsForProjects(orderId, projectIds) {
+    if (!orderId || !projectIds.length) return [];
+
+    const { data, error } = await supabaseClient
+        .from('OrderRequest')
+        .select('id, orderProjectId, status, requestProfile')
+        .eq('orderId', orderId)
+        .in('orderProjectId', projectIds);
+
+    if (error) {
+        if (error.message?.includes('orderProjectId')) return [];
+        console.error('getOpenRequestsForProjects:', error);
+        return [];
+    }
+
+    return (data || []).filter(isRequestOpen);
+}
+
+function confirmApprovalDespiteOpenRequests(openRequests, projects) {
+    const lines = openRequests.map(req => {
+        const project = projects.find(p => p.id === req.orderProjectId);
+        const name = project?.name || 'Projeto';
+        const status = normalizeRequestStatus(req);
+        return `• ${name} (${status})`;
+    });
+
+    return confirm(
+        `Os projetos abaixo possuem requisições em aberto:\n\n${lines.join('\n')}\n\nDeseja solicitar aprovação comercial mesmo assim?`
+    );
+}
+
+async function getOpenCommercialApprovalsForProject(orderId, orderProjectId) {
+    if (!orderId || !orderProjectId) return [];
+
+    let { data, error } = await supabaseClient
+        .from('CommercialApproval')
+        .select('id, projectName, status, approved, orderProjectId')
+        .eq('orderId', orderId)
+        .eq('orderProjectId', orderProjectId);
+
+    if (error?.message?.includes('orderProjectId')) {
+        const projects = typeof fetchOrderProjectsForOrder === 'function'
+            ? await fetchOrderProjectsForOrder(orderId)
+            : [];
+        const project = projects.find(p => p.id === orderProjectId);
+        if (!project) return [];
+
+        ({ data, error } = await supabaseClient
+            .from('CommercialApproval')
+            .select('id, projectName, status, approved')
+            .eq('orderId', orderId)
+            .eq('projectName', project.name));
+    }
+
+    if (error) {
+        console.error('getOpenCommercialApprovalsForProject:', error);
+        return [];
+    }
+
+    return (data || []).filter(a => normalizeCommercialApproval(a).status !== 'Aprovado');
+}
+
+async function validateConsultorRequestAgainstOpenApproval(orderProjectId, existingRequest) {
+    if (currentUser?.role !== 'Consultor' || !orderProjectId || !activeOrderId) {
+        return true;
+    }
+
+    const isNew = !existingRequest;
+    const projectChanged = existingRequest
+        && Number(existingRequest.orderProjectId) !== Number(orderProjectId);
+
+    if (!isNew && !projectChanged) {
+        return true;
+    }
+
+    const openApprovals = await getOpenCommercialApprovalsForProject(activeOrderId, orderProjectId);
+    if (!openApprovals.length) {
+        return true;
+    }
+
+    const projects = await fetchOrderProjectsForOrder(activeOrderId);
+    const project = projects.find(p => p.id === orderProjectId);
+    const name = project?.name || openApprovals[0].projectName || 'Projeto';
+    const status = getApprovalStatusLabel(normalizeCommercialApproval(openApprovals[0]).status);
+
+    alert(
+        `O projeto "${name}" possui solicitação de aprovação comercial em aberto (${status}). ` +
+        'Solicite uma revisão ou edite a solicitação existente antes de criar uma nova requisição.'
+    );
+    return false;
+}
+
 async function insertCommercialApprovals(payloads) {
     let { error } = await supabaseClient.from('CommercialApproval').insert(payloads);
 
@@ -221,7 +313,7 @@ async function openCommercialApprovalModal() {
 
 async function editCommercialApproval(id) {
     const approval = commercialApprovalsCache.find(a => a.id === id);
-    if (!approval || !canEditCommercialApproval(approval)) return;
+    if (!approval || currentUser?.role === 'Consultor' || !canEditCommercialApproval(approval)) return;
 
     editingCommercialApprovalId = id;
     document.getElementById('commercial-approval-modal-title').textContent = 'Aprovação Comercial';
@@ -292,9 +384,34 @@ function normalizeCommercialApproval(record) {
     };
 }
 
+function getCommercialApprovalStatusSortOrder(status, role) {
+    const normalized = getApprovalStatusLabel(status);
+    const orderByRole = role === 'Projetista'
+        ? { 'Em revisão': 0, 'Aguardando Aprovação': 1, 'Aprovado': 2 }
+        : { 'Aguardando Aprovação': 0, 'Em revisão': 1, 'Aprovado': 2 };
+
+    return orderByRole[normalized] ?? 99;
+}
+
+function sortCommercialApprovals(approvals) {
+    const role = currentUser?.role;
+
+    return [...approvals].sort((a, b) => {
+        const approvalA = normalizeCommercialApproval(a);
+        const approvalB = normalizeCommercialApproval(b);
+        const statusOrderA = getCommercialApprovalStatusSortOrder(approvalA.status, role);
+        const statusOrderB = getCommercialApprovalStatusSortOrder(approvalB.status, role);
+
+        if (statusOrderA !== statusOrderB) return statusOrderA - statusOrderB;
+        return (b.id || 0) - (a.id || 0);
+    });
+}
+
 async function queryCommercialApprovals(orderId) {
     const columnSets = [
+        'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status, createdAt',
         'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status',
+        'id, orderId, projectName, designerId, approved, approvedAt, status, createdAt',
         'id, orderId, projectName, designerId, approved, approvedAt, status',
         'id, orderId, projectName, designerId, approved, approvedAt',
         'id, orderId, projectName, designerId, approved',
@@ -315,6 +432,87 @@ async function queryCommercialApprovals(orderId) {
     }
 
     return { data: null, error: lastError };
+}
+
+function renderCommercialApprovalActions(approval, { showApprove, showRequestRevision, showEdit }) {
+    const buttons = [];
+
+    if (showApprove) {
+        buttons.push(`<button type="button" onclick="approveCommercialApproval(${approval.id})"
+            class="text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-1.5 rounded-lg font-medium">Aprovar</button>`);
+    }
+    if (showRequestRevision) {
+        buttons.push(`<button type="button" onclick="openCommercialRevisionModal(${approval.id})"
+            class="text-xs bg-sky-700 text-white hover:bg-sky-800 px-3 py-1.5 rounded-lg font-medium">Solicitar Revisão</button>`);
+    }
+    if (showEdit) {
+        buttons.push(`<button type="button" onclick="editCommercialApproval(${approval.id})"
+            class="text-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium">Editar</button>`);
+    }
+
+    if (!buttons.length) return '';
+
+    return `<div class="px-4 py-3 bg-white/50 border-t border-white/60 flex flex-wrap gap-2 justify-end">${buttons.join('')}</div>`;
+}
+
+function renderCommercialApprovalCard(approval, context) {
+    const {
+        projetistaNames,
+        projectById,
+        revisionsByApproval
+    } = context;
+
+    const status = getApprovalStatusLabel(approval.status);
+    const statusClass = getApprovalStatusBadgeClass(status);
+    const showApprove = canApproveCommercialApproval(approval);
+    const showEdit = currentUser?.role !== 'Consultor'
+        && canEditCommercialApproval(approval)
+        && canEditCommercialApprovalCommercialFieldsOnly(approval);
+    const showRequestRevision = typeof canRequestNewRevision === 'function' && canRequestNewRevision(approval);
+    const revisions = revisionsByApproval[approval.id] || [];
+    const revisionsHtml = typeof renderCommercialRevisionsSection === 'function'
+        ? renderCommercialRevisionsSection(revisions, approval)
+        : '';
+
+    const linkedProject = approval.orderProjectId ? projectById[approval.orderProjectId] : null;
+    const environmentName = linkedProject?.environmentType?.name || '';
+    const projetistaName = projetistaNames[approval.designerId] || '—';
+    const approvalDate = approval.approved && approval.approvedAt
+        ? formatDate(approval.approvedAt)
+        : '—';
+    const revisionsLabel = revisions.length
+        ? `${revisions.length} revisão${revisions.length > 1 ? 'ões' : ''}`
+        : 'Nenhuma';
+
+    const actionsHtml = renderCommercialApprovalActions(approval, {
+        showApprove,
+        showRequestRevision,
+        showEdit
+    });
+
+    const cardBgClass = getCommercialApprovalHighlightBgClass(approval);
+    const div = document.createElement('div');
+    div.className = `${cardBgClass} rounded-xl border overflow-hidden shadow-sm`;
+    div.innerHTML = `
+        <div class="px-4 py-3 bg-white/50 border-b border-white/60">
+            <div class="flex justify-between items-start gap-3">
+                <div class="min-w-0 flex-1">
+                    <p class="text-[10px] uppercase font-semibold text-slate-500 tracking-wide">Projeto</p>
+                    <p class="text-sm font-bold text-slate-900 truncate" title="${approval.projectName || ''}">${approval.projectName || '—'}</p>
+                    ${environmentName ? `<p class="text-xs text-slate-500 mt-0.5">${environmentName}</p>` : ''}
+                    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                        <span class="text-slate-600"><span class="text-slate-400">👤 Projetista:</span> <span class="font-medium text-slate-800">${projetistaName}</span></span>
+                        <span class="text-slate-600"><span class="text-slate-400">Data de aprovação:</span> <span class="font-medium text-slate-800">${approvalDate}</span></span>
+                        <span class="text-slate-600"><span class="text-slate-400">Revisões:</span> <span class="font-medium text-slate-800">${revisionsLabel}</span></span>
+                    </div>
+                </div>
+                <span class="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase whitespace-nowrap shrink-0 ${statusClass}">${status}</span>
+            </div>
+        </div>
+        ${actionsHtml}
+        ${revisionsHtml ? `<div class="px-4 pb-4">${revisionsHtml}</div>` : ''}
+    `;
+    return div;
 }
 
 async function loadCommercialApprovals(orderId) {
@@ -369,48 +567,22 @@ async function loadCommercialApprovals(orderId) {
         ? await fetchCommercialRevisionsByApprovalIds(approvalIds)
         : {};
 
+    const projects = typeof fetchOrderProjectsForOrder === 'function'
+        ? await fetchOrderProjectsForOrder(orderId)
+        : [];
+    const projectById = Object.fromEntries(projects.map(p => [p.id, p]));
+
     list.innerHTML = '';
+    list.className = 'space-y-3';
 
     try {
-        approvals.forEach(a => {
+        sortCommercialApprovals(approvals).forEach(a => {
             const approval = normalizeCommercialApproval(a);
-            const showApprove = canApproveCommercialApproval(approval);
-            const showEdit = canEditCommercialApproval(approval)
-                && canEditCommercialApprovalCommercialFieldsOnly(approval);
-            const status = getApprovalStatusLabel(approval.status);
-            const statusClass = getApprovalStatusBadgeClass(status);
-            const showRequestRevision = typeof canRequestNewRevision === 'function' && canRequestNewRevision(approval);
-            const showOpenRevision = approval.status === 'Em revisão'
-                && typeof canOpenRevisionModal === 'function'
-                && canOpenRevisionModal(approval);
-            const revisionsHtml = typeof renderCommercialRevisionsSection === 'function'
-                ? renderCommercialRevisionsSection(revisionsByApproval[approval.id])
-                : '';
-
-            const div = document.createElement('div');
-            div.className = 'bg-white p-5 rounded-xl border border-emerald-200 shadow-sm space-y-3';
-            div.innerHTML = `
-                <div class="flex justify-between items-start border-b border-slate-100 pb-2 gap-3">
-                    <div>
-                        <p class="text-sm font-bold text-slate-900">${approval.projectName}</p>
-                        <p class="text-xs text-slate-500 mt-1">Projetista: ${projetistaNames[approval.designerId] || '-'}</p>
-                    </div>
-                    <div class="flex flex-wrap items-center gap-2 justify-end">
-                        ${showApprove ? `<button type="button" onclick="approveCommercialApproval(${approval.id})"
-                            class="text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-2.5 py-1 rounded-lg font-medium">Aprovar</button>` : ''}
-                        ${showRequestRevision ? `<button type="button" onclick="openCommercialRevisionModal(${approval.id})"
-                            class="text-xs bg-sky-700 text-white hover:bg-sky-800 px-2.5 py-1 rounded-lg font-medium">Solicitar Revisão</button>` : ''}
-                        ${showOpenRevision ? `<button type="button" onclick="openCommercialRevisionModal(${approval.id})"
-                            class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Revisão</button>` : ''}
-                        ${showEdit ? `<button type="button" onclick="editCommercialApproval(${approval.id})"
-                            class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium">Editar</button>` : ''}
-                        <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
-                    </div>
-                </div>
-                <p class="text-[10px] text-slate-500">Data de aprovação: ${approval.approved && approval.approvedAt ? formatDate(approval.approvedAt) : '—'}</p>
-                ${revisionsHtml}
-            `;
-            list.appendChild(div);
+            list.appendChild(renderCommercialApprovalCard(approval, {
+                projetistaNames,
+                projectById,
+                revisionsByApproval
+            }));
         });
     } catch (renderError) {
         console.error('loadCommercialApprovals render:', renderError);
@@ -462,6 +634,13 @@ function bindCommercialApprovalEvents() {
             }
 
             const projects = await fetchOrderProjectsForOrder(activeOrderId);
+            const openRequests = await getOpenRequestsForProjects(activeOrderId, selectedProjectIds);
+
+            if (openRequests.length) {
+                const shouldContinue = confirmApprovalDespiteOpenRequests(openRequests, projects);
+                if (!shouldContinue) return;
+            }
+
             const payloads = selectedProjectIds.map(projectId => {
                 const project = projects.find(p => p.id === projectId);
                 return {

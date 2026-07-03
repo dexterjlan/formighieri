@@ -88,6 +88,8 @@ async function searchConversations() {
         rows = rows.filter(r => String(r.designerId) === projetista);
     }
 
+    rows = sortOrderRequests(rows);
+
     tbody.innerHTML = "";
     countEl.textContent = `${rows.length} requisiç${rows.length === 1 ? 'ão' : 'ões'}`;
 
@@ -99,7 +101,7 @@ async function searchConversations() {
     rows.forEach(r => {
         const status = normalizeRequestStatus(r);
         const canEdit = canEditConversation(r);
-        const rowBg = getQueryRowBgColor(r);
+        const rowBg = getRequestHighlightBgHex(r);
         const cellStyle = `background-color: ${rowBg};`;
         const profile = formatRequestProfile(r.requestProfile);
         const profileClass = getRequestProfileBadgeClass(r.requestProfile);
@@ -127,22 +129,6 @@ async function searchConversations() {
         `;
         tbody.appendChild(tr);
     });
-}
-
-function getQueryRowBgColor(conv) {
-    if (isRequestClosed(conv)) {
-        return '#bbf7d0';
-    }
-
-    const created = new Date(conv.createdAt);
-    if (!Number.isNaN(created.getTime())) {
-        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
-        if (daysOpen > 5) {
-            return '#fecaca';
-        }
-    }
-
-    return '#fde68a';
 }
 
 function bindConversationsQueryEvents() {

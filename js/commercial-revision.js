@@ -57,6 +57,16 @@ function getCurrentApproval() {
     return commercialApprovalsCache.find(a => a.id === currentRevisionApprovalId);
 }
 
+function renderRevisionResizableText(text, tone = 'default') {
+    const hasText = Boolean(text);
+    const content = hasText ? escapeHtml(text) : '—';
+    const toneClass = hasText
+        ? (tone === 'muted' ? 'text-slate-600' : 'text-slate-800')
+        : 'text-slate-400';
+
+    return `<div class="revision-resizable-field revision-resizable-field--readonly ${toneClass}">${content}</div>`;
+}
+
 function renderRevisionActivityRow(activity) {
     const approval = getCurrentApproval();
     const isNewRevision = approval?.status === 'Aguardando Aprovação';
@@ -74,22 +84,21 @@ function renderRevisionActivityRow(activity) {
 
     tr.innerHTML = `
         <td class="p-3 align-top">
-            <input type="text" class="revision-activity-description w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600 disabled:bg-slate-50"
-                value="${activity.description || ''}"
+            <textarea rows="2" class="revision-activity-description revision-resizable-input px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600 disabled:bg-slate-50"
                 placeholder="Descreva a atividade..."
-                ${consultorCanEdit ? '' : 'disabled'}>
+                ${consultorCanEdit ? '' : 'disabled'}>${escapeHtml(activity.description || '')}</textarea>
         </td>
-        <td class="p-3 align-top text-center">
+        <td class="p-3 align-middle text-center">
             <input type="checkbox" class="revision-activity-completed h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                 ${activity.completed ? 'checked' : ''}
                 ${completionCanEdit ? '' : 'disabled'}>
         </td>
         <td class="p-3 align-top">
-            <textarea rows="2" class="revision-activity-observation w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600 disabled:bg-slate-50"
+            <textarea rows="2" class="revision-activity-observation revision-resizable-input px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600 disabled:bg-slate-50"
                 placeholder="Observação do projetista..."
-                ${completionCanEdit ? '' : 'disabled'}>${activity.observation || ''}</textarea>
+                ${completionCanEdit ? '' : 'disabled'}>${escapeHtml(activity.observation || '')}</textarea>
         </td>
-        <td class="p-3 align-top">
+        <td class="p-3 align-middle">
             <p class="revision-activity-completed-at px-2 py-1.5 text-xs border border-slate-100 rounded-lg bg-slate-50 text-slate-600 whitespace-nowrap">
                 ${activity.completedAt ? formatDate(activity.completedAt) : '—'}
             </p>
@@ -319,6 +328,37 @@ async function openCommercialRevisionView(approvalId) {
     toggleModal('commercial-revision-modal', true);
 }
 
+async function openCommercialRevisionForRevision(approvalId, revisionId) {
+    const approval = await ensureApprovalInCache(approvalId);
+    if (!approval || !canViewCommercialRevision(approval)) return;
+
+    const { data: latest } = await supabaseClient
+        .from('CommercialRevision')
+        .select('id')
+        .eq('commercialApprovalId', approvalId)
+        .order('createdAt', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (approval.status === 'Em revisão' && latest?.id === revisionId && canOpenRevisionModal(approval)) {
+        return openCommercialRevisionModal(approvalId);
+    }
+
+    revisionModalViewOnly = true;
+    currentRevisionApprovalId = approvalId;
+    editingRevisionId = revisionId;
+    revisionActivityRowCounter = 0;
+
+    document.getElementById('revision-activities-list').innerHTML = '';
+    document.getElementById('revision-empty-msg').classList.add('hidden');
+    setupCommercialRevisionModalHeader(approval);
+    updateRevisionModalControls(approval);
+    await loadRevisionActivities(revisionId);
+    toggleModal('commercial-revision-modal', true);
+}
+
+window.openCommercialRevisionForRevision = openCommercialRevisionForRevision;
+
 function closeCommercialRevisionModal() {
     revisionModalViewOnly = false;
     editingRevisionId = null;
@@ -481,15 +521,15 @@ async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
         .from('CommercialRevision')
         .select('id, commercialApprovalId, createdAt')
         .in('commercialApprovalId', approvalIds)
-        .order('createdAt', { ascending: true })
-        .order('id', { ascending: true });
+        .order('createdAt', { ascending: false })
+        .order('id', { ascending: false });
 
     if (error) {
         ({ data: revisions, error } = await supabaseClient
             .from('CommercialRevision')
             .select('id, commercialApprovalId')
             .in('commercialApprovalId', approvalIds)
-            .order('id', { ascending: true }));
+            .order('id', { ascending: false }));
     }
 
     if (error || !revisions?.length) return {};
@@ -524,39 +564,63 @@ async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
     return byApproval;
 }
 
-function renderCommercialRevisionsSection(revisions) {
+function renderCommercialRevisionsSection(revisions, approval) {
     if (!revisions || revisions.length === 0) return '';
 
-    const blocks = revisions.map((revision, index) => {
+    const canView = approval && canViewCommercialRevision(approval);
+    const sortedRevisions = [...revisions].sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (dateB !== dateA) return dateB - dateA;
+        return (b.id || 0) - (a.id || 0);
+    });
+
+    const blocks = sortedRevisions.map((revision, index) => {
+        const isOpenRevision = approval?.status === 'Em revisão'
+            && sortedRevisions[0]?.id === revision.id;
         const activitiesHtml = revision.activities.length
             ? revision.activities.map(activity => `
                 <tr class="border-t border-slate-100">
-                    <td class="py-2 pr-2 text-xs text-slate-800 align-top">${activity.description || '—'}</td>
-                    <td class="py-2 px-2 text-center text-xs align-top">
+                    <td class="py-2 pr-2 align-top">${renderRevisionResizableText(activity.description)}</td>
+                    <td class="py-2 px-2 text-center text-xs align-middle">
                         ${activity.completed
                             ? '<span class="text-emerald-700 font-semibold">Sim</span>'
                             : '<span class="text-slate-400">Não</span>'}
                     </td>
-                    <td class="py-2 px-2 text-xs text-slate-600 align-top">${activity.observation || '—'}</td>
-                    <td class="py-2 pl-2 text-xs text-slate-500 whitespace-nowrap align-top">${activity.completedAt ? formatDate(activity.completedAt) : '—'}</td>
+                    <td class="py-2 px-2 align-top">${renderRevisionResizableText(activity.observation, 'muted')}</td>
+                    <td class="py-2 pl-2 text-xs text-slate-500 whitespace-nowrap align-middle">${activity.completedAt ? formatDate(activity.completedAt) : '—'}</td>
                 </tr>
             `).join('')
             : `<tr><td colspan="4" class="py-2 text-xs text-slate-400">Nenhuma atividade registrada.</td></tr>`;
 
+        const viewButton = canView && isOpenRevision
+            ? `<button type="button" onclick="openCommercialRevisionForRevision(${approval.id}, ${revision.id})"
+                class="text-xs bg-sky-700 text-white hover:bg-sky-800 px-4 py-2 rounded-lg font-semibold shadow-sm whitespace-nowrap">Ver Revisão</button>`
+            : '';
+
         return `
-            <div class="border border-sky-100 rounded-lg overflow-hidden">
-                <div class="bg-sky-50 px-3 py-2 flex justify-between items-center gap-2">
-                    <p class="text-xs font-semibold text-sky-900">Revisão ${index + 1}</p>
-                    <p class="text-[10px] text-sky-700">${revision.createdAt ? formatDate(revision.createdAt) : '—'}</p>
+            <div class="bg-sky-50 border border-sky-200 rounded-xl overflow-hidden shadow-sm">
+                <div class="bg-sky-100/80 px-4 py-3 flex justify-between items-center gap-3 border-b border-sky-200">
+                    <div>
+                        <p class="text-xs font-bold text-sky-900">Revisão ${index + 1}</p>
+                        <p class="text-[10px] text-sky-700 mt-0.5">${revision.createdAt ? formatDate(revision.createdAt) : '—'}</p>
+                    </div>
+                    ${viewButton}
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full min-w-[480px]">
-                        <thead class="text-[9px] uppercase text-slate-400 bg-white">
+                <div class="overflow-x-auto bg-white/70">
+                    <table class="revision-history-table min-w-[480px]">
+                        <colgroup>
+                            <col style="width:36%">
+                            <col style="width:72px">
+                            <col style="width:36%">
+                            <col style="width:112px">
+                        </colgroup>
+                        <thead class="text-[9px] uppercase text-slate-500 bg-sky-50/50">
                             <tr>
                                 <th class="px-3 py-1.5 font-semibold text-left">Atividade</th>
-                                <th class="px-2 py-1.5 font-semibold text-center w-16">Realizado</th>
+                                <th class="px-2 py-1.5 font-semibold text-center">Realizado</th>
                                 <th class="px-2 py-1.5 font-semibold text-left">Observação</th>
-                                <th class="px-3 py-1.5 font-semibold text-left w-28">Data realização</th>
+                                <th class="px-3 py-1.5 font-semibold text-left">Data realização</th>
                             </tr>
                         </thead>
                         <tbody>${activitiesHtml}</tbody>
@@ -567,8 +631,8 @@ function renderCommercialRevisionsSection(revisions) {
     }).join('');
 
     return `
-        <div class="space-y-2 pt-3 border-t border-slate-100">
-            <p class="text-[10px] font-bold text-slate-400 uppercase">Revisões</p>
+        <div class="space-y-3 pt-3 border-t border-dashed border-slate-200">
+            <p class="text-[10px] font-bold text-slate-400 uppercase">Histórico de revisões</p>
             ${blocks}
         </div>
     `;

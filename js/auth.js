@@ -19,6 +19,38 @@ async function enterApp(authUserId) {
     }
 }
 
+async function ensureAppUserOnRegister(user, name, email, role) {
+    const { data: byAuth } = await supabaseClient
+        .from('appUsers')
+        .select('id')
+        .eq('authId', user.id)
+        .maybeSingle();
+
+    if (byAuth) {
+        return supabaseClient
+            .from('appUsers')
+            .update({ name, email, role })
+            .eq('id', byAuth.id);
+    }
+
+    const { data: byEmail } = await supabaseClient
+        .from('appUsers')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+    if (byEmail) {
+        return supabaseClient
+            .from('appUsers')
+            .update({ authId: user.id, name, role })
+            .eq('id', byEmail.id);
+    }
+
+    return supabaseClient
+        .from('appUsers')
+        .insert({ authId: user.id, email, name, role, isActive: true });
+}
+
 async function loadUserProfile(authUserId) {
     const { data: profile, error: profileError } = await supabaseClient
         .from('appUsers')
@@ -26,18 +58,31 @@ async function loadUserProfile(authUserId) {
         .eq('authId', authUserId)
         .maybeSingle();
 
+    const { data: { user } } = await supabaseClient.auth.getUser();
+    if (!user) {
+        throw new Error("Sessão inválida.");
+    }
+
+    const metadataRole = user.user_metadata?.role || null;
+
     if (profile) {
         if (profile.isActive === false) {
             await supabaseClient.auth.signOut();
             throw new Error("Usuário desativado. Entre em contato com o administrador.");
         }
-        currentUser = profile;
-        return;
-    }
 
-    const { data: { user } } = await supabaseClient.auth.getUser();
-    if (!user) {
-        throw new Error("Sessão inválida.");
+        if (!profile.role && metadataRole) {
+            const { data: updated } = await supabaseClient
+                .from('appUsers')
+                .update({ role: metadataRole })
+                .eq('id', profile.id)
+                .select('*')
+                .single();
+            currentUser = updated || profile;
+        } else {
+            currentUser = profile;
+        }
+        return;
     }
 
     const { data: legacyUser } = await supabaseClient
@@ -49,7 +94,10 @@ async function loadUserProfile(authUserId) {
     if (legacyUser) {
         const { data: linked, error: linkError } = await supabaseClient
             .from('appUsers')
-            .update({ authId: user.id })
+            .update({
+                authId: user.id,
+                role: legacyUser.role || metadataRole || null
+            })
             .eq('id', legacyUser.id)
             .select('*')
             .single();
@@ -73,6 +121,7 @@ async function loadUserProfile(authUserId) {
             authId: user.id,
             email: user.email,
             name: user.user_metadata?.name || user.email,
+            role: metadataRole,
             isActive: true
         })
         .select('*')
@@ -126,9 +175,16 @@ function bindAuthEvents() {
         const email = document.getElementById("reg-email").value.trim().toLowerCase();
         const password = document.getElementById("reg-password").value;
         const passwordConfirm = document.getElementById("reg-password-confirm").value;
+        const role = document.getElementById("reg-role").value;
 
         if (password !== passwordConfirm) {
             alert("As senhas não coincidem.");
+            return;
+        }
+
+        if (!role) {
+            alert("Selecione o perfil (Consultor ou Projetista).");
+            document.getElementById("reg-role").focus();
             return;
         }
 
@@ -136,7 +192,7 @@ function bindAuthEvents() {
             email,
             password,
             options: {
-                data: { name }
+                data: { name, role }
             }
         });
 
@@ -152,13 +208,19 @@ function bindAuthEvents() {
             return;
         }
 
+        const { error: profileError } = await ensureAppUserOnRegister(data.user, name, email, role);
+        if (profileError) {
+            console.error("ensureAppUserOnRegister:", profileError);
+            alert("Conta criada no login, mas falhou ao salvar o perfil: " + formatAuthError(profileError));
+        }
+
         if (data.session) {
             await enterApp(data.user.id);
             document.getElementById("register-form").reset();
             return;
         }
 
-        alert("Conta criada! Um administrador definirá seu perfil. Faça login após a confirmação do e-mail (se solicitada).");
+        alert("Conta criada! Faça login após a confirmação do e-mail (se solicitada).");
         document.getElementById("register-form").reset();
         showLoginScreen();
     });

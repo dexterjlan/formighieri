@@ -28,7 +28,9 @@ async function loadApprovalQueryFilterOptions() {
 
 async function queryAllCommercialApprovals() {
     const columnSets = [
+        'id, orderId, projectName, designerId, approved, approvedAt, status, createdAt',
         'id, orderId, projectName, designerId, approved, approvedAt, status',
+        'id, orderId, projectName, designerId, approved, approvedAt, createdAt',
         'id, orderId, projectName, designerId, approved, approvedAt',
         'id, orderId, projectName, designerId, approved',
         '*'
@@ -121,6 +123,8 @@ async function searchCommercialApprovalsQuery() {
     rows.forEach(r => {
         const statusLabel = getApprovalStatusLabel(r.status);
         const statusClass = getApprovalStatusBadgeClass(statusLabel);
+        const rowBg = getCommercialApprovalHighlightBgHex(r);
+        const cellStyle = `background-color: ${rowBg};`;
         const hasRevision = (revisionsByApproval[r.id] || []).length > 0;
         const showViewRevision = hasRevision
             && typeof canViewCommercialRevision === 'function'
@@ -147,16 +151,16 @@ async function searchCommercialApprovalsQuery() {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td class="p-3 font-mono text-xs font-bold text-slate-600">${r.order.orderCode || '-'}</td>
-            <td class="p-3 text-slate-800">${r.order.clientName || '-'}</td>
-            <td class="p-3 text-slate-500">${r.order.consultantName || '-'}</td>
-            <td class="p-3 text-slate-700">${r.projetistaName}</td>
-            <td class="p-3 text-slate-800">${r.projectName || '-'}</td>
-            <td class="p-3">
+            <td class="p-3 font-mono text-xs font-bold text-slate-600" style="${cellStyle}">${r.order.orderCode || '-'}</td>
+            <td class="p-3 text-slate-800" style="${cellStyle}">${r.order.clientName || '-'}</td>
+            <td class="p-3 text-slate-500" style="${cellStyle}">${r.order.consultantName || '-'}</td>
+            <td class="p-3 text-slate-700" style="${cellStyle}">👤 ${r.projetistaName}</td>
+            <td class="p-3 text-slate-800" style="${cellStyle}">${r.projectName || '-'}</td>
+            <td class="p-3" style="${cellStyle}">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${statusLabel}</span>
             </td>
-            <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${r.approved && r.approvedAt ? formatDate(r.approvedAt) : '—'}</td>
-            <td class="p-3 whitespace-nowrap">
+            <td class="p-3 text-xs text-slate-500 whitespace-nowrap" style="${cellStyle}">${r.approved && r.approvedAt ? formatDate(r.approvedAt) : '—'}</td>
+            <td class="p-3 whitespace-nowrap" style="${cellStyle}">
                 ${actionButtons.length
                     ? `<div class="flex flex-wrap gap-1">${actionButtons.join('')}</div>`
                     : '<span class="text-xs text-slate-300">—</span>'}

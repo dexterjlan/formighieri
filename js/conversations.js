@@ -60,14 +60,47 @@ function setupConvResponseFields(conv) {
     }
 }
 
+async function loadConvOrderProjects(selectedId) {
+    const select = document.getElementById('conv-order-project');
+    if (!select) return;
+
+    const projects = activeOrderId ? await fetchOrderProjectsForOrder(activeOrderId) : [];
+
+    select.innerHTML = '<option value="">Nenhum</option>';
+
+    if (!projects.length) {
+        select.innerHTML += '<option value="" disabled>Nenhum projeto cadastrado no pedido</option>';
+        return;
+    }
+
+    [...projects]
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
+        .forEach(p => {
+            const env = p.environmentType?.name ? ` (${p.environmentType.name})` : '';
+            select.innerHTML += `<option value="${p.id}">${p.name}${env}</option>`;
+        });
+
+    if (selectedId) {
+        select.value = String(selectedId);
+    }
+}
+
+function getConvOrderProjectIdValue() {
+    const value = document.getElementById('conv-order-project')?.value;
+    return value ? Number(value) : null;
+}
+
 async function openConvModal() {
     editingConversationId = null;
-    document.getElementById("conv-modal-title").textContent = "Nova Requisição Técnica";
+    document.getElementById("conv-modal-title").textContent = "Nova Requisição";
     document.getElementById("conv-form-submit").textContent = "Criar Requisição";
     document.getElementById("conv-form").reset();
     resetConvResponseFields();
     setupConvProfileFields(false);
-    await loadProjetistas();
+    await Promise.all([
+        loadProjetistas(),
+        loadConvOrderProjects()
+    ]);
     toggleModal('conv-modal', true);
 }
 
@@ -110,7 +143,10 @@ async function editConversation(id) {
     document.getElementById("conv-form-submit").textContent = "Salvar Alterações";
     setupConvProfileFields(true, conv);
     setupConvResponseFields(conv);
-    await loadProjetistas();
+    await Promise.all([
+        loadProjetistas(),
+        loadConvOrderProjects(conv.orderProjectId)
+    ]);
     document.getElementById("conv-designer").value = String(conv.designerId);
     document.getElementById("conv-request").value = conv.designerRequest;
     toggleModal('conv-modal', true);
@@ -184,12 +220,22 @@ window.closeConvModal = closeConvModal;
 window.editConversation = editConversation;
 
 async function loadConversations(orderId) {
-    const [{ data: convs, error }, { data: orderInfo }] = await Promise.all([
-        supabaseClient
+    let convsResult = await supabaseClient
+        .from('OrderRequest')
+        .select('*, orderProject:OrderProject(id, name, environmentType:EnvironmentType(name))')
+        .eq('orderId', orderId)
+        .order('createdAt', { ascending: true });
+
+    if (convsResult.error?.message?.includes('orderProject')) {
+        convsResult = await supabaseClient
             .from('OrderRequest')
             .select('*')
             .eq('orderId', orderId)
-            .order('createdAt', { ascending: true }),
+            .order('createdAt', { ascending: true });
+    }
+
+    const [{ data: convs, error }, { data: orderInfo }] = await Promise.all([
+        Promise.resolve(convsResult),
         supabaseClient
             .from('salesOrders')
             .select('consultantName')
@@ -227,22 +273,28 @@ async function loadConversations(orderId) {
 
     list.innerHTML = "";
 
-    convs.forEach(c => {
+    sortOrderRequests(convs).forEach(c => {
         const status = normalizeRequestStatus(c);
         const canEdit = canEditConversation(c);
         const statusClass = getRequestStatusBadgeClass(status);
+        const cardBgClass = getRequestHighlightBgClass(c);
         const div = document.createElement("div");
-        div.className = "bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3";
+        div.className = `${cardBgClass} p-5 rounded-xl border shadow-sm space-y-3`;
 
         const requestTitle = c.requestProfile === 'Consultor'
             ? 'Solicitação do Consultor'
             : 'Solicitação do Projetista';
+
+        const projectLabel = c.orderProject?.name
+            ? `<div class="text-xs font-medium text-violet-700">🏠 Projeto: ${c.orderProject.name}${c.orderProject.environmentType?.name ? ` · ${c.orderProject.environmentType.name}` : ''}</div>`
+            : '';
 
         div.innerHTML = `
             <div class="flex justify-between items-center border-b border-slate-100 pb-2">
                 <div class="flex flex-col gap-0.5">
                     <div class="text-xs font-bold text-slate-700">👤 Projetista: ${projetistaNames[c.designerId] || '-'}</div>
                     <div class="text-xs font-bold text-slate-600">📋 Consultor: ${consultantName}</div>
+                    ${projectLabel}
                 </div>
                 <div class="flex items-center gap-2">
                     ${canEdit ? `<button type="button" onclick="editConversation(${c.id})"
@@ -250,7 +302,7 @@ async function loadConversations(orderId) {
                     <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
                 </div>
             </div>
-            <div class="bg-slate-50 p-3 rounded-lg text-xs">
+            <div class="bg-white/70 p-3 rounded-lg text-xs">
                 <p class="font-bold text-slate-400 uppercase text-[9px] mb-1">${requestTitle}:</p>
                 <p class="text-slate-800 font-medium">${c.designerRequest}</p>
             </div>
@@ -333,17 +385,25 @@ function bindConversationEvents() {
 
         const designerId = document.getElementById("conv-designer").value;
         const designerRequest = document.getElementById("conv-request").value.trim();
+        const orderProjectId = getConvOrderProjectIdValue();
 
         if (!designerRequest) {
             alert("Informe a solicitação.");
             return;
         }
 
+        const existing = editingConversationId
+            ? conversationsCache.find(c => c.id === editingConversationId)
+            : null;
+
+        const canProceed = await validateConsultorRequestAgainstOpenApproval(orderProjectId, existing);
+        if (!canProceed) return;
+
         if (editingConversationId) {
-            const existing = conversationsCache.find(c => c.id === editingConversationId);
             const updatePayload = {
                 designerId,
                 designerRequest,
+                orderProjectId,
                 updatedAt: new Date().toISOString(),
                 updatedById: currentUser.id
             };
@@ -372,10 +432,18 @@ function bindConversationEvents() {
                 }
             }
 
-            const { error } = await supabaseClient
+            let { error } = await supabaseClient
                 .from('OrderRequest')
                 .update(updatePayload)
                 .eq('id', editingConversationId);
+
+            if (error?.message?.includes('orderProjectId')) {
+                const { orderProjectId: _omit, ...payloadWithoutProject } = updatePayload;
+                ({ error } = await supabaseClient
+                    .from('OrderRequest')
+                    .update(payloadWithoutProject)
+                    .eq('id', editingConversationId));
+            }
 
             if (error) {
                 alert("Erro ao salvar requisição: " + error.message);
@@ -393,13 +461,20 @@ function bindConversationEvents() {
                 orderId: activeOrderId,
                 designerId,
                 designerRequest,
+                orderProjectId,
                 requestProfile,
                 status: getInitialRequestStatus(requestProfile),
                 createdById: currentUser.id,
                 updatedById: currentUser.id
             };
 
-            const { error } = await supabaseClient.from('OrderRequest').insert([payload]);
+            let { error } = await supabaseClient.from('OrderRequest').insert([payload]);
+
+            if (error?.message?.includes('orderProjectId')) {
+                const { orderProjectId: _omit, ...payloadWithoutProject } = payload;
+                ({ error } = await supabaseClient.from('OrderRequest').insert([payloadWithoutProject]));
+            }
+
             if (error) {
                 alert("Erro ao criar requisição: " + error.message);
                 return;

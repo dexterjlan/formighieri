@@ -1,3 +1,39 @@
 body {
     font-family: 'Inter', sans-serif;
 }
+
+.revision-activities-table,
+.revision-history-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.revision-resizable-field {
+    display: block;
+    width: 100%;
+    min-height: 2.25rem;
+    max-height: 10rem;
+    overflow: auto;
+    resize: vertical;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    word-break: break-word;
+    white-space: pre-wrap;
+    box-sizing: border-box;
+}
+
+.revision-resizable-field--readonly {
+    background: rgb(248 250 252);
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+}
+
+.revision-resizable-input {
+    width: 100%;
+    min-height: 2.25rem;
+    max-height: 10rem;
+    resize: vertical;
+    overflow: auto;
+    box-sizing: border-box;
+}

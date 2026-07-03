@@ -83,6 +83,95 @@ function getRequestStatusBadgeClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function getRequestHighlightBgHex(conv) {
+    if (isRequestClosed(conv)) {
+        return '#bbf7d0';
+    }
+
+    const created = new Date(conv.createdAt);
+    if (!Number.isNaN(created.getTime())) {
+        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysOpen > 5) {
+            return '#fecaca';
+        }
+    }
+
+    return '#fde68a';
+}
+
+function getRequestHighlightBgClass(conv) {
+    if (isRequestClosed(conv)) {
+        return 'bg-emerald-100 border-emerald-200';
+    }
+
+    const created = new Date(conv.createdAt);
+    if (!Number.isNaN(created.getTime())) {
+        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysOpen > 5) {
+            return 'bg-red-100 border-red-200';
+        }
+    }
+
+    return 'bg-amber-100 border-amber-200';
+}
+
+function sortOrderRequests(convs) {
+    return [...convs].sort((a, b) => {
+        const aOpen = isRequestOpen(a);
+        const bOpen = isRequestOpen(b);
+        if (aOpen !== bOpen) return aOpen ? -1 : 1;
+
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+    });
+}
+
+function isCommercialApprovalApproved(approval) {
+    const status = getApprovalStatusLabel(
+        approval?.status || (approval?.approved ? 'Aprovado' : 'Aguardando Aprovação')
+    );
+    return status === 'Aprovado';
+}
+
+function getCommercialApprovalReferenceDate(approval) {
+    return approval?.createdAt || approval?.updatedAt || null;
+}
+
+function getCommercialApprovalHighlightBgHex(approval) {
+    if (isCommercialApprovalApproved(approval)) {
+        return '#bbf7d0';
+    }
+
+    const refDate = getCommercialApprovalReferenceDate(approval);
+    const created = new Date(refDate);
+    if (!Number.isNaN(created.getTime())) {
+        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysOpen > 5) {
+            return '#fecaca';
+        }
+    }
+
+    return '#fde68a';
+}
+
+function getCommercialApprovalHighlightBgClass(approval) {
+    if (isCommercialApprovalApproved(approval)) {
+        return 'bg-emerald-100 border-emerald-200';
+    }
+
+    const refDate = getCommercialApprovalReferenceDate(approval);
+    const created = new Date(refDate);
+    if (!Number.isNaN(created.getTime())) {
+        const daysOpen = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+        if (daysOpen > 5) {
+            return 'bg-red-100 border-red-200';
+        }
+    }
+
+    return 'bg-amber-100 border-amber-200';
+}
+
 function getRequestResponseSummary(conv) {
     const parts = [];
     if (conv?.commercialResponse) parts.push(`Consultor: ${conv.commercialResponse}`);
@@ -102,6 +191,14 @@ function formatDate(dateStr) {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
     });
+}
+
+function escapeHtml(text) {
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 function truncateText(text, max = 60) {
@@ -147,14 +244,11 @@ function updateConvRequestLabel(profile) {
 
 function setupConvProfileFields(isEdit, conv) {
     const adminWrap = document.getElementById('conv-profile-wrap');
-    const autoWrap = document.getElementById('conv-creator-profile-wrap');
-    const autoLabel = document.getElementById('conv-creator-profile-label');
     const profileSelect = document.getElementById('conv-profile');
     const readOnlyWrap = document.getElementById('conv-profile-readonly-wrap');
     const readOnlyLabel = document.getElementById('conv-profile-readonly-label');
 
     adminWrap.classList.add('hidden');
-    autoWrap.classList.add('hidden');
     readOnlyWrap.classList.add('hidden');
     profileSelect.required = false;
     profileSelect.onchange = null;
@@ -175,8 +269,6 @@ function setupConvProfileFields(isEdit, conv) {
         return;
     }
 
-    autoWrap.classList.remove('hidden');
-    autoLabel.textContent = currentUser.role;
     updateConvRequestLabel(currentUser.role);
 }
 
