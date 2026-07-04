@@ -234,6 +234,14 @@ function isConferente(user = currentUser) {
     return Boolean(user?.conferente);
 }
 
+function isGestorComercial(user = currentUser) {
+    return user?.role === 'Admin' && Boolean(user?.gestorComercial);
+}
+
+function isGestorProjetos(user = currentUser) {
+    return (user?.role === 'Admin' || user?.role === 'Projetista') && Boolean(user?.gestorProjetos);
+}
+
 function canCreateAsAdminOrConferente() {
     return isAdmin() || isConferente();
 }

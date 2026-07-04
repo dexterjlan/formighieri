@@ -10,7 +10,11 @@ function isAdminOrOrderConsultorForOrder(orderId) {
 }
 
 function isAnteprojetoConferenceConfirmed(conference) {
-    return conference?.status === 'Confirmada';
+    return conference?.status === 'Confirmada' || conference?.status === 'Aprovada';
+}
+
+function isAnteprojetoConferenceApproved(conference) {
+    return conference?.status === 'Aprovada';
 }
 
 function canCreateAnteprojetoConference() {
@@ -27,6 +31,10 @@ function canEditAnteprojetoConference(conference) {
     return currentUser?.role === 'Projetista' && conference.designerId === currentUser.id;
 }
 
+function canExtendAnteprojetoConferenceStructure(conference) {
+    return !conference;
+}
+
 function canEditAnteprojetoConsultorFields(conference) {
     if (!conference || isAnteprojetoConferenceConfirmed(conference)) return false;
     return isAdminOrOrderConsultorForOrder(conference.orderId || activeOrderId);
@@ -35,6 +43,12 @@ function canEditAnteprojetoConsultorFields(conference) {
 function canConfirmAnteprojetoConference(conference) {
     if (!conference || isAnteprojetoConferenceConfirmed(conference)) return false;
     return isAdminOrOrderConsultorForOrder(conference.orderId || activeOrderId);
+}
+
+function canApproveAnteprojetoConference(conference) {
+    if (!conference || conference.status !== 'Confirmada') return false;
+    if (!isGestorComercial()) return false;
+    return true;
 }
 
 function getConferenceModules(conference) {
@@ -67,32 +81,26 @@ async function resolveOrderProjectsForOrder(orderId) {
     const normalizedId = normalizeOrderId(orderId);
     if (normalizedId == null) return [];
 
-    const cached = getCachedOrderProjects(normalizedId);
-    if (cached.length) return cached;
-
-    if (typeof loadOrderProjects === 'function' && normalizedId === normalizeOrderId(activeOrderId)) {
-        await loadOrderProjects(normalizedId);
-        const refreshed = getCachedOrderProjects(normalizedId);
-        if (refreshed.length) return refreshed;
-    }
-
-    if (typeof fetchOrderProjectsForOrder === 'function') {
-        const projects = await fetchOrderProjectsForOrder(normalizedId);
-        if (projects.length) return projects;
-    }
-
     let result = await supabaseClient
         .from('OrderProject')
-        .select('*, environmentType:EnvironmentType(name)')
+        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
         .eq('orderId', normalizedId)
-        .order('createdAt', { ascending: true });
+        .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('OrderProjectStatus') || result.error?.message?.includes('statusId')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('*, environmentType:EnvironmentType(name)')
+            .eq('orderId', normalizedId)
+            .order('name', { ascending: true });
+    }
 
     if (result.error?.message?.includes('environmentType')) {
         result = await supabaseClient
             .from('OrderProject')
             .select('*')
             .eq('orderId', normalizedId)
-            .order('createdAt', { ascending: true });
+            .order('name', { ascending: true });
     }
 
     if (result.error) {
@@ -100,7 +108,138 @@ async function resolveOrderProjectsForOrder(orderId) {
         return [];
     }
 
-    return result.data || [];
+    return enrichAnteprojetoProjectsWithStatus(result.data || []);
+}
+
+async function getConferenciaEnviadaStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Conferência Enviada')
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Conferência Enviada')
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
+async function applyConferenciaEnviadaStatusToProjects(orderProjectIds) {
+    const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return;
+
+    const statusId = await getConferenciaEnviadaStatusId();
+    if (!statusId) {
+        throw new Error('Status "Conferência Enviada" não encontrado. Cadastre em Gestão → Status de Projeto.');
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', uniqueIds);
+
+    if (error) throw error;
+}
+
+async function getConferenciaRealizadaStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Conferência Realizada')
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Conferência Realizada')
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
+function getConferenceOrderProjectIds(conference) {
+    return [...new Set(
+        (conference?.conferenceProjects || [])
+            .map(project => Number(project.orderProjectId))
+            .filter(Boolean)
+    )];
+}
+
+async function applyConferenciaRealizadaStatusToProjects(orderProjectIds) {
+    const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return;
+
+    const statusId = await getConferenciaRealizadaStatusId();
+    if (!statusId) {
+        throw new Error('Status "Conferência Realizada" não encontrado. Cadastre em Gestão → Status de Projeto.');
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', uniqueIds);
+
+    if (error) throw error;
+}
+
+async function getAguardandoProjetoTecnicoStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Aguardando Projeto Técnico')
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Aguardando Projeto Técnico')
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
+async function applyAguardandoProjetoTecnicoStatusToProjects(orderProjectIds) {
+    const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return;
+
+    const statusId = await getAguardandoProjetoTecnicoStatusId();
+    if (!statusId) {
+        throw new Error('Status "Aguardando Projeto Técnico" não encontrado. Cadastre em Gestão → Status de Projeto.');
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', uniqueIds);
+
+    if (error) throw error;
 }
 
 function getUsedOrderProjectIds(editingConferenceId = null) {
@@ -188,8 +327,41 @@ function getConferenceSketchUpPath(conference) {
 }
 
 function getProjectLabel(project) {
-    const env = project.environmentType?.name ? ` (${project.environmentType.name})` : '';
-    return `${project.name}${env}`;
+    return project.name || 'Projeto';
+}
+
+function getProjectStatusName(project) {
+    return project?.projectStatus?.name || '';
+}
+
+function isProjectPlantaLevantada(project) {
+    return getProjectStatusName(project) === 'Planta Levantada';
+}
+
+async function enrichAnteprojetoProjectsWithStatus(projects) {
+    if (!projects.length) return projects;
+
+    const needsEnrich = projects.some(project => project.statusId && !project.projectStatus);
+    if (!needsEnrich) return projects;
+
+    const statusIds = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
+    if (!statusIds.length) return projects;
+
+    const { data: statuses, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id, name')
+        .in('id', statusIds);
+
+    if (error) {
+        console.error('enrichAnteprojetoProjectsWithStatus:', error);
+        return projects;
+    }
+
+    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+    return projects.map(project => ({
+        ...project,
+        projectStatus: project.projectStatus || statusById[project.statusId] || null
+    }));
 }
 
 function getUsedProjectSectionIds() {
@@ -209,7 +381,9 @@ async function loadAnteprojetoAvailableProjects(conference = null, editingConfer
     anteprojetoAvailableProjectsCache = allProjects
         .filter(project => {
             const id = Number(project.id);
-            return selectedMap[id] || !usedProjectIds.has(id);
+            if (selectedMap[id]) return true;
+            if (usedProjectIds.has(id)) return false;
+            return isProjectPlantaLevantada(project);
         })
         .map(project => ({
             orderProjectId: Number(project.id),
@@ -256,8 +430,9 @@ function addAnteprojetoProjectSection(project = {}, options = {}) {
     const container = document.getElementById('anteprojeto-projects-structure');
     if (!container || !project.orderProjectId) return null;
 
-    const { canEditStructure = true, canEditConsultor = false, readOnly = false } = options;
+    const { canEditStructure = true, canExtendStructure = true, canEditConsultor = false, readOnly = false } = options;
     const structureDisabled = readOnly || !canEditStructure;
+    const extendDisabled = readOnly || !canExtendStructure;
 
     const section = document.createElement('div');
     section.className = 'anteprojeto-project-section border border-sky-200 rounded-xl bg-sky-50/30 overflow-hidden';
@@ -267,17 +442,20 @@ function addAnteprojetoProjectSection(project = {}, options = {}) {
     section.innerHTML = `
         <div class="flex justify-between items-center gap-2 px-4 py-2.5 bg-sky-100/50 border-b border-sky-200">
             <span class="text-xs font-bold text-slate-800">🏠 ${escapeHtml(project.label || 'Projeto')}</span>
-            ${structureDisabled
+            ${extendDisabled
                 ? ''
                 : '<button type="button" class="anteprojeto-remove-project-btn text-xs text-red-600 hover:text-red-800 font-medium">Remover projeto</button>'}
         </div>
-        <div class="anteprojeto-add-module-bar flex gap-2 px-4 py-3 bg-white/80 border-b border-sky-100 ${structureDisabled ? 'hidden' : ''}">
-            <input type="text" class="anteprojeto-new-module-name flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-sky-600"
-                placeholder="Nome do módulo">
-            <button type="button" class="anteprojeto-add-module-btn text-xs bg-sky-700 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800 whitespace-nowrap">Adicionar módulo</button>
-        </div>
         <div class="anteprojeto-modules-list px-4 py-3 space-y-3 bg-white/80"></div>
         <p class="anteprojeto-modules-empty-msg text-xs text-slate-400 text-center py-3">Nenhum módulo neste projeto.</p>
+        <div class="anteprojeto-add-module-bar px-4 py-3 bg-sky-50 border-t-2 border-sky-300 ${extendDisabled ? 'hidden' : ''}">
+            <p class="text-[10px] font-semibold text-sky-800 uppercase tracking-wide mb-2">+ Novo módulo</p>
+            <div class="flex gap-2">
+                <input type="text" class="anteprojeto-new-module-name flex-1 px-2.5 py-2 text-xs border-2 border-sky-200 rounded-lg bg-white focus:outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-200"
+                    placeholder="Nome do módulo">
+                <button type="button" class="anteprojeto-add-module-btn text-xs bg-sky-700 text-white px-3 py-2 rounded-lg font-semibold hover:bg-sky-800 shadow-sm whitespace-nowrap">Adicionar módulo</button>
+            </div>
+        </div>
     `;
 
     section.querySelector('.anteprojeto-add-module-btn')?.addEventListener('click', () => {
@@ -307,6 +485,8 @@ function addAnteprojetoProjectSection(project = {}, options = {}) {
 }
 
 function addAnteprojetoProjectFromSelect(options = {}) {
+    if (!options.canExtendStructure) return;
+
     const select = document.getElementById('anteprojeto-add-project-select');
     const orderProjectId = Number(select?.value);
     if (!orderProjectId) {
@@ -322,19 +502,16 @@ function addAnteprojetoProjectFromSelect(options = {}) {
 }
 
 function groupConferenceByProjects(conference) {
-    return (conference?.conferenceProjects || []).map(project => {
-        const env = project.orderProject?.environmentType?.name ? ` (${project.orderProject.environmentType.name})` : '';
-        return {
-            orderProjectId: Number(project.orderProjectId),
-            label: `${project.orderProject?.name || 'Projeto'}${env}`,
-            modules: (project.modules || [])
-                .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.id - b.id))
-                .map(module => ({
-                    ...module,
-                    observations: normalizeModuleObservations(module.observations)
-                }))
-        };
-    });
+    return (conference?.conferenceProjects || []).map(project => ({
+        orderProjectId: Number(project.orderProjectId),
+        label: project.orderProject?.name || 'Projeto',
+        modules: (project.modules || [])
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.id - b.id))
+            .map(module => ({
+                ...module,
+                observations: normalizeModuleObservations(module.observations)
+            }))
+    }));
 }
 
 async function renderAnteprojetoProjectsPicker(conference = null, editingConferenceId = null) {
@@ -481,8 +658,9 @@ function addObservationToModule(card, text, options = {}) {
 }
 
 function bindModuleCardEvents(card, options = {}) {
-    const { canEditStructure = true, canEditConsultor = false, readOnly = false } = options;
+    const { canEditStructure = true, canExtendStructure = true, canEditConsultor = false, readOnly = false } = options;
     const structureDisabled = readOnly || !canEditStructure;
+    const extendDisabled = readOnly || !canExtendStructure;
 
     card.querySelector('.anteprojeto-toggle-observations')?.addEventListener('click', () => {
         const panel = card.querySelector('.module-observations-panel');
@@ -521,8 +699,9 @@ function bindModuleCardEvents(card, options = {}) {
 }
 
 function renderAnteprojetoModuleCard(module = {}, options = {}) {
-    const { canEditStructure = true, canEditConsultor = false, readOnly = false } = options;
+    const { canEditStructure = true, canExtendStructure = true, canEditConsultor = false, readOnly = false } = options;
     const structureDisabled = readOnly || !canEditStructure;
+    const extendDisabled = readOnly || !canExtendStructure;
 
     const card = document.createElement('div');
     card.className = 'anteprojeto-module-card border border-slate-200 rounded-lg bg-white overflow-hidden';
@@ -539,7 +718,7 @@ function renderAnteprojetoModuleCard(module = {}, options = {}) {
                 <button type="button" class="anteprojeto-toggle-observations text-[10px] text-sky-700 font-medium hover:text-sky-900">
                     ${hasObservations ? `Observações (${observations.length})` : 'Observações'}
                 </button>
-                ${structureDisabled
+                ${extendDisabled
                     ? ''
                     : '<button type="button" class="anteprojeto-remove-module text-[10px] text-red-600 hover:text-red-800 font-medium">Remover</button>'}
             </div>
@@ -573,6 +752,8 @@ function addAnteprojetoModuleCard(section, module = {}, options = {}) {
 }
 
 function addModuleFromSectionInput(section, options = {}) {
+    if (!options.canExtendStructure) return;
+
     const input = section.querySelector('.anteprojeto-new-module-name');
     const name = input?.value.trim() || '';
     if (!name) {
@@ -637,18 +818,43 @@ async function populateAnteprojetoDesignerSelect(selectedId = null, locked = fal
         return;
     }
 
-    const { data: designers, error } = await supabaseClient
+    let result = await supabaseClient
         .from('appUsers')
-        .select('id, name')
+        .select('id, name, conferente')
         .eq('role', 'Projetista')
         .eq('isActive', true)
+        .eq('conferente', true)
         .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('conferente')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .eq('role', 'Projetista')
+            .eq('isActive', true)
+            .order('name', { ascending: true });
+    }
+
+    let designers = (result.data || []).filter(user => user.conferente !== false);
+
+    if (selectedId && !designers.some(user => Number(user.id) === Number(selectedId))) {
+        const { data: selectedDesigner } = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .eq('id', selectedId)
+            .maybeSingle();
+
+        if (selectedDesigner) {
+            designers.push(selectedDesigner);
+            designers.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+        }
+    }
 
     select.disabled = locked;
     select.innerHTML = '<option value="">Selecione...</option>';
 
-    if (error || !designers?.length) {
-        select.innerHTML += '<option value="" disabled>Nenhum projetista cadastrado</option>';
+    if (result.error || !designers.length) {
+        select.innerHTML += '<option value="" disabled>Nenhum projetista conferente cadastrado</option>';
         wrap.classList.remove('hidden');
         return;
     }
@@ -662,8 +868,14 @@ async function populateAnteprojetoDesignerSelect(selectedId = null, locked = fal
 }
 
 function setAnteprojetoModalFields(conference, options = {}) {
-    const { readOnly = false, canEditStructure = false, canEditConsultor = false } = options;
+    const {
+        readOnly = false,
+        canEditStructure = false,
+        canExtendStructure = false,
+        canEditConsultor = false
+    } = options;
     const structureDisabled = readOnly || !canEditStructure;
+    const extendDisabled = readOnly || !canExtendStructure;
 
     const sketchUpEl = document.getElementById('anteprojeto-sketchup-path');
     if (sketchUpEl) sketchUpEl.disabled = structureDisabled;
@@ -679,11 +891,12 @@ function setAnteprojetoModalFields(conference, options = {}) {
 
     const addProjectSelect = document.getElementById('anteprojeto-add-project-select');
     const addProjectBtn = document.getElementById('btn-add-anteprojeto-project');
-    if (addProjectSelect) addProjectSelect.disabled = structureDisabled;
-    if (addProjectBtn) addProjectBtn.classList.toggle('hidden', structureDisabled);
+    if (addProjectSelect) addProjectSelect.disabled = extendDisabled;
+    if (addProjectBtn) addProjectBtn.classList.toggle('hidden', extendDisabled);
+    addProjectSelect?.closest('.flex')?.classList.toggle('hidden', extendDisabled);
 
-    document.querySelectorAll('.anteprojeto-add-module-bar, .anteprojeto-remove-project-btn')
-        .forEach(el => el.classList.toggle('hidden', structureDisabled));
+    document.querySelectorAll('.anteprojeto-add-module-bar, .anteprojeto-remove-project-btn, .anteprojeto-remove-module')
+        .forEach(el => el.classList.toggle('hidden', extendDisabled));
 
     if (structureDisabled) {
         document.querySelectorAll('.anteprojeto-add-observation-bar').forEach(el => el.classList.add('hidden'));
@@ -717,6 +930,7 @@ async function openAnteprojetoModal(conferenceId = null) {
 
     const readOnly = isAnteprojetoConferenceConfirmed(conference);
     const canEditStructure = canEditAnteprojetoConference(conference);
+    const canExtendStructure = canExtendAnteprojetoConferenceStructure(conference);
     const canEditConsultor = canEditAnteprojetoConsultorFields(conference);
 
     document.getElementById('anteprojeto-form').reset();
@@ -742,7 +956,7 @@ async function openAnteprojetoModal(conferenceId = null) {
 
     if (conference) {
         title.textContent = readOnly ? 'Conferência de Anteprojeto' : 'Editar Conferência';
-        const modalOptions = { canEditStructure, canEditConsultor, readOnly };
+        const modalOptions = { canEditStructure, canExtendStructure, canEditConsultor, readOnly };
         groupConferenceByProjects(conference).forEach(project => {
             addAnteprojetoProjectSection(project, modalOptions);
         });
@@ -750,7 +964,7 @@ async function openAnteprojetoModal(conferenceId = null) {
         title.textContent = 'Nova Conferência de Anteprojeto';
     }
 
-    setAnteprojetoModalFields(conference, { readOnly, canEditStructure, canEditConsultor });
+    setAnteprojetoModalFields(conference, { readOnly, canEditStructure, canExtendStructure, canEditConsultor });
     submitBtn.textContent = conference ? 'Salvar Conferência' : 'Criar Conferência';
     toggleModal('anteprojeto-modal', true);
 }
@@ -919,11 +1133,15 @@ async function persistModuleObservations(moduleId, observations, options = {}) {
 }
 
 async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, modules, options = {}) {
-    const { canEditStructure = true, canEditConsultor = false } = options;
+    const {
+        canEditStructure = true,
+        canExtendStructure = false,
+        canEditConsultor = false
+    } = options;
     const now = new Date().toISOString();
     const projectIdByOrderProject = {};
 
-    if (canEditStructure) {
+    if (canExtendStructure && canEditStructure) {
         const { data: currentProjects } = await supabaseClient
             .from('AnteprojetoConferenceProject')
             .select('id, orderProjectId')
@@ -979,7 +1197,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
     }
 
     const existingModuleIds = modules.filter(module => module.id).map(module => module.id);
-    if (canEditStructure) {
+    if (canExtendStructure && canEditStructure) {
         const conferenceProjectIds = Object.values(projectIdByOrderProject);
         let moduleRows = [];
         if (conferenceProjectIds.length) {
@@ -1007,7 +1225,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
 
         if (module.id) {
             const updatePayload = { updatedAt: now };
-            if (canEditStructure) {
+            if (canExtendStructure && canEditStructure) {
                 updatePayload.conferenceProjectId = conferenceProjectId;
                 updatePayload.name = module.name;
                 updatePayload.sortOrder = module.sortOrder;
@@ -1033,7 +1251,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
             continue;
         }
 
-        if (!canEditStructure) continue;
+        if (!canExtendStructure || !canEditStructure) continue;
 
         const { data: insertedModule, error } = await supabaseClient
             .from('AnteprojetoModule')
@@ -1059,6 +1277,7 @@ async function saveAnteprojetoConference() {
         : null;
 
     const canEditStructure = canEditAnteprojetoConference(conference);
+    const canExtendStructure = canExtendAnteprojetoConferenceStructure(conference);
     const canEditConsultor = canEditAnteprojetoConsultorFields(conference);
 
     if (!canEditStructure && !canEditConsultor) {
@@ -1159,13 +1378,22 @@ async function saveAnteprojetoConference() {
             conferenceId,
             selectedProjects,
             modules,
-            { canEditStructure, canEditConsultor }
+            { canEditStructure, canExtendStructure, canEditConsultor }
         );
+
+        if (!conference) {
+            await applyConferenciaEnviadaStatusToProjects(
+                selectedProjects.map(project => project.orderProjectId)
+            );
+        }
 
         closeAnteprojetoModal();
         await loadAnteprojetoObservations();
         refreshAnteprojetoObservationDatalist();
         await loadAnteprojetoConferences(activeOrderId);
+        if (typeof loadOrderProjects === 'function' && activeOrderId) {
+            await loadOrderProjects(activeOrderId);
+        }
     } catch (error) {
         alert('Erro ao salvar conferência: ' + error.message);
     }
@@ -1191,26 +1419,88 @@ async function confirmAnteprojetoConference(conferenceId) {
     }
 
     const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('AnteprojetoConference')
-        .update({
-            status: 'Confirmada',
-            confirmedAt: now,
-            confirmedById: currentUser.id,
-            updatedAt: now,
-            updatedById: currentUser.id
-        })
-        .eq('id', conferenceId);
 
-    if (error) {
+    try {
+        const { error } = await supabaseClient
+            .from('AnteprojetoConference')
+            .update({
+                status: 'Confirmada',
+                confirmedAt: now,
+                confirmedById: currentUser.id,
+                updatedAt: now,
+                updatedById: currentUser.id
+            })
+            .eq('id', conferenceId);
+
+        if (error) throw error;
+
+        await applyConferenciaRealizadaStatusToProjects(getConferenceOrderProjectIds(conference));
+
+        await loadAnteprojetoConferences(activeOrderId);
+        if (typeof loadOrderProjects === 'function' && activeOrderId) {
+            await loadOrderProjects(activeOrderId);
+        }
+    } catch (error) {
         alert('Erro ao confirmar conferência: ' + error.message);
-        return;
     }
-
-    await loadAnteprojetoConferences(activeOrderId);
 }
 
 window.confirmAnteprojetoConference = confirmAnteprojetoConference;
+
+async function approveAnteprojetoConference(conferenceId) {
+    const conference = anteprojetoConferencesCache.find(c => c.id === conferenceId);
+    if (!conference) return;
+
+    if (!canApproveAnteprojetoConference(conference)) {
+        alert('Somente Admin com flag Gestor comercial pode aprovar a conferência.');
+        return;
+    }
+
+    if (!confirm('Aprovar esta conferência e alterar os projetos para Aguardando Projeto Técnico?')) {
+        return;
+    }
+
+    try {
+        await applyAguardandoProjetoTecnicoStatusToProjects(getConferenceOrderProjectIds(conference));
+
+        const now = new Date().toISOString();
+        let updatePayload = {
+            status: 'Aprovada',
+            approvedAt: now,
+            approvedById: currentUser.id,
+            updatedAt: now,
+            updatedById: currentUser.id
+        };
+
+        let { error: conferenceError } = await supabaseClient
+            .from('AnteprojetoConference')
+            .update(updatePayload)
+            .eq('id', conferenceId);
+
+        if (conferenceError?.message?.includes('approvedAt') || conferenceError?.message?.includes('Aprovada')) {
+            updatePayload = {
+                status: 'Aprovada',
+                updatedAt: now,
+                updatedById: currentUser.id
+            };
+            ({ error: conferenceError } = await supabaseClient
+                .from('AnteprojetoConference')
+                .update(updatePayload)
+                .eq('id', conferenceId));
+        }
+
+        if (conferenceError) throw conferenceError;
+
+        await loadAnteprojetoConferences(activeOrderId);
+        if (typeof loadOrderProjects === 'function' && activeOrderId) {
+            await loadOrderProjects(activeOrderId);
+        }
+    } catch (error) {
+        alert('Erro ao aprovar conferência: ' + error.message);
+    }
+}
+
+window.approveAnteprojetoConference = approveAnteprojetoConference;
 
 function bindAnteprojetoTreeToggles(root) {
     root.querySelectorAll('.anteprojeto-tree-node').forEach(node => {
@@ -1253,22 +1543,28 @@ function renderAnteprojetoObservationLeaf(obs) {
 
 function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const confirmed = isAnteprojetoConferenceConfirmed(conference);
+    const approved = isAnteprojetoConferenceApproved(conference);
     const moduleObservations = getConferenceModuleObservations(conference);
     const checkedCount = moduleObservations.filter(obs => obs.consultorChecked).length;
     const canEdit = canEditAnteprojetoConference(conference) || canEditAnteprojetoConsultorFields(conference);
     const canConfirm = canConfirmAnteprojetoConference(conference);
+    const canApprove = canApproveAnteprojetoConference(conference);
     const canOpen = confirmed || canEdit;
     const allChecked = moduleObservations.length > 0
         && moduleObservations.every(obs => obs.consultorChecked);
     const projetistaName = projetistaNames[conference.designerId] || '-';
-    const statusClass = confirmed ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800';
+    const statusClass = approved
+        ? 'bg-indigo-100 text-indigo-800'
+        : confirmed
+            ? 'bg-emerald-100 text-emerald-800'
+            : 'bg-sky-100 text-sky-800';
     const sketchUpPath = getConferenceSketchUpPath(conference);
     const conferenceObservation = conference.conferenceObservation || '';
     const projectCount = (conference.conferenceProjects || []).length;
     const moduleCount = getConferenceModules(conference).length;
 
     const card = document.createElement('div');
-    card.className = `${confirmed ? 'bg-emerald-50/60 border-emerald-200' : 'bg-sky-50/50 border-sky-200'} rounded-xl border shadow-sm overflow-hidden`;
+    card.className = `${approved ? 'bg-indigo-50/60 border-indigo-200' : confirmed ? 'bg-emerald-50/60 border-emerald-200' : 'bg-sky-50/50 border-sky-200'} rounded-xl border shadow-sm overflow-hidden`;
 
     const header = document.createElement('div');
     header.className = 'px-4 py-3 bg-white/60 space-y-2 border-b border-slate-100';
@@ -1377,16 +1673,26 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
 
     body.appendChild(projectsWrap);
 
-    if (canConfirm) {
+    if (canConfirm || canApprove) {
         const confirmWrap = document.createElement('div');
-        confirmWrap.className = 'flex justify-end pt-2 border-t border-slate-100';
-        confirmWrap.innerHTML = `
-            <button type="button" onclick="confirmAnteprojetoConference(${conference.id})"
-                class="text-xs px-3 py-1.5 rounded-lg font-medium ${allChecked ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
-                ${allChecked ? '' : 'disabled'}>
-                Confirmar Conferência
-            </button>
-        `;
+        confirmWrap.className = 'flex justify-end gap-2 pt-2 border-t border-slate-100';
+        if (canConfirm) {
+            confirmWrap.innerHTML += `
+                <button type="button" onclick="confirmAnteprojetoConference(${conference.id})"
+                    class="text-xs px-3 py-1.5 rounded-lg font-medium ${allChecked ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
+                    ${allChecked ? '' : 'disabled'}>
+                    Confirmar Conferência
+                </button>
+            `;
+        }
+        if (canApprove) {
+            confirmWrap.innerHTML += `
+                <button type="button" onclick="approveAnteprojetoConference(${conference.id})"
+                    class="text-xs px-3 py-1.5 rounded-lg font-medium bg-indigo-700 text-white hover:bg-indigo-800">
+                    Aprovado
+                </button>
+            `;
+        }
         body.appendChild(confirmWrap);
     }
 
@@ -1432,7 +1738,7 @@ async function enrichAnteprojetoConferences(conferences, orderId) {
             .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
             .map(project => ({
             ...project,
-            orderProject: project.orderProject || orderProjectById[Number(project.orderProjectId)] || null,
+            orderProject: orderProjectById[Number(project.orderProjectId)] || project.orderProject || null,
             modules: (project.modules || [])
                 .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.id - b.id))
                 .map(module => {
@@ -1465,7 +1771,7 @@ async function loadAnteprojetoConferences(orderId) {
             *,
             conferenceProjects:AnteprojetoConferenceProject(
                 *,
-                orderProject:OrderProject(id, name, environmentType:EnvironmentType(name)),
+                orderProject:OrderProject(id, name, statusId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)),
                 modules:AnteprojetoModule(
                     *,
                     observations:AnteprojetoModuleObservation(
@@ -1509,7 +1815,7 @@ async function loadAnteprojetoConferences(orderId) {
     conferences = await enrichAnteprojetoConferences(conferences, orderId);
     anteprojetoConferencesCache = conferences;
 
-    const openCount = conferences.filter(conference => conference.status !== 'Confirmada').length;
+    const openCount = conferences.filter(conference => conference.status === 'Em andamento').length;
     updateOrderTabCounts(undefined, undefined, undefined, openCount);
 
     const designerIds = [...new Set(conferences.map(conference => conference.designerId).filter(Boolean))];
@@ -1553,6 +1859,7 @@ function bindAnteprojetoEvents() {
             : null;
         addAnteprojetoProjectFromSelect({
             canEditStructure: canEditAnteprojetoConference(conference),
+            canExtendStructure: canExtendAnteprojetoConferenceStructure(conference),
             canEditConsultor: canEditAnteprojetoConsultorFields(conference),
             readOnly: false
         });

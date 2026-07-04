@@ -48,62 +48,275 @@ function canEditCommercialApproval(approval) {
     return canEditCommercialApprovalDesignerFields(approval);
 }
 
-async function loadApprovalProjetistas(selectedId) {
-    const select = document.getElementById("approval-designer");
-    select.disabled = false;
-    select.classList.remove('bg-slate-100', 'cursor-not-allowed');
-
-    if (currentUser?.role === 'Projetista' && !canEditCommercialApprovalCommercialFields({ orderId: activeOrderId })) {
-        select.innerHTML = `<option value="${currentUser.id}">${currentUser.name}</option>`;
-        select.value = String(currentUser.id);
-        select.disabled = true;
-        select.classList.add('bg-slate-100', 'cursor-not-allowed');
-        return;
-    }
-
-    const { data: projetistas, error } = await supabaseClient
-        .from('appUsers')
-        .select('id, name')
-        .eq('role', 'Projetista')
-        .eq('isActive', true)
-        .order('name', { ascending: true });
-
-    select.innerHTML = '<option value="">Selecione...</option>';
-
-    if (error || !projetistas || projetistas.length === 0) {
-        select.innerHTML += '<option value="" disabled>Nenhum projetista cadastrado</option>';
-        return;
-    }
-
-    projetistas.forEach(p => {
-        select.innerHTML += `<option value="${p.id}">${p.name}</option>`;
-    });
-
-    if (selectedId) {
-        select.value = String(selectedId);
-    }
-}
-
 function setupCommercialApprovalFormFields(approval, isEditMode) {
-    const commercialCanEdit = canEditCommercialApprovalCommercialFieldsOnly(approval);
     const statusWrap = document.getElementById('approval-status-readonly-wrap');
     const statusLabel = document.getElementById('approval-status-readonly-label');
     const createWrap = document.getElementById('approval-create-wrap');
     const editWrap = document.getElementById('approval-edit-wrap');
-
-    document.getElementById('approval-designer').disabled = !commercialCanEdit || currentUser?.role === 'Projetista';
+    const designerReadonlyWrap = document.getElementById('approval-designer-readonly-wrap');
+    const submitBtn = document.getElementById('commercial-approval-form-submit');
 
     if (isEditMode) {
         createWrap.classList.add('hidden');
         editWrap.classList.remove('hidden');
         statusWrap.classList.remove('hidden');
+        designerReadonlyWrap?.classList.remove('hidden');
         statusLabel.textContent = getApprovalStatusLabel(approval.status);
+        submitBtn?.classList.add('hidden');
         return;
     }
 
     createWrap.classList.remove('hidden');
     editWrap.classList.add('hidden');
     statusWrap.classList.add('hidden');
+    designerReadonlyWrap?.classList.add('hidden');
+    submitBtn?.classList.remove('hidden');
+}
+
+async function fetchCommercialApprovalProjectDesigner(projectId) {
+    if (!projectId) return null;
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('id, designerId, designer:appUsers!OrderProject_designerId_fkey(id, name)')
+        .eq('id', projectId)
+        .maybeSingle();
+
+    if (result.error?.message?.includes('designer')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, designerId')
+            .eq('id', projectId)
+            .maybeSingle();
+    }
+
+    if (result.error || !result.data) return null;
+
+    const project = result.data;
+    if (project.designer?.name) return project.designer;
+
+    if (project.designerId) {
+        const { data: designer } = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .eq('id', project.designerId)
+            .maybeSingle();
+        return designer || { id: project.designerId, name: '—' };
+    }
+
+    return null;
+}
+
+async function setApprovalDesignerReadonlyLabel(approval) {
+    const label = document.getElementById('approval-designer-readonly-label');
+    if (!label) return;
+
+    const designer = approval?.orderProjectId
+        ? await fetchCommercialApprovalProjectDesigner(approval.orderProjectId)
+        : null;
+
+    if (designer?.name) {
+        label.textContent = designer.name;
+        return;
+    }
+
+    if (approval?.designerId) {
+        const { data: user } = await supabaseClient
+            .from('appUsers')
+            .select('name')
+            .eq('id', approval.designerId)
+            .maybeSingle();
+        label.textContent = user?.name || '—';
+        return;
+    }
+
+    label.textContent = '—';
+}
+
+const COMMERCIAL_APPROVAL_PROJECT_STATUS = 'Projeto Técnico';
+const COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS = 'Aguardando Aprovação';
+
+async function getAguardandoAprovacaoProjectStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS)
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS)
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
+async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
+    const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return;
+
+    const statusId = await getAguardandoAprovacaoProjectStatusId();
+    if (!statusId) {
+        throw new Error(`Status "${COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS}" não encontrado. Cadastre em Gestão → Status de Projeto.`);
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', uniqueIds);
+
+    if (error) throw error;
+}
+
+const COMMERCIAL_REVISION_PROJECT_STATUS = 'Em Revisão';
+
+async function getEmRevisaoProjectStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', COMMERCIAL_REVISION_PROJECT_STATUS)
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', COMMERCIAL_REVISION_PROJECT_STATUS)
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
+async function applyEmRevisaoStatusToProjects(orderProjectIds) {
+    const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return;
+
+    const statusId = await getEmRevisaoProjectStatusId();
+    if (!statusId) {
+        throw new Error(`Status "${COMMERCIAL_REVISION_PROJECT_STATUS}" não encontrado. Cadastre em Gestão → Status de Projeto.`);
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', uniqueIds);
+
+    if (error) throw error;
+}
+
+async function applyEmRevisaoStatusForCommercialApproval(approval) {
+    let orderProjectId = approval?.orderProjectId;
+
+    if (!orderProjectId && approval?.id) {
+        const { data } = await supabaseClient
+            .from('CommercialApproval')
+            .select('orderProjectId')
+            .eq('id', approval.id)
+            .maybeSingle();
+        orderProjectId = data?.orderProjectId;
+    }
+
+    if (!orderProjectId) return;
+
+    await applyEmRevisaoStatusToProjects([orderProjectId]);
+}
+
+function getCommercialApprovalProjectStatusName(project) {
+    return project?.projectStatus?.name || '';
+}
+
+async function enrichCommercialApprovalProjectsWithStatus(projects) {
+    if (!projects.length) return projects;
+
+    const needsEnrich = projects.some(project => project.statusId && !project.projectStatus);
+    if (!needsEnrich) return projects;
+
+    const statusIds = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
+    if (!statusIds.length) return projects;
+
+    const { data: statuses, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id, name')
+        .in('id', statusIds);
+
+    if (error) {
+        console.error('enrichCommercialApprovalProjectsWithStatus:', error);
+        return projects;
+    }
+
+    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+    return projects.map(project => ({
+        ...project,
+        projectStatus: project.projectStatus || statusById[project.statusId] || null
+    }));
+}
+
+async function loadApprovalProjetistas() {
+    // Responsável definido no cadastro do projeto.
+}
+
+async function fetchCommercialApprovalEligibleProjects(orderId) {
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)')
+        .eq('orderId', orderId)
+        .order('createdAt', { ascending: true });
+
+    if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('statusId') || result.error?.message?.includes('designer')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('*, environmentType:EnvironmentType(name)')
+            .eq('orderId', orderId)
+            .order('createdAt', { ascending: true });
+    }
+
+    if (result.error) {
+        console.error('fetchCommercialApprovalEligibleProjects:', result.error);
+        return [];
+    }
+
+    const projects = await enrichCommercialApprovalProjectsWithStatus(result.data || []);
+    const designerIds = [...new Set(projects.map(project => project.designerId).filter(Boolean))];
+    let designerById = {};
+
+    if (designerIds.length) {
+        const { data: designers } = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .in('id', designerIds);
+        designerById = Object.fromEntries((designers || []).map(designer => [designer.id, designer]));
+    }
+
+    const enrichedProjects = projects.map(project => ({
+        ...project,
+        designer: project.designer || designerById[project.designerId] || null
+    }));
+
+    const statusFiltered = enrichedProjects.filter(project =>
+        getCommercialApprovalProjectStatusName(project) === COMMERCIAL_APPROVAL_PROJECT_STATUS
+    );
+
+    if (currentUser?.role === 'Projetista') {
+        return statusFiltered.filter(project => Number(project.designerId) === Number(currentUser.id));
+    }
+
+    return statusFiltered;
 }
 
 function getExistingApprovalsByProjectId(approvals, projects) {
@@ -126,10 +339,13 @@ function getExistingApprovalsByProjectId(approvals, projects) {
 
 async function loadApprovalProjectCheckboxes() {
     const container = document.getElementById('approval-projects-list');
-    const projects = await fetchOrderProjectsForOrder(activeOrderId);
+    const isProjetista = currentUser?.role === 'Projetista';
+    const projects = await fetchCommercialApprovalEligibleProjects(activeOrderId);
 
     if (!projects.length) {
-        container.innerHTML = '<p class="text-xs text-slate-400 text-center py-2">Cadastre projetos no pedido antes de solicitar aprovação.</p>';
+        container.innerHTML = `<p class="text-xs text-slate-400 text-center py-2">${isProjetista
+            ? `Nenhum projeto seu com status ${COMMERCIAL_APPROVAL_PROJECT_STATUS} disponível para solicitar aprovação.`
+            : `Nenhum projeto com status ${COMMERCIAL_APPROVAL_PROJECT_STATUS} disponível para solicitar aprovação.`}</p>`;
         return;
     }
 
@@ -144,20 +360,25 @@ async function loadApprovalProjectCheckboxes() {
         const existing = existingByProjectId[project.id];
         const hasApproval = Boolean(existing);
         const statusLabel = hasApproval ? getApprovalStatusLabel(normalizeCommercialApproval(existing).status) : '';
+        const designerName = project.designer?.name || 'Sem responsável';
+        const canSelect = hasApproval || Boolean(project.designerId);
+        const showDesignerName = !isProjetista;
 
         const label = document.createElement('label');
-        label.className = `flex items-center gap-2 px-2 py-1.5 rounded-md border ${hasApproval ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-white'} cursor-pointer hover:bg-white transition`;
+        label.className = `flex items-center gap-2 px-2 py-1.5 rounded-md border ${hasApproval ? 'border-emerald-200 bg-emerald-50/60' : canSelect ? 'border-slate-200 bg-white cursor-pointer hover:bg-white' : 'border-slate-200 bg-slate-50 opacity-70'} transition`;
 
         label.innerHTML = `
             <input type="checkbox" name="approval-project" value="${project.id}"
                 data-project-name="${project.name.replace(/"/g, '&quot;')}"
+                data-designer-id="${project.designerId || ''}"
                 ${hasApproval ? 'data-existing-approval="true"' : ''}
                 class="rounded border-slate-300 text-emerald-700 focus:ring-emerald-600 shrink-0"
-                ${hasApproval ? 'checked disabled' : ''}>
+                ${hasApproval ? 'checked disabled' : !canSelect ? 'disabled' : ''}>
             <span class="flex-1 min-w-0 text-xs leading-tight">
-                <span class="font-semibold text-slate-800">${project.name}</span>
-                <span class="text-slate-400"> · ${project.environmentType?.name || '-'}</span>
+                <span class="font-semibold text-slate-800">${escapeHtml(project.name)}</span>
+                ${showDesignerName ? `<span class="text-slate-400"> · ${escapeHtml(designerName)}</span>` : ''}
                 ${hasApproval ? `<span class="text-[10px] text-emerald-700 font-medium"> · ${statusLabel}</span>` : ''}
+                ${showDesignerName && !hasApproval && !project.designerId ? '<span class="text-[10px] text-amber-700 font-medium"> · Cadastre o responsável no projeto</span>' : ''}
             </span>
         `;
 
@@ -313,10 +534,7 @@ async function openCommercialApprovalModal() {
     const { data: approvals } = await queryCommercialApprovals(activeOrderId);
     commercialApprovalsCache = (approvals || []).map(a => normalizeCommercialApproval(a));
 
-    await Promise.all([
-        loadApprovalProjetistas(),
-        loadApprovalProjectCheckboxes()
-    ]);
+    await loadApprovalProjectCheckboxes();
     toggleModal('commercial-approval-modal', true);
 }
 
@@ -329,7 +547,7 @@ async function editCommercialApproval(id) {
     document.getElementById('commercial-approval-form-submit').textContent = 'Salvar Alterações';
     document.getElementById('approval-edit-project-name').textContent = approval.projectName || '-';
     setupCommercialApprovalFormFields(approval, true);
-    await loadApprovalProjetistas(approval.designerId);
+    await setApprovalDesignerReadonlyLabel(approval);
     toggleModal('commercial-approval-modal', true);
 }
 
@@ -666,17 +884,15 @@ function bindCommercialApprovalEvents() {
     document.getElementById('commercial-approval-form').addEventListener('submit', async function (e) {
         e.preventDefault();
 
-        const designerId = document.getElementById('approval-designer').value;
         const existing = editingCommercialApprovalId
             ? commercialApprovalsCache.find(a => a.id === editingCommercialApprovalId)
             : null;
 
-        if (!designerId) {
-            alert('Selecione o projetista.');
+        if (editingCommercialApprovalId && existing) {
             return;
         }
 
-        const isCreateMode = !editingCommercialApprovalId || !existing;
+        const isCreateMode = true;
         let selectedProjectIds = [];
 
         if (isCreateMode) {
@@ -696,60 +912,65 @@ function bindCommercialApprovalEvents() {
         setCommercialApprovalFormLoading(true, 'Salvando solicitação...');
 
         try {
-            if (editingCommercialApprovalId && existing) {
-                if (!canEditCommercialApprovalCommercialFieldsOnly(existing)) {
-                    alert('Esta solicitação não pode mais ser editada.');
-                    return;
-                }
+            const projects = await fetchCommercialApprovalEligibleProjects(activeOrderId);
+            const projectsWithoutDesigner = selectedProjectIds.filter(projectId => {
+                const project = projects.find(item => Number(item.id) === Number(projectId));
+                return !project?.designerId;
+            });
 
-                const payload = { designerId };
-                let { error } = await supabaseClient
-                    .from('CommercialApproval')
-                    .update(payload)
-                    .eq('id', editingCommercialApprovalId);
+            if (projectsWithoutDesigner.length) {
+                alert('Todos os projetos selecionados precisam ter responsável cadastrado no projeto.');
+                return;
+            }
 
-                if (error) {
-                    alert('Erro ao salvar aprovação comercial: ' + error.message);
-                    return;
-                }
-            } else {
-                const projects = await fetchOrderProjectsForOrder(activeOrderId);
-                const openRequests = await getOpenRequestsForProjects(activeOrderId, selectedProjectIds);
+            const allOrderProjects = await fetchOrderProjectsForOrder(activeOrderId);
+            const openRequests = await getOpenRequestsForProjects(activeOrderId, selectedProjectIds);
 
-                if (openRequests.length) {
-                    const shouldContinue = confirmApprovalDespiteOpenRequests(openRequests, projects);
-                    if (!shouldContinue) return;
-                }
+            if (openRequests.length) {
+                const shouldContinue = confirmApprovalDespiteOpenRequests(openRequests, allOrderProjects);
+                if (!shouldContinue) return;
+            }
 
-                const payloads = selectedProjectIds.map(projectId => {
-                    const project = projects.find(p => p.id === projectId);
-                    return {
-                        orderId: activeOrderId,
-                        orderProjectId: projectId,
-                        projectName: project?.name || '',
-                        designerId,
-                        approved: false,
-                        approvedAt: null,
-                        status: 'Aguardando Aprovação'
-                    };
-                }).filter(p => p.projectName);
+            const payloads = selectedProjectIds.map(projectId => {
+                const project = projects.find(item => Number(item.id) === Number(projectId));
+                return {
+                    orderId: activeOrderId,
+                    orderProjectId: projectId,
+                    projectName: project?.name || '',
+                    designerId: project?.designerId,
+                    approved: false,
+                    approvedAt: null,
+                    status: 'Aguardando Aprovação'
+                };
+            }).filter(payload => payload.projectName && payload.designerId);
 
-                const { error, data: insertedApprovals } = await insertCommercialApprovals(payloads);
+            if (!payloads.length) {
+                alert('Não foi possível montar as solicitações com o responsável dos projetos.');
+                return;
+            }
 
-                if (error) {
-                    alert('Erro ao salvar aprovação comercial: ' + error.message);
-                    return;
-                }
+            const { error, data: insertedApprovals } = await insertCommercialApprovals(payloads);
 
-                setCommercialApprovalFormLoading(true, 'Enviando notificação por e-mail...');
-                for (const inserted of insertedApprovals) {
-                    await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
-                }
+            if (error) {
+                alert('Erro ao salvar aprovação comercial: ' + error.message);
+                return;
+            }
+
+            await applyAguardandoAprovacaoStatusToProjects(selectedProjectIds);
+
+            setCommercialApprovalFormLoading(true, 'Enviando notificação por e-mail...');
+            for (const inserted of insertedApprovals) {
+                await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
             }
 
             closeCommercialApprovalModal();
             document.getElementById('commercial-approval-form').reset();
             loadCommercialApprovals(activeOrderId);
+            if (typeof loadOrderProjects === 'function' && activeOrderId) {
+                await loadOrderProjects(activeOrderId);
+            }
+        } catch (error) {
+            alert('Erro ao salvar solicitação: ' + error.message);
         } finally {
             setCommercialApprovalFormLoading(false);
         }

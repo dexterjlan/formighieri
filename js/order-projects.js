@@ -19,6 +19,27 @@ async function loadEnvironmentTypes() {
     return environmentTypesCache;
 }
 
+async function getVendidoProjectStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Vendido')
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('isActive', true)
+        .order('sortOrder', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
 async function populateEnvironmentTypeSelect() {
     const select = document.getElementById('project-environment-type');
     const types = [...(await loadEnvironmentTypes())].sort((a, b) =>
@@ -160,11 +181,18 @@ function bindOrderProjectEvents() {
             return;
         }
 
+        const statusId = await getVendidoProjectStatusId();
+        if (!statusId) {
+            alert('Status "Vendido" não encontrado. Cadastre em Gestão → Status de Projeto.');
+            return;
+        }
+
         const now = new Date().toISOString();
         const payload = {
             orderId: activeOrderId,
             name,
             environmentTypeId: Number(environmentTypeId),
+            statusId,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now

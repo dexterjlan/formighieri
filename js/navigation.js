@@ -16,6 +16,8 @@ function showMainPanel() {
 function updateAdminNav() {
     document.getElementById("btn-manage-users").classList.toggle("hidden", !isAdmin());
     document.getElementById("btn-system-settings").classList.toggle("hidden", !isAdmin());
+    document.getElementById("btn-gestao").classList.toggle("hidden", !isAdmin());
+    if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
 }
 
 const MAIN_NAV_ACTIVE_CLASS = 'text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg';
@@ -26,6 +28,8 @@ function updateMainNavActive(activeView) {
         dashboard: document.getElementById('btn-back-dashboard'),
         requests: document.getElementById('btn-conversations-query'),
         approvals: document.getElementById('btn-approvals-query'),
+        gestao: document.getElementById('btn-gestao'),
+        pendencias: document.getElementById('btn-pendencias'),
         users: document.getElementById('btn-manage-users'),
         settings: document.getElementById('btn-system-settings')
     };
@@ -42,6 +46,8 @@ function hideSubViews() {
     document.getElementById("system-settings-view").classList.add("hidden");
     document.getElementById("conversations-query-view").classList.add("hidden");
     document.getElementById("approvals-query-view").classList.add("hidden");
+    document.getElementById("gestao-view").classList.add("hidden");
+    document.getElementById("pendencias-view").classList.add("hidden");
 }
 
 function showDashboard() {

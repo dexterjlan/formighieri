@@ -11,6 +11,8 @@ const SCRIPTS = [
     'js/navigation.js',
     'js/conversations-query.js',
     'js/users-admin.js',
+    'js/gestao.js',
+    'js/pendencias.js',
     'js/system-settings.js',
     'js/auth.js',
     'js/orders.js',
@@ -52,7 +54,7 @@ async function bootstrap() {
         mount.innerHTML = htmlParts.join('\n');
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260750`);
+            await loadScript(`${src}?v=20260786`);
         }
 
         initAppEvents();

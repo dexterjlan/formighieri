@@ -17,6 +17,7 @@ function initAppEvents() {
     document.getElementById("btn-show-login").addEventListener("click", showLoginScreen);
     bindAuthEvents();
     bindNavigationEvents();
+    bindGestaoEvents();
     bindSystemSettingsEvents();
     bindConversationsQueryEvents();
     bindCommercialApprovalQueryEvents();
@@ -28,4 +29,5 @@ function initAppEvents() {
     bindRequestActivityEvents();
     bindCommercialApprovalEvents();
     bindCommercialRevisionEvents();
+    bindPendenciasEvents();
 }

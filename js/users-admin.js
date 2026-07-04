@@ -1,14 +1,22 @@
 async function loadUsersAdminList() {
-    const { data: users, error } = await supabaseClient
+    let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, conferente')
+        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos')
         .order('name', { ascending: true });
 
+    if (result.error?.message?.includes('gestorProjetos') || result.error?.message?.includes('gestorComercial')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, conferente')
+            .order('name', { ascending: true });
+    }
+
+    const { data: users, error } = result;
     const tbody = document.getElementById("users-admin-list");
     tbody.innerHTML = "";
 
     if (error || !users) {
-        tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-xs text-red-500">Erro ao carregar usuários.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-xs text-red-500">Erro ao carregar usuários.</td></tr>';
         return;
     }
 
@@ -17,21 +25,37 @@ async function loadUsersAdminList() {
         const isSelf = u.id === currentUser.id;
         const isActive = u.isActive !== false;
         const isConferenteUser = Boolean(u.conferente);
+        const isGestorComercialUser = Boolean(u.gestorComercial);
+        const isGestorProjetosUser = Boolean(u.gestorProjetos);
+        const isAdminUser = u.role === 'Admin';
+        const isProjetistaUser = u.role === 'Projetista';
+        const canHaveGestorProjetos = isAdminUser || isProjetistaUser;
         const currentRole = u.role || "Sem perfil";
         const statusBadge = isActive
             ? '<span class="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Ativo</span>'
             : '<span class="text-[10px] font-bold uppercase bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Inativo</span>';
+        const roleFlags = [
+            isConferenteUser ? 'Conferente' : '',
+            isAdminUser && isGestorComercialUser ? 'Gestor comercial' : '',
+            canHaveGestorProjetos && isGestorProjetosUser ? 'Gestor de projetos' : ''
+        ].filter(Boolean).join(' · ');
         const roleDisplay = u.role === 'Admin'
-            ? '<span class="text-xs font-bold bg-slate-900 text-amber-500 px-2 py-0.5 rounded">Admin</span>'
-            : `<span class="text-xs text-slate-600">${currentRole}${isConferenteUser ? ' · Conferente' : ''}</span>`;
+            ? `<span class="text-xs font-bold bg-slate-900 text-amber-500 px-2 py-0.5 rounded">Admin${roleFlags ? ` · ${roleFlags}` : ''}</span>`
+            : `<span class="text-xs text-slate-600">${currentRole}${roleFlags ? ` · ${roleFlags}` : ''}</span>`;
         const toggleLabel = isActive ? 'Desativar' : 'Reativar';
         const toggleClass = isActive
             ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
             : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200';
         const disableToggle = isSelf ? 'disabled title="Você não pode desativar a si mesmo"' : '';
-        const disableEdit = !isActive || isSelf
-            ? `disabled title="${isSelf ? 'Você não pode alterar o próprio perfil' : 'Reative o usuário para editar'}"`
+        const disableEdit = !isActive
+            ? 'disabled title="Reative o usuário para editar"'
             : '';
+        const disableGestorComercial = !isActive || !isAdminUser
+            ? `disabled title="${!isAdminUser ? 'Somente para perfil Admin' : 'Reative o usuário para editar'}"`
+            : 'title="Pode aprovar conferências de anteprojeto"';
+        const disableGestorProjetos = !isActive || !canHaveGestorProjetos
+            ? `disabled title="${!canHaveGestorProjetos ? 'Somente para Admin ou Projetista' : 'Reative o usuário para editar'}"`
+            : 'title="Acesso ao menu Gestor de Projetos em Pendências"';
 
         tr.innerHTML = `
             <td class="p-3 font-medium ${isActive ? 'text-slate-900' : 'text-slate-400 line-through'}">${u.name}</td>
@@ -52,9 +76,17 @@ async function loadUsersAdminList() {
                     class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 disabled:opacity-50"
                     title="Pode criar medição e conferência de anteprojeto">
             </td>
+            <td class="p-3 text-center">
+                <input type="checkbox" id="gestor-comercial-check-${u.id}" ${isGestorComercialUser ? 'checked' : ''} ${disableGestorComercial}
+                    class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 disabled:opacity-50">
+            </td>
+            <td class="p-3 text-center">
+                <input type="checkbox" id="gestor-projetos-check-${u.id}" ${isGestorProjetosUser ? 'checked' : ''} ${disableGestorProjetos}
+                    class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 disabled:opacity-50">
+            </td>
             <td class="p-3">
                 <div class="flex flex-col gap-1.5">
-                    <button type="button" onclick="saveUserRole(${u.id})" ${isActive && !isSelf ? '' : 'disabled'}
+                    <button type="button" onclick="saveUserRole(${u.id})" ${isActive ? '' : 'disabled'}
                         class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-amber-700 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">
                         Salvar
                     </button>
@@ -67,34 +99,92 @@ async function loadUsersAdminList() {
         `;
 
         tbody.appendChild(tr);
+
+        const roleSelect = document.getElementById(`role-select-${u.id}`);
+        const gestorComercialCheck = document.getElementById(`gestor-comercial-check-${u.id}`);
+        const gestorProjetosCheck = document.getElementById(`gestor-projetos-check-${u.id}`);
+
+        const syncFlagCheckboxes = () => {
+            const role = roleSelect?.value || '';
+            const isAdminSelected = role === 'Admin';
+            const canGestorProjetos = isAdminSelected || role === 'Projetista';
+
+            if (gestorComercialCheck) {
+                gestorComercialCheck.disabled = !isActive || !isAdminSelected;
+                if (!isAdminSelected) gestorComercialCheck.checked = false;
+            }
+
+            if (gestorProjetosCheck) {
+                gestorProjetosCheck.disabled = !isActive || !canGestorProjetos;
+                if (!canGestorProjetos) gestorProjetosCheck.checked = false;
+            }
+        };
+
+        syncFlagCheckboxes();
+        if (roleSelect && !roleSelect.disabled) {
+            roleSelect.addEventListener('change', syncFlagCheckboxes);
+        }
     });
+}
+
+function refreshLoggedInUserDisplay() {
+    if (!currentUser) return;
+
+    const roleLabel = currentUser.role || 'Sem perfil';
+    const display = document.getElementById('user-display');
+    if (display) {
+        display.innerText = `Logado como: ${currentUser.name} (${roleLabel})`;
+    }
+
+    if (typeof updateAdminNav === 'function') updateAdminNav();
+    if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
+    if (typeof updateAnteprojetoActionButtons === 'function') updateAnteprojetoActionButtons();
 }
 
 async function saveUserRole(userId) {
     if (!isAdmin()) return;
-    if (userId === currentUser.id) {
-        alert("Você não pode alterar o próprio perfil.");
-        return;
-    }
 
     const select = document.getElementById(`role-select-${userId}`);
     const conferenteCheck = document.getElementById(`conferente-check-${userId}`);
+    const gestorComercialCheck = document.getElementById(`gestor-comercial-check-${userId}`);
+    const gestorProjetosCheck = document.getElementById(`gestor-projetos-check-${userId}`);
     const role = select?.value;
     const conferente = Boolean(conferenteCheck?.checked);
+    const gestorComercial = role === 'Admin' && Boolean(gestorComercialCheck?.checked);
+    const gestorProjetos = (role === 'Admin' || role === 'Projetista') && Boolean(gestorProjetosCheck?.checked);
 
     if (!role) {
         alert("Selecione Admin, Projetista ou Consultor.");
         return;
     }
 
-    const { error } = await supabaseClient
+    let payload = { role, conferente, gestorComercial, gestorProjetos };
+    let { error } = await supabaseClient
         .from('appUsers')
-        .update({ role, conferente })
+        .update(payload)
         .eq('id', userId);
+
+    if (error?.message?.includes('gestorProjetos') || error?.message?.includes('gestorComercial')) {
+        ({ error } = await supabaseClient
+            .from('appUsers')
+            .update({ role, conferente })
+            .eq('id', userId));
+    }
 
     if (error) {
         alert("Erro ao salvar usuário: " + error.message);
         return;
+    }
+
+    if (userId === currentUser.id) {
+        currentUser = {
+            ...currentUser,
+            role,
+            conferente,
+            gestorComercial,
+            gestorProjetos
+        };
+        refreshLoggedInUserDisplay();
     }
 
     alert("Usuário atualizado com sucesso.");

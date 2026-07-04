@@ -72,6 +72,8 @@ function buildOrderRequestEmailBody(payload) {
 
     return appendEmailNoReplyFooterText(lines.join('\n'));
 }
+
+function buildOrderRequestEmailHtml(payload) {
     const requestTitle = payload.requestProfile === 'Consultor'
         ? 'Solicitação do Consultor'
         : 'Solicitação do Projetista';
@@ -148,6 +150,8 @@ function buildOrderRequestEmailBody(payload) {
 </body>
 </html>`;
 }
+
+async function fetchOrderRequestNotificationContext(orderId, orderProjectId, designerId) {
     let order = typeof ordersCache !== 'undefined'
         ? ordersCache.find(o => o.id === orderId)
         : null;

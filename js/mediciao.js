@@ -1,6 +1,184 @@
 let medicoesCache = [];
 let editingMedicaoId = null;
 
+const MEDICAO_ELIGIBLE_STATUS_NAMES = new Set([
+    'Vendido',
+    'Aguardando Obra',
+    'Aguardando Medição',
+    'Medição Realizada'
+]);
+
+function getProjectStatusName(project) {
+    return project?.projectStatus?.name || '';
+}
+
+function isProjectEligibleForMedicaoPicker(project) {
+    const statusName = getProjectStatusName(project);
+    return Boolean(statusName && MEDICAO_ELIGIBLE_STATUS_NAMES.has(statusName));
+}
+
+function filterProjectsForMedicaoPicker(projects, medicao = null) {
+    const selectedIds = new Set(
+        getMedicaoProjects(medicao).map(item => Number(item.orderProjectId))
+    );
+
+    return projects.filter(project =>
+        isProjectEligibleForMedicaoPicker(project)
+        || selectedIds.has(Number(project.id))
+    );
+}
+
+async function getMedicaoRealizadaStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Medição Realizada')
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Medição Realizada')
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
+async function getPlantaLevantadaStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Planta Levantada')
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Planta Levantada')
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
+async function enrichProjectsWithStatus(projects) {
+    if (!projects.length) return projects;
+
+    const needsEnrich = projects.some(project => project.statusId && !project.projectStatus);
+    if (!needsEnrich) return projects;
+
+    const statusIds = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
+    if (!statusIds.length) return projects;
+
+    const { data: statuses, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id, name')
+        .in('id', statusIds);
+
+    if (error) {
+        console.error('enrichProjectsWithStatus:', error);
+        return projects;
+    }
+
+    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+    return projects.map(project => ({
+        ...project,
+        projectStatus: project.projectStatus || statusById[project.statusId] || null
+    }));
+}
+
+async function fetchOrderProjectsWithStatusForMedicao(orderId) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId) return [];
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
+        .eq('orderId', normalizedId)
+        .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('OrderProjectStatus') || result.error?.message?.includes('statusId')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('*, environmentType:EnvironmentType(name)')
+            .eq('orderId', normalizedId)
+            .order('name', { ascending: true });
+    }
+
+    if (result.error) {
+        console.error('fetchOrderProjectsWithStatusForMedicao:', result.error);
+        return [];
+    }
+
+    return enrichProjectsWithStatus(result.data || []);
+}
+
+async function applyMedicaoRealizadaStatusToProjects(orderProjectIds) {
+    const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return;
+
+    const statusId = await getMedicaoRealizadaStatusId();
+    if (!statusId) {
+        throw new Error('Status "Medição Realizada" não encontrado. Cadastre em Gestão → Status de Projeto.');
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', uniqueIds);
+
+    if (error) throw error;
+}
+
+async function applyPlantaLevantadaStatusToProjects(orderProjectIds) {
+    const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return;
+
+    const statusId = await getPlantaLevantadaStatusId();
+    if (!statusId) {
+        throw new Error('Status "Planta Levantada" não encontrado. Cadastre em Gestão → Status de Projeto.');
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', uniqueIds);
+
+    if (error) throw error;
+}
+
+function isMedicaoPlantaLevantadaChecked(row) {
+    const input = row.querySelector('.medicao-project-planta-check');
+    if (!input) return false;
+    if (input.type === 'checkbox') return input.checked;
+    return input.value === '1';
+}
+
+function getMedicaoPlantaLevantadaDate(row) {
+    const input = row.querySelector('.medicao-project-planta-date');
+    if (!input) return null;
+    return input.value || null;
+}
+
+function isMedicaoPlantaLocked(row) {
+    return row.querySelector('.medicao-project-planta-locked')?.value === '1';
+}
+
 function isAdminOrOrderConsultorForMedicao(orderId) {
     if (currentUser?.role === 'Admin') return true;
     if (currentUser?.role !== 'Consultor') return false;
@@ -39,6 +217,25 @@ function toInputDateValue(dateStr) {
     return String(dateStr).split('T')[0];
 }
 
+function getTodayInputDate() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function isFutureInputDate(dateStr) {
+    const value = toInputDateValue(dateStr);
+    if (!value) return false;
+    return value > getTodayInputDate();
+}
+
+function setMedicaoDateInputMax(input) {
+    if (!input || input.type !== 'date') return;
+    input.max = getTodayInputDate();
+}
+
 function getMedicaoProjects(medicao) {
     return medicao?.medicaoProjects || [];
 }
@@ -51,39 +248,76 @@ function getMedicaoPrimaryDate(medicao) {
 }
 
 async function resolveOrderProjectsForMedicao(orderId) {
-    const normalizedId = Number(orderId);
-    if (!normalizedId) return [];
-
-    if (typeof orderProjectsCache !== 'undefined') {
-        const cached = orderProjectsCache.filter(project => Number(project.orderId) === normalizedId);
-        if (cached.length) return cached;
-    }
-
-    if (typeof loadOrderProjects === 'function' && normalizedId === Number(activeOrderId)) {
-        await loadOrderProjects(normalizedId);
-        const refreshed = orderProjectsCache.filter(project => Number(project.orderId) === normalizedId);
-        if (refreshed.length) return refreshed;
-    }
-
-    if (typeof fetchOrderProjectsForOrder === 'function') {
-        return fetchOrderProjectsForOrder(normalizedId);
-    }
-
-    const { data, error } = await supabaseClient
-        .from('OrderProject')
-        .select('*, environmentType:EnvironmentType(name)')
-        .eq('orderId', normalizedId)
-        .order('name', { ascending: true });
-
-    if (error) {
-        console.error('resolveOrderProjectsForMedicao:', error);
-        return [];
-    }
-
-    return data || [];
+    return fetchOrderProjectsWithStatusForMedicao(orderId);
 }
 
-function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '') {
+function renderMedicaoProjectEditRow(project, medicaoProject) {
+    const env = project.environmentType?.name ? ` (${project.environmentType.name})` : '';
+    const measurementDate = toInputDateValue(medicaoProject.measurementDate);
+    const plantaLocked = Boolean(medicaoProject.plantaLevantada);
+    const plantaDateValue = toInputDateValue(medicaoProject.plantaLevantadaDate);
+
+    const plantaSectionHtml = plantaLocked
+        ? `
+        <div class="medicao-project-planta-wrap flex flex-wrap items-center gap-2">
+            <span class="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
+                Planta levantada · ${formatDateOnly(medicaoProject.plantaLevantadaDate)}
+            </span>
+            <input type="hidden" class="medicao-project-planta-locked" value="1">
+            <input type="hidden" class="medicao-project-planta-check" value="1">
+            <input type="hidden" class="medicao-project-planta-date" value="${escapeHtml(plantaDateValue)}">
+        </div>`
+        : `
+        <div class="medicao-project-planta-wrap flex flex-wrap items-center gap-3">
+            <label class="flex items-center gap-2 text-[11px] text-slate-600">
+                <input type="checkbox" class="medicao-project-planta-check h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                Planta levantada
+            </label>
+            <div class="flex items-center gap-1.5">
+                <span class="text-[10px] text-slate-500">Data planta:</span>
+                <input type="date" class="medicao-project-planta-date px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600 disabled:bg-slate-50" disabled>
+            </div>
+        </div>`;
+
+    const row = document.createElement('div');
+    row.className = 'medicao-project-row medicao-project-edit-row space-y-2 py-2 border-b border-slate-100 last:border-0';
+    row.dataset.orderProjectId = String(project.id);
+    row.dataset.measured = 'true';
+    row.innerHTML = `
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="font-medium text-xs text-slate-700">${escapeHtml(project.name || 'Projeto')}${escapeHtml(env)}</span>
+            <div class="flex items-center gap-1.5 shrink-0">
+                <span class="text-[10px] text-slate-500">Data medição:</span>
+                <span class="text-xs font-semibold text-teal-800">${formatDateOnly(medicaoProject.measurementDate)}</span>
+            </div>
+        </div>
+        <input type="hidden" class="medicao-project-date" value="${escapeHtml(measurementDate)}">
+        ${plantaSectionHtml}
+    `;
+
+    if (plantaLocked) return row;
+
+    const plantaCheckbox = row.querySelector('.medicao-project-planta-check');
+    const plantaDateInput = row.querySelector('.medicao-project-planta-date');
+
+    const syncPlantaState = () => {
+        plantaDateInput.disabled = !plantaCheckbox.checked;
+        if (!plantaCheckbox.checked) {
+            plantaDateInput.value = '';
+            return;
+        }
+        if (!plantaDateInput.value) {
+            plantaDateInput.value = getTodayInputDate();
+        }
+    };
+
+    plantaCheckbox.addEventListener('change', syncPlantaState);
+    setMedicaoDateInputMax(plantaDateInput);
+
+    return row;
+}
+
+function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '', allowPlantaLevantada = false) {
     const env = project.environmentType?.name ? ` (${project.environmentType.name})` : '';
     const checked = Boolean(selected);
     const dateValue = selected?.measurementDate
@@ -91,6 +325,22 @@ function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '
         : defaultDate;
     const plantaChecked = Boolean(selected?.plantaLevantada);
     const plantaDateValue = toInputDateValue(selected?.plantaLevantadaDate);
+
+    const plantaSectionHtml = allowPlantaLevantada
+        ? `
+        <div class="medicao-project-planta-wrap flex flex-wrap items-center gap-3 pl-6 ${checked ? '' : 'hidden'}">
+            <label class="flex items-center gap-2 text-[11px] text-slate-600">
+                <input type="checkbox" class="medicao-project-planta-check h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    ${plantaChecked ? 'checked' : ''} ${checked ? '' : 'disabled'}>
+                Planta levantada
+            </label>
+            <div class="flex items-center gap-1.5">
+                <span class="text-[10px] text-slate-500">Data planta:</span>
+                <input type="date" class="medicao-project-planta-date px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600 disabled:bg-slate-50"
+                    value="${escapeHtml(plantaDateValue)}" ${plantaChecked && checked ? '' : 'disabled'}>
+            </div>
+        </div>`
+        : '';
 
     const row = document.createElement('div');
     row.className = 'medicao-project-row space-y-2 py-2 border-b border-slate-100 last:border-0';
@@ -108,18 +358,7 @@ function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '
                     value="${escapeHtml(dateValue)}" ${checked ? '' : 'disabled'}>
             </div>
         </div>
-        <div class="medicao-project-planta-wrap flex flex-wrap items-center gap-3 pl-6 ${checked ? '' : 'hidden'}">
-            <label class="flex items-center gap-2 text-[11px] text-slate-600">
-                <input type="checkbox" class="medicao-project-planta-check h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                    ${plantaChecked ? 'checked' : ''} ${checked ? '' : 'disabled'}>
-                Planta levantada
-            </label>
-            <div class="flex items-center gap-1.5">
-                <span class="text-[10px] text-slate-500">Data planta:</span>
-                <input type="date" class="medicao-project-planta-date px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600 disabled:bg-slate-50"
-                    value="${escapeHtml(plantaDateValue)}" ${plantaChecked && checked ? '' : 'disabled'}>
-            </div>
-        </div>
+        ${plantaSectionHtml}
     `;
 
     const checkbox = row.querySelector('.medicao-project-check');
@@ -131,12 +370,15 @@ function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '
     const syncProjectRowState = () => {
         const enabled = checkbox.checked;
         dateInput.disabled = !enabled;
-        plantaWrap.classList.toggle('hidden', !enabled);
-        plantaCheckbox.disabled = !enabled;
 
         if (enabled && !dateInput.value) {
             dateInput.value = document.getElementById('medicao-default-date')?.value || '';
         }
+
+        if (!allowPlantaLevantada || !plantaWrap) return;
+
+        plantaWrap.classList.toggle('hidden', !enabled);
+        plantaCheckbox.disabled = !enabled;
 
         if (!enabled) {
             plantaCheckbox.checked = false;
@@ -152,7 +394,12 @@ function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '
     };
 
     checkbox.addEventListener('change', syncProjectRowState);
-    plantaCheckbox.addEventListener('change', syncProjectRowState);
+    if (allowPlantaLevantada && plantaCheckbox) {
+        plantaCheckbox.addEventListener('change', syncProjectRowState);
+    }
+
+    setMedicaoDateInputMax(dateInput);
+    setMedicaoDateInputMax(plantaDateInput);
 
     return row;
 }
@@ -162,20 +409,60 @@ async function populateMedicaoProjectsPicker(medicao = null) {
     const emptyMsg = document.getElementById('medicao-projects-empty-msg');
     if (!picker) return;
 
-    const projects = await resolveOrderProjectsForMedicao(activeOrderId);
+    picker.innerHTML = '';
+
+    if (medicao) {
+        const measuredProjects = getMedicaoProjects(medicao);
+
+        if (!measuredProjects.length) {
+            emptyMsg?.classList.remove('hidden');
+            if (emptyMsg) {
+                emptyMsg.textContent = 'Nenhum projeto vinculado a esta medição.';
+            }
+            return;
+        }
+
+        emptyMsg?.classList.add('hidden');
+
+        const orderProjects = await resolveOrderProjectsForMedicao(activeOrderId);
+        const orderProjectById = Object.fromEntries(
+            orderProjects.map(project => [Number(project.id), project])
+        );
+
+        measuredProjects
+            .slice()
+            .sort((a, b) => String(a.orderProject?.name || orderProjectById[Number(a.orderProjectId)]?.name || '')
+                .localeCompare(String(b.orderProject?.name || orderProjectById[Number(b.orderProjectId)]?.name || ''), 'pt-BR'))
+            .forEach(medicaoProject => {
+                const project = orderProjectById[Number(medicaoProject.orderProjectId)]
+                    || medicaoProject.orderProject
+                    || { id: medicaoProject.orderProjectId, name: 'Projeto' };
+
+                picker.appendChild(renderMedicaoProjectEditRow(project, medicaoProject));
+            });
+
+        return;
+    }
+
+    const projects = filterProjectsForMedicaoPicker(
+        await resolveOrderProjectsForMedicao(activeOrderId),
+        null
+    );
     const selectedByProjectId = {};
-    getMedicaoProjects(medicao).forEach(item => {
-        selectedByProjectId[Number(item.orderProjectId)] = item;
-    });
 
     const defaultDate = document.getElementById('medicao-default-date')?.value
-        || toInputDateValue(getMedicaoPrimaryDate(medicao))
-        || toInputDateValue(new Date().toISOString());
+        || getTodayInputDate();
 
-    picker.innerHTML = '';
     if (!projects.length) {
         emptyMsg?.classList.remove('hidden');
+        if (emptyMsg) {
+            emptyMsg.textContent = 'Nenhum projeto elegível para medição neste pedido (status: Vendido, Aguardando Obra, Aguardando Medição ou Medição Realizada).';
+        }
         return;
+    }
+
+    if (emptyMsg) {
+        emptyMsg.textContent = 'Nenhum projeto cadastrado neste pedido.';
     }
 
     emptyMsg?.classList.add('hidden');
@@ -183,12 +470,15 @@ async function populateMedicaoProjectsPicker(medicao = null) {
         picker.appendChild(renderMedicaoProjectPickerRow(
             project,
             selectedByProjectId[Number(project.id)],
-            defaultDate
+            defaultDate,
+            false
         ));
     });
 }
 
 function syncMedicaoProjectDatesFromDefault() {
+    if (editingMedicaoId) return;
+
     const defaultDate = document.getElementById('medicao-default-date')?.value;
     if (!defaultDate) return;
 
@@ -203,16 +493,21 @@ function syncMedicaoProjectDatesFromDefault() {
 
 function collectMedicaoProjectsFromDom() {
     const projects = [];
+    const isEdit = Boolean(editingMedicaoId);
 
     document.querySelectorAll('.medicao-project-row').forEach(row => {
-        const checkbox = row.querySelector('.medicao-project-check');
-        if (!checkbox?.checked) return;
+        if (isEdit) {
+            if (row.dataset.measured !== 'true') return;
+        } else {
+            const checkbox = row.querySelector('.medicao-project-check');
+            if (!checkbox?.checked) return;
+        }
 
         const orderProjectId = Number(row.dataset.orderProjectId);
         const measurementDate = row.querySelector('.medicao-project-date')?.value || '';
-        const plantaLevantada = Boolean(row.querySelector('.medicao-project-planta-check')?.checked);
+        const plantaLevantada = isMedicaoPlantaLevantadaChecked(row);
         const plantaLevantadaDate = plantaLevantada
-            ? row.querySelector('.medicao-project-planta-date')?.value || ''
+            ? getMedicaoPlantaLevantadaDate(row)
             : null;
 
         if (!measurementDate) return;
@@ -251,10 +546,15 @@ async function openMedicaoModal(medicaoId = null) {
 
     document.getElementById('medicao-form').reset();
 
+    const defaultDateWrap = document.getElementById('medicao-default-date-wrap');
     const defaultDateEl = document.getElementById('medicao-default-date');
+    const isEdit = Boolean(medicao);
+
+    defaultDateWrap?.classList.toggle('hidden', isEdit);
     if (defaultDateEl) {
-        defaultDateEl.value = toInputDateValue(getMedicaoPrimaryDate(medicao))
-            || toInputDateValue(new Date().toISOString());
+        defaultDateEl.required = !isEdit;
+        defaultDateEl.value = isEdit ? '' : getTodayInputDate();
+        setMedicaoDateInputMax(defaultDateEl);
     }
 
     document.getElementById('medicao-observation').value = medicao?.observation || '';
@@ -263,8 +563,14 @@ async function openMedicaoModal(medicaoId = null) {
 
     const title = document.getElementById('medicao-modal-title');
     const submitBtn = document.getElementById('medicao-form-submit');
+    const hintEl = document.getElementById('medicao-projects-hint');
     title.textContent = medicao ? 'Editar Medição' : 'Nova Medição';
     submitBtn.textContent = medicao ? 'Salvar Medição' : 'Criar Medição';
+    if (hintEl) {
+        hintEl.textContent = medicao
+            ? 'Altere a observação e marque planta levantada nos projetos já medidos nesta medição.'
+            : 'Marque os projetos medidos e informe a data da medição de cada um.';
+    }
 
     toggleModal('medicao-modal', true);
 }
@@ -360,26 +666,44 @@ async function saveMedicao() {
     const observation = document.getElementById('medicao-observation')?.value.trim() || null;
     const projects = collectMedicaoProjectsFromDom();
 
-    if (!defaultDate) {
+    if (!editingMedicaoId && !defaultDate) {
         alert('Informe a data da medição.');
         document.getElementById('medicao-default-date')?.focus();
         return;
     }
 
+    if (!editingMedicaoId && isFutureInputDate(defaultDate)) {
+        alert('A data da medição não pode ser no futuro.');
+        document.getElementById('medicao-default-date')?.focus();
+        return;
+    }
+
     if (!projects.length) {
-        alert('Selecione ao menos um projeto medido.');
+        alert(editingMedicaoId
+            ? 'Nenhum projeto medido encontrado nesta medição.'
+            : 'Selecione ao menos um projeto medido.');
         return;
     }
 
     for (const project of projects) {
-        if (!project.measurementDate) {
+        if (!editingMedicaoId && !project.measurementDate) {
             alert('Informe a data de medição para todos os projetos selecionados.');
             return;
         }
-        if (project.plantaLevantada && !project.plantaLevantadaDate) {
+        if (!editingMedicaoId && isFutureInputDate(project.measurementDate)) {
+            alert('A data de medição não pode ser no futuro.');
+            return;
+        }
+        if (editingMedicaoId && project.plantaLevantada && !project.plantaLevantadaDate) {
             const row = document.querySelector(`.medicao-project-row[data-order-project-id="${project.orderProjectId}"]`);
             const projectName = row?.querySelector('.font-medium')?.textContent?.trim() || 'um projeto';
             alert(`Informe a data da planta para o projeto "${projectName}".`);
+            return;
+        }
+        if (editingMedicaoId && project.plantaLevantada && isFutureInputDate(project.plantaLevantadaDate)) {
+            const row = document.querySelector(`.medicao-project-row[data-order-project-id="${project.orderProjectId}"]`);
+            const projectName = row?.querySelector('.font-medium')?.textContent?.trim() || 'um projeto';
+            alert(`A data da planta do projeto "${projectName}" não pode ser no futuro.`);
             return;
         }
     }
@@ -416,8 +740,21 @@ async function saveMedicao() {
         }
 
         await persistMedicaoProjects(medicaoId, projects);
+        if (!medicao) {
+            await applyMedicaoRealizadaStatusToProjects(projects.map(project => project.orderProjectId));
+        } else {
+            const plantaProjectIds = projects
+                .filter(project => project.plantaLevantada)
+                .map(project => project.orderProjectId);
+            if (plantaProjectIds.length) {
+                await applyPlantaLevantadaStatusToProjects(plantaProjectIds);
+            }
+        }
         closeMedicaoModal();
         await loadMedicoes(activeOrderId);
+        if (typeof loadOrderProjects === 'function' && activeOrderId) {
+            await loadOrderProjects(activeOrderId);
+        }
     } catch (error) {
         alert('Erro ao salvar medição: ' + error.message);
     }
@@ -463,23 +800,20 @@ function renderMedicaoCard(medicao, creatorNames = {}) {
 
     const projectsHtml = projects.length
         ? projects.map(item => {
-            const env = item.orderProject?.environmentType?.name
-                ? ` (${item.orderProject.environmentType.name})`
-                : '';
-            const plantaInfo = item.plantaLevantada
-                ? `Planta: sim (${formatDateOnly(item.plantaLevantadaDate)})`
-                : 'Planta: não';
+            const plantaBadge = item.plantaLevantada
+                ? `<span class="text-[10px] text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">Planta: sim · ${formatDateOnly(item.plantaLevantadaDate)}</span>`
+                : `<span class="text-[10px] text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">Planta: não</span>`;
             return `
-                <li class="py-2 border-b border-teal-100 last:border-0 space-y-1">
-                    <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700">
-                        <span class="font-medium">${escapeHtml(item.orderProject?.name || 'Projeto')}${escapeHtml(env)}</span>
-                        <span class="text-[10px] text-teal-800 bg-teal-100 px-2 py-0.5 rounded-full font-semibold">${formatDateOnly(item.measurementDate)}</span>
+                <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 bg-white border border-teal-200/80 rounded-lg shadow-sm">
+                    <div class="flex flex-wrap items-center gap-2 min-w-0">
+                        <span class="text-xs font-semibold text-slate-800">${escapeHtml(item.orderProject?.name || 'Projeto')}</span>
+                        <span class="text-[10px] text-teal-900 bg-teal-100 border border-teal-200 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">${formatDateOnly(item.measurementDate)}</span>
                     </div>
-                    <div class="text-[10px] text-slate-500">${escapeHtml(plantaInfo)}</div>
+                    ${plantaBadge}
                 </li>
             `;
         }).join('')
-        : '<li class="text-xs text-slate-400 py-1">Nenhum projeto vinculado.</li>';
+        : '<li class="text-xs text-slate-400 py-2 px-3 bg-white border border-dashed border-slate-200 rounded-lg">Nenhum projeto vinculado.</li>';
 
     card.innerHTML = `
         <div class="collapsible-list-header px-4 py-3 bg-white/70 border-b border-teal-100 cursor-pointer">
@@ -512,9 +846,9 @@ function renderMedicaoCard(medicao, creatorNames = {}) {
                 <div class="text-[10px] font-semibold text-slate-500 uppercase mb-1">Observação</div>
                 <div class="text-xs text-slate-700 whitespace-pre-wrap">${escapeHtml(medicao.observation || '—')}</div>
             </div>
-            <div>
-                <div class="text-[10px] font-semibold text-slate-500 uppercase mb-1">Projetos medidos</div>
-                <ul class="border border-slate-200 rounded-lg px-3 py-1 bg-white/80 list-none m-0">${projectsHtml}</ul>
+            <div class="rounded-xl border border-teal-200 bg-teal-50/40 p-3">
+                <div class="text-[10px] font-semibold text-teal-800 uppercase mb-2">Projetos medidos</div>
+                <ul class="space-y-2 list-none m-0 p-0">${projectsHtml}</ul>
             </div>
         </div>
     `;

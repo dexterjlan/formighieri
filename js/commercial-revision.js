@@ -209,7 +209,7 @@ async function ensureApprovalInCache(approvalId) {
 
     let { data, error } = await supabaseClient
         .from('CommercialApproval')
-        .select('id, orderId, projectName, designerId, approved, approvedAt, status')
+        .select('id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status')
         .eq('id', approvalId)
         .maybeSingle();
 
@@ -415,6 +415,10 @@ async function persistCommercialRevision() {
             alert('Erro ao atualizar status da aprovação: ' + statusError.message);
             return { ok: false };
         }
+
+        if (typeof applyEmRevisaoStatusForCommercialApproval === 'function') {
+            await applyEmRevisaoStatusForCommercialApproval(approval);
+        }
     }
 
     for (const activity of activities) {
@@ -502,6 +506,9 @@ async function saveCommercialRevision() {
 
         closeCommercialRevisionModal();
         refreshCommercialApprovalViews();
+        if (result.createdRevision && typeof loadOrderProjects === 'function' && activeOrderId) {
+            await loadOrderProjects(activeOrderId);
+        }
     } finally {
         setCommercialRevisionModalLoading(false);
     }
