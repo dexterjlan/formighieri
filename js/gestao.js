@@ -89,6 +89,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-kanban-panel')?.classList.add('hidden');
     document.getElementById('gestao-relatorios-panel')?.classList.add('hidden');
     document.getElementById('gestao-performance-panel')?.classList.add('hidden');
+    document.getElementById('gestao-import-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-history-panel')?.classList.add('hidden');
 }
 
@@ -486,5 +487,8 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoPerformanceEvents === 'function') {
         bindGestaoPerformanceEvents();
+    }
+    if (typeof bindGestaoImportEvents === 'function') {
+        bindGestaoImportEvents();
     }
 }

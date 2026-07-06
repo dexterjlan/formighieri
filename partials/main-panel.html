@@ -499,10 +499,16 @@
                                 <h3 class="font-bold text-sm text-slate-900">Pedidos</h3>
                                 <p class="text-xs text-slate-400 mt-0.5">Lista de pedidos cadastrados no sistema.</p>
                             </div>
-                            <button type="button" id="btn-gestao-create-order"
-                                class="bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-800">
-                                + Criar Pedido
-                            </button>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" id="btn-gestao-import-orders"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    Importar
+                                </button>
+                                <button type="button" id="btn-gestao-create-order"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Criar Pedido
+                                </button>
+                            </div>
                         </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-sm">
@@ -518,6 +524,53 @@
                                 </thead>
                                 <tbody id="gestao-orders-list" class="divide-y divide-slate-100"></tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <div id="gestao-import-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900">Importar pedidos e projetos</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Carregue um arquivo Excel exportado do ERP usando o template padrão.</p>
+                            </div>
+                            <button type="button" id="btn-gestao-import-back"
+                                class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg font-medium">
+                                ← Voltar à lista
+                            </button>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-5">
+                            <div class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                                <p class="text-xs font-semibold text-slate-700">Como importar</p>
+                                <ol class="text-xs text-slate-600 space-y-1.5 list-decimal list-inside">
+                                    <li>Baixe o template Excel e preencha uma linha por projeto (repita os dados do pedido em cada linha).</li>
+                                    <li>Se o pedido já existir, apenas os projetos novos serão criados; projeto duplicado gera erro.</li>
+                                    <li>Opcional: use <span class="font-mono text-[10px]">data_medicao</span>, <span class="font-mono text-[10px]">data_planta_levantada</span>, <span class="font-mono text-[10px]">data_inicio_montagem_interna</span> e <span class="font-mono text-[10px]">data_fim_montagem_interna</span>.</li>
+                                    <li>Use os nomes cadastrados no sistema para ambiente, status, consultor e projetista.</li>
+                                    <li>Salve o arquivo e selecione-o abaixo para importar.</li>
+                                </ol>
+                                <button type="button" id="btn-gestao-import-template"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    Baixar template Excel
+                                </button>
+                            </div>
+
+                            <div class="space-y-2">
+                                <label for="gestao-import-file" class="block text-xs font-semibold text-slate-500">
+                                    Arquivo Excel (.xlsx)
+                                </label>
+                                <input type="file" id="gestao-import-file" accept=".xlsx,.xls"
+                                    class="block w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-indigo-50 file:text-indigo-800 hover:file:bg-indigo-100">
+                                <p id="gestao-import-file-name" class="hidden text-xs text-slate-500"></p>
+                            </div>
+
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" id="gestao-import-submit" disabled
+                                    class="text-xs bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    Importar arquivo
+                                </button>
+                            </div>
+
+                            <div id="gestao-import-result" class="hidden"></div>
                         </div>
                     </div>
 
