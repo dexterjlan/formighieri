@@ -70,6 +70,36 @@ let pendenciasAguardandoAprovacaoCache = [];
 let pendenciasConsultorRequisicaoCache = [];
 let pendenciasActiveSection = null;
 let pendenciasActiveItem = null;
+let pendenciasCollapsedSections = new Set();
+
+function isPendenciasSectionExpanded(sectionId) {
+    return pendenciasActiveSection === sectionId && !pendenciasCollapsedSections.has(sectionId);
+}
+
+function togglePendenciasSectionCollapsed(sectionId) {
+    if (pendenciasCollapsedSections.has(sectionId)) {
+        pendenciasCollapsedSections.delete(sectionId);
+    } else {
+        pendenciasCollapsedSections.add(sectionId);
+    }
+}
+
+function selectPendenciasSection(sectionId, options = {}) {
+    const { expand = true, resetItem = true } = options;
+    const isSameSection = pendenciasActiveSection === sectionId;
+
+    pendenciasActiveSection = sectionId;
+
+    if (resetItem) {
+        pendenciasActiveItem = null;
+    }
+
+    if (expand) {
+        pendenciasCollapsedSections.delete(sectionId);
+    }
+
+    return isSameSection;
+}
 
 function canSeeAllPendenciasMenus() {
     return isAdmin();
@@ -166,11 +196,8 @@ function getDefaultPendenciasSection() {
     return null;
 }
 
-function renderPendenciasSidebar() {
-    const nav = document.getElementById('pendencias-sidebar-nav');
-    if (!nav) return;
-
-    const sections = [
+function getPendenciasSidebarSections() {
+    return [
         {
             id: 'consultor',
             label: 'Consultor',
@@ -201,9 +228,7 @@ function renderPendenciasSidebar() {
             label: 'Gestor de Projetos',
             visible: canSeePendenciasGestorProjetosMenu(),
             items: [
-                { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
-                { id: 'em-revisao', label: 'Em Revisão' },
-                { id: 'requisicao', label: 'Requisição' }
+                { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' }
             ]
         },
         {
@@ -216,6 +241,13 @@ function renderPendenciasSidebar() {
             ]
         }
     ].filter(section => section.visible);
+}
+
+function renderPendenciasSidebar() {
+    const nav = document.getElementById('pendencias-sidebar-nav');
+    if (!nav) return;
+
+    const sections = getPendenciasSidebarSections();
 
     if (!sections.length) {
         nav.innerHTML = '<p class="text-xs text-slate-400 px-2">Nenhum menu disponível.</p>';
@@ -229,32 +261,72 @@ function renderPendenciasSidebar() {
     const activeSection = sections.find(section => section.id === pendenciasActiveSection) || sections[0];
     const activeItems = activeSection.items || [];
 
-    if (!pendenciasActiveItem || !activeItems.some(item => item.id === pendenciasActiveItem)) {
-        pendenciasActiveItem = activeItems[0]?.id || null;
+    if (pendenciasActiveItem && !activeItems.some(item => item.id === pendenciasActiveItem)) {
+        pendenciasActiveItem = null;
     }
 
-    nav.innerHTML = sections.map(section => `
-        <div class="space-y-1">
-            <button type="button"
-                class="pendencias-section-btn w-full text-left px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wide ${section.id === pendenciasActiveSection ? 'bg-violet-100 text-violet-900 border border-violet-200' : 'text-slate-600 hover:bg-slate-50 border border-transparent'}"
-                data-pendencias-section="${section.id}">
-                ${escapeHtml(section.label)}
-            </button>
-            ${section.id === pendenciasActiveSection && section.items.length
-                ? `<div class="pl-2 space-y-1">${section.items.map(item => `
+    nav.innerHTML = sections.map(section => {
+        const isActive = section.id === pendenciasActiveSection;
+        const isExpanded = isPendenciasSectionExpanded(section.id);
+        const sectionClass = [
+            'pendencias-sidebar-section',
+            isActive ? 'is-active' : '',
+            isExpanded ? 'is-expanded' : 'is-collapsed'
+        ].filter(Boolean).join(' ');
+
+        const itemsHtml = section.items.length
+            ? `<div class="pendencias-section-items">
                     <button type="button"
-                        class="pendencias-item-btn w-full text-left px-3 py-2 rounded-lg text-xs font-medium ${item.id === pendenciasActiveItem ? 'bg-white text-violet-800 border border-violet-200 shadow-sm' : 'text-slate-600 hover:bg-white border border-transparent'}"
+                        class="pendencias-overview-btn pendencias-subitem-btn ${!pendenciasActiveItem && isActive ? 'is-selected' : ''}">
+                        Resumo
+                    </button>
+                    ${section.items.map(item => `
+                    <button type="button"
+                        class="pendencias-item-btn pendencias-subitem-btn ${item.id === pendenciasActiveItem ? 'is-selected' : ''}"
                         data-pendencias-item="${item.id}">
                         ${escapeHtml(item.label)}
                     </button>
-                `).join('')}</div>`
-                : ''}
+                `).join('')}
+                </div>`
+            : '';
+
+        return `
+        <div class="${sectionClass}" data-pendencias-section="${section.id}">
+            <button type="button"
+                class="pendencias-section-btn"
+                data-pendencias-section="${section.id}"
+                aria-expanded="${isExpanded ? 'true' : 'false'}">
+                <span class="pendencias-section-chevron" aria-hidden="true">▶</span>
+                <span class="pendencias-section-label">${escapeHtml(section.label)}</span>
+            </button>
+            ${itemsHtml}
         </div>
-    `).join('');
+    `;
+    }).join('');
 
     nav.querySelectorAll('.pendencias-section-btn').forEach(button => {
         button.addEventListener('click', () => {
-            pendenciasActiveSection = button.dataset.pendenciasSection;
+            const sectionId = button.dataset.pendenciasSection;
+            const isSameSection = pendenciasActiveSection === sectionId;
+
+            if (isSameSection) {
+                if (isPendenciasSectionExpanded(sectionId)) {
+                    togglePendenciasSectionCollapsed(sectionId);
+                } else {
+                    pendenciasCollapsedSections.delete(sectionId);
+                }
+                renderPendenciasSidebar();
+                return;
+            }
+
+            selectPendenciasSection(sectionId);
+            renderPendenciasSidebar();
+            loadPendenciasContent();
+        });
+    });
+
+    nav.querySelectorAll('.pendencias-overview-btn').forEach(button => {
+        button.addEventListener('click', () => {
             pendenciasActiveItem = null;
             renderPendenciasSidebar();
             loadPendenciasContent();
@@ -368,6 +440,11 @@ function getPendenciasProjectStatusBadgeClass(statusName) {
 }
 
 function loadPendenciasContent() {
+    if (!pendenciasActiveItem) {
+        loadPendenciasSectionOverview();
+        return;
+    }
+
     if (pendenciasActiveSection === 'consultor' && pendenciasActiveItem === 'conferencia') {
         loadPendenciasConsultorConferencia();
         return;
@@ -405,16 +482,6 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'implantacao') {
         loadPendenciasImplantacao();
-        return;
-    }
-
-    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'em-revisao') {
-        loadPendenciasEmRevisao();
-        return;
-    }
-
-    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'requisicao') {
-        loadPendenciasRequisicao();
         return;
     }
 

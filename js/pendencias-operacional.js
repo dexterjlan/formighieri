@@ -403,6 +403,11 @@ async function updatePendenciasPpcpProjectStatus(projectId, expectedStatusName, 
 }
 
 async function reloadActivePendenciasPpcpList() {
+    if (!pendenciasActiveItem) {
+        await loadPendenciasSectionOverview();
+        return;
+    }
+
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'aguardando-ppcp') {
         await loadPendenciasAguardandoPpcp();
         return;
@@ -884,6 +889,11 @@ async function savePendenciasFabricaFimMontagem(projectId) {
 }
 
 async function reloadActivePendenciasGestorFabricaList() {
+    if (!pendenciasActiveItem) {
+        await loadPendenciasSectionOverview();
+        return;
+    }
+
     if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'aguardando-montagem-interna') {
         await loadPendenciasAguardandoMontagemInterna();
         return;

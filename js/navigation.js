@@ -9,7 +9,7 @@ function showMainPanel() {
         `Logado como: ${currentUser.name} (${roleLabel})`;
     updateAdminNav();
     updateCommercialApprovalButtonVisibility();
-    showDashboard();
+    showWelcome();
     initApp();
 }
 
@@ -28,6 +28,7 @@ const MAIN_NAV_INACTIVE_CLASS = 'text-xs bg-slate-800 text-slate-300 hover:text-
 
 function updateMainNavActive(activeView) {
     const buttons = {
+        home: document.getElementById('btn-inicio'),
         dashboard: document.getElementById('btn-back-dashboard'),
         requests: document.getElementById('btn-conversations-query'),
         approvals: document.getElementById('btn-approvals-query'),
@@ -43,6 +44,7 @@ function updateMainNavActive(activeView) {
 }
 
 function hideSubViews() {
+    document.getElementById("welcome-view").classList.add("hidden");
     document.getElementById("dashboard-view").classList.add("hidden");
     document.getElementById("system-settings-view").classList.add("hidden");
     document.getElementById("conversations-query-view").classList.add("hidden");
@@ -87,6 +89,7 @@ function showApprovalsQuery() {
 }
 
 function bindNavigationEvents() {
+    document.getElementById("btn-inicio").addEventListener("click", showWelcome);
     document.getElementById("btn-back-dashboard").addEventListener("click", showDashboard);
     document.getElementById("btn-conversations-query").addEventListener("click", showConversationsQuery);
     document.getElementById("btn-approvals-query").addEventListener("click", showApprovalsQuery);

@@ -2,12 +2,15 @@
     <div id="main-panel" class="hidden flex flex-col flex-1">
         <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md">
             <div>
-                <img src="images/logo.jpg" alt="Formighieri" class="h-9 w-auto object-contain">
-                <p class="text-xs text-slate-400 mt-1" id="user-display">Usuário: -</p>
+                <img src="images/logo.jpg" alt="FGP - Formighieri Gestão de Processo" class="h-9 w-auto object-contain">
+                <p class="text-[10px] text-amber-400/90 font-semibold tracking-wide mt-1">FGP · Formighieri Gestão de Processo</p>
+                <p class="text-xs text-slate-400 mt-0.5" id="user-display">Usuário: -</p>
             </div>
             <div class="flex items-center gap-2">
+                <button type="button" id="btn-inicio"
+                    class="text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg">Início</button>
                 <button type="button" id="btn-back-dashboard"
-                    class="text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg">Pedidos</button>
+                    class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Pedidos</button>
                 <button type="button" id="btn-conversations-query"
                     class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Requisições</button>
                 <button type="button" id="btn-approvals-query"
@@ -22,6 +25,98 @@
                     class="text-xs bg-slate-800 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg">Sair</button>
             </div>
         </header>
+
+        <!-- TELA INICIAL -->
+        <main id="welcome-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6 overflow-auto">
+            <div class="max-w-5xl mx-auto space-y-8 pb-8">
+                <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 px-6 py-8 md:px-10 md:py-10 text-white">
+                        <p class="text-[10px] uppercase tracking-widest text-amber-400 font-semibold mb-2">FGP</p>
+                        <h1 class="text-2xl md:text-3xl font-bold leading-tight">Bem-vindo ao FGP - Formighieri Gestão de Processo</h1>
+                        <p class="text-sm text-slate-300 mt-3 max-w-2xl leading-relaxed">
+                            Centralizamos aqui todas as etapas do processo do pedido ao cliente — da venda à expedição —
+                            com comunicação integrada, histórico completo e pendências visíveis para cada perfil.
+                        </p>
+                    </div>
+                    <div class="px-6 py-6 md:px-10 md:py-8 space-y-4 text-sm text-slate-600 leading-relaxed">
+                        <p>
+                            O fluxo é organizado em torno de <strong class="text-slate-800">três perfis principais</strong>:
+                            <strong class="text-sky-700">Consultor</strong>,
+                            <strong class="text-violet-700">Projetista</strong> e
+                            <strong class="text-amber-800">Gestor</strong>.
+                            Cada um enxerga suas responsabilidades e o que está aguardando ação na tela de
+                            <strong class="text-slate-800">Pendências</strong>.
+                        </p>
+                        <p class="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-emerald-900 text-xs md:text-sm">
+                            <strong>Não é mais necessário enviar e-mail a cada etapa.</strong>
+                            O aplicativo registra as mudanças de status, mantém o histórico e dispara as notificações
+                            automaticamente quando algo precisa da sua atenção.
+                        </p>
+                    </div>
+                </section>
+
+                <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <article class="welcome-profile-card welcome-profile-card--consultor bg-white rounded-xl border border-sky-100 shadow-sm p-5">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="welcome-profile-dot welcome-profile-dot--consultor"></span>
+                            <h2 class="text-sm font-bold text-sky-900">Consultor</h2>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-3">Relacionamento com o cliente e validações comerciais ao longo do projeto.</p>
+                        <p class="text-xs text-slate-700 bg-sky-50/80 border border-sky-100 rounded-lg px-3 py-2.5 leading-relaxed">
+                            <span class="font-semibold text-sky-900">Exemplo:</span>
+                            responder a conferência de anteprojeto enviada pelo projetista e aprovar comercialmente
+                            os projetos do pedido quando estiverem prontos.
+                        </p>
+                    </article>
+                    <article class="welcome-profile-card welcome-profile-card--projetista bg-white rounded-xl border border-violet-100 shadow-sm p-5">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="welcome-profile-dot welcome-profile-dot--projetista"></span>
+                            <h2 class="text-sm font-bold text-violet-900">Projetista</h2>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-3">Desenvolvimento técnico, conferências e tratamento de revisões.</p>
+                        <p class="text-xs text-slate-700 bg-violet-50/80 border border-violet-100 rounded-lg px-3 py-2.5 leading-relaxed">
+                            <span class="font-semibold text-violet-900">Exemplo:</span>
+                            montar a conferência de anteprojeto, executar o projeto técnico e enviar requisições
+                            ao consultor quando precisar de informação do cliente.
+                        </p>
+                    </article>
+                    <article class="welcome-profile-card welcome-profile-card--gestor bg-white rounded-xl border border-amber-100 shadow-sm p-5">
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="welcome-profile-dot welcome-profile-dot--gestor"></span>
+                            <h2 class="text-sm font-bold text-amber-900">Gestor</h2>
+                        </div>
+                        <p class="text-xs text-slate-500 mb-3">Coordenação das etapas operacionais — medição, produção e montagem.</p>
+                        <p class="text-xs text-slate-700 bg-amber-50/80 border border-amber-100 rounded-lg px-3 py-2.5 leading-relaxed">
+                            <span class="font-semibold text-amber-900">Exemplo:</span>
+                            acompanhar projetos aguardando medição ou PPCP, liberar implantação na produção e
+                            registrar o andamento da montagem interna até a expedição.
+                        </p>
+                    </article>
+                </section>
+
+                <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                        <h2 class="text-sm font-bold text-slate-900">Fluxo dos status e responsáveis</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Sequência oficial dos status do projeto e responsável em cada etapa.</p>
+                        <div id="welcome-flow-legend" class="flex flex-wrap gap-2 mt-3"></div>
+                    </div>
+                    <div class="p-4 md:p-6">
+                        <div id="welcome-flowchart" class="welcome-pipeline" aria-label="Fluxograma de status do projeto"></div>
+                    </div>
+                </section>
+
+                <div class="flex flex-wrap justify-center gap-3 pt-2">
+                    <button type="button" id="btn-welcome-go-orders"
+                        class="text-sm bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm">
+                        Ir para Pedidos
+                    </button>
+                    <button type="button" id="btn-welcome-go-pendencias"
+                        class="hidden text-sm bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-5 py-2.5 rounded-lg font-medium">
+                        Ver Pendências
+                    </button>
+                </div>
+            </div>
+        </main>
 
         <!-- PAINEL DE PEDIDOS -->
         <main id="dashboard-view" class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -390,6 +485,10 @@
                             class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                             Relatórios
                         </button>
+                        <button type="button" id="gestao-nav-performance"
+                            class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Performance
+                        </button>
                     </nav>
                 </aside>
 
@@ -641,6 +740,33 @@
                         </div>
                     </div>
 
+                    <div id="gestao-performance-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900">Performance</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Tempo médio entre etapas do fluxo, com base no histórico de status.</p>
+                            </div>
+                            <form id="gestao-performance-filter-form" class="flex flex-wrap items-end gap-2">
+                                <div>
+                                    <label for="gestao-performance-days" class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Dias para trás</label>
+                                    <input type="number" id="gestao-performance-days" min="1" max="365" value="30"
+                                        class="w-24 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="text-xs bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-800">
+                                    Aplicar
+                                </button>
+                                <button type="button" id="btn-gestao-performance-refresh"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    Atualizar
+                                </button>
+                            </form>
+                        </div>
+                        <div id="gestao-performance-content" class="flex-1 overflow-auto p-4 space-y-4 bg-slate-50/30">
+                            <p class="text-xs text-slate-400 text-center py-8">Carregando performance...</p>
+                        </div>
+                    </div>
+
                     <div id="gestao-project-history-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-start gap-3 shrink-0">
                             <div class="min-w-0">
@@ -669,7 +795,7 @@
                             <h2 class="font-bold text-sm text-slate-900">Pendências</h2>
                             <p class="text-xs text-slate-400 mt-1">Menus por perfil e função.</p>
                         </div>
-                        <nav id="pendencias-sidebar-nav" class="p-3 space-y-3"></nav>
+                        <nav id="pendencias-sidebar-nav" class="p-3 pendencias-sidebar-nav"></nav>
                     </div>
                 </aside>
                 <div class="flex-1 min-w-0">

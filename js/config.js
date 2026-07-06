@@ -8,7 +8,7 @@ const NOTIFICATIONS_ENABLED = true;
 const NOTIFICATION_TEST_MODE = true;
 const NOTIFICATION_TEST_EMAIL = 'dexterjl@gmail.com';
 const NOTIFICATION_FROM_EMAIL = 'formighieri.notificacoes@gmail.com';
-const NOTIFICATION_FROM_NAME = 'Formighieri Notificações';
+const NOTIFICATION_FROM_NAME = 'FGP - Formighieri';
 
 // Google Apps Script — envia pelo Gmail formighieri.notificacoes@gmail.com
 // Cole o script de google-apps-script/FormighieriNotificacoes.gs e publique como Web App

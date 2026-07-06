@@ -49,7 +49,8 @@ function setGestaoNavActive(navKey) {
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
         usuarios: document.getElementById('gestao-nav-usuarios'),
         kanban: document.getElementById('gestao-nav-kanban'),
-        relatorios: document.getElementById('gestao-nav-relatorios')
+        relatorios: document.getElementById('gestao-nav-relatorios'),
+        performance: document.getElementById('gestao-nav-performance')
     };
 
     Object.entries(navMap).forEach(([key, button]) => {
@@ -87,6 +88,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-usuarios-panel')?.classList.add('hidden');
     document.getElementById('gestao-kanban-panel')?.classList.add('hidden');
     document.getElementById('gestao-relatorios-panel')?.classList.add('hidden');
+    document.getElementById('gestao-performance-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-history-panel')?.classList.add('hidden');
 }
 
@@ -392,6 +394,15 @@ function showGestaoRelatoriosPanel() {
     }
 }
 
+function showGestaoPerformancePanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-performance-panel')?.classList.remove('hidden');
+    setGestaoNavActive('performance');
+    if (typeof loadGestaoPerformance === 'function') {
+        loadGestaoPerformance();
+    }
+}
+
 function showGestao() {
     if (!canAccessGestao()) {
         alert('Somente administradores e gestores podem acessar a Gestão.');
@@ -456,6 +467,10 @@ function bindGestaoEvents() {
         editingGestaoOrderId = null;
         showGestaoRelatoriosPanel();
     });
+    document.getElementById('gestao-nav-performance')?.addEventListener('click', () => {
+        editingGestaoOrderId = null;
+        showGestaoPerformancePanel();
+    });
     document.getElementById('btn-gestao-kanban-refresh')?.addEventListener('click', loadGestaoKanban);
     document.getElementById('btn-gestao-project-history-back')?.addEventListener('click', showGestaoKanbanPanel);
     document.getElementById('gestao-kanban-board')?.addEventListener('click', (event) => {
@@ -468,5 +483,8 @@ function bindGestaoEvents() {
     document.getElementById('gestao-new-marceneiro-form')?.addEventListener('submit', addGestaoMarceneiro);
     if (typeof bindGestaoRelatoriosEvents === 'function') {
         bindGestaoRelatoriosEvents();
+    }
+    if (typeof bindGestaoPerformanceEvents === 'function') {
+        bindGestaoPerformanceEvents();
     }
 }

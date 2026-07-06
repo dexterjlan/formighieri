@@ -106,7 +106,8 @@ function buildOrderRequestEmailHtml(payload) {
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
   <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
     <div style="background:#0f172a;color:#f59e0b;padding:18px 24px;">
-      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Formighieri</p>
+      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">FGP</p>
+      <p style="margin:2px 0 0;font-size:10px;color:#64748b;">Formighieri Gestão de Processo</p>
       <h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff;">Requisição ${escapeHtml(payload.eventLabel)}</h1>
     </div>
     <div style="padding:24px;">
@@ -330,7 +331,8 @@ function buildApprovalEmailHtml(payload) {
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
   <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
     <div style="background:#0f172a;color:#10b981;padding:18px 24px;">
-      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">Formighieri</p>
+      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">FGP</p>
+      <p style="margin:2px 0 0;font-size:10px;color:#64748b;">Formighieri Gestão de Processo</p>
       <h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff;">${escapeHtml(payload.eventTitle)}</h1>
     </div>
     <div style="padding:24px;">
