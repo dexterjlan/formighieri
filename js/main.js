@@ -25,9 +25,12 @@ function initAppEvents() {
     bindOrderProjectEvents();
     bindAnteprojetoEvents();
     bindMedicaoEvents();
+    bindFabricaEvents();
+    bindPpcpEvents();
     bindConversationEvents();
     bindRequestActivityEvents();
     bindCommercialApprovalEvents();
     bindCommercialRevisionEvents();
     bindPendenciasEvents();
+    bindUsersAdminEvents();
 }

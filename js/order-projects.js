@@ -78,15 +78,18 @@ window.closeOrderProjectModal = closeOrderProjectModal;
 
 function updateProjectsListToggle(count) {
     const btn = document.getElementById('btn-toggle-projects-list');
-    if (!btn) return;
+    const icon = document.getElementById('order-projects-toggle-icon');
+    if (!btn || !icon) return;
 
-    if (!count) {
-        btn.classList.add('hidden');
-        return;
-    }
-
-    btn.classList.remove('hidden');
-    btn.textContent = orderProjectsExpanded ? 'Recolher' : 'Expandir';
+    const hasProjects = count > 0;
+    icon.classList.toggle('hidden', !hasProjects);
+    icon.textContent = orderProjectsExpanded ? '▼' : '▶';
+    btn.setAttribute(
+        'aria-label',
+        hasProjects
+            ? (orderProjectsExpanded ? 'Recolher projetos' : 'Expandir projetos')
+            : 'Projetos'
+    );
 }
 
 function applyProjectsListCollapse() {
@@ -97,6 +100,7 @@ function applyProjectsListCollapse() {
 }
 
 function toggleOrderProjectsList() {
+    if (!orderProjectsCache.length) return;
     orderProjectsExpanded = !orderProjectsExpanded;
     applyProjectsListCollapse();
     updateProjectsListToggle(orderProjectsCache.length);
@@ -105,18 +109,52 @@ function toggleOrderProjectsList() {
 window.toggleOrderProjectsList = toggleOrderProjectsList;
 
 async function fetchOrderProjectsForOrder(orderId) {
-    const { data, error } = await supabaseClient
+    let result = await supabaseClient
         .from('OrderProject')
-        .select('*, environmentType:EnvironmentType(name)')
+        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
         .eq('orderId', orderId)
         .order('createdAt', { ascending: true });
 
-    if (error) {
-        console.error('fetchOrderProjectsForOrder:', error);
+    if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('*, environmentType:EnvironmentType(name)')
+            .eq('orderId', orderId)
+            .order('createdAt', { ascending: true });
+    }
+
+    if (result.error) {
+        console.error('fetchOrderProjectsForOrder:', result.error);
         return [];
     }
 
-    return data || [];
+    return enrichOrderProjectsWithStatus(result.data || []);
+}
+
+async function enrichOrderProjectsWithStatus(projects) {
+    if (!projects.length) return projects;
+
+    const needsEnrich = projects.some(project => project.statusId && !project.projectStatus);
+    if (!needsEnrich) return projects;
+
+    const statusIds = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
+    if (!statusIds.length) return projects;
+
+    const { data: statuses, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id, name')
+        .in('id', statusIds);
+
+    if (error) {
+        console.error('enrichOrderProjectsWithStatus:', error);
+        return projects;
+    }
+
+    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+    return projects.map(project => ({
+        ...project,
+        projectStatus: project.projectStatus || statusById[project.statusId] || null
+    }));
 }
 
 async function loadOrderProjects(orderId) {
@@ -134,25 +172,44 @@ async function loadOrderProjects(orderId) {
         orderProjectsExpanded = false;
         applyProjectsListCollapse();
         updateProjectsListToggle(0);
+        if (typeof refreshOrdersListSummary === 'function') {
+            await refreshOrdersListSummary();
+        }
         return;
     }
 
-    list.innerHTML = '';
+    list.innerHTML = `
+        <div class="grid grid-cols-[minmax(0,1fr)_88px_1fr] gap-2 px-2.5 py-1 text-[9px] uppercase font-semibold text-slate-400 border-b border-violet-100">
+            <span>Projeto</span>
+            <span>Ambiente</span>
+            <span>Status</span>
+        </div>
+    `;
 
     [...orderProjectsCache]
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
         .forEach(p => {
-        const div = document.createElement('div');
-        div.className = 'flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md border border-violet-100 bg-violet-50/40';
-        div.innerHTML = `
-            <span class="text-xs font-semibold text-slate-800 truncate" title="${p.name}">${p.name}</span>
-            <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-violet-100 text-violet-800 whitespace-nowrap shrink-0">${p.environmentType?.name || '-'}</span>
-        `;
-        list.appendChild(div);
-    });
+            const statusName = getOrderProjectStatusName(p);
+            const statusClass = getOrderProjectStatusBadgeClass(statusName);
+            const div = document.createElement('div');
+            div.className = 'grid grid-cols-[minmax(0,1fr)_88px_1fr] gap-2 items-center px-2.5 py-1.5 rounded-md border border-violet-100 bg-violet-50/40';
+            div.innerHTML = `
+                <div class="min-w-0">
+                    <span class="text-xs font-semibold text-slate-800 truncate block" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    ${p.saleValue != null ? `<span class="text-[10px] text-slate-500">${formatSaleValue(p.saleValue)}</span>` : ''}
+                </div>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-violet-100 text-violet-800 whitespace-nowrap truncate" title="${escapeHtml(p.environmentType?.name || '-')}">${escapeHtml(p.environmentType?.name || '-')}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+            `;
+            list.appendChild(div);
+        });
 
     applyProjectsListCollapse();
     updateProjectsListToggle(orderProjectsCache.length);
+
+    if (typeof refreshOrdersListSummary === 'function') {
+        await refreshOrdersListSummary();
+    }
 }
 
 function bindOrderProjectEvents() {
@@ -181,6 +238,13 @@ function bindOrderProjectEvents() {
             return;
         }
 
+        const saleValue = parseSaleValueInput(document.getElementById('project-sale-value')?.value);
+        if (Number.isNaN(saleValue)) {
+            alert('Informe um valor de venda válido.');
+            document.getElementById('project-sale-value')?.focus();
+            return;
+        }
+
         const statusId = await getVendidoProjectStatusId();
         if (!statusId) {
             alert('Status "Vendido" não encontrado. Cadastre em Gestão → Status de Projeto.');
@@ -198,7 +262,16 @@ function bindOrderProjectEvents() {
             updatedAt: now
         };
 
-        const { error } = await supabaseClient.from('OrderProject').insert([payload]);
+        if (saleValue !== null) {
+            payload.saleValue = saleValue;
+        }
+
+        let { error } = await supabaseClient.from('OrderProject').insert([payload]);
+
+        if (error?.message?.includes('saleValue')) {
+            delete payload.saleValue;
+            ({ error } = await supabaseClient.from('OrderProject').insert([payload]));
+        }
 
         if (error) {
             alert('Erro ao salvar projeto: ' + error.message);

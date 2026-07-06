@@ -109,32 +109,89 @@ async function syncRegisteredUserProfile(user, name, email, role, session = null
 }
 
 async function applyMissingRoleFromMetadata(profile, user) {
-    if (!profile || profile.role) return profile;
+    const normalized = normalizeAppUserProfile(profile);
+    if (!normalized || normalized.role) return normalized;
 
     const metadataRole = user?.user_metadata?.role || null;
-    if (!metadataRole) return profile;
+    if (!metadataRole) return normalized;
 
     const { data: updated, error } = await supabaseClient
         .from('appUsers')
         .update({ role: metadataRole })
-        .eq('id', profile.id)
-        .select('*')
+        .eq('id', normalized.id)
+        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica')
         .single();
 
     if (error) {
         console.warn('applyMissingRoleFromMetadata:', error.message);
-        return profile;
+        return normalized;
     }
 
-    return updated || profile;
+    return normalizeAppUserProfile(updated || normalized);
+}
+
+async function queryAppUserByAuthId(authUserId) {
+    let result = await supabaseClient
+        .from('appUsers')
+        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica')
+        .eq('authId', authUserId)
+        .maybeSingle();
+
+    if (result.error?.message?.includes('ppcp') || result.error?.message?.includes('gestorFabrica')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos')
+            .eq('authId', authUserId)
+            .maybeSingle();
+    }
+
+    return result;
+}
+
+async function refreshCurrentUserProfile() {
+    if (!currentUser) return;
+
+    const authId = currentUser.authId;
+    const userId = currentUser.id;
+    if (!authId && !userId) return;
+
+    let query = supabaseClient
+        .from('appUsers')
+        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica');
+
+    if (authId) {
+        query = query.eq('authId', authId);
+    } else {
+        query = query.eq('id', userId);
+    }
+
+    let { data, error } = await query.maybeSingle();
+
+    if (error?.message?.includes('ppcp') || error?.message?.includes('gestorFabrica')) {
+        let fallbackQuery = supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos');
+        fallbackQuery = authId
+            ? fallbackQuery.eq('authId', authId)
+            : fallbackQuery.eq('id', userId);
+        ({ data, error } = await fallbackQuery.maybeSingle());
+    }
+
+    if (error || !data) return;
+
+    currentUser = normalizeAppUserProfile({ ...currentUser, ...data });
+
+    const roleLabel = currentUser.role || 'Sem perfil';
+    const display = document.getElementById('user-display');
+    if (display) {
+        display.innerText = `Logado como: ${currentUser.name} (${roleLabel})`;
+    }
+
+    if (typeof updateAdminNav === 'function') updateAdminNav();
 }
 
 async function loadUserProfile(authUserId) {
-    const { data: profile, error: profileError } = await supabaseClient
-        .from('appUsers')
-        .select('*')
-        .eq('authId', authUserId)
-        .maybeSingle();
+    const { data: profile, error: profileError } = await queryAppUserByAuthId(authUserId);
 
     const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) {
@@ -175,7 +232,7 @@ async function loadUserProfile(authUserId) {
                 await supabaseClient.auth.signOut();
                 throw new Error("Usuário desativado. Entre em contato com o administrador.");
             }
-            currentUser = linked;
+            currentUser = normalizeAppUserProfile(linked);
             return;
         }
         if (linkError) {
@@ -196,7 +253,7 @@ async function loadUserProfile(authUserId) {
         .single();
 
     if (created) {
-        currentUser = created;
+        currentUser = normalizeAppUserProfile(created);
         return;
     }
 
@@ -251,7 +308,7 @@ function bindAuthEvents() {
         }
 
         if (!role) {
-            alert("Selecione o perfil (Consultor ou Projetista).");
+            alert("Selecione o perfil (Consultor, Projetista ou Marceneiro).");
             document.getElementById("reg-role").focus();
             return;
         }

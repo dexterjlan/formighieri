@@ -1,3 +1,37 @@
+function isApprovedCommercialApproval(approval) {
+    const status = getApprovalStatusLabel(approval?.status);
+    return status === 'Aprovado' || approval?.approved === true;
+}
+
+const APPROVAL_QUERY_DEFAULT_STATUSES = ['Aguardando Aprovação', 'Em revisão'];
+
+function getCommercialApprovalQueryStatus(approval) {
+    if (isApprovedCommercialApproval(approval)) return 'Aprovado';
+    return getApprovalStatusLabel(approval?.status);
+}
+
+function getApprovalQueryStatusFilters() {
+    const select = document.getElementById('approval-filter-status');
+    if (!select) return [...APPROVAL_QUERY_DEFAULT_STATUSES];
+    return Array.from(select.selectedOptions).map(option => option.value);
+}
+
+function resetApprovalQueryStatusFilter() {
+    const select = document.getElementById('approval-filter-status');
+    if (!select) return;
+
+    Array.from(select.options).forEach(option => {
+        option.selected = APPROVAL_QUERY_DEFAULT_STATUSES.includes(option.value);
+    });
+}
+
+function matchesApprovalQueryStatusFilter(approval, selectedStatuses) {
+    if (!selectedStatuses.length) return false;
+
+    const status = getCommercialApprovalQueryStatus(approval);
+    return selectedStatuses.includes(status);
+}
+
 async function loadApprovalQueryFilterOptions() {
     const { data: consultores } = await supabaseClient
         .from('appUsers')
@@ -62,11 +96,6 @@ async function searchCommercialApprovalsQuery() {
     if (error || !approvals) {
         tbody.innerHTML = '<tr><td colspan="8" class="p-4 text-xs text-red-500">Erro ao carregar aprovações.</td></tr>';
         countEl.textContent = '0 aprovações';
-        updateQueryResultsPanelToggle(
-            'btn-toggle-approvals-query-results',
-            'approvals-query-results-panel',
-            approvalsQueryResultsExpanded
-        );
         return;
     }
 
@@ -90,7 +119,7 @@ async function searchCommercialApprovalsQuery() {
     const pedido = document.getElementById('approval-filter-pedido').value.trim().toLowerCase();
     const consultor = document.getElementById('approval-filter-consultor').value;
     const projetista = document.getElementById('approval-filter-projetista').value;
-    const status = document.getElementById('approval-filter-status').value;
+    const statusFilters = getApprovalQueryStatusFilters();
 
     let rows = approvals.map(a => {
         const normalized = normalizeCommercialApproval(a);
@@ -110,9 +139,7 @@ async function searchCommercialApprovalsQuery() {
     if (projetista) {
         rows = rows.filter(r => String(r.designerId) === projetista);
     }
-    if (status) {
-        rows = rows.filter(r => r.status === status);
-    }
+    rows = rows.filter(r => matchesApprovalQueryStatusFilter(r, statusFilters));
 
     const approvalIds = rows.map(r => r.id);
     const revisionsByApproval = typeof fetchCommercialRevisionsByApprovalIds === 'function'
@@ -124,11 +151,6 @@ async function searchCommercialApprovalsQuery() {
 
     if (rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="p-6 text-center text-xs text-slate-400">Nenhuma aprovação encontrada.</td></tr>';
-        updateQueryResultsPanelToggle(
-            'btn-toggle-approvals-query-results',
-            'approvals-query-results-panel',
-            approvalsQueryResultsExpanded
-        );
         return;
     }
 
@@ -180,12 +202,6 @@ async function searchCommercialApprovalsQuery() {
         `;
         tbody.appendChild(tr);
     });
-
-    updateQueryResultsPanelToggle(
-        'btn-toggle-approvals-query-results',
-        'approvals-query-results-panel',
-        approvalsQueryResultsExpanded
-    );
 }
 
 function refreshApprovalsQueryIfVisible() {
@@ -204,8 +220,7 @@ function bindCommercialApprovalQueryEvents() {
         document.getElementById('approval-filter-pedido').value = '';
         document.getElementById('approval-filter-consultor').value = '';
         document.getElementById('approval-filter-projetista').value = '';
-        document.getElementById('approval-filter-status').value = '';
+        resetApprovalQueryStatusFilter();
         searchCommercialApprovalsQuery();
     });
-    document.getElementById('btn-toggle-approvals-query-results')?.addEventListener('click', toggleApprovalsQueryResults);
 }

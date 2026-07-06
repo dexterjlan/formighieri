@@ -103,6 +103,7 @@ async function openConvModal() {
         loadProjetistas(),
         loadConvOrderProjects()
     ]);
+    setupConvModalFieldLocks(null);
     toggleModal('conv-modal', true);
 }
 
@@ -118,11 +119,15 @@ function canEditConversation(conv) {
     const requestProfile = conv.requestProfile || 'Projetista';
 
     if (currentUser.role === 'Projetista') {
-        return requestProfile === 'Projetista' && conv.designerId === currentUser.id;
+        if (Number(conv.designerId) !== Number(currentUser.id)) return false;
+        if (requestProfile === 'Projetista') return true;
+        return isRequestWaitingProjetista(conv);
     }
 
     if (currentUser.role === 'Consultor') {
-        return requestProfile === 'Consultor' && isOrderConsultorForRequest(conv);
+        if (!isOrderConsultorForRequest(conv)) return false;
+        if (requestProfile === 'Consultor') return true;
+        return isRequestWaitingConsultor(conv);
     }
 
     return false;
@@ -136,13 +141,58 @@ function canRespondAsProjetista(conv) {
     return isRequestWaitingProjetista(conv) && canEditProjetistaResponse(conv);
 }
 
+function isConsultorRespondingToProjetistaRequest(conv) {
+    if (!conv || currentUser?.role === 'Admin') return false;
+    return (conv.requestProfile || 'Projetista') === 'Projetista'
+        && isRequestWaitingConsultor(conv)
+        && canRespondAsConsultor(conv);
+}
+
+function isProjetistaRespondingToConsultorRequest(conv) {
+    if (!conv || currentUser?.role === 'Admin') return false;
+    return (conv.requestProfile || 'Projetista') === 'Consultor'
+        && isRequestWaitingProjetista(conv)
+        && canEditProjetistaResponse(conv);
+}
+
+function isConvRespondOnlyMode(conv) {
+    return isConsultorRespondingToProjetistaRequest(conv)
+        || isProjetistaRespondingToConsultorRequest(conv);
+}
+
+function setConvFieldDisabled(el, disabled) {
+    if (!el) return;
+    el.disabled = disabled;
+    el.classList.toggle('bg-slate-100', disabled);
+    el.classList.toggle('cursor-not-allowed', disabled);
+}
+
+function setupConvModalFieldLocks(conv) {
+    const isEdit = Boolean(conv);
+    const respondOnly = isConvRespondOnlyMode(conv);
+
+    setConvFieldDisabled(document.getElementById('conv-order-project'), isEdit);
+    setConvFieldDisabled(document.getElementById('conv-designer'), isEdit || currentUser?.role === 'Projetista');
+    setConvFieldDisabled(document.getElementById('conv-request'), respondOnly);
+
+    const submitBtn = document.getElementById('conv-form-submit');
+    if (submitBtn && isEdit) {
+        submitBtn.textContent = respondOnly ? 'Salvar resposta' : 'Salvar Alterações';
+    }
+}
+
 async function editConversation(id) {
     const conv = conversationsCache.find(c => c.id === id);
     if (!conv || !canEditConversation(conv)) return;
 
     editingConversationId = id;
-    document.getElementById("conv-modal-title").textContent = "Editar Requisição";
-    document.getElementById("conv-form-submit").textContent = "Salvar Alterações";
+    const respondOnly = isConvRespondOnlyMode(conv);
+    document.getElementById("conv-modal-title").textContent = respondOnly
+        ? 'Responder Requisição'
+        : 'Editar Requisição';
+    document.getElementById("conv-form-submit").textContent = respondOnly
+        ? 'Salvar resposta'
+        : 'Salvar Alterações';
     setupConvProfileFields(true, conv);
     setupConvResponseFields(conv);
     await Promise.all([
@@ -154,6 +204,7 @@ async function editConversation(id) {
     document.getElementById("conv-request").value = conv.designerRequest;
     updateRequestActivityModalControls(conv);
     updateConvModalActivitiesHint();
+    setupConvModalFieldLocks(conv);
     toggleModal('conv-modal', true);
 }
 
@@ -408,6 +459,10 @@ async function replyConsultorConversation(id) {
         }
 
         await loadConversations(activeOrderId);
+        if (typeof loadPendenciasConsultorRequisicoes === 'function'
+            && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
+            await loadPendenciasConsultorRequisicoes();
+        }
     } finally {
         setRequestReplyLoading(id, 'consultor', false);
     }
@@ -537,6 +592,11 @@ function setConvFormLoading(isLoading, message = 'Salvando requisição...') {
         saveActivitiesBtn.classList.toggle('cursor-not-allowed', isLoading);
     }
     fields.forEach(field => { field.disabled = isLoading; });
+
+    if (!isLoading && editingConversationId) {
+        const conv = conversationsCache.find(c => c.id === editingConversationId);
+        setupConvModalFieldLocks(conv);
+    }
 }
 
 function bindConversationEvents() {
@@ -548,28 +608,32 @@ function bindConversationEvents() {
         const orderProjectId = getConvOrderProjectIdValue();
         const requestActivities = collectRequestActivitiesFromDom().filter(a => a.description);
 
-        if (!designerRequest) {
+        const existing = editingConversationId
+            ? conversationsCache.find(c => c.id === editingConversationId)
+            : null;
+        const respondOnly = existing && isConvRespondOnlyMode(existing);
+
+        if (!respondOnly && !designerRequest) {
             alert("Informe a solicitação.");
             return;
         }
 
-        const existing = editingConversationId
-            ? conversationsCache.find(c => c.id === editingConversationId)
-            : null;
-
         setConvFormLoading(true, 'Validando requisição...');
 
         try {
-            const canProceed = await validateConsultorRequestAgainstOpenApproval(orderProjectId, existing);
+            const canProceed = await validateConsultorRequestAgainstOpenApproval(
+                respondOnly ? (existing?.orderProjectId ?? null) : orderProjectId,
+                existing
+            );
             if (!canProceed) return;
 
             if (editingConversationId) {
                 setConvFormLoading(true, 'Salvando requisição...');
 
                 const updatePayload = {
-                    designerId,
-                    designerRequest,
-                    orderProjectId,
+                    designerId: existing.designerId,
+                    designerRequest: respondOnly ? existing.designerRequest : designerRequest,
+                    orderProjectId: existing.orderProjectId ?? null,
                     updatedAt: new Date().toISOString(),
                     updatedById: currentUser.id
                 };
@@ -627,8 +691,8 @@ function bindConversationEvents() {
                     setConvFormLoading(true, 'Enviando notificação por e-mail...');
                     await notifyOrderRequestEmail('answered', {
                         ...existing,
-                        designerRequest,
-                        orderProjectId,
+                        designerRequest: respondOnly ? existing.designerRequest : designerRequest,
+                        orderProjectId: existing.orderProjectId ?? null,
                         commercialResponse: updatePayload.commercialResponse ?? existing.commercialResponse,
                         designerResponse: updatePayload.designerResponse ?? existing.designerResponse,
                         status: 'Encerrado',
@@ -695,6 +759,10 @@ function bindConversationEvents() {
                 searchConversations();
             } else if (activeOrderId) {
                 loadConversations(activeOrderId);
+            }
+            if (typeof loadPendenciasConsultorRequisicoes === 'function'
+                && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
+                await loadPendenciasConsultorRequisicoes();
             }
         } finally {
             setConvFormLoading(false);

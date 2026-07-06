@@ -216,6 +216,31 @@ function truncateText(text, max = 60) {
     return text.length > max ? text.slice(0, max) + '…' : text;
 }
 
+function parseSaleValueInput(value) {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return null;
+
+    const normalized = trimmed.replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.');
+    const num = Number(normalized);
+    if (!Number.isFinite(num) || num < 0) return NaN;
+
+    return Math.round(num * 100) / 100;
+}
+
+function formatSaleValueForInput(value) {
+    if (value === null || value === undefined || value === '') return '';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '';
+    return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatSaleValue(value) {
+    if (value === null || value === undefined || value === '') return '—';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '—';
+    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 function getApprovalStatusLabel(status) {
     return status || 'Aguardando Aprovação';
 }
@@ -230,8 +255,21 @@ function isAdmin() {
     return currentUser?.role === 'Admin';
 }
 
+function normalizeAppUserProfile(profile) {
+    if (!profile) return profile;
+    return {
+        ...profile,
+        isActive: profile.isActive !== false,
+        conferente: Boolean(profile.conferente),
+        gestorComercial: Boolean(profile.gestorComercial),
+        gestorProjetos: Boolean(profile.gestorProjetos),
+        ppcp: Boolean(profile.ppcp),
+        gestorFabrica: Boolean(profile.gestorFabrica)
+    };
+}
+
 function isConferente(user = currentUser) {
-    return Boolean(user?.conferente);
+    return user?.role === 'Projetista' && Boolean(user?.conferente);
 }
 
 function isGestorComercial(user = currentUser) {
@@ -242,39 +280,59 @@ function isGestorProjetos(user = currentUser) {
     return (user?.role === 'Admin' || user?.role === 'Projetista') && Boolean(user?.gestorProjetos);
 }
 
+function isPpcp(user = currentUser) {
+    return user?.role === 'Projetista' && Boolean(user?.ppcp);
+}
+
+function isGestorFabrica(user = currentUser) {
+    return user?.role === 'Marceneiro' && Boolean(user?.gestorFabrica);
+}
+
+function canSeeRequestProfileField(user = currentUser) {
+    return user?.role === 'Admin'
+        || isGestorComercial(user)
+        || isGestorProjetos(user);
+}
+
+function syncRequestProfileColumnVisibility() {
+    const show = canSeeRequestProfileField();
+    document.querySelectorAll('.conv-query-profile-col').forEach(el => {
+        el.classList.toggle('hidden', !show);
+    });
+}
+
+function isMarceneiro(user = currentUser) {
+    return user?.role === 'Marceneiro';
+}
+
+function canSeeQueryNav(user = currentUser) {
+    return !isMarceneiro(user);
+}
+
+function canAccessGestao(user = currentUser) {
+    return user?.role === 'Admin'
+        || isGestorComercial(user)
+        || isGestorProjetos(user)
+        || isGestorFabrica(user);
+}
+
+function canSeeOrderMedicaoTab(user = currentUser) {
+    if (!user) return false;
+    return user.role === 'Admin' || isConferente(user) || isGestorComercial(user);
+}
+
+function canSeeOrderPpcpTab(user = currentUser) {
+    if (!user) return false;
+    return user.role === 'Admin' || isPpcp(user);
+}
+
+function canSeeOrderFabricaTab(user = currentUser) {
+    if (!user) return false;
+    return user.role === 'Admin' || isGestorFabrica(user);
+}
+
 function canCreateAsAdminOrConferente() {
     return isAdmin() || isConferente();
-}
-
-let conversationsQueryResultsExpanded = false;
-let approvalsQueryResultsExpanded = false;
-
-function updateQueryResultsPanelToggle(buttonId, panelId, expanded) {
-    const btn = document.getElementById(buttonId);
-    const panel = document.getElementById(panelId);
-    if (!btn || !panel) return;
-
-    panel.classList.toggle('hidden', !expanded);
-    btn.textContent = expanded ? 'Recolher' : 'Expandir';
-    btn.setAttribute('aria-label', expanded ? 'Recolher lista' : 'Expandir lista');
-}
-
-function toggleConversationsQueryResults() {
-    conversationsQueryResultsExpanded = !conversationsQueryResultsExpanded;
-    updateQueryResultsPanelToggle(
-        'btn-toggle-conversations-query-results',
-        'conversations-query-results-panel',
-        conversationsQueryResultsExpanded
-    );
-}
-
-function toggleApprovalsQueryResults() {
-    approvalsQueryResultsExpanded = !approvalsQueryResultsExpanded;
-    updateQueryResultsPanelToggle(
-        'btn-toggle-approvals-query-results',
-        'approvals-query-results-panel',
-        approvalsQueryResultsExpanded
-    );
 }
 
 function bindCollapsibleListCardToggles(root, options = {}) {
@@ -334,6 +392,7 @@ function setupConvProfileFields(isEdit, conv) {
     const profileSelect = document.getElementById('conv-profile');
     const readOnlyWrap = document.getElementById('conv-profile-readonly-wrap');
     const readOnlyLabel = document.getElementById('conv-profile-readonly-label');
+    const canSeeProfile = canSeeRequestProfileField();
 
     adminWrap.classList.add('hidden');
     readOnlyWrap.classList.add('hidden');
@@ -341,8 +400,10 @@ function setupConvProfileFields(isEdit, conv) {
     profileSelect.onchange = null;
 
     if (isEdit) {
-        readOnlyWrap.classList.remove('hidden');
-        readOnlyLabel.textContent = formatRequestProfile(conv?.requestProfile);
+        if (canSeeProfile) {
+            readOnlyWrap.classList.remove('hidden');
+            readOnlyLabel.textContent = formatRequestProfile(conv?.requestProfile);
+        }
         updateConvRequestLabel(conv?.requestProfile);
         return;
     }
@@ -367,4 +428,29 @@ function getRequestProfileForCreate() {
         return currentUser.role;
     }
     return '';
+}
+
+function getOrderProjectStatusName(project) {
+    return project?.projectStatus?.name || project?.statusName || '—';
+}
+
+function getOrderProjectStatusBadgeClass(statusName) {
+    if (!statusName || statusName === '—') return 'bg-slate-100 text-slate-600';
+    if (statusName === 'Aguardando Aprovação') return 'bg-amber-100 text-amber-800';
+    if (statusName === 'Em Revisão' || statusName === 'Em revisão') return 'bg-sky-100 text-sky-800';
+    if (statusName === 'Projeto Técnico') return 'bg-violet-100 text-violet-800';
+    if (statusName === 'Aguardando Projeto Técnico') return 'bg-indigo-100 text-indigo-800';
+    if (statusName === 'Vendido') return 'bg-emerald-100 text-emerald-800';
+    if (statusName === 'Aguardando Obra') return 'bg-orange-100 text-orange-800';
+    if (statusName === 'Aguardando Medição') return 'bg-cyan-100 text-cyan-800';
+    if (statusName === 'Conferência Realizada') return 'bg-teal-100 text-teal-800';
+    if (statusName === 'Conferência Enviada') return 'bg-sky-100 text-sky-800';
+    if (statusName === 'Medição Realizada') return 'bg-teal-100 text-teal-800';
+    if (statusName === 'Planta Levantada') return 'bg-lime-100 text-lime-800';
+    if (statusName === 'Aguardando PPCP') return 'bg-fuchsia-100 text-fuchsia-800';
+    if (statusName === 'Implantação') return 'bg-teal-100 text-teal-800';
+    if (statusName === 'Em Produção') return 'bg-orange-100 text-orange-800';
+    if (statusName === 'Montagem Interna') return 'bg-amber-100 text-amber-800';
+    if (statusName === 'Expedição') return 'bg-slate-200 text-slate-800';
+    return 'bg-slate-100 text-slate-700';
 }

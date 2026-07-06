@@ -14,10 +14,13 @@ function showMainPanel() {
 }
 
 function updateAdminNav() {
-    document.getElementById("btn-manage-users").classList.toggle("hidden", !isAdmin());
     document.getElementById("btn-system-settings").classList.toggle("hidden", !isAdmin());
-    document.getElementById("btn-gestao").classList.toggle("hidden", !isAdmin());
+    document.getElementById("btn-gestao").classList.toggle("hidden", !canAccessGestao());
+    document.getElementById("btn-conversations-query").classList.toggle("hidden", !canSeeQueryNav());
+    document.getElementById("btn-approvals-query").classList.toggle("hidden", !canSeeQueryNav());
+    if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
+    if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
 }
 
 const MAIN_NAV_ACTIVE_CLASS = 'text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg';
@@ -30,7 +33,6 @@ function updateMainNavActive(activeView) {
         approvals: document.getElementById('btn-approvals-query'),
         gestao: document.getElementById('btn-gestao'),
         pendencias: document.getElementById('btn-pendencias'),
-        users: document.getElementById('btn-manage-users'),
         settings: document.getElementById('btn-system-settings')
     };
 
@@ -42,7 +44,6 @@ function updateMainNavActive(activeView) {
 
 function hideSubViews() {
     document.getElementById("dashboard-view").classList.add("hidden");
-    document.getElementById("users-admin-view").classList.add("hidden");
     document.getElementById("system-settings-view").classList.add("hidden");
     document.getElementById("conversations-query-view").classList.add("hidden");
     document.getElementById("approvals-query-view").classList.add("hidden");
@@ -59,14 +60,14 @@ function showDashboard() {
 
 function showUsersAdmin() {
     if (!isAdmin()) return;
-    hideSubViews();
-    document.getElementById("users-admin-view").classList.remove("hidden");
-    updateMainNavActive('users');
-    updateAdminNav();
-    loadUsersAdminList();
+    if (typeof showGestao === 'function') {
+        showGestao();
+        showGestaoUsuariosPanel();
+    }
 }
 
 function showConversationsQuery() {
+    if (!canSeeQueryNav()) return;
     hideSubViews();
     document.getElementById("conversations-query-view").classList.remove("hidden");
     updateMainNavActive('requests');
@@ -76,6 +77,7 @@ function showConversationsQuery() {
 }
 
 function showApprovalsQuery() {
+    if (!canSeeQueryNav()) return;
     hideSubViews();
     document.getElementById("approvals-query-view").classList.remove("hidden");
     updateMainNavActive('approvals');
@@ -88,5 +90,4 @@ function bindNavigationEvents() {
     document.getElementById("btn-back-dashboard").addEventListener("click", showDashboard);
     document.getElementById("btn-conversations-query").addEventListener("click", showConversationsQuery);
     document.getElementById("btn-approvals-query").addEventListener("click", showApprovalsQuery);
-    document.getElementById("btn-manage-users").addEventListener("click", showUsersAdmin);
 }

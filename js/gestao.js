@@ -2,14 +2,16 @@ let gestaoOrdersCache = [];
 let gestaoEnvironmentTypesCache = [];
 let gestaoProjetistasCache = [];
 let gestaoProjectStatusesCache = [];
+let gestaoMarceneirosCache = [];
 let editingGestaoOrderId = null;
 
 const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
 const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-
-function canAccessGestao() {
-    return isAdmin();
-}
+const GESTAO_NAV_SUB_ACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
+const GESTAO_NAV_SUB_INACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'marceneiros', 'usuarios'];
+const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
+const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
 function formatGestaoDate(dateStr) {
     if (!dateStr) return '—';
@@ -31,24 +33,60 @@ function updateGestaoProjectsEmptyState() {
     emptyMsg?.classList.toggle('hidden', hasRows);
 }
 
+function setGestaoCadastrosNavExpanded(expanded) {
+    const items = document.getElementById('gestao-nav-cadastros-items');
+    const chevron = document.getElementById('gestao-nav-cadastros-chevron');
+    if (!items) return;
+
+    items.classList.toggle('hidden', !expanded);
+    if (chevron) chevron.textContent = expanded ? '▼' : '▶';
+}
+
 function setGestaoNavActive(navKey) {
     const navMap = {
         pedido: document.getElementById('gestao-nav-pedido'),
         'project-status': document.getElementById('gestao-nav-project-status'),
-        kanban: document.getElementById('gestao-nav-kanban')
+        marceneiros: document.getElementById('gestao-nav-marceneiros'),
+        usuarios: document.getElementById('gestao-nav-usuarios'),
+        kanban: document.getElementById('gestao-nav-kanban'),
+        relatorios: document.getElementById('gestao-nav-relatorios')
     };
 
     Object.entries(navMap).forEach(([key, button]) => {
         if (!button) return;
-        button.className = key === navKey ? GESTAO_NAV_ACTIVE_CLASS : GESTAO_NAV_INACTIVE_CLASS;
+
+        const isSubItem = GESTAO_CADASTRO_NAV_KEYS.includes(key);
+        const activeClass = isSubItem ? GESTAO_NAV_SUB_ACTIVE_CLASS : GESTAO_NAV_ACTIVE_CLASS;
+        const inactiveClass = isSubItem ? GESTAO_NAV_SUB_INACTIVE_CLASS : GESTAO_NAV_INACTIVE_CLASS;
+        button.className = key === navKey ? activeClass : inactiveClass;
     });
+
+    const cadastrosActive = GESTAO_CADASTRO_NAV_KEYS.includes(navKey);
+    const cadastrosToggle = document.getElementById('gestao-nav-cadastros-toggle');
+
+    if (cadastrosActive) {
+        setGestaoCadastrosNavExpanded(true);
+    }
+
+    if (cadastrosToggle) {
+        cadastrosToggle.className = cadastrosActive
+            ? GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS
+            : GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS;
+    }
+}
+
+function updateGestaoCadastrosNavVisibility() {
+    document.getElementById('gestao-nav-usuarios')?.classList.toggle('hidden', !isAdmin());
 }
 
 function hideAllGestaoPanels() {
     document.getElementById('gestao-pedido-list-panel')?.classList.add('hidden');
     document.getElementById('gestao-pedido-form-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-status-panel')?.classList.add('hidden');
+    document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
+    document.getElementById('gestao-usuarios-panel')?.classList.add('hidden');
     document.getElementById('gestao-kanban-panel')?.classList.add('hidden');
+    document.getElementById('gestao-relatorios-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-history-panel')?.classList.add('hidden');
 }
 
@@ -198,6 +236,10 @@ function addGestaoProjectRow(project = {}) {
             </select>
         </td>
         <td class="p-2">
+            <input type="text" class="gestao-project-sale-value w-full px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                value="${escapeHtml(formatSaleValueForInput(project.saleValue))}" placeholder="0,00" inputmode="decimal">
+        </td>
+        <td class="p-2">
             <input type="date" class="gestao-project-delivery w-full px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
                 value="${toGestaoInputDate(project.deliveryDate)}">
         </td>
@@ -240,6 +282,7 @@ function collectGestaoProjectsFromDom() {
         projectCode: row.querySelector('.gestao-project-code')?.value.trim() || '',
         name: row.querySelector('.gestao-project-name')?.value.trim() || '',
         environmentTypeId: Number(row.querySelector('.gestao-project-environment')?.value) || null,
+        saleValue: parseSaleValueInput(row.querySelector('.gestao-project-sale-value')?.value),
         deliveryDate: row.querySelector('.gestao-project-delivery')?.value || null,
         statusId: Number(row.querySelector('.gestao-project-status')?.value) || getDefaultProjectStatusId(),
         designerId: row.querySelector('.gestao-project-designer')?.value
@@ -312,11 +355,41 @@ function showGestaoProjectStatusPanel() {
     setGestaoNavActive('project-status');
 }
 
+function showGestaoMarceneirosPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-marceneiros-panel')?.classList.remove('hidden');
+    setGestaoNavActive('marceneiros');
+}
+
+function showGestaoUsuariosPanel() {
+    if (!isAdmin()) {
+        alert('Somente administradores podem gerenciar usuários.');
+        return;
+    }
+
+    hideAllGestaoPanels();
+    document.getElementById('gestao-usuarios-panel')?.classList.remove('hidden');
+    setGestaoNavActive('usuarios');
+
+    if (typeof loadUsersAdminList === 'function') {
+        loadUsersAdminList();
+    }
+}
+
 function showGestaoKanbanPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-kanban-panel')?.classList.remove('hidden');
     setGestaoNavActive('kanban');
     loadGestaoKanban();
+}
+
+function showGestaoRelatoriosPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-relatorios-panel')?.classList.remove('hidden');
+    setGestaoNavActive('relatorios');
+    if (typeof loadGestaoRelatorios === 'function') {
+        loadGestaoRelatorios();
+    }
 }
 
 function getProjectStatusId(project) {
@@ -692,6 +765,8 @@ async function fetchGestaoProjectsByOrderIds(orderIds) {
     if (!normalizedIds.length) return {};
 
     const selectVariants = [
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name)',
         'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name)',
         'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId',
@@ -736,6 +811,8 @@ async function enrichGestaoOrdersWithProjectStatuses(orders) {
 
 async function fetchGestaoOrders() {
     const orderSelectVariants = [
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId)',
@@ -825,6 +902,7 @@ async function insertGestaoProject(orderId, project, now) {
             projectCode: project.projectCode,
             name: project.name,
             environmentTypeId: project.environmentTypeId,
+            saleValue: project.saleValue,
             deliveryDate: project.deliveryDate,
             statusId,
             designerId: project.designerId,
@@ -839,6 +917,7 @@ async function insertGestaoProject(orderId, project, now) {
             environmentTypeId: project.environmentTypeId,
             deliveryDate: project.deliveryDate,
             statusId,
+            designerId: project.designerId,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -888,6 +967,7 @@ async function updateGestaoProject(project, now) {
             projectCode: project.projectCode,
             name: project.name,
             environmentTypeId: project.environmentTypeId,
+            saleValue: project.saleValue,
             deliveryDate: project.deliveryDate,
             statusId,
             designerId: project.designerId,
@@ -900,6 +980,7 @@ async function updateGestaoProject(project, now) {
             environmentTypeId: project.environmentTypeId,
             deliveryDate: project.deliveryDate,
             statusId,
+            designerId: project.designerId,
             updatedById: currentUser.id,
             updatedAt: now
         },
@@ -1006,6 +1087,10 @@ async function saveGestaoOrder(event) {
             alert(`O código do projeto "${project.name}" deve conter somente números.`);
             return;
         }
+        if (Number.isNaN(project.saleValue)) {
+            alert(`Informe um valor de venda válido para o projeto "${project.name}".`);
+            return;
+        }
     }
 
     const now = new Date().toISOString();
@@ -1095,7 +1180,8 @@ async function saveGestaoOrder(event) {
             || error.message?.includes('projectCode')
             || error.message?.includes('statusId')
             || error.message?.includes('OrderProjectStatus')
-            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql e supabase/create-order-project-status.sql no Supabase.'
+            || error.message?.includes('saleValue')
+            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql, supabase/add-order-project-sale-value.sql e supabase/create-order-project-status.sql no Supabase.'
             : '';
         alert('Erro ao salvar pedido: ' + error.message + sqlHint);
     }
@@ -1103,7 +1189,7 @@ async function saveGestaoOrder(event) {
 
 function showGestao() {
     if (!canAccessGestao()) {
-        alert('Somente administradores podem acessar a Gestão.');
+        alert('Somente administradores e gestores podem acessar a Gestão.');
         return;
     }
 
@@ -1111,6 +1197,7 @@ function showGestao() {
     document.getElementById('gestao-view')?.classList.remove('hidden');
     if (typeof updateMainNavActive === 'function') updateMainNavActive('gestao');
     if (typeof updateAdminNav === 'function') updateAdminNav();
+    updateGestaoCadastrosNavVisibility();
 
     showGestaoPedidoListPanel();
     loadGestaoOrdersList();
@@ -1267,6 +1354,184 @@ async function addGestaoProjectStatus(event) {
     await loadGestaoProjectStatusList();
 }
 
+async function loadGestaoMarceneiros(activeOnly = false) {
+    let query = supabaseClient
+        .from('Marceneiro')
+        .select('id, name, sortOrder, isActive')
+        .order('sortOrder', { ascending: true })
+        .order('name', { ascending: true });
+
+    if (activeOnly) {
+        query = query.eq('isActive', true);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('loadGestaoMarceneiros:', error);
+        gestaoMarceneirosCache = [];
+        return [];
+    }
+
+    gestaoMarceneirosCache = data || [];
+    return gestaoMarceneirosCache;
+}
+
+async function loadGestaoMarceneirosList() {
+    const tbody = document.getElementById('gestao-marceneiros-list');
+    if (!tbody) return;
+
+    const marceneiros = await loadGestaoMarceneiros(false);
+
+    if (!marceneiros.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="p-6 text-center text-xs text-amber-700">
+                    Nenhum marceneiro cadastrado. Execute <code>supabase/create-marceneiro.sql</code> no Supabase.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    marceneiros.forEach(marceneiro => {
+        const tr = document.createElement('tr');
+        tr.dataset.marceneiroId = String(marceneiro.id);
+        tr.innerHTML = `
+            <td class="p-3">
+                <input type="number" class="gestao-marceneiro-sort w-20 px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
+                    value="${Number(marceneiro.sortOrder) || 0}" min="0" step="1">
+            </td>
+            <td class="p-3">
+                <input type="text" class="gestao-marceneiro-name w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
+                    value="${escapeHtml(marceneiro.name)}" required>
+            </td>
+            <td class="p-3 text-center">
+                <input type="checkbox" class="gestao-marceneiro-active h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    ${marceneiro.isActive !== false ? 'checked' : ''}>
+            </td>
+            <td class="p-3">
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" class="gestao-save-marceneiro text-xs bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1 rounded-lg font-medium">
+                        Salvar
+                    </button>
+                    <button type="button" class="gestao-delete-marceneiro text-xs bg-white border border-red-200 text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg font-medium">
+                        Excluir
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('.gestao-save-marceneiro').forEach(button => {
+        button.addEventListener('click', () => saveGestaoMarceneiroRow(button.closest('tr')));
+    });
+    tbody.querySelectorAll('.gestao-delete-marceneiro').forEach(button => {
+        button.addEventListener('click', () => deleteGestaoMarceneiroRow(button.closest('tr')));
+    });
+}
+
+async function saveGestaoMarceneiroRow(row) {
+    if (!row || !canAccessGestao()) return;
+
+    const marceneiroId = Number(row.dataset.marceneiroId);
+    const name = row.querySelector('.gestao-marceneiro-name')?.value.trim();
+    const sortOrder = Number(row.querySelector('.gestao-marceneiro-sort')?.value) || 0;
+    const isActive = Boolean(row.querySelector('.gestao-marceneiro-active')?.checked);
+
+    if (!name) {
+        alert('Informe o nome do marceneiro.');
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('Marceneiro')
+        .update({ name, sortOrder, isActive, updatedAt: now })
+        .eq('id', marceneiroId);
+
+    if (error) {
+        alert('Erro ao salvar marceneiro: ' + error.message);
+        return;
+    }
+
+    await loadGestaoMarceneirosList();
+}
+
+async function deleteGestaoMarceneiroRow(row) {
+    if (!row || !canAccessGestao()) return;
+
+    const marceneiroId = Number(row.dataset.marceneiroId);
+    const name = row.querySelector('.gestao-marceneiro-name')?.value.trim() || 'este marceneiro';
+
+    const { count, error: countError } = await supabaseClient
+        .from('OrderProject')
+        .select('id', { count: 'exact', head: true })
+        .eq('marceneiroId', marceneiroId);
+
+    if (countError) {
+        if (countError.message?.includes('marceneiroId')) {
+            alert('Execute supabase/add-order-project-montagem-fields.sql no Supabase para habilitar a exclusão com verificação de uso.');
+            return;
+        }
+        alert('Erro ao verificar uso do marceneiro: ' + countError.message);
+        return;
+    }
+
+    if (count > 0) {
+        alert(`O marceneiro "${name}" está vinculado a ${count} projeto(s). Desative-o em vez de excluir.`);
+        return;
+    }
+
+    if (!confirm(`Excluir o marceneiro "${name}"?`)) return;
+
+    const { error } = await supabaseClient
+        .from('Marceneiro')
+        .delete()
+        .eq('id', marceneiroId);
+
+    if (error) {
+        alert('Erro ao excluir marceneiro: ' + error.message);
+        return;
+    }
+
+    await loadGestaoMarceneirosList();
+}
+
+async function addGestaoMarceneiro(event) {
+    event.preventDefault();
+    if (!canAccessGestao()) return;
+
+    const name = document.getElementById('gestao-new-marceneiro-name')?.value.trim();
+    const sortOrder = Number(document.getElementById('gestao-new-marceneiro-sort')?.value) || 0;
+
+    if (!name) {
+        alert('Informe o nome do marceneiro.');
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('Marceneiro')
+        .insert({
+            name,
+            sortOrder,
+            isActive: true,
+            updatedAt: now
+        });
+
+    if (error) {
+        alert('Erro ao adicionar marceneiro: ' + error.message);
+        return;
+    }
+
+    document.getElementById('gestao-new-marceneiro-form')?.reset();
+    document.getElementById('gestao-new-marceneiro-sort').value = '0';
+    await loadGestaoMarceneirosList();
+}
+
 function bindGestaoEvents() {
     document.getElementById('btn-gestao')?.addEventListener('click', showGestao);
     document.getElementById('btn-gestao-create-order')?.addEventListener('click', openGestaoCreateOrderForm);
@@ -1283,6 +1548,11 @@ function bindGestaoEvents() {
     document.getElementById('gestao-ord-code')?.addEventListener('input', function () {
         this.value = this.value.replace(/\D/g, '');
     });
+    document.getElementById('gestao-nav-cadastros-toggle')?.addEventListener('click', () => {
+        const items = document.getElementById('gestao-nav-cadastros-items');
+        if (!items) return;
+        setGestaoCadastrosNavExpanded(items.classList.contains('hidden'));
+    });
     document.getElementById('gestao-nav-pedido')?.addEventListener('click', () => {
         editingGestaoOrderId = null;
         showGestaoPedidoListPanel();
@@ -1293,9 +1563,22 @@ function bindGestaoEvents() {
         showGestaoProjectStatusPanel();
         loadGestaoProjectStatusList();
     });
+    document.getElementById('gestao-nav-marceneiros')?.addEventListener('click', () => {
+        editingGestaoOrderId = null;
+        showGestaoMarceneirosPanel();
+        loadGestaoMarceneirosList();
+    });
+    document.getElementById('gestao-nav-usuarios')?.addEventListener('click', () => {
+        editingGestaoOrderId = null;
+        showGestaoUsuariosPanel();
+    });
     document.getElementById('gestao-nav-kanban')?.addEventListener('click', () => {
         editingGestaoOrderId = null;
         showGestaoKanbanPanel();
+    });
+    document.getElementById('gestao-nav-relatorios')?.addEventListener('click', () => {
+        editingGestaoOrderId = null;
+        showGestaoRelatoriosPanel();
     });
     document.getElementById('btn-gestao-kanban-refresh')?.addEventListener('click', loadGestaoKanban);
     document.getElementById('btn-gestao-project-history-back')?.addEventListener('click', showGestaoKanbanPanel);
@@ -1306,4 +1589,8 @@ function bindGestaoEvents() {
         openGestaoProjectStatusHistory(getGestaoProjectHistoryContext(button.dataset.orderProjectId));
     });
     document.getElementById('gestao-new-status-form')?.addEventListener('submit', addGestaoProjectStatus);
+    document.getElementById('gestao-new-marceneiro-form')?.addEventListener('submit', addGestaoMarceneiro);
+    if (typeof bindGestaoRelatoriosEvents === 'function') {
+        bindGestaoRelatoriosEvents();
+    }
 }

@@ -1,3 +1,25 @@
+const REQUEST_QUERY_DEFAULT_STATUSES = ['Aguardando Consultor', 'Aguardando Projetista'];
+
+function getRequestQueryStatusFilters() {
+    const select = document.getElementById('filter-status');
+    if (!select) return [...REQUEST_QUERY_DEFAULT_STATUSES];
+    return Array.from(select.selectedOptions).map(option => option.value);
+}
+
+function resetRequestQueryStatusFilter() {
+    const select = document.getElementById('filter-status');
+    if (!select) return;
+
+    Array.from(select.options).forEach(option => {
+        option.selected = REQUEST_QUERY_DEFAULT_STATUSES.includes(option.value);
+    });
+}
+
+function matchesRequestQueryStatusFilter(request, selectedStatuses) {
+    if (!selectedStatuses.length) return false;
+    return selectedStatuses.includes(normalizeRequestStatus(request));
+}
+
 async function loadQueryFilterOptions() {
     const { data: consultores } = await supabaseClient
         .from('appUsers')
@@ -28,6 +50,9 @@ async function loadQueryFilterOptions() {
 
 async function searchConversations() {
     await ensureSystemSettingsLoaded();
+    syncRequestProfileColumnVisibility();
+    const showProfile = canSeeRequestProfileField();
+    const tableColSpan = showProfile ? 11 : 10;
 
     const { data: convs, error } = await supabaseClient
         .from('OrderRequest')
@@ -38,13 +63,8 @@ async function searchConversations() {
     const countEl = document.getElementById("query-results-count");
 
     if (error || !convs) {
-        tbody.innerHTML = '<tr><td colspan="11" class="p-4 text-xs text-red-500">Erro ao carregar requisições.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${tableColSpan}" class="p-4 text-xs text-red-500">Erro ao carregar requisições.</td></tr>`;
         countEl.textContent = '0 requisições';
-        updateQueryResultsPanelToggle(
-            'btn-toggle-conversations-query-results',
-            'conversations-query-results-panel',
-            conversationsQueryResultsExpanded
-        );
         return;
     }
 
@@ -69,7 +89,7 @@ async function searchConversations() {
 
     const pedido = document.getElementById("filter-pedido").value.trim().toLowerCase();
     const cliente = document.getElementById("filter-cliente").value.trim().toLowerCase();
-    const status = document.getElementById("filter-status").value;
+    const statusFilters = getRequestQueryStatusFilters();
     const consultor = document.getElementById("filter-consultor").value;
     const projetista = document.getElementById("filter-projetista").value;
 
@@ -85,9 +105,7 @@ async function searchConversations() {
     if (cliente) {
         rows = rows.filter(r => (r.order.clientName || '').toLowerCase().includes(cliente));
     }
-    if (status) {
-        rows = rows.filter(r => normalizeRequestStatus(r) === status);
-    }
+    rows = rows.filter(r => matchesRequestQueryStatusFilter(r, statusFilters));
     if (consultor) {
         rows = rows.filter(r => r.order.consultantName === consultor);
     }
@@ -101,12 +119,7 @@ async function searchConversations() {
     countEl.textContent = `${rows.length} requisiç${rows.length === 1 ? 'ão' : 'ões'}`;
 
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="p-6 text-center text-xs text-slate-400">Nenhuma requisição encontrada.</td></tr>';
-        updateQueryResultsPanelToggle(
-            'btn-toggle-conversations-query-results',
-            'conversations-query-results-panel',
-            conversationsQueryResultsExpanded
-        );
+        tbody.innerHTML = `<tr><td colspan="${tableColSpan}" class="p-6 text-center text-xs text-slate-400">Nenhuma requisição encontrada.</td></tr>`;
         return;
     }
 
@@ -118,6 +131,11 @@ async function searchConversations() {
         const profile = formatRequestProfile(r.requestProfile);
         const profileClass = getRequestProfileBadgeClass(r.requestProfile);
         const statusClass = getRequestStatusBadgeClass(status);
+        const profileCell = showProfile
+            ? `<td class="p-3 conv-query-profile-col" style="${cellStyle}">
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${profileClass}">${profile}</span>
+            </td>`
+            : '';
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td class="p-3 font-mono text-xs font-bold text-slate-600" style="${cellStyle}">${r.order.orderCode || '-'}</td>
@@ -127,9 +145,7 @@ async function searchConversations() {
             <td class="p-3" style="${cellStyle}">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
             </td>
-            <td class="p-3" style="${cellStyle}">
-                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${profileClass}">${profile}</span>
-            </td>
+            ${profileCell}
             <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${r.designerRequest || ''}">${truncateText(r.designerRequest)}</td>
             <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${getRequestResponseSummary(r)}">${truncateText(getRequestResponseSummary(r))}</td>
             <td class="p-3 text-xs text-slate-400 whitespace-nowrap" style="${cellStyle}">${formatDate(r.createdAt)}</td>
@@ -141,12 +157,6 @@ async function searchConversations() {
         `;
         tbody.appendChild(tr);
     });
-
-    updateQueryResultsPanelToggle(
-        'btn-toggle-conversations-query-results',
-        'conversations-query-results-panel',
-        conversationsQueryResultsExpanded
-    );
 }
 
 function bindConversationsQueryEvents() {
@@ -157,10 +167,9 @@ function bindConversationsQueryEvents() {
     document.getElementById("btn-clear-filters").addEventListener("click", function () {
         document.getElementById("filter-pedido").value = "";
         document.getElementById("filter-cliente").value = "";
-        document.getElementById("filter-status").value = "";
+        resetRequestQueryStatusFilter();
         document.getElementById("filter-consultor").value = "";
         document.getElementById("filter-projetista").value = "";
         searchConversations();
     });
-    document.getElementById('btn-toggle-conversations-query-results')?.addEventListener('click', toggleConversationsQueryResults);
 }

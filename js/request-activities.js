@@ -226,6 +226,7 @@ function validateRequestActivitiesBeforeReply(activities) {
 
 function canEditRequestActivityDescriptions(conv) {
     if (conv && isRequestClosed(conv)) return false;
+    if (isConvRespondOnlyMode(conv)) return false;
     if (currentUser?.role === 'Admin') return true;
 
     if (!conv) {

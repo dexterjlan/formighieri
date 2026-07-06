@@ -16,8 +16,6 @@
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Pendências</button>
                 <button type="button" id="btn-gestao"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Gestão</button>
-                <button type="button" id="btn-manage-users"
-                    class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Usuários</button>
                 <button type="button" id="btn-system-settings"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Configurações</button>
                 <button type="button" id="btn-logout"
@@ -69,22 +67,19 @@
                                 <p class="text-xs text-slate-400 mt-1" id="det-info">Consultor: - | Criado por: -</p>
                             </div>
                         </div>
-                        <div class="px-5 py-2.5 border-b border-slate-100 bg-violet-50/50 flex justify-between items-center gap-2">
-                            <h4 class="text-xs font-semibold text-violet-800 uppercase">
-                                Projetos <span id="order-projects-count" class="font-normal opacity-80">(0)</span>
-                            </h4>
-                            <button type="button" id="btn-toggle-projects-list"
-                                class="hidden text-xs text-violet-700 hover:text-violet-900 font-medium px-2 py-1 rounded-md hover:bg-violet-100">
-                                Expandir
-                            </button>
-                        </div>
+                        <button type="button" id="btn-toggle-projects-list"
+                            class="w-full px-5 py-2.5 border-b border-slate-100 bg-violet-50/50 flex items-center gap-1.5 text-xs font-semibold text-violet-800 uppercase text-left hover:bg-violet-100/60">
+                            <span id="order-projects-toggle-icon" class="hidden text-[10px] leading-none shrink-0">▶</span>
+                            <span>Projetos <span id="order-projects-count" class="font-normal opacity-80">(0)</span></span>
+                        </button>
                         <div id="order-projects-panel" class="hidden px-3 py-2">
                             <div class="space-y-1.5" id="order-projects-list"></div>
                         </div>
                     </div>
 
                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div class="flex border-b border-slate-200 bg-slate-50/50">
+                        <div id="order-detail-tabs-wrap">
+                            <div id="order-detail-tabs-bar" class="flex border-b border-slate-200 bg-slate-50/50">
                             <button type="button" id="order-tab-approvals"
                                 class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-emerald-600 text-emerald-800 bg-white">
                                 Aprovações Comerciais <span id="order-tab-approvals-count" class="font-normal opacity-80">(0)</span>
@@ -101,6 +96,18 @@
                                 class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
                                 Medição <span id="order-tab-medicao-count" class="font-normal opacity-80">(0)</span>
                             </button>
+                            <button type="button" id="order-tab-ppcp"
+                                class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
+                                PPCP <span id="order-tab-ppcp-count" class="font-normal opacity-80">(0)</span>
+                            </button>
+                            <button type="button" id="order-tab-fabrica"
+                                class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
+                                Fábrica <span id="order-tab-fabrica-count" class="font-normal opacity-80">(0)</span>
+                            </button>
+                            </div>
+                            <p id="order-detail-tabs-empty" class="hidden px-4 py-3 text-xs text-slate-400 text-center border-b border-slate-200 bg-slate-50/50">
+                                Nenhuma aba disponível para seu perfil.
+                            </p>
                         </div>
                         <div id="order-tab-panel-approvals" class="p-4">
                             <div class="flex justify-start mb-3">
@@ -133,37 +140,23 @@
                             </div>
                             <div class="space-y-4" id="medicao-list"></div>
                         </div>
+                        <div id="order-tab-panel-ppcp" class="hidden p-4">
+                            <p class="text-xs text-slate-500 mb-3">Implante os projetos aguardando PPCP e, após finalizar a implantação, inicie a produção.</p>
+                            <div class="space-y-6" id="ppcp-projects-list"></div>
+                        </div>
+                        <div id="order-tab-panel-fabrica" class="hidden p-4">
+                            <p class="text-xs text-slate-500 mb-3">Pedidos com projetos em produção ou montagem interna — expanda cada pedido para registrar montagem.</p>
+                            <div class="space-y-4" id="fabrica-projects-list"></div>
+                            <div id="fabrica-save-footer" class="hidden pt-4 mt-4 border-t border-slate-100 flex justify-end">
+                                <button type="button" id="btn-fabrica-save"
+                                    class="bg-orange-700 text-white text-xs px-5 py-2 rounded-lg font-semibold hover:bg-orange-800">
+                                    Salvar
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
-        </main>
-
-        <!-- TELA ADMIN: EDITAR USUÁRIOS -->
-        <main id="users-admin-view" class="hidden flex-1 max-w-4xl w-full mx-auto p-4 md:p-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50">
-                    <h2 class="font-bold text-sm text-slate-900">Gerenciar Usuários</h2>
-                    <p class="text-xs text-slate-400 mt-1">Defina o perfil, as flags Conferente, Gestor comercial, Gestor de projetos e gerencie o acesso.</p>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Nome</th>
-                                <th class="text-left p-3 font-semibold">E-mail</th>
-                                <th class="text-left p-3 font-semibold">Status</th>
-                                <th class="text-left p-3 font-semibold">Perfil atual</th>
-                                <th class="text-left p-3 font-semibold">Novo perfil</th>
-                                <th class="text-center p-3 font-semibold">Conferente</th>
-                                <th class="text-center p-3 font-semibold">Gestor comercial</th>
-                                <th class="text-center p-3 font-semibold">Gestor de projetos</th>
-                                <th class="p-3 font-semibold">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="users-admin-list" class="divide-y divide-slate-100"></tbody>
-                    </table>
-                </div>
-            </div>
         </main>
 
         <!-- TELA ADMIN: CONFIGURAÇÕES DO SISTEMA -->
@@ -231,13 +224,13 @@
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label>
-                        <select id="filter-status"
+                        <select id="filter-status" multiple size="3"
                             class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
-                            <option value="">Todos</option>
-                            <option value="Aguardando Consultor">Aguardando Consultor</option>
-                            <option value="Aguardando Projetista">Aguardando Projetista</option>
+                            <option value="Aguardando Consultor" selected>Aguardando Consultor</option>
+                            <option value="Aguardando Projetista" selected>Aguardando Projetista</option>
                             <option value="Encerrado">Encerrado</option>
                         </select>
+                        <p class="text-[10px] text-slate-400 mt-1">Segure Ctrl (Windows) ou ⌘ (Mac) para selecionar vários status.</p>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Consultor</label>
@@ -262,14 +255,10 @@
                 </form>
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center gap-2">
+                <div class="p-3 border-b border-slate-100 bg-slate-50/50">
                     <span class="text-xs text-slate-500" id="query-results-count">0 requisições</span>
-                    <button type="button" id="btn-toggle-conversations-query-results"
-                        class="text-xs text-amber-700 hover:text-amber-900 font-medium px-2 py-1 rounded-md hover:bg-amber-50 shrink-0">
-                        Expandir
-                    </button>
                 </div>
-                <div id="conversations-query-results-panel" class="hidden overflow-x-auto max-h-[calc(100vh-340px)] overflow-y-auto">
+                <div id="conversations-query-results-panel" class="overflow-x-auto max-h-[calc(100vh-340px)] overflow-y-auto">
                     <table class="w-full text-sm">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500 sticky top-0">
                             <tr>
@@ -278,7 +267,7 @@
                                 <th class="text-left p-3 font-semibold">Consultor</th>
                                 <th class="text-left p-3 font-semibold">Projetista</th>
                                 <th class="text-left p-3 font-semibold">Status</th>
-                                <th class="text-left p-3 font-semibold">Perfil</th>
+                                <th class="text-left p-3 font-semibold conv-query-profile-col">Perfil</th>
                                 <th class="text-left p-3 font-semibold">Solicitação</th>
                                 <th class="text-left p-3 font-semibold">Resposta</th>
                                 <th class="text-left p-3 font-semibold">Data de criação</th>
@@ -319,13 +308,13 @@
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label>
-                        <select id="approval-filter-status"
+                        <select id="approval-filter-status" multiple size="3"
                             class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-emerald-600">
-                            <option value="">Todos</option>
-                            <option value="Aguardando Aprovação">Aguardando Aprovação</option>
-                            <option value="Em revisão">Em revisão</option>
+                            <option value="Aguardando Aprovação" selected>Aguardando Aprovação</option>
+                            <option value="Em revisão" selected>Em revisão</option>
                             <option value="Aprovado">Aprovado</option>
                         </select>
+                        <p class="text-[10px] text-slate-400 mt-1">Segure Ctrl (Windows) ou ⌘ (Mac) para selecionar vários status.</p>
                     </div>
                     <div class="flex items-end gap-2 md:col-span-2 lg:col-span-2">
                         <button type="submit"
@@ -336,14 +325,10 @@
                 </form>
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-3 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center gap-2">
+                <div class="p-3 border-b border-slate-100 bg-slate-50/50">
                     <span class="text-xs text-slate-500" id="approval-query-results-count">0 aprovações</span>
-                    <button type="button" id="btn-toggle-approvals-query-results"
-                        class="text-xs text-emerald-700 hover:text-emerald-900 font-medium px-2 py-1 rounded-md hover:bg-emerald-50 shrink-0">
-                        Expandir
-                    </button>
                 </div>
-                <div id="approvals-query-results-panel" class="hidden overflow-x-auto max-h-[calc(100vh-340px)] overflow-y-auto">
+                <div id="approvals-query-results-panel" class="overflow-x-auto max-h-[calc(100vh-340px)] overflow-y-auto">
                     <table class="w-full text-sm">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500 sticky top-0">
                             <tr>
@@ -372,17 +357,38 @@
                         <p class="text-[10px] text-slate-400 mt-1">Área administrativa</p>
                     </div>
                     <nav class="p-2 space-y-1">
-                        <button type="button" id="gestao-nav-pedido"
-                            class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100">
-                            Pedido
-                        </button>
-                        <button type="button" id="gestao-nav-project-status"
-                            class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
-                            Status de Projeto
-                        </button>
+                        <div id="gestao-nav-cadastros-group">
+                            <button type="button" id="gestao-nav-cadastros-toggle"
+                                class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2">
+                                <span>Cadastros</span>
+                                <span id="gestao-nav-cadastros-chevron" class="text-[10px] text-slate-400 shrink-0">▼</span>
+                            </button>
+                            <div id="gestao-nav-cadastros-items" class="mt-1 ml-2 pl-2 border-l border-slate-200 space-y-1">
+                                <button type="button" id="gestao-nav-pedido"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100">
+                                    Pedido
+                                </button>
+                                <button type="button" id="gestao-nav-project-status"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Status de Projeto
+                                </button>
+                                <button type="button" id="gestao-nav-marceneiros"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Marceneiros
+                                </button>
+                                <button type="button" id="gestao-nav-usuarios"
+                                    class="hidden gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Usuários
+                                </button>
+                            </div>
+                        </div>
                         <button type="button" id="gestao-nav-kanban"
                             class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                             Kanban
+                        </button>
+                        <button type="button" id="gestao-nav-relatorios"
+                            class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Relatórios
                         </button>
                     </nav>
                 </aside>
@@ -461,14 +467,15 @@
                                         + Adicionar projeto
                                     </button>
                                 </div>
-                                <p class="text-[10px] text-slate-400">Código do projeto (somente números), nome, ambiente, data de entrega, status e projetista responsável.</p>
+                                <p class="text-[10px] text-slate-400">Código do projeto (somente números), nome, ambiente, valor de venda, data de entrega, status e projetista responsável.</p>
                                 <div class="overflow-x-auto border border-slate-200 rounded-lg bg-white">
-                                    <table class="w-full text-xs min-w-[900px]">
+                                    <table class="w-full text-xs min-w-[1020px]">
                                         <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
                                             <tr>
                                                 <th class="text-left p-2 font-semibold">Código</th>
                                                 <th class="text-left p-2 font-semibold">Nome</th>
                                                 <th class="text-left p-2 font-semibold">Ambiente</th>
+                                                <th class="text-left p-2 font-semibold">Valor venda</th>
                                                 <th class="text-left p-2 font-semibold">Entrega</th>
                                                 <th class="text-left p-2 font-semibold">Status</th>
                                                 <th class="text-left p-2 font-semibold">Projetista</th>
@@ -529,6 +536,79 @@
                         </div>
                     </div>
 
+                    <div id="gestao-marceneiros-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Marceneiros</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os marceneiros responsáveis pela montagem interna dos projetos.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-marceneiro-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[180px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo marceneiro</label>
+                                    <input type="text" id="gestao-new-marceneiro-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Nome do marceneiro">
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ordem</label>
+                                    <input type="number" id="gestao-new-marceneiro-sort" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-marceneiros-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-usuarios-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Usuários</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Perfil, permissões e status. Cores por perfil: <span class="text-slate-700">Admin</span> · <span class="text-violet-600">Projetista</span> · <span class="text-sky-600">Consultor</span> · <span class="text-orange-600">Marceneiro</span></p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <div class="flex flex-wrap items-end gap-2 border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[180px]">
+                                    <label for="users-filter-name" class="block text-[10px] font-semibold text-slate-500 mb-1">Nome ou e-mail</label>
+                                    <input type="text" id="users-filter-name" placeholder="Buscar..."
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <div class="w-40">
+                                    <label for="users-filter-role" class="block text-[10px] font-semibold text-slate-500 mb-1">Perfil</label>
+                                    <select id="users-filter-role"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                        <option value="">Todos</option>
+                                        <option value="Admin">Admin</option>
+                                        <option value="Projetista">Projetista</option>
+                                        <option value="Consultor">Consultor</option>
+                                        <option value="Marceneiro">Marceneiro</option>
+                                        <option value="__none__">Sem perfil</option>
+                                    </select>
+                                </div>
+                                <button type="button" id="btn-users-clear-filters"
+                                    class="text-xs px-3 py-2 rounded-lg font-medium bg-white border border-slate-200 text-slate-600 hover:bg-slate-50">
+                                    Limpar
+                                </button>
+                                <span id="users-admin-count" class="text-[10px] text-slate-400 ml-auto"></span>
+                            </div>
+                            <div id="users-admin-list" class="space-y-2"></div>
+                        </div>
+                    </div>
+
                     <div id="gestao-kanban-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
                             <div>
@@ -542,6 +622,22 @@
                         </div>
                         <div id="gestao-kanban-board" class="flex-1 overflow-auto p-4 bg-slate-50/30">
                             <p class="text-xs text-slate-400 text-center py-8">Carregando kanban...</p>
+                        </div>
+                    </div>
+
+                    <div id="gestao-relatorios-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900">Relatórios</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Visão gerencial dos projetos por status, faixa comercial e fechamento de produção.</p>
+                            </div>
+                            <button type="button" id="btn-gestao-relatorios-refresh"
+                                class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                Atualizar
+                            </button>
+                        </div>
+                        <div id="gestao-relatorios-content" class="flex-1 overflow-auto p-4 space-y-4 bg-slate-50/30">
+                            <p class="text-xs text-slate-400 text-center py-8">Carregando relatórios...</p>
                         </div>
                     </div>
 

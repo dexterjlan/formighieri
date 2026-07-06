@@ -466,6 +466,10 @@ function refreshCommercialApprovalViews() {
     if (typeof refreshApprovalsQueryIfVisible === 'function') {
         refreshApprovalsQueryIfVisible();
     }
+    if (typeof loadPendenciasConsultorAguardandoAprovacao === 'function'
+        && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
+        loadPendenciasConsultorAguardandoAprovacao();
+    }
 }
 
 function setCommercialRevisionModalLoading(isLoading, message = 'Salvando revisão...') {
@@ -554,6 +558,10 @@ async function sendRevisionBackToApproval() {
             return;
         }
 
+        if (typeof applyAguardandoAprovacaoStatusForCommercialApproval === 'function') {
+            await applyAguardandoAprovacaoStatusForCommercialApproval(approval);
+        }
+
         setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
         await notifyApprovalEmail('sent_back_to_approval', {
             ...approval,
@@ -564,6 +572,9 @@ async function sendRevisionBackToApproval() {
 
         closeCommercialRevisionModal();
         refreshCommercialApprovalViews();
+        if (typeof loadOrderProjects === 'function' && activeOrderId) {
+            await loadOrderProjects(activeOrderId);
+        }
     } finally {
         setCommercialRevisionModalLoading(false);
     }

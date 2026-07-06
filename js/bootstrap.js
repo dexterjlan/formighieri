@@ -12,6 +12,7 @@ const SCRIPTS = [
     'js/conversations-query.js',
     'js/users-admin.js',
     'js/gestao.js',
+    'js/gestao-relatorios.js',
     'js/pendencias.js',
     'js/system-settings.js',
     'js/auth.js',
@@ -19,6 +20,8 @@ const SCRIPTS = [
     'js/order-projects.js',
     'js/anteprojeto.js',
     'js/mediciao.js',
+    'js/fabrica.js',
+    'js/ppcp.js',
     'js/notifications.js',
     'js/request-activities.js',
     'js/conversations.js',
@@ -54,7 +57,7 @@ async function bootstrap() {
         mount.innerHTML = htmlParts.join('\n');
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260786`);
+            await loadScript(`${src}?v=20260843`);
         }
 
         initAppEvents();

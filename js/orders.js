@@ -15,35 +15,84 @@ async function fetchOrderSummaryApprovals() {
     return [];
 }
 
+async function fetchOrderSummaryProjects() {
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('orderId, statusId, projectStatus:OrderProjectStatus(name)');
+
+    if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('orderId, statusId');
+    }
+
+    if (result.error) {
+        console.error('fetchOrderSummaryProjects:', result.error);
+        return [];
+    }
+
+    let projects = result.data || [];
+    const needsEnrich = projects.some(project => project.statusId && !project.projectStatus);
+
+    if (needsEnrich) {
+        const statusIds = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
+        if (statusIds.length) {
+            const { data: statuses } = await supabaseClient
+                .from('OrderProjectStatus')
+                .select('id, name')
+                .in('id', statusIds);
+
+            const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+            projects = projects.map(project => ({
+                ...project,
+                projectStatus: project.projectStatus || statusById[project.statusId] || null
+            }));
+        }
+    }
+
+    return projects;
+}
+
 async function loadOrderSummaryCounts() {
-    const [approvals, requests] = await Promise.all([
+    const [approvals, requests, projects] = await Promise.all([
         fetchOrderSummaryApprovals(),
         supabaseClient
             .from('OrderRequest')
             .select('orderId, status, requestProfile')
-            .then(({ data }) => data || [])
+            .then(({ data }) => data || []),
+        fetchOrderSummaryProjects()
     ]);
 
     const counts = {};
 
+    function ensureOrderCounts(orderId) {
+        if (!counts[orderId]) {
+            counts[orderId] = { approvals: 0, requests: 0, projectStatuses: {} };
+        }
+        return counts[orderId];
+    }
+
     approvals.forEach(approval => {
         if (!approval.orderId) return;
-        if (!counts[approval.orderId]) {
-            counts[approval.orderId] = { approvals: 0, requests: 0 };
-        }
+        const entry = ensureOrderCounts(approval.orderId);
         if (normalizeCommercialApproval(approval).status !== 'Aprovado') {
-            counts[approval.orderId].approvals += 1;
+            entry.approvals += 1;
         }
     });
 
     requests.forEach(request => {
         if (!request.orderId) return;
-        if (!counts[request.orderId]) {
-            counts[request.orderId] = { approvals: 0, requests: 0 };
-        }
+        const entry = ensureOrderCounts(request.orderId);
         if (isRequestOpen(request)) {
-            counts[request.orderId].requests += 1;
+            entry.requests += 1;
         }
+    });
+
+    projects.forEach(project => {
+        if (!project.orderId) return;
+        const entry = ensureOrderCounts(project.orderId);
+        const statusName = getOrderProjectStatusName(project);
+        entry.projectStatuses[statusName] = (entry.projectStatuses[statusName] || 0) + 1;
     });
 
     orderSummaryCounts = counts;
@@ -54,28 +103,54 @@ async function refreshOrdersListSummary() {
     renderOrdersList();
 }
 
-function renderOrderSummaryBadges(orderId) {
-    const counts = orderSummaryCounts[orderId];
-    if (!counts || (counts.approvals === 0 && counts.requests === 0)) {
+function renderOrderProjectStatusSummaryBadges(projectStatuses) {
+    if (!projectStatuses || !Object.keys(projectStatuses).length) {
         return '';
     }
 
-    const badges = [];
-    if (counts.approvals > 0) {
-        badges.push(
-            `<span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800" title="Aprovações em aberto">${counts.approvals} aprov.</span>`
-        );
-    }
-    if (counts.requests > 0) {
-        badges.push(
-            `<span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="Requisições em aberto">${counts.requests} req.</span>`
-        );
-    }
+    const badges = Object.entries(projectStatuses)
+        .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR', { sensitivity: 'base' }))
+        .map(([statusName, count]) => {
+            const statusClass = getOrderProjectStatusBadgeClass(statusName);
+            return `<span class="inline-flex items-center text-[9px] leading-tight font-semibold px-1 py-0.5 rounded ${statusClass}" title="${escapeHtml(statusName)}">${count} · ${escapeHtml(statusName)}</span>`;
+        });
 
-    return `<div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
-        <span class="text-[10px] font-semibold text-slate-500">⏳ Pendências:</span>
+    return `<div class="flex items-center gap-1 mt-1 flex-wrap">
         ${badges.join('')}
     </div>`;
+}
+
+function renderOrderSummaryBadges(orderId) {
+    const counts = orderSummaryCounts[orderId];
+    if (!counts) return '';
+
+    const parts = [];
+
+    if (counts.approvals > 0 || counts.requests > 0) {
+        const badges = [];
+        if (counts.approvals > 0) {
+            badges.push(
+                `<span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800" title="Aprovações em aberto">${counts.approvals} aprov.</span>`
+            );
+        }
+        if (counts.requests > 0) {
+            badges.push(
+                `<span class="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="Requisições em aberto">${counts.requests} req.</span>`
+            );
+        }
+
+        parts.push(`<div class="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <span class="text-[10px] font-semibold text-slate-500">⏳ Pendências:</span>
+            ${badges.join('')}
+        </div>`);
+    }
+
+    const statusBadges = renderOrderProjectStatusSummaryBadges(counts.projectStatuses);
+    if (statusBadges) {
+        parts.push(statusBadges);
+    }
+
+    return parts.join('');
 }
 
 function setupOrderConsultantFilter() {
@@ -190,12 +265,14 @@ async function loadConsultants() {
     });
 }
 
-function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount) {
+function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount, fabricaCount, ppcpCount) {
     const approvalsCountEl = document.getElementById('order-tab-approvals-count');
     const requestsCountEl = document.getElementById('order-tab-requests-count');
     const projectsCountEl = document.getElementById('order-projects-count');
     const anteprojetoCountEl = document.getElementById('order-tab-anteprojeto-count');
     const medicaoCountEl = document.getElementById('order-tab-medicao-count');
+    const fabricaCountEl = document.getElementById('order-tab-fabrica-count');
+    const ppcpCountEl = document.getElementById('order-tab-ppcp-count');
 
     if (approvalsCountEl && pendingApprovalsCount !== undefined) {
         approvalsCountEl.textContent = `(${pendingApprovalsCount})`;
@@ -211,6 +288,12 @@ function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projects
     }
     if (medicaoCountEl && medicoesCount !== undefined) {
         medicaoCountEl.textContent = `(${medicoesCount})`;
+    }
+    if (fabricaCountEl && fabricaCount !== undefined && canSeeOrderFabricaTab()) {
+        fabricaCountEl.textContent = `(${fabricaCount})`;
+    }
+    if (ppcpCountEl && ppcpCount !== undefined && canSeeOrderPpcpTab()) {
+        ppcpCountEl.textContent = `(${ppcpCount})`;
     }
 }
 
@@ -269,10 +352,109 @@ const ORDER_DETAIL_TABS = {
         panelId: 'order-tab-panel-medicao',
         activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-teal-600 text-teal-800 bg-white',
         inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+    },
+    ppcp: {
+        tabId: 'order-tab-ppcp',
+        panelId: 'order-tab-panel-ppcp',
+        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-violet-600 text-violet-800 bg-white',
+        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+    },
+    fabrica: {
+        tabId: 'order-tab-fabrica',
+        panelId: 'order-tab-panel-fabrica',
+        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-orange-600 text-orange-800 bg-white',
+        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
     }
 };
 
+function isOrderDetailTabVisible(tabKey) {
+    if (isMarceneiro()) {
+        return tabKey === 'fabrica' && isGestorFabrica();
+    }
+
+    if (tabKey === 'medicao') return canSeeOrderMedicaoTab();
+    if (tabKey === 'ppcp') return canSeeOrderPpcpTab();
+    if (tabKey === 'fabrica') return canSeeOrderFabricaTab();
+    return true;
+}
+
+function getOrderDetailTabKeys() {
+    return Object.keys(ORDER_DETAIL_TABS);
+}
+
+function hasAnyVisibleOrderDetailTab() {
+    return getOrderDetailTabKeys().some(key => isOrderDetailTabVisible(key));
+}
+
+function getFirstVisibleOrderDetailTab() {
+    const order = ['approvals', 'requests', 'anteprojeto', 'medicao', 'ppcp', 'fabrica'];
+    return order.find(key => isOrderDetailTabVisible(key)) || null;
+}
+
+function applyOrderTabButtonsVisibility() {
+    getOrderDetailTabKeys().forEach(tabKey => {
+        const config = ORDER_DETAIL_TABS[tabKey];
+        const tabEl = document.getElementById(config?.tabId);
+        if (!tabEl) return;
+
+        if (isOrderDetailTabVisible(tabKey)) {
+            tabEl.classList.remove('hidden');
+        } else {
+            tabEl.classList.add('hidden');
+        }
+    });
+}
+
+function updateOrderTabsChromeVisibility() {
+    const hasAnyTab = hasAnyVisibleOrderDetailTab();
+    document.getElementById('order-detail-tabs-bar')?.classList.toggle('hidden', !hasAnyTab);
+    document.getElementById('order-detail-tabs-empty')?.classList.toggle('hidden', hasAnyTab);
+}
+
+function hideAllOrderDetailPanels() {
+    getOrderDetailTabKeys().forEach(tabKey => {
+        const config = ORDER_DETAIL_TABS[tabKey];
+        document.getElementById(config.panelId)?.classList.add('hidden');
+    });
+}
+
+function updateOrderDetailTabsVisibility() {
+    getOrderDetailTabKeys().forEach(tabKey => {
+        const config = ORDER_DETAIL_TABS[tabKey];
+        if (!config) return;
+        if (!isOrderDetailTabVisible(tabKey)) {
+            document.getElementById(config.panelId)?.classList.add('hidden');
+        }
+    });
+
+    applyOrderTabButtonsVisibility();
+    updateOrderTabsChromeVisibility();
+
+    const activePanel = Object.entries(ORDER_DETAIL_TABS).find(([, config]) => {
+        const panel = document.getElementById(config.panelId);
+        return panel && !panel.classList.contains('hidden');
+    });
+
+    if (activePanel && !isOrderDetailTabVisible(activePanel[0])) {
+        switchOrderDetailTab(getFirstVisibleOrderDetailTab());
+    } else if (!hasAnyVisibleOrderDetailTab()) {
+        hideAllOrderDetailPanels();
+    }
+}
+
 function switchOrderDetailTab(tab) {
+    if (!tab || !isOrderDetailTabVisible(tab)) {
+        const first = getFirstVisibleOrderDetailTab();
+        if (!first) {
+            hideAllOrderDetailPanels();
+            updateOrderTabsChromeVisibility();
+            applyOrderTabButtonsVisibility();
+            return;
+        }
+        switchOrderDetailTab(first);
+        return;
+    }
+
     Object.entries(ORDER_DETAIL_TABS).forEach(([key, config]) => {
         const isActive = key === tab;
         const tabEl = document.getElementById(config.tabId);
@@ -282,10 +464,12 @@ function switchOrderDetailTab(tab) {
             tabEl.className = isActive ? config.activeClass : config.inactiveClass;
         }
         if (panelEl) {
-            panelEl.classList.toggle('hidden', !isActive);
+            panelEl.classList.toggle('hidden', !isActive || !isOrderDetailTabVisible(key));
         }
     });
 
+    applyOrderTabButtonsVisibility();
+    updateOrderTabsChromeVisibility();
     updateOrderDetailActionButtons();
 }
 
@@ -296,6 +480,10 @@ async function openOrderModal() {
 window.openOrderModal = openOrderModal;
 
 async function selectOrder(id) {
+    if (typeof refreshCurrentUserProfile === 'function') {
+        await refreshCurrentUserProfile();
+    }
+
     activeOrderId = id;
     document.getElementById("empty-state").classList.add("hidden");
     document.getElementById("order-content").classList.remove("hidden");
@@ -315,15 +503,29 @@ async function selectOrder(id) {
 
     loadOrders();
     loadOrderProjects(id);
-    loadConversations(id);
-    loadCommercialApprovals(id);
-    if (typeof loadAnteprojetoConferences === 'function') {
-        loadAnteprojetoConferences(id);
+
+    const marceneiroOnlyFabrica = isMarceneiro() && isGestorFabrica();
+    const marceneiroWithoutTabs = isMarceneiro() && !isGestorFabrica();
+
+    if (!marceneiroWithoutTabs && !marceneiroOnlyFabrica) {
+        loadConversations(id);
+        loadCommercialApprovals(id);
+        if (typeof loadAnteprojetoConferences === 'function') {
+            loadAnteprojetoConferences(id);
+        }
+        if (typeof loadMedicoes === 'function' && canSeeOrderMedicaoTab()) {
+            loadMedicoes(id);
+        }
+        if (typeof loadPpcpProjects === 'function' && canSeeOrderPpcpTab()) {
+            loadPpcpProjects(id);
+        }
     }
-    if (typeof loadMedicoes === 'function') {
-        loadMedicoes(id);
+
+    if (typeof loadFabricaProjects === 'function' && canSeeOrderFabricaTab()) {
+        loadFabricaProjects(id);
     }
-    switchOrderDetailTab('approvals');
+    updateOrderDetailTabsVisibility();
+    switchOrderDetailTab(getFirstVisibleOrderDetailTab());
 }
 
 function bindOrderEvents() {
@@ -338,6 +540,20 @@ function bindOrderEvents() {
     });
     document.getElementById('order-tab-medicao').addEventListener('click', function () {
         switchOrderDetailTab('medicao');
+    });
+    document.getElementById('order-tab-ppcp').addEventListener('click', function () {
+        if (!canSeeOrderPpcpTab()) return;
+        switchOrderDetailTab('ppcp');
+        if (activeOrderId && typeof loadPpcpProjects === 'function') {
+            loadPpcpProjects(activeOrderId);
+        }
+    });
+    document.getElementById('order-tab-fabrica').addEventListener('click', function () {
+        if (!canSeeOrderFabricaTab()) return;
+        switchOrderDetailTab('fabrica');
+        if (activeOrderId && typeof loadFabricaProjects === 'function') {
+            loadFabricaProjects(activeOrderId);
+        }
     });
 
     document.getElementById('filter-order-client').addEventListener('input', renderOrdersList);

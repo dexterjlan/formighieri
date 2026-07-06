@@ -47,6 +47,11 @@
                         <option value="">Selecione...</option>
                     </select>
                 </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Valor de venda</label>
+                    <input type="text" id="project-sale-value" inputmode="decimal" placeholder="0,00"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-violet-600">
+                </div>
                 <div class="flex gap-2 pt-2">
                     <button type="button" onclick="closeOrderProjectModal()"
                         class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
@@ -314,6 +319,12 @@
                         class="flex-1 bg-sky-700 text-white py-2 rounded-lg text-xs font-medium">Criar Conferência</button>
                 </div>
             </form>
+            <div id="anteprojeto-modal-approve-wrap" class="hidden flex justify-end pt-3 mt-3 border-t border-slate-100">
+                <button type="button" id="btn-anteprojeto-modal-approve"
+                    class="text-xs px-4 py-2 rounded-lg font-medium bg-indigo-700 text-white hover:bg-indigo-800">
+                    Aprovar
+                </button>
+            </div>
         </div>
     </div>
 
