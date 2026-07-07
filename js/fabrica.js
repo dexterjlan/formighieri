@@ -343,19 +343,29 @@ async function enrichFabricaProjectsWithOrder(projects) {
     }));
 }
 
-async function fetchFabricaProjects(statusIds) {
-    let result = await supabaseClient
+async function fetchFabricaProjects(statusIds, orderId = null) {
+    let query = supabaseClient
         .from('OrderProject')
         .select(FABRICA_PROJECT_SELECT)
-        .in('statusId', statusIds)
-        .order('name', { ascending: true });
+        .in('statusId', statusIds);
+
+    if (orderId) {
+        query = query.eq('orderId', orderId);
+    }
+
+    let result = await query.order('name', { ascending: true });
 
     if (result.error?.message?.includes('marceneiro') || result.error?.message?.includes('MontagemInterna') || result.error?.message?.includes('salesOrders')) {
-        result = await supabaseClient
+        query = supabaseClient
             .from('OrderProject')
             .select('id, orderId, name, projectCode, marceneiroId, inicioMontagemInterna, fimMontagemInterna, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
-            .in('statusId', statusIds)
-            .order('name', { ascending: true });
+            .in('statusId', statusIds);
+
+        if (orderId) {
+            query = query.eq('orderId', orderId);
+        }
+
+        result = await query.order('name', { ascending: true });
     }
 
     return result;
@@ -551,7 +561,7 @@ async function saveAllFabricaProjects() {
     }
 }
 
-async function loadFabricaProjects(orderIdForTabCount = null) {
+async function loadFabricaProjects(orderId = null) {
     const list = document.getElementById('fabrica-projects-list');
     if (!list) return;
 
@@ -577,32 +587,43 @@ async function loadFabricaProjects(orderIdForTabCount = null) {
                 Status de fábrica não encontrados. Execute <code>supabase/add-order-project-fabrica-status.sql</code> no Supabase.
             </p>
         `;
-        updateFabricaTabCount([], orderIdForTabCount);
+        updateFabricaTabCount([], orderId);
         return;
     }
 
-    const result = await fetchFabricaProjects(statusIds);
+    const result = await fetchFabricaProjects(statusIds, orderId);
 
     if (result.error) {
         console.error('loadFabricaProjects:', result.error);
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-6">Erro ao carregar projetos: ${escapeHtml(result.error.message)}</p>`;
-        updateFabricaTabCount([], orderIdForTabCount);
+        updateFabricaTabCount([], orderId);
         return;
     }
 
     const projects = await enrichFabricaProjectsWithOrder(result.data || []);
-    updateFabricaTabCount(projects, orderIdForTabCount);
+    updateFabricaTabCount(projects, orderId);
 
     if (!projects.length) {
-        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Nenhum projeto em produção ou montagem interna.</p>';
+        list.innerHTML = orderId
+            ? '<p class="text-xs text-slate-400 text-center py-8">Nenhum projeto deste pedido em produção ou montagem interna.</p>'
+            : '<p class="text-xs text-slate-400 text-center py-8">Nenhum projeto em produção ou montagem interna.</p>';
         return;
     }
 
-    const groups = groupFabricaProjectsByOrder(projects);
     list.innerHTML = '';
-    groups.forEach(group => {
-        list.appendChild(renderFabricaOrderGroup(group));
-    });
+
+    if (orderId) {
+        [...projects]
+            .sort(sortFabricaProjects)
+            .forEach(project => {
+                list.appendChild(renderFabricaProjectCard(project));
+            });
+    } else {
+        groupFabricaProjectsByOrder(projects).forEach(group => {
+            list.appendChild(renderFabricaOrderGroup(group));
+        });
+    }
+
     updateFabricaSaveFooterVisibility(projects);
 }
 

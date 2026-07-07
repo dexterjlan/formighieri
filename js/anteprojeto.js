@@ -632,6 +632,8 @@ function renderObservationItem(observation = {}, options = {}) {
             placeholder="Resposta do consultor" ${disabledConsultor}></textarea>
     `;
     consultorWrap.querySelector('.anteprojeto-observation-response').value = data.consultorResponse || '';
+    consultorWrap.querySelector('.anteprojeto-observation-checked')
+        ?.addEventListener('change', refreshAnteprojetoModalConfirmButton);
     item.appendChild(consultorWrap);
 
     return item;
@@ -912,6 +914,39 @@ function setAnteprojetoModalFields(conference, options = {}) {
     }
 }
 
+function areAllAnteprojetoModalObservationsChecked() {
+    const checkboxes = document.querySelectorAll(
+        '#anteprojeto-projects-structure .anteprojeto-observation-checked:not(:disabled)'
+    );
+    if (!checkboxes.length) return false;
+    return [...checkboxes].every(checkbox => checkbox.checked);
+}
+
+function refreshAnteprojetoModalConfirmButton() {
+    const btn = document.getElementById('btn-anteprojeto-modal-confirm');
+    if (!btn) return;
+
+    const allChecked = areAllAnteprojetoModalObservationsChecked();
+    btn.disabled = !allChecked;
+    btn.classList.toggle('bg-emerald-700', allChecked);
+    btn.classList.toggle('text-white', allChecked);
+    btn.classList.toggle('hover:bg-emerald-800', allChecked);
+    btn.classList.toggle('bg-slate-200', !allChecked);
+    btn.classList.toggle('text-slate-500', !allChecked);
+    btn.classList.toggle('cursor-not-allowed', !allChecked);
+}
+
+function updateAnteprojetoModalConfirmControls(conference) {
+    const wrap = document.getElementById('anteprojeto-modal-confirm-wrap');
+    if (!wrap) return;
+
+    const show = Boolean(conference && canConfirmAnteprojetoConference(conference));
+    wrap.classList.toggle('hidden', !show);
+    if (show) {
+        refreshAnteprojetoModalConfirmButton();
+    }
+}
+
 function updateAnteprojetoModalApproveControls(conference) {
     const wrap = document.getElementById('anteprojeto-modal-approve-wrap');
     const btn = document.getElementById('btn-anteprojeto-modal-approve');
@@ -989,6 +1024,7 @@ async function openAnteprojetoConferenceFromPendencias(conferenceId) {
     }
 
     await openAnteprojetoModal(conference.id);
+    updateAnteprojetoModalConfirmControls(conference);
     updateAnteprojetoModalApproveControls(conference);
 }
 
@@ -1048,6 +1084,7 @@ async function openAnteprojetoModal(conferenceId = null) {
 
     setAnteprojetoModalFields(conference, { readOnly, canEditStructure, canExtendStructure, canEditConsultor });
     submitBtn.textContent = conference ? 'Salvar Conferência' : 'Criar Conferência';
+    updateAnteprojetoModalConfirmControls(conference);
     updateAnteprojetoModalApproveControls(conference);
     toggleModal('anteprojeto-modal', true);
 }
@@ -1056,6 +1093,7 @@ window.openAnteprojetoModal = openAnteprojetoModal;
 
 function closeAnteprojetoModal() {
     editingAnteprojetoConferenceId = null;
+    updateAnteprojetoModalConfirmControls(null);
     updateAnteprojetoModalApproveControls(null);
     toggleModal('anteprojeto-modal', false);
 }
@@ -1533,7 +1571,85 @@ async function confirmAnteprojetoConference(conferenceId) {
     }
 }
 
+async function confirmAnteprojetoConferenceFromModal() {
+    const conferenceId = editingAnteprojetoConferenceId;
+    if (!conferenceId) return;
+
+    const conference = anteprojetoConferencesCache.find(c => c.id === conferenceId);
+    if (!conference || !canConfirmAnteprojetoConference(conference)) return;
+
+    if (!areAllAnteprojetoModalObservationsChecked()) {
+        alert('Marque todas as observações como conferidas antes de confirmar.');
+        return;
+    }
+
+    try {
+        const selectedProjects = collectSelectedProjectsFromDom();
+        const modules = collectAnteprojetoModulesFromDom();
+        await persistAnteprojetoConferenceData(
+            conferenceId,
+            selectedProjects,
+            modules,
+            { canEditStructure: false, canExtendStructure: false, canEditConsultor: true }
+        );
+
+        const refreshed = await fetchAnteprojetoConferenceById(conferenceId);
+        if (refreshed) {
+            const cacheIndex = anteprojetoConferencesCache.findIndex(item => Number(item.id) === Number(conferenceId));
+            if (cacheIndex >= 0) {
+                anteprojetoConferencesCache[cacheIndex] = refreshed;
+            } else {
+                anteprojetoConferencesCache.push(refreshed);
+            }
+        }
+
+        closeAnteprojetoModal();
+        await confirmAnteprojetoConference(conferenceId);
+    } catch (error) {
+        alert('Erro ao confirmar conferência: ' + error.message);
+    }
+}
+
+async function confirmAnteprojetoConferenceFromPendencias(conferenceId) {
+    const conference = await fetchAnteprojetoConferenceById(conferenceId);
+    if (!conference) {
+        alert('Conferência não encontrada.');
+        return;
+    }
+
+    activeOrderId = conference.orderId;
+    const cacheIndex = anteprojetoConferencesCache.findIndex(item => Number(item.id) === Number(conferenceId));
+    if (cacheIndex >= 0) {
+        anteprojetoConferencesCache[cacheIndex] = conference;
+    } else {
+        anteprojetoConferencesCache = [...anteprojetoConferencesCache, conference];
+    }
+
+    await confirmAnteprojetoConference(conferenceId);
+}
+
+async function approveAnteprojetoConferenceFromPendencias(conferenceId) {
+    const conference = await fetchAnteprojetoConferenceById(conferenceId);
+    if (!conference) {
+        alert('Conferência não encontrada.');
+        return;
+    }
+
+    activeOrderId = conference.orderId;
+    const cacheIndex = anteprojetoConferencesCache.findIndex(item => Number(item.id) === Number(conferenceId));
+    if (cacheIndex >= 0) {
+        anteprojetoConferencesCache[cacheIndex] = conference;
+    } else {
+        anteprojetoConferencesCache = [...anteprojetoConferencesCache, conference];
+    }
+
+    await approveAnteprojetoConference(conferenceId);
+}
+
 window.confirmAnteprojetoConference = confirmAnteprojetoConference;
+window.confirmAnteprojetoConferenceFromModal = confirmAnteprojetoConferenceFromModal;
+window.confirmAnteprojetoConferenceFromPendencias = confirmAnteprojetoConferenceFromPendencias;
+window.fetchAnteprojetoConferenceById = fetchAnteprojetoConferenceById;
 
 async function approveAnteprojetoConference(conferenceId) {
     const conference = anteprojetoConferencesCache.find(c => c.id === conferenceId);
@@ -1594,6 +1710,7 @@ async function approveAnteprojetoConference(conferenceId) {
 }
 
 window.approveAnteprojetoConference = approveAnteprojetoConference;
+window.approveAnteprojetoConferenceFromPendencias = approveAnteprojetoConferenceFromPendencias;
 
 function bindAnteprojetoTreeToggles(root) {
     root.querySelectorAll('.anteprojeto-tree-node').forEach(node => {
@@ -1946,9 +2063,17 @@ function updateAnteprojetoActionButtons() {
 
 function bindAnteprojetoEvents() {
     document.getElementById('btn-new-anteprojeto')?.addEventListener('click', () => openAnteprojetoModal());
+    document.getElementById('btn-anteprojeto-modal-confirm')?.addEventListener('click', () => {
+        confirmAnteprojetoConferenceFromModal();
+    });
     document.getElementById('btn-anteprojeto-modal-approve')?.addEventListener('click', () => {
         if (!editingAnteprojetoConferenceId) return;
         approveAnteprojetoConference(editingAnteprojetoConferenceId);
+    });
+    document.getElementById('anteprojeto-projects-structure')?.addEventListener('change', event => {
+        if (event.target?.classList?.contains('anteprojeto-observation-checked')) {
+            refreshAnteprojetoModalConfirmButton();
+        }
     });
     document.getElementById('btn-add-anteprojeto-project')?.addEventListener('click', () => {
         const conference = editingAnteprojetoConferenceId

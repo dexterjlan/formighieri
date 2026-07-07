@@ -9,7 +9,7 @@ const USER_FLAG_CONFIG = [
         id: 'gestor-comercial',
         label: 'Gestor comercial',
         hint: 'Aprovações comerciais',
-        appliesTo: role => role === 'Admin'
+        appliesTo: role => role === 'Admin' || role === 'Consultor'
     },
     {
         id: 'gestor-projetos',
@@ -65,6 +65,7 @@ function getUserCardStyle(role) {
 
 function buildUserRoleBadges(u) {
     const isAdminUser = u.role === 'Admin';
+    const isConsultorUser = u.role === 'Consultor';
     const isProjetistaUser = u.role === 'Projetista';
     const isMarceneiroUser = u.role === 'Marceneiro';
     const canHaveGestorProjetos = isAdminUser || isProjetistaUser;
@@ -79,7 +80,7 @@ function buildUserRoleBadges(u) {
     }
 
     if (isProjetistaUser && u.conferente) badges.push('<span class="text-[10px] bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-100">Conferente</span>');
-    if (isAdminUser && u.gestorComercial) badges.push('<span class="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-100">Gestor comercial</span>');
+    if ((isAdminUser || isConsultorUser) && u.gestorComercial) badges.push('<span class="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-100">Gestor comercial</span>');
     if (canHaveGestorProjetos && u.gestorProjetos) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">Gestor de projetos</span>');
     if (isProjetistaUser && u.ppcp) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">PPCP</span>');
     if (isMarceneiroUser && u.gestorFabrica) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
@@ -368,7 +369,7 @@ async function saveUserRole(userId) {
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const role = select?.value;
     const conferente = role === 'Projetista' && Boolean(conferenteCheck?.checked);
-    const gestorComercial = role === 'Admin' && Boolean(gestorComercialCheck?.checked);
+    const gestorComercial = (role === 'Admin' || role === 'Consultor') && Boolean(gestorComercialCheck?.checked);
     const gestorProjetos = (role === 'Admin' || role === 'Projetista') && Boolean(gestorProjetosCheck?.checked);
     const ppcp = role === 'Projetista' && Boolean(ppcpCheck?.checked);
     const gestorFabrica = role === 'Marceneiro' && Boolean(gestorFabricaCheck?.checked);

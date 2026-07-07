@@ -196,7 +196,6 @@ async function loadOrderProjects(orderId) {
             div.innerHTML = `
                 <div class="min-w-0">
                     <span class="text-xs font-semibold text-slate-800 truncate block" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
-                    ${p.saleValue != null ? `<span class="text-[10px] text-slate-500">${formatSaleValue(p.saleValue)}</span>` : ''}
                 </div>
                 <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-violet-100 text-violet-800 whitespace-nowrap truncate" title="${escapeHtml(p.environmentType?.name || '-')}">${escapeHtml(p.environmentType?.name || '-')}</span>
                 <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>

@@ -32,10 +32,9 @@ function renderGestaoKanbanCard(order, projects) {
         .slice()
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
         .map(project => {
-            const codePrefix = project.projectCode ? `${escapeHtml(project.projectCode)} — ` : '';
             return `
                 <li class="flex items-start justify-between gap-2">
-                    <span class="text-[11px] text-slate-700 leading-snug min-w-0">${codePrefix}${escapeHtml(project.name || 'Projeto')}</span>
+                    <span class="text-[11px] text-slate-700 leading-snug min-w-0">${escapeHtml(project.name || 'Projeto')}</span>
                     <button type="button"
                         class="gestao-kanban-history-btn shrink-0 text-[10px] bg-white border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-medium hover:bg-indigo-50"
                         data-order-project-id="${project.id}">

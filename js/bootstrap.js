@@ -67,7 +67,7 @@ async function bootstrap() {
         mount.innerHTML = htmlParts.join('\n');
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260860`);
+            await loadScript(`${src}?v=20260882`);
         }
 
         initAppEvents();

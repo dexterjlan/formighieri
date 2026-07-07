@@ -4,6 +4,7 @@ const PENDENCIAS_STATUS_EM_REVISAO = 'Em Revisão';
 const PENDENCIAS_STATUS_VENDIDO = 'Vendido';
 const PENDENCIAS_STATUS_AGUARDANDO_OBRA = 'Aguardando Obra';
 const PENDENCIAS_STATUS_AGUARDANDO_MEDICAO = 'Aguardando Medição';
+const PENDENCIAS_STATUS_PLANTA_LEVANTADA = 'Planta Levantada';
 const PENDENCIAS_STATUS_CONFERENCIA_REALIZADA = 'Conferência Realizada';
 const PENDENCIAS_STATUS_CONFERENCIA_ENVIADA = 'Conferência Enviada';
 const PENDENCIAS_STATUS_AGUARDANDO_APROVACAO = 'Aguardando Aprovação';
@@ -111,8 +112,14 @@ function canSeePendenciasConsultorMenu() {
         || isGestorComercial();
 }
 
+function canSeePendenciasProjetistaMedicaoConferenciaMenus() {
+    return canSeeAllPendenciasMenus() || isConferente() || isGestorComercial();
+}
+
 function canSeePendenciasProjetistaMenu() {
-    return canSeeAllPendenciasMenus() || currentUser?.role === 'Projetista';
+    return canSeeAllPendenciasMenus()
+        || currentUser?.role === 'Projetista'
+        || canSeePendenciasProjetistaMedicaoConferenciaMenus();
 }
 
 function canSeePendenciasGestorComercialMenu() {
@@ -134,16 +141,30 @@ function canActPendenciasPpcpStatus() {
 }
 
 function getPendenciasProjetistaMenuItems() {
-    const items = [
-        { id: 'aguardando-projeto-tecnico', label: 'Aguardando Projeto Técnico' },
-        { id: 'em-revisao', label: 'Em Revisão' },
-        { id: 'requisicao', label: 'Requisição' }
-    ];
+    const items = [];
+    const showProjetistaWork = canSeeAllPendenciasMenus() || currentUser?.role === 'Projetista';
 
-    if (canSeePendenciasPpcpItems()) {
+    if (showProjetistaWork) {
         items.push(
-            { id: 'aguardando-ppcp', label: 'Aguardando PPCP' },
-            { id: 'implantacao', label: 'Implantação' }
+            { id: 'aguardando-projeto-tecnico', label: 'Aguardando Projeto Técnico' },
+            { id: 'projeto-tecnico', label: 'Projeto Técnico' },
+            { id: 'em-revisao', label: 'Em Revisão' },
+            { id: 'requisicao', label: 'Requisição' }
+        );
+
+        if (canSeePendenciasPpcpItems()) {
+            items.push(
+                { id: 'aguardando-ppcp', label: 'Aguardando PPCP' },
+                { id: 'implantacao', label: 'Implantação' }
+            );
+        }
+    }
+
+    if (canSeePendenciasProjetistaMedicaoConferenciaMenus()) {
+        items.push(
+            { id: 'aguardando-medicao', label: 'Aguardando Medição' },
+            { id: 'aguardando-planta', label: 'Aguardando Planta' },
+            { id: 'conferencias', label: 'Conferências' }
         );
     }
 
@@ -430,6 +451,7 @@ function getPendenciasProjectStatusBadgeClass(statusName) {
     if (statusName === PENDENCIAS_STATUS_VENDIDO) return 'bg-emerald-100 text-emerald-800';
     if (statusName === PENDENCIAS_STATUS_AGUARDANDO_OBRA) return 'bg-orange-100 text-orange-800';
     if (statusName === PENDENCIAS_STATUS_AGUARDANDO_MEDICAO) return 'bg-cyan-100 text-cyan-800';
+    if (statusName === PENDENCIAS_STATUS_PLANTA_LEVANTADA) return 'bg-lime-100 text-lime-800';
     if (statusName === PENDENCIAS_STATUS_CONFERENCIA_REALIZADA) return 'bg-teal-100 text-teal-800';
     if (statusName === PENDENCIAS_STATUS_CONFERENCIA_ENVIADA) return 'bg-sky-100 text-sky-800';
     if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PPCP) return 'bg-fuchsia-100 text-fuchsia-800';
@@ -465,6 +487,11 @@ function loadPendenciasContent() {
         return;
     }
 
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'projeto-tecnico') {
+        loadPendenciasProjetoTecnico();
+        return;
+    }
+
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'em-revisao') {
         loadPendenciasEmRevisao();
         return;
@@ -482,6 +509,21 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'implantacao') {
         loadPendenciasImplantacao();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'aguardando-medicao') {
+        loadPendenciasProjetistaAguardandoMedicao();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'aguardando-planta') {
+        loadPendenciasProjetistaAguardandoPlanta();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'conferencias') {
+        loadPendenciasProjetistaConferencias();
         return;
     }
 

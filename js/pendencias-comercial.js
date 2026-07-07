@@ -108,36 +108,58 @@ async function fetchPendenciasAprovarConferenciaProjects() {
         projects.map(project => project.id),
         'Confirmada'
     );
+    const conferenceIds = [...new Set(
+        Object.values(conferenceByProjectId).map(conference => conference?.id).filter(Boolean)
+    )];
+    const conferenceDetailsById = await fetchPendenciasConferenceDetailsByIds(conferenceIds);
 
-    return { error: null, projects, conferenceByProjectId };
+    return { error: null, projects, conferenceByProjectId, conferenceDetailsById };
 }
 
-function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId) {
+function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId, conferenceDetailsById) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
+    const conferenceGroups = groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId);
     const subtitle = isGestorComercial()
-        ? 'Projetos com conferência realizada aguardando aprovação comercial.'
-        : 'Visualização dos projetos com conferência realizada aguardando aprovação.';
+        ? 'Conferências confirmadas aguardando aprovação comercial.'
+        : 'Visualização das conferências confirmadas aguardando aprovação.';
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const conference = conferenceByProjectId[project.id];
-        const canView = Boolean(conference);
+    const rows = conferenceGroups.map(group => {
+        const orderCode = group.order?.orderCode || '—';
+        const clientName = group.order?.clientName || '—';
+        const projectSummary = getPendenciasConsultorConferenciaProjectSummary(group.projects);
+        const deliveryDates = group.projects
+            .map(project => project.deliveryDate)
+            .filter(Boolean)
+            .sort();
+        const deliveryDate = formatPendenciasDeliveryDate(deliveryDates[0]);
+        const conference = group.conference;
+        const canView = Boolean(conference?.id);
+        const fullConference = conference?.id ? conferenceDetailsById?.[conference.id] || null : null;
+        const canApprove = fullConference
+            && typeof canApproveAnteprojetoConference === 'function'
+            && canApproveAnteprojetoConference(fullConference);
+        const actionButtons = [];
 
-        const actionCell = canView
-            ? `<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`
+        if (canView) {
+            actionButtons.push(`<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
+                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`);
+        }
+        if (canApprove) {
+            actionButtons.push(`<button type="button" onclick="approveAnteprojetoConferenceFromPendencias(${conference.id})"
+                class="text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium">Aprovar</button>`);
+        }
+
+        const actionCell = actionButtons.length
+            ? `<div class="flex flex-wrap justify-end gap-1">${actionButtons.join('')}</div>`
             : '<span class="text-xs text-slate-300">—</span>';
 
         return `
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
+                <td class="p-3 text-xs text-slate-500">${escapeHtml(projectSummary)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
             </tr>
@@ -156,22 +178,22 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId)
                     Atualizar
                 </button>
             </div>
-            ${projects.length
+            ${conferenceGroups.length
                 ? `<div class="overflow-x-auto">
                     <table class="w-full text-sm min-w-[820px]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
+                                <th class="text-left p-3 font-semibold">Projetos</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-36">Ações</th>
+                                <th class="text-right p-3 font-semibold w-56">Ações</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
                     </table>
                 </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto com conferência realizada aguardando aprovação.</p>`}
+                : `<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhuma conferência confirmada aguardando aprovação.</p>`}
         </div>
     `;
 
@@ -190,14 +212,15 @@ async function loadPendenciasAprovarConferencia() {
         return;
     }
 
-    const { error, projects, conferenceByProjectId } = await fetchPendenciasAprovarConferenciaProjects();
+    const { error, projects, conferenceByProjectId, conferenceDetailsById } =
+        await fetchPendenciasAprovarConferenciaProjects();
 
     if (error) {
         renderPendenciasPlaceholder('Aprovar Conferência', `Erro ao carregar: ${error.message}`);
         return;
     }
 
-    renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId);
+    renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId, conferenceDetailsById);
 }
 
 function isPendenciasConsultorConferenciaOverviewMode() {
@@ -239,36 +262,130 @@ async function fetchPendenciasConsultorConferenciaProjects() {
         projects.map(project => project.id),
         'Em andamento'
     );
+    const conferenceIds = [...new Set(
+        Object.values(conferenceByProjectId).map(conference => conference?.id).filter(Boolean)
+    )];
+    const conferenceDetailsById = await fetchPendenciasConferenceDetailsByIds(conferenceIds);
 
-    return { error: null, overviewMode, projects, conferenceByProjectId };
+    return { error: null, overviewMode, projects, conferenceByProjectId, conferenceDetailsById };
 }
 
-function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectId, overviewMode) {
+function groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId) {
+    const groupsByKey = new Map();
+
+    (projects || []).forEach(project => {
+        const conference = conferenceByProjectId[project.id];
+        const groupKey = conference?.id ? `conference-${conference.id}` : `project-${project.id}`;
+
+        if (!groupsByKey.has(groupKey)) {
+            groupsByKey.set(groupKey, {
+                conference: conference || null,
+                order: project.order || {},
+                projects: []
+            });
+        }
+
+        groupsByKey.get(groupKey).projects.push(project);
+    });
+
+    return [...groupsByKey.values()]
+        .map(group => ({
+            ...group,
+            projects: sortPendenciasByDeliveryDate(group.projects)
+        }))
+        .sort((a, b) => {
+            const orderA = a.order?.orderCode || '';
+            const orderB = b.order?.orderCode || '';
+            const orderCompare = String(orderA).localeCompare(String(orderB), 'pt-BR', { numeric: true });
+            if (orderCompare !== 0) return orderCompare;
+
+            const dateA = a.conference?.createdAt ? new Date(a.conference.createdAt).getTime() : 0;
+            const dateB = b.conference?.createdAt ? new Date(b.conference.createdAt).getTime() : 0;
+            return dateB - dateA;
+        });
+}
+
+function getPendenciasConsultorConferenciaProjectSummary(projects) {
+    const labelFn = typeof getPendenciasProjectDetailLabel === 'function'
+        ? getPendenciasProjectDetailLabel
+        : project => project?.name || 'Projeto';
+    const separator = typeof PENDENCIAS_DETAIL_SEPARATOR === 'string'
+        ? PENDENCIAS_DETAIL_SEPARATOR
+        : ' | ';
+
+    return (projects || []).map(labelFn).join(separator);
+}
+
+function isPendenciasConferenceAllConsultorChecked(conference) {
+    if (!conference || typeof getConferenceModuleObservations !== 'function') return false;
+    const moduleObservations = getConferenceModuleObservations(conference);
+    return moduleObservations.length > 0
+        && moduleObservations.every(obs => obs.consultorChecked);
+}
+
+async function fetchPendenciasConferenceDetailsByIds(conferenceIds) {
+    const detailsById = {};
+    if (!conferenceIds.length || typeof fetchAnteprojetoConferenceById !== 'function') {
+        return detailsById;
+    }
+
+    const uniqueIds = [...new Set(conferenceIds.filter(Boolean))];
+    await Promise.all(uniqueIds.map(async conferenceId => {
+        const conference = await fetchAnteprojetoConferenceById(conferenceId);
+        if (conference) {
+            detailsById[conferenceId] = conference;
+        }
+    }));
+
+    return detailsById;
+}
+
+function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectId, conferenceDetailsById, overviewMode) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
+    const conferenceGroups = groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId);
     const subtitle = overviewMode
-        ? 'Todos os projetos com conferência enviada aguardando retorno do consultor.'
-        : 'Projetos dos seus pedidos com conferência enviada.';
+        ? 'Conferências enviadas aguardando retorno do consultor.'
+        : 'Conferências dos seus pedidos aguardando retorno.';
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const conference = conferenceByProjectId[project.id];
-        const canView = Boolean(conference);
+    const rows = conferenceGroups.map(group => {
+        const orderCode = group.order?.orderCode || '—';
+        const clientName = group.order?.clientName || '—';
+        const projectSummary = getPendenciasConsultorConferenciaProjectSummary(group.projects);
+        const deliveryDates = group.projects
+            .map(project => project.deliveryDate)
+            .filter(Boolean)
+            .sort();
+        const deliveryDate = formatPendenciasDeliveryDate(deliveryDates[0]);
+        const conference = group.conference;
+        const canView = Boolean(conference?.id);
+        const fullConference = conference?.id ? conferenceDetailsById?.[conference.id] || null : null;
+        const canConfirm = fullConference
+            && typeof canConfirmAnteprojetoConference === 'function'
+            && canConfirmAnteprojetoConference(fullConference);
+        const allChecked = isPendenciasConferenceAllConsultorChecked(fullConference);
+        const actionButtons = [];
 
-        const actionCell = canView
-            ? `<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`
+        if (canView) {
+            actionButtons.push(`<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
+                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`);
+        }
+        if (canConfirm) {
+            actionButtons.push(`<button type="button" onclick="confirmAnteprojetoConferenceFromPendencias(${conference.id})"
+                class="text-xs px-2.5 py-1 rounded-lg font-medium ${allChecked ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}"
+                ${allChecked ? '' : 'disabled'}>Confirmar Conferência</button>`);
+        }
+
+        const actionCell = actionButtons.length
+            ? `<div class="flex flex-wrap justify-end gap-1">${actionButtons.join('')}</div>`
             : '<span class="text-xs text-slate-300">—</span>';
 
         return `
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
+                <td class="p-3 text-xs text-slate-500">${escapeHtml(projectSummary)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
             </tr>
@@ -276,8 +393,8 @@ function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectI
     }).join('');
 
     const emptyMessage = overviewMode
-        ? 'Nenhum projeto com conferência enviada.'
-        : 'Nenhum projeto com conferência enviada nos seus pedidos.';
+        ? 'Nenhuma conferência enviada aguardando retorno.'
+        : 'Nenhuma conferência enviada nos seus pedidos.';
 
     content.innerHTML = `
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -291,16 +408,16 @@ function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectI
                     Atualizar
                 </button>
             </div>
-            ${projects.length
+            ${conferenceGroups.length
                 ? `<div class="overflow-x-auto">
                     <table class="w-full text-sm min-w-[820px]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
+                                <th class="text-left p-3 font-semibold">Projetos</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-36">Ações</th>
+                                <th class="text-right p-3 font-semibold w-56">Ações</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
@@ -325,7 +442,7 @@ async function loadPendenciasConsultorConferencia() {
         return;
     }
 
-    const { error, overviewMode, projects, conferenceByProjectId } =
+    const { error, overviewMode, projects, conferenceByProjectId, conferenceDetailsById } =
         await fetchPendenciasConsultorConferenciaProjects();
 
     if (error) {
@@ -333,7 +450,7 @@ async function loadPendenciasConsultorConferencia() {
         return;
     }
 
-    renderPendenciasConsultorConferenciaList(projects, conferenceByProjectId, overviewMode);
+    renderPendenciasConsultorConferenciaList(projects, conferenceByProjectId, conferenceDetailsById, overviewMode);
 }
 
 function enrichPendenciasApprovalWithProject(approval, project) {
@@ -405,7 +522,9 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
         const clientName = project.order?.clientName || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
+        const projectLabel = typeof getPendenciasProjectDetailLabel === 'function'
+            ? getPendenciasProjectDetailLabel(project)
+            : (project?.name || 'Projeto');
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const approval = approvalsByProject[project.id];
         const canApprove = approval

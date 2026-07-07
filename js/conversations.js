@@ -1,3 +1,5 @@
+let convOrderProjectsCache = [];
+
 async function loadProjetistas() {
     const select = document.getElementById("conv-designer");
     select.disabled = false;
@@ -65,6 +67,7 @@ async function loadConvOrderProjects(selectedId) {
     if (!select) return;
 
     const projects = activeOrderId ? await fetchOrderProjectsForOrder(activeOrderId) : [];
+    convOrderProjectsCache = projects;
 
     select.innerHTML = '<option value="">Nenhum</option>';
 
@@ -88,6 +91,64 @@ async function loadConvOrderProjects(selectedId) {
 function getConvOrderProjectIdValue() {
     const value = document.getElementById('conv-order-project')?.value;
     return value ? Number(value) : null;
+}
+
+function getConvOrderProjectById(projectId) {
+    if (!projectId) return null;
+    return convOrderProjectsCache.find(project => Number(project.id) === Number(projectId)) || null;
+}
+
+function shouldLockConvDesignerFromProject() {
+    if (editingConversationId) return false;
+    if (currentUser?.role === 'Projetista') return false;
+    if (currentUser?.role === 'Consultor') return true;
+    if (currentUser?.role === 'Admin') {
+        return document.getElementById('conv-profile')?.value === 'Consultor';
+    }
+    return false;
+}
+
+async function ensureDesignerInConvSelect(designerId) {
+    const select = document.getElementById('conv-designer');
+    if (!select || !designerId) return;
+
+    const exists = [...select.options].some(option => Number(option.value) === Number(designerId));
+    if (exists) return;
+
+    const { data: user } = await supabaseClient
+        .from('appUsers')
+        .select('id, name')
+        .eq('id', designerId)
+        .maybeSingle();
+
+    if (user) {
+        const option = document.createElement('option');
+        option.value = String(user.id);
+        option.textContent = user.name;
+        select.appendChild(option);
+    }
+}
+
+async function applyConvDesignerFromSelectedProject() {
+    const designerSelect = document.getElementById('conv-designer');
+    if (!designerSelect) return;
+
+    if (!shouldLockConvDesignerFromProject()) {
+        setConvFieldDisabled(designerSelect, false);
+        return;
+    }
+
+    const project = getConvOrderProjectById(getConvOrderProjectIdValue());
+    const projectDesignerId = project?.designerId ? Number(project.designerId) : null;
+
+    if (!projectDesignerId) {
+        setConvFieldDisabled(designerSelect, false);
+        return;
+    }
+
+    await ensureDesignerInConvSelect(projectDesignerId);
+    designerSelect.value = String(projectDesignerId);
+    setConvFieldDisabled(designerSelect, true);
 }
 
 async function openConvModal() {
@@ -172,7 +233,13 @@ function setupConvModalFieldLocks(conv) {
     const respondOnly = isConvRespondOnlyMode(conv);
 
     setConvFieldDisabled(document.getElementById('conv-order-project'), isEdit);
-    setConvFieldDisabled(document.getElementById('conv-designer'), isEdit || currentUser?.role === 'Projetista');
+
+    if (isEdit || currentUser?.role === 'Projetista') {
+        setConvFieldDisabled(document.getElementById('conv-designer'), true);
+    } else {
+        applyConvDesignerFromSelectedProject();
+    }
+
     setConvFieldDisabled(document.getElementById('conv-request'), respondOnly);
 
     const submitBtn = document.getElementById('conv-form-submit');
@@ -600,6 +667,10 @@ function setConvFormLoading(isLoading, message = 'Salvando requisição...') {
 }
 
 function bindConversationEvents() {
+    document.getElementById('conv-order-project')?.addEventListener('change', () => {
+        applyConvDesignerFromSelectedProject();
+    });
+
     document.getElementById("conv-form").addEventListener("submit", async function (e) {
         e.preventDefault();
 

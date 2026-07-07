@@ -254,10 +254,11 @@ function renderPendenciasPpcpProjectList(config) {
     if (!content) return;
 
     const canAct = canActPendenciasPpcpStatus();
+    const labelFn = config.projectLabelFn || getPendenciasProjectLabel;
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
         const clientName = project.order?.clientName || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
+        const projectLabel = labelFn(project);
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const statusName = getPendenciasProjectStatusName(project);
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
@@ -451,7 +452,10 @@ async function loadPendenciasAguardandoPpcp() {
         targetStatusName: PENDENCIAS_STATUS_IMPLANTACAO,
         actionLabel: 'Implantar',
         actionButtonClass: 'bg-violet-100 text-violet-800 hover:bg-violet-200',
-        confirmMessage: 'Enviar este projeto para implantação?'
+        confirmMessage: 'Enviar este projeto para implantação?',
+        projectLabelFn: project => typeof getPendenciasProjectDetailLabel === 'function'
+            ? getPendenciasProjectDetailLabel(project)
+            : (project?.name || 'Projeto')
     });
 }
 
@@ -488,7 +492,10 @@ async function loadPendenciasImplantacao() {
         targetStatusName: PENDENCIAS_STATUS_EM_PRODUCAO,
         actionLabel: 'Iniciar produção',
         actionButtonClass: 'bg-teal-100 text-teal-800 hover:bg-teal-200',
-        confirmMessage: 'Finalizar implantação e iniciar produção deste projeto?'
+        confirmMessage: 'Finalizar implantação e iniciar produção deste projeto?',
+        projectLabelFn: project => typeof getPendenciasProjectDetailLabel === 'function'
+            ? getPendenciasProjectDetailLabel(project)
+            : (project?.name || 'Projeto')
     });
 }
 
@@ -573,6 +580,12 @@ function getPendenciasFabricaMarceneiroName(project) {
     return project.marceneiro?.name || '—';
 }
 
+function getPendenciasFabricaProjectLabel(project) {
+    return typeof getPendenciasProjectDetailLabel === 'function'
+        ? getPendenciasProjectDetailLabel(project)
+        : (project?.name || 'Projeto');
+}
+
 function renderPendenciasAguardandoMontagemInternaList(projects) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
@@ -586,7 +599,7 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
         const clientName = project.order?.clientName || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
+        const projectLabel = getPendenciasFabricaProjectLabel(project);
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const inicioValue = project.inicioMontagemInterna
             ? String(project.inicioMontagemInterna).split('T')[0]
@@ -676,7 +689,7 @@ function renderPendenciasEmMontagemList(projects) {
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
         const clientName = project.order?.clientName || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
+        const projectLabel = getPendenciasFabricaProjectLabel(project);
         const marceneiroName = getPendenciasFabricaMarceneiroName(project);
         const inicioDisplay = formatPendenciasFabricaDisplayDate(project.inicioMontagemInterna);
         const fimValue = project.fimMontagemInterna

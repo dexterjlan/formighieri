@@ -114,11 +114,13 @@ function enrichGestaoRelatorioProjectsWithMeasurementDates(projects, measurement
 
 function buildGestaoRelatorioStatusCounts(projects, statuses) {
     const activeStatuses = (statuses || [])
-        .filter(status => status.isActive !== false)
+        .filter(status => status.isActive !== false && status.name !== GESTAO_RELATORIO_EXPEDICAO_STATUS)
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || String(a.name).localeCompare(String(b.name), 'pt-BR'));
 
     const countByStatusId = {};
     (projects || []).forEach(project => {
+        if (getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS) return;
+
         const statusId = project.statusId;
         if (!statusId) return;
         countByStatusId[statusId] = (countByStatusId[statusId] || 0) + 1;
@@ -128,6 +130,7 @@ function buildGestaoRelatorioStatusCounts(projects, statuses) {
     const extras = {};
 
     (projects || []).forEach(project => {
+        if (getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS) return;
         if (!project.statusId || knownIds.has(project.statusId)) return;
         const name = getGestaoRelatorioStatusName(project) || 'Sem status';
         extras[name] = (extras[name] || 0) + 1;
@@ -146,7 +149,7 @@ function buildGestaoRelatorioStatusCounts(projects, statuses) {
         items.push({ statusId: null, name, sortOrder: 9999, count });
     });
 
-    return items.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, 'pt-BR'));
+    return items.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
 }
 
 function renderGestaoRelatorioPieChart(statusCounts) {
@@ -255,7 +258,20 @@ function filterGestaoRelatorioPedidosPendentesProjects(projects, statuses) {
     );
 }
 
-function groupGestaoRelatorioPedidosPendentes(projects) {
+function buildGestaoRelatorioOrderProjectCounts(projects) {
+    const counts = {};
+
+    (projects || []).forEach(project => {
+        const orderId = Number(project.orderId);
+        if (!orderId) return;
+        counts[orderId] = (counts[orderId] || 0) + 1;
+    });
+
+    return counts;
+}
+
+function groupGestaoRelatorioPedidosPendentes(projects, allProjects = projects) {
+    const orderProjectCounts = buildGestaoRelatorioOrderProjectCounts(allProjects);
     const monthGroups = {};
 
     projects.forEach(project => {
@@ -271,6 +287,7 @@ function groupGestaoRelatorioPedidosPendentes(projects) {
                 orderId,
                 order: project.order || {},
                 clientDeliveryDate: project.order?.clientDeliveryDate || null,
+                totalProjectCount: orderProjectCounts[orderId] || 0,
                 projects: []
             };
         }
@@ -335,6 +352,7 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project) {
 function renderGestaoRelatorioPedidosPendentesOrderGroup(orderGroup) {
     const orderCode = orderGroup.order?.orderCode || '—';
     const clientName = orderGroup.order?.clientName || '—';
+    const projectCount = orderGroup.totalProjectCount || orderGroup.projects.length;
     const orderDeliveryDate = typeof formatGestaoDate === 'function'
         ? formatGestaoDate(orderGroup.clientDeliveryDate)
         : (orderGroup.clientDeliveryDate || '—');
@@ -347,6 +365,7 @@ function renderGestaoRelatorioPedidosPendentesOrderGroup(orderGroup) {
                         aria-label="Expandir">▶</button>
                     <span class="text-xs font-mono font-bold text-slate-700">${escapeHtml(orderCode)}</span>
                     <span class="text-xs text-slate-700 truncate">${escapeHtml(clientName)}</span>
+                    <span class="text-[10px] text-slate-500 shrink-0">${projectCount} projeto${projectCount === 1 ? '' : 's'}</span>
                 </div>
                 <div class="text-right shrink-0">
                     <p class="text-[10px] text-slate-400 uppercase tracking-wide">Entrega pedido</p>
@@ -517,7 +536,7 @@ function renderGestaoRelatoriosPanel(projects, statuses) {
 
     const statusCounts = buildGestaoRelatorioStatusCounts(projects, statuses);
     const pedidosPendentesProjects = filterGestaoRelatorioPedidosPendentesProjects(projects, statuses);
-    const pedidosPendentesGroups = groupGestaoRelatorioPedidosPendentes(pedidosPendentesProjects);
+    const pedidosPendentesGroups = groupGestaoRelatorioPedidosPendentes(pedidosPendentesProjects, projects);
     const nextMonthLabel = formatGestaoRelatorioNextMonthLabel();
     const fechamentoProjects = projects.filter(project =>
         getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS

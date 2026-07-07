@@ -1,19 +1,23 @@
 const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     consultor: {
-        conferencia: 'Projetos com conferência enviada aguardando retorno do consultor.',
+        conferencia: 'Conferências enviadas aguardando retorno do consultor.',
         'aguardando-aprovacao': 'Projetos aguardando aprovação comercial.',
         requisicoes: 'Requisições aguardando resposta do consultor.'
     },
     projetista: {
         'aguardando-projeto-tecnico': 'Projetos aguardando projeto técnico (sem responsável ou associados a você).',
+        'projeto-tecnico': 'Projetos em projeto técnico associados a você.',
         'em-revisao': 'Projetos em revisão sob sua responsabilidade.',
         requisicao: 'Requisições aguardando sua resposta.',
         'aguardando-ppcp': 'Projetos aguardando implantação PPCP.',
-        implantacao: 'Projetos em implantação aguardando início da produção.'
+        implantacao: 'Projetos em implantação aguardando início da produção.',
+        'aguardando-medicao': 'Pedidos com projetos aguardando medição.',
+        'aguardando-planta': 'Medições com projetos aguardando planta levantada.',
+        conferencias: 'Pedidos com projetos em planta levantada aguardando conferência.'
     },
     'gestor-comercial': {
         'aguardando-medicao': 'Projetos vendidos ou aguardando obra.',
-        'aprovar-conferencia': 'Projetos com conferência realizada aguardando aprovação comercial.'
+        'aprovar-conferencia': 'Conferências confirmadas aguardando aprovação comercial.'
     },
     'gestor-projetos': {
         'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.'
@@ -28,8 +32,9 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
     try {
         switch (`${sectionId}:${itemId}`) {
             case 'consultor:conferencia': {
-                const { error, projects } = await fetchPendenciasConsultorConferenciaProjects();
-                return error ? null : projects.length;
+                const { error, projects, conferenceByProjectId } = await fetchPendenciasConsultorConferenciaProjects();
+                if (error) return null;
+                return groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId).length;
             }
             case 'consultor:aguardando-aprovacao': {
                 const { error, projects } = await fetchPendenciasConsultorAguardandoAprovacaoProjects();
@@ -42,6 +47,10 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             case 'projetista:aguardando-projeto-tecnico': {
                 const { error, unassigned, mine } = await fetchPendenciasAguardandoProjetoTecnico();
                 return error ? null : (unassigned.length + mine.length);
+            }
+            case 'projetista:projeto-tecnico': {
+                const { error, projects } = await fetchPendenciasProjetoTecnicoProjects();
+                return error ? null : projects.length;
             }
             case 'projetista:em-revisao': {
                 const { error, projects } = await fetchPendenciasEmRevisaoProjects();
@@ -59,13 +68,26 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_IMPLANTACAO);
                 return error ? null : projects.length;
             }
+            case 'projetista:aguardando-medicao': {
+                const { error, orders } = await fetchPendenciasProjetistaAguardandoMedicaoOrders();
+                return error ? null : orders.length;
+            }
+            case 'projetista:aguardando-planta': {
+                const { error, medicoes } = await fetchPendenciasAguardandoPlantaMedicoes();
+                return error ? null : medicoes.length;
+            }
+            case 'projetista:conferencias': {
+                const { error, orders } = await fetchPendenciasProjetistaConferenciasOrders();
+                return error ? null : orders.length;
+            }
             case 'gestor-comercial:aguardando-medicao': {
                 const { error, projects } = await fetchPendenciasAguardandoMedicaoProjects();
                 return error ? null : projects.length;
             }
             case 'gestor-comercial:aprovar-conferencia': {
-                const { error, projects } = await fetchPendenciasAprovarConferenciaProjects();
-                return error ? null : projects.length;
+                const { error, projects, conferenceByProjectId } = await fetchPendenciasAprovarConferenciaProjects();
+                if (error) return null;
+                return groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId).length;
             }
             case 'gestor-projetos:projetos-sem-projetistas': {
                 const { error, projects } = await fetchPendenciasAguardandoPtSemProjetista();

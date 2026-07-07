@@ -564,6 +564,114 @@ async function insertCommercialApprovals(payloads) {
     return { error, data: data || [] };
 }
 
+async function submitCommercialApprovalFromPendencias(projectId) {
+    const normalizedId = Number(projectId);
+    if (!normalizedId) return;
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('id, orderId, name, designerId, statusId, projectStatus:OrderProjectStatus(id, name)')
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, orderId, name, designerId, statusId')
+            .eq('id', normalizedId)
+            .maybeSingle();
+    }
+
+    if (result.error || !result.data) {
+        alert('Projeto não encontrado.');
+        return;
+    }
+
+    const project = await enrichCommercialApprovalProjectsWithStatus([result.data]);
+    const enrichedProject = project[0];
+    const statusName = getCommercialApprovalProjectStatusName(enrichedProject);
+
+    if (statusName !== COMMERCIAL_APPROVAL_PROJECT_STATUS) {
+        alert('Este projeto não está mais em Projeto Técnico.');
+        return;
+    }
+
+    if (currentUser?.role === 'Projetista'
+        && Number(enrichedProject.designerId) !== Number(currentUser.id)) {
+        alert('Sem permissão para enviar este projeto para aprovação.');
+        return;
+    }
+
+    if (!enrichedProject.designerId) {
+        alert('Projeto sem responsável cadastrado.');
+        return;
+    }
+
+    const openApprovals = await getOpenCommercialApprovalsForProject(
+        enrichedProject.orderId,
+        normalizedId
+    );
+    if (openApprovals.length) {
+        const status = getApprovalStatusLabel(normalizeCommercialApproval(openApprovals[0]).status);
+        alert(`Já existe solicitação de aprovação em aberto (${status}).`);
+        return;
+    }
+
+    if (!confirm(`Enviar o projeto "${enrichedProject.name}" para aprovação comercial?`)) {
+        return;
+    }
+
+    const openRequests = await getOpenRequestsForProjects(enrichedProject.orderId, [normalizedId]);
+    if (openRequests.length) {
+        const allOrderProjects = typeof fetchOrderProjectsForOrder === 'function'
+            ? await fetchOrderProjectsForOrder(enrichedProject.orderId)
+            : [enrichedProject];
+        const shouldContinue = confirmApprovalDespiteOpenRequests(openRequests, allOrderProjects);
+        if (!shouldContinue) return;
+    }
+
+    try {
+        const payload = {
+            orderId: enrichedProject.orderId,
+            orderProjectId: normalizedId,
+            projectName: enrichedProject.name,
+            designerId: enrichedProject.designerId,
+            approved: false,
+            approvedAt: null,
+            status: 'Aguardando Aprovação'
+        };
+
+        const { error, data: insertedApprovals } = await insertCommercialApprovals([payload]);
+        if (error) {
+            alert('Erro ao enviar para aprovação: ' + error.message);
+            return;
+        }
+
+        await applyAguardandoAprovacaoStatusToProjects([normalizedId]);
+
+        for (const inserted of insertedApprovals) {
+            await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
+        }
+
+        if (typeof loadPendenciasProjetoTecnico === 'function'
+            && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
+            await loadPendenciasProjetoTecnico();
+        }
+        if (Number(activeOrderId) === Number(enrichedProject.orderId)) {
+            if (typeof loadCommercialApprovals === 'function') {
+                await loadCommercialApprovals(activeOrderId);
+            }
+            if (typeof loadOrderProjects === 'function') {
+                await loadOrderProjects(activeOrderId);
+            }
+        }
+    } catch (error) {
+        alert('Erro ao enviar para aprovação: ' + error.message);
+    }
+}
+
+window.submitCommercialApprovalFromPendencias = submitCommercialApprovalFromPendencias;
+
 function updateCommercialApprovalButtonVisibility() {
     if (typeof updateOrderDetailActionButtons === 'function') {
         updateOrderDetailActionButtons();

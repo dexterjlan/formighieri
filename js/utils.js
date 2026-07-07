@@ -273,7 +273,7 @@ function isConferente(user = currentUser) {
 }
 
 function isGestorComercial(user = currentUser) {
-    return user?.role === 'Admin' && Boolean(user?.gestorComercial);
+    return (user?.role === 'Admin' || user?.role === 'Consultor') && Boolean(user?.gestorComercial);
 }
 
 function isGestorProjetos(user = currentUser) {
@@ -332,7 +332,7 @@ function canSeeOrderFabricaTab(user = currentUser) {
 }
 
 function canCreateAsAdminOrConferente() {
-    return isAdmin() || isConferente();
+    return isAdmin() || isConferente() || isGestorComercial();
 }
 
 function bindCollapsibleListCardToggles(root, options = {}) {
@@ -413,7 +413,12 @@ function setupConvProfileFields(isEdit, conv) {
         profileSelect.required = true;
         profileSelect.value = '';
         updateConvRequestLabel('');
-        profileSelect.onchange = () => updateConvRequestLabel(profileSelect.value);
+        profileSelect.onchange = () => {
+            updateConvRequestLabel(profileSelect.value);
+            if (typeof applyConvDesignerFromSelectedProject === 'function') {
+                applyConvDesignerFromSelectedProject();
+            }
+        };
         return;
     }
 
