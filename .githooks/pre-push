@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+"$ROOT/scripts/bump-version.sh"
+
+if git diff --quiet -- VERSION; then
+  exit 0
+fi
+
+git add VERSION
+git commit -m "chore: bump version to $(tr -d '[:space:]' < VERSION)"
+
+exit 0

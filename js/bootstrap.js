@@ -51,6 +51,23 @@ function loadScript(src) {
     });
 }
 
+async function loadAppVersion() {
+    const el = document.getElementById('app-version');
+    if (!el) return;
+
+    try {
+        const response = await fetch(`VERSION?${Date.now()}`);
+        if (!response.ok) return;
+
+        const version = (await response.text()).trim();
+        if (version) {
+            el.textContent = ` v${version}`;
+        }
+    } catch (error) {
+        console.warn('loadAppVersion:', error);
+    }
+}
+
 async function bootstrap() {
     const mount = document.getElementById('app-root');
 
@@ -65,9 +82,10 @@ async function bootstrap() {
         );
 
         mount.innerHTML = htmlParts.join('\n');
+        await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260882`);
+            await loadScript(`${src}?v=20260883`);
         }
 
         initAppEvents();
