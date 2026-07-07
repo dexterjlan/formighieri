@@ -1,8 +1,13 @@
 #!/bin/sh
 set -eu
 
+if [ "${FGP_SKIP_VERSION_BUMP:-}" = "1" ]; then
+  exit 0
+fi
+
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
+remote="${1:-origin}"
 
 "$ROOT/scripts/bump-version.sh"
 
@@ -11,6 +16,11 @@ if git diff --quiet -- VERSION; then
 fi
 
 git add VERSION
-git commit -m "chore: bump version to $(tr -d '[:space:]' < VERSION)"
+version="$(tr -d '[:space:]' < VERSION)"
+git commit -m "chore: bump version to ${version}"
 
-exit 0
+echo "Versão atualizada para ${version}." >&2
+FGP_SKIP_VERSION_BUMP=1 git push "$remote" HEAD
+
+# O push acima já publicou os commits com a nova versão.
+exit 1
