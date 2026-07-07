@@ -194,6 +194,10 @@
                                 class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
                                 Medição <span id="order-tab-medicao-count" class="font-normal opacity-80">(0)</span>
                             </button>
+                            <button type="button" id="order-tab-nomear"
+                                class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
+                                Nomear <span id="order-tab-nomear-count" class="font-normal opacity-80">(0)</span>
+                            </button>
                             <button type="button" id="order-tab-ppcp"
                                 class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
                                 PPCP <span id="order-tab-ppcp-count" class="font-normal opacity-80">(0)</span>
@@ -238,8 +242,12 @@
                             </div>
                             <div class="space-y-4" id="medicao-list"></div>
                         </div>
+                        <div id="order-tab-panel-nomear" class="hidden p-4">
+                            <p class="text-xs text-slate-500 mb-3">Confirme os projetos como nomeados para enviá-los ao PPCP. Somente o projetista responsável pode confirmar.</p>
+                            <div class="space-y-4" id="nomear-projects-list"></div>
+                        </div>
                         <div id="order-tab-panel-ppcp" class="hidden p-4">
-                            <p class="text-xs text-slate-500 mb-3">Implante os projetos aguardando PPCP e, após finalizar a implantação, inicie a produção.</p>
+                            <p class="text-xs text-slate-500 mb-3">Projetos do pedido no fluxo PPCP. Inicie a implantação ou abra o checklist quando disponível.</p>
                             <div class="space-y-6" id="ppcp-projects-list"></div>
                         </div>
                         <div id="order-tab-panel-fabrica" class="hidden p-4">

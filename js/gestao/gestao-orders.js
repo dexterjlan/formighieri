@@ -475,7 +475,7 @@ async function saveGestaoOrder(event) {
             || error.message?.includes('statusId')
             || error.message?.includes('OrderProjectStatus')
             || error.message?.includes('saleValue')
-            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql, supabase/add-order-project-sale-value.sql e supabase/create-order-project-status.sql no Supabase.'
+            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql e supabase/create-order-project-status.sql no Supabase.'
             : '';
         alert('Erro ao salvar pedido: ' + error.message + sqlHint);
     }

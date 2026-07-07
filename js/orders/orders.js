@@ -265,7 +265,7 @@ async function loadConsultants() {
     });
 }
 
-function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount, fabricaCount, ppcpCount) {
+function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount, fabricaCount, ppcpCount, nomearCount) {
     const approvalsCountEl = document.getElementById('order-tab-approvals-count');
     const requestsCountEl = document.getElementById('order-tab-requests-count');
     const projectsCountEl = document.getElementById('order-projects-count');
@@ -273,6 +273,7 @@ function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projects
     const medicaoCountEl = document.getElementById('order-tab-medicao-count');
     const fabricaCountEl = document.getElementById('order-tab-fabrica-count');
     const ppcpCountEl = document.getElementById('order-tab-ppcp-count');
+    const nomearCountEl = document.getElementById('order-tab-nomear-count');
 
     if (approvalsCountEl && pendingApprovalsCount !== undefined) {
         approvalsCountEl.textContent = `(${pendingApprovalsCount})`;
@@ -294,6 +295,9 @@ function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projects
     }
     if (ppcpCountEl && ppcpCount !== undefined && canSeeOrderPpcpTab()) {
         ppcpCountEl.textContent = `(${ppcpCount})`;
+    }
+    if (nomearCountEl && nomearCount !== undefined && canSeeOrderNomearTab()) {
+        nomearCountEl.textContent = `(${nomearCount})`;
     }
 }
 
@@ -353,6 +357,12 @@ const ORDER_DETAIL_TABS = {
         activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-teal-600 text-teal-800 bg-white',
         inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
     },
+    nomear: {
+        tabId: 'order-tab-nomear',
+        panelId: 'order-tab-panel-nomear',
+        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-purple-600 text-purple-800 bg-white',
+        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+    },
     ppcp: {
         tabId: 'order-tab-ppcp',
         panelId: 'order-tab-panel-ppcp',
@@ -373,6 +383,7 @@ function isOrderDetailTabVisible(tabKey) {
     }
 
     if (tabKey === 'medicao') return canSeeOrderMedicaoTab();
+    if (tabKey === 'nomear') return canSeeOrderNomearTab();
     if (tabKey === 'ppcp') return canSeeOrderPpcpTab();
     if (tabKey === 'fabrica') return canSeeOrderFabricaTab();
     return true;
@@ -387,7 +398,7 @@ function hasAnyVisibleOrderDetailTab() {
 }
 
 function getFirstVisibleOrderDetailTab() {
-    const order = ['approvals', 'requests', 'anteprojeto', 'medicao', 'ppcp', 'fabrica'];
+    const order = ['approvals', 'requests', 'anteprojeto', 'medicao', 'nomear', 'ppcp', 'fabrica'];
     return order.find(key => isOrderDetailTabVisible(key)) || null;
 }
 
@@ -516,6 +527,9 @@ async function selectOrder(id) {
         if (typeof loadMedicoes === 'function' && canSeeOrderMedicaoTab()) {
             loadMedicoes(id);
         }
+        if (typeof loadNomearProjects === 'function' && canSeeOrderNomearTab()) {
+            loadNomearProjects(id);
+        }
         if (typeof loadPpcpProjects === 'function' && canSeeOrderPpcpTab()) {
             loadPpcpProjects(id);
         }
@@ -540,6 +554,13 @@ function bindOrderEvents() {
     });
     document.getElementById('order-tab-medicao').addEventListener('click', function () {
         switchOrderDetailTab('medicao');
+    });
+    document.getElementById('order-tab-nomear').addEventListener('click', function () {
+        if (!canSeeOrderNomearTab()) return;
+        switchOrderDetailTab('nomear');
+        if (activeOrderId && typeof loadNomearProjects === 'function') {
+            loadNomearProjects(activeOrderId);
+        }
     });
     document.getElementById('order-tab-ppcp').addEventListener('click', function () {
         if (!canSeeOrderPpcpTab()) return;

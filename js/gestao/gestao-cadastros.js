@@ -268,7 +268,7 @@ async function deleteGestaoMarceneiroRow(row) {
 
     if (countError) {
         if (countError.message?.includes('marceneiroId')) {
-            alert('Execute supabase/add-order-project-montagem-fields.sql no Supabase para habilitar a exclusão com verificação de uso.');
+            alert('Execute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase para habilitar a exclusão com verificação de uso.');
             return;
         }
         alert('Erro ao verificar uso do marceneiro: ' + countError.message);

@@ -388,7 +388,7 @@ async function notifyApprovalEmail(eventType, approval, options = {}) {
     if (!NOTIFICATIONS_ENABLED || !approval) return;
 
     if (!isGoogleAppsScriptConfigured()) {
-        console.info('notifyApprovalEmail: Google Apps Script não configurado em js/config.js');
+        console.info('notifyApprovalEmail: Google Apps Script não configurado em js/core/config.js');
         return;
     }
 
@@ -437,7 +437,7 @@ async function notifyOrderRequestEmail(eventType, requestData) {
     if (!NOTIFICATIONS_ENABLED || !requestData) return;
 
     if (!isGoogleAppsScriptConfigured()) {
-        console.info('notifyOrderRequestEmail: Google Apps Script não configurado em js/config.js');
+        console.info('notifyOrderRequestEmail: Google Apps Script não configurado em js/core/config.js');
         return;
     }
 

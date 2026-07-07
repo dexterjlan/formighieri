@@ -249,9 +249,9 @@ async function applyAguardandoAprovacaoStatusForCommercialApproval(approval) {
     await applyAguardandoAprovacaoStatusToProjects([orderProjectId]);
 }
 
-const COMMERCIAL_APPROVED_PROJECT_STATUS = 'Aguardando PPCP';
+const COMMERCIAL_APPROVED_PROJECT_STATUS = 'Nomear';
 
-async function getAguardandoPpcpProjectStatusId() {
+async function getNomearProjectStatusId() {
     const { data, error } = await supabaseClient
         .from('OrderProjectStatus')
         .select('id')
@@ -270,11 +270,11 @@ async function getAguardandoPpcpProjectStatusId() {
     return fallback?.id || null;
 }
 
-async function applyAguardandoPpcpStatusToProjects(orderProjectIds) {
+async function applyNomearStatusToProjects(orderProjectIds) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
-    const statusId = await getAguardandoPpcpProjectStatusId();
+    const statusId = await getNomearProjectStatusId();
     if (!statusId) {
         throw new Error(`Status "${COMMERCIAL_APPROVED_PROJECT_STATUS}" não encontrado. Cadastre em Gestão → Status de Projeto.`);
     }
@@ -284,6 +284,7 @@ async function applyAguardandoPpcpStatusToProjects(orderProjectIds) {
         .from('OrderProject')
         .update({
             statusId,
+            nomeado: false,
             updatedById: currentUser.id,
             updatedAt: now
         })
@@ -292,11 +293,11 @@ async function applyAguardandoPpcpStatusToProjects(orderProjectIds) {
     if (error) throw error;
 }
 
-async function applyAguardandoPpcpStatusForCommercialApproval(approval) {
+async function applyNomearStatusForCommercialApproval(approval) {
     const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
     if (!orderProjectId) return;
 
-    await applyAguardandoPpcpStatusToProjects([orderProjectId]);
+    await applyNomearStatusToProjects([orderProjectId]);
 }
 
 function getCommercialApprovalProjectStatusName(project) {
@@ -768,8 +769,8 @@ async function approveCommercialApproval(id) {
         }
 
         setApproveButtonLoading(id, true, 'Atualizando status do projeto...');
-        if (typeof applyAguardandoPpcpStatusForCommercialApproval === 'function') {
-            await applyAguardandoPpcpStatusForCommercialApproval(approval);
+        if (typeof applyNomearStatusForCommercialApproval === 'function') {
+            await applyNomearStatusForCommercialApproval(approval);
         }
 
         setApproveButtonLoading(id, true, 'Enviando notificação por e-mail...');
@@ -784,6 +785,9 @@ async function approveCommercialApproval(id) {
             loadCommercialApprovals(activeOrderId);
             if (typeof loadOrderProjects === 'function') {
                 await loadOrderProjects(activeOrderId);
+            }
+            if (typeof loadNomearProjects === 'function' && canSeeOrderNomearTab()) {
+                await loadNomearProjects(activeOrderId);
             }
         }
         if (typeof refreshApprovalsQueryIfVisible === 'function') {

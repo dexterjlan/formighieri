@@ -8,6 +8,7 @@ const PENDENCIAS_STATUS_PLANTA_LEVANTADA = 'Planta Levantada';
 const PENDENCIAS_STATUS_CONFERENCIA_REALIZADA = 'Conferência Realizada';
 const PENDENCIAS_STATUS_CONFERENCIA_ENVIADA = 'Conferência Enviada';
 const PENDENCIAS_STATUS_AGUARDANDO_APROVACAO = 'Aguardando Aprovação';
+const PENDENCIAS_STATUS_NOMEAR = 'Nomear';
 const PENDENCIAS_STATUS_AGUARDANDO_PPCP = 'Aguardando PPCP';
 const PENDENCIAS_STATUS_IMPLANTACAO = 'Implantação';
 const PENDENCIAS_STATUS_EM_PRODUCAO = 'Em Produção';
@@ -149,7 +150,8 @@ function getPendenciasProjetistaMenuItems() {
             { id: 'aguardando-projeto-tecnico', label: 'Aguardando Projeto Técnico' },
             { id: 'projeto-tecnico', label: 'Projeto Técnico' },
             { id: 'em-revisao', label: 'Em Revisão' },
-            { id: 'requisicao', label: 'Requisição' }
+            { id: 'requisicao', label: 'Requisição' },
+            { id: 'nomear', label: 'Nomear' }
         );
 
         if (canSeePendenciasPpcpItems()) {
@@ -499,6 +501,11 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'requisicao') {
         loadPendenciasRequisicao();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'nomear') {
+        loadPendenciasNomear();
         return;
     }
 

@@ -409,6 +409,11 @@ async function reloadActivePendenciasPpcpList() {
         return;
     }
 
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'nomear') {
+        await loadPendenciasNomear();
+        return;
+    }
+
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'aguardando-ppcp') {
         await loadPendenciasAguardandoPpcp();
         return;
@@ -417,6 +422,154 @@ async function reloadActivePendenciasPpcpList() {
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'implantacao') {
         await loadPendenciasImplantacao();
     }
+}
+
+function canActPendenciasNomear(project) {
+    return canActOrderProjectNomear(project);
+}
+
+async function fetchPendenciasNomearProjects() {
+    const statusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_NOMEAR);
+
+    if (!statusId) {
+        return {
+            error: new Error(`Status "${PENDENCIAS_STATUS_NOMEAR}" não encontrado.`),
+            projects: []
+        };
+    }
+
+    const userId = Number(currentUser?.id);
+    const overviewMode = isAdmin() || isGestorProjetos();
+    const result = await queryPendenciasProjects(
+        overviewMode
+            ? { statusId }
+            : { statusId, designerId: userId }
+    );
+
+    if (result.error) {
+        return { error: result.error, projects: [] };
+    }
+
+    return {
+        error: null,
+        projects: sortPendenciasByDeliveryDate(result.data || [])
+    };
+}
+
+function renderPendenciasNomearList(projects) {
+    const content = document.getElementById('pendencias-content');
+    if (!content) return;
+
+    const labelFn = typeof getPendenciasProjectDetailLabel === 'function'
+        ? getPendenciasProjectDetailLabel
+        : (project => project?.name || 'Projeto');
+
+    const rows = projects.map(project => {
+        const orderCode = project.order?.orderCode || '—';
+        const clientName = project.order?.clientName || '—';
+        const projectLabel = labelFn(project);
+        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
+        const statusName = getPendenciasProjectStatusName(project);
+        const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
+        const canAct = canActPendenciasNomear(project);
+        const actionCell = canAct
+            ? `<button type="button"
+                class="pendencias-nomear-action-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-purple-100 text-purple-800 hover:bg-purple-200"
+                data-project-id="${project.id}">
+                Nomeado
+            </button>`
+            : '<span class="text-xs text-slate-300">—</span>';
+
+        return `
+            <tr class="border-b border-slate-100 last:border-0">
+                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
+                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
+                <td class="p-3">
+                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
+                        ${escapeHtml(statusName || '—')}
+                    </span>
+                </td>
+                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
+                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
+            </tr>
+        `;
+    }).join('');
+
+    content.innerHTML = `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-900">Nomear</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos aguardando nomeação pelo projetista responsável.</p>
+                </div>
+                <button type="button" id="btn-pendencias-refresh-nomear"
+                    class="text-xs bg-white border border-purple-200 text-purple-800 px-3 py-1.5 rounded-lg font-medium hover:bg-purple-50">
+                    Atualizar
+                </button>
+            </div>
+            ${projects.length
+                ? `<div class="overflow-x-auto">
+                    <table class="w-full text-sm min-w-[920px]">
+                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="text-left p-3 font-semibold">Pedido</th>
+                                <th class="text-left p-3 font-semibold">Cliente</th>
+                                <th class="text-left p-3 font-semibold">Projeto</th>
+                                <th class="text-left p-3 font-semibold">Status</th>
+                                <th class="text-left p-3 font-semibold">Entrega</th>
+                                <th class="text-right p-3 font-semibold w-44">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`
+                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto aguardando nomeação.</p>'}
+        </div>
+    `;
+
+    content.querySelector('#btn-pendencias-refresh-nomear')
+        ?.addEventListener('click', () => loadPendenciasNomear());
+
+    content.querySelectorAll('.pendencias-nomear-action-btn').forEach(button => {
+        button.addEventListener('click', async () => {
+            const projectId = Number(button.dataset.projectId);
+            if (!projectId) return;
+
+            button.disabled = true;
+            button.classList.add('opacity-60', 'cursor-not-allowed');
+
+            const success = await markOrderProjectAsNomeado(projectId, {
+                onSuccess: () => loadPendenciasNomear()
+            });
+
+            if (!success) {
+                button.disabled = false;
+                button.classList.remove('opacity-60', 'cursor-not-allowed');
+            }
+        });
+    });
+}
+
+async function loadPendenciasNomear() {
+    const content = document.getElementById('pendencias-content');
+    if (content) {
+        content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando projetos...</p>';
+    }
+
+    if (!canSeePendenciasProjetistaMenu()) {
+        renderPendenciasPlaceholder('Nomear', 'Sem permissão para visualizar esta pendência.');
+        return;
+    }
+
+    const { error, projects } = await fetchPendenciasNomearProjects();
+
+    if (error) {
+        renderPendenciasPlaceholder('Nomear', `Erro ao carregar: ${error.message}`);
+        return;
+    }
+
+    renderPendenciasNomearList(projects);
 }
 
 async function loadPendenciasAguardandoPpcp() {
@@ -438,7 +591,7 @@ async function loadPendenciasAguardandoPpcp() {
     }
 
     const subtitle = canActPendenciasPpcpStatus()
-        ? 'Projetos aguardando PPCP. Clique em Implantar para enviar à implantação.'
+        ? 'Projetos aguardando PPCP. Clique em Iniciar Implantação para enviar à implantação.'
         : 'Visualização dos projetos aguardando PPCP.';
 
     renderPendenciasPpcpProjectList({
@@ -450,13 +603,83 @@ async function loadPendenciasAguardandoPpcp() {
         refreshHandler: () => loadPendenciasAguardandoPpcp(),
         expectedStatusName: PENDENCIAS_STATUS_AGUARDANDO_PPCP,
         targetStatusName: PENDENCIAS_STATUS_IMPLANTACAO,
-        actionLabel: 'Implantar',
+        actionLabel: 'Iniciar Implantação',
         actionButtonClass: 'bg-violet-100 text-violet-800 hover:bg-violet-200',
         confirmMessage: 'Enviar este projeto para implantação?',
         projectLabelFn: project => typeof getPendenciasProjectDetailLabel === 'function'
             ? getPendenciasProjectDetailLabel(project)
             : (project?.name || 'Projeto')
     });
+}
+
+async function fetchPendenciasImplantacoesAbertas() {
+    const statusEncerrado = typeof IMPLANTACAO_STATUS_ENCERRADO === 'string'
+        ? IMPLANTACAO_STATUS_ENCERRADO
+        : 'Encerrado';
+
+    const { data: implantacoes, error } = await supabaseClient
+        .from('Implantacao')
+        .select('id, status, orderProjectId, updatedAt')
+        .neq('status', statusEncerrado)
+        .order('updatedAt', { ascending: false });
+
+    if (error?.message?.includes('Implantacao')) {
+        return {
+            error: new Error('Tabela Implantacao não encontrada. Execute supabase/create-implantacao.sql no Supabase.'),
+            projects: []
+        };
+    }
+
+    if (error) {
+        return { error, projects: [] };
+    }
+
+    if (!implantacoes?.length) {
+        return { error: null, projects: [] };
+    }
+
+    const projectIds = [...new Set(implantacoes.map(item => item.orderProjectId).filter(Boolean))];
+    let projectResult = await supabaseClient
+        .from('OrderProject')
+        .select(PENDENCIAS_PROJECT_SELECT)
+        .in('id', projectIds);
+
+    if (projectResult.error?.message?.includes('projectStatus') || projectResult.error?.message?.includes('designer')) {
+        projectResult = await supabaseClient
+            .from('OrderProject')
+            .select(PENDENCIAS_PROJECT_SELECT_FALLBACK)
+            .in('id', projectIds);
+    }
+
+    if (projectResult.error) {
+        return { error: projectResult.error, projects: [] };
+    }
+
+    const projectsById = Object.fromEntries(
+        (await enrichPendenciasProjectsWithStatus(projectResult.data || []))
+            .map(project => [project.id, project])
+    );
+
+    const projects = implantacoes.map(implantacao => {
+        const project = projectsById[implantacao.orderProjectId];
+        const base = project || {
+            id: implantacao.orderProjectId,
+            name: `Projeto #${implantacao.orderProjectId}`,
+            order: null,
+            deliveryDate: null
+        };
+
+        return {
+            ...base,
+            implantacaoId: implantacao.id,
+            implantacaoStatus: implantacao.status
+        };
+    });
+
+    return {
+        error: null,
+        projects: sortPendenciasByDeliveryDate(projects)
+    };
 }
 
 async function loadPendenciasImplantacao() {
@@ -470,32 +693,105 @@ async function loadPendenciasImplantacao() {
         return;
     }
 
-    const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_IMPLANTACAO);
+    const { error, projects } = await fetchPendenciasImplantacoesAbertas();
 
     if (error) {
         renderPendenciasPlaceholder('Implantação', `Erro ao carregar: ${error.message}`);
         return;
     }
 
-    const subtitle = canActPendenciasPpcpStatus()
-        ? 'Projetos em implantação. Finalize a implantação e inicie a produção.'
-        : 'Visualização dos projetos em implantação.';
+    renderPendenciasImplantacaoList(projects);
+}
 
-    renderPendenciasPpcpProjectList({
-        title: 'Implantação',
-        subtitle,
-        projects,
-        emptyMessage: 'Nenhum projeto em implantação.',
-        refreshButtonId: 'btn-pendencias-refresh-implantacao',
-        refreshHandler: () => loadPendenciasImplantacao(),
-        expectedStatusName: PENDENCIAS_STATUS_IMPLANTACAO,
-        targetStatusName: PENDENCIAS_STATUS_EM_PRODUCAO,
-        actionLabel: 'Iniciar produção',
-        actionButtonClass: 'bg-teal-100 text-teal-800 hover:bg-teal-200',
-        confirmMessage: 'Finalizar implantação e iniciar produção deste projeto?',
-        projectLabelFn: project => typeof getPendenciasProjectDetailLabel === 'function'
-            ? getPendenciasProjectDetailLabel(project)
-            : (project?.name || 'Projeto')
+function renderPendenciasImplantacaoList(projects) {
+    const content = document.getElementById('pendencias-content');
+    if (!content) return;
+
+    const canAct = canActPendenciasPpcpStatus();
+    const labelFn = typeof getPendenciasProjectDetailLabel === 'function'
+        ? getPendenciasProjectDetailLabel
+        : (project => project?.name || 'Projeto');
+
+    const rows = projects.map(project => {
+        const orderCode = project.order?.orderCode || '—';
+        const clientName = project.order?.clientName || '—';
+        const projectLabel = labelFn(project);
+        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
+        const statusLabel = project.implantacaoStatus || getPendenciasProjectStatusName(project);
+        const statusClass = typeof getImplantacaoStatusBadgeClass === 'function' && project.implantacaoStatus
+            ? getImplantacaoStatusBadgeClass(project.implantacaoStatus)
+            : getPendenciasProjectStatusBadgeClass(getPendenciasProjectStatusName(project));
+        const actionCell = canAct
+            ? `<button type="button"
+                class="pendencias-implantacao-open-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-teal-100 text-teal-800 hover:bg-teal-200"
+                data-project-id="${project.id}"
+                data-project-name="${escapeHtml(projectLabel)}">
+                Implantação
+            </button>`
+            : '<span class="text-xs text-slate-300">—</span>';
+
+        return `
+            <tr class="border-b border-slate-100 last:border-0">
+                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
+                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
+                <td class="p-3">
+                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
+                        ${escapeHtml(statusLabel || '—')}
+                    </span>
+                </td>
+                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
+                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
+            </tr>
+        `;
+    }).join('');
+
+    const subtitle = canAct
+        ? 'Implantações em aberto. Abra o checklist para enviar à produção ou compras.'
+        : 'Visualização das implantações em aberto.';
+
+    content.innerHTML = `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-900">Implantação</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
+                </div>
+                <button type="button" id="btn-pendencias-refresh-implantacao"
+                    class="text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50">
+                    Atualizar
+                </button>
+            </div>
+            ${projects.length
+                ? `<div class="overflow-x-auto">
+                    <table class="w-full text-sm min-w-[920px]">
+                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="text-left p-3 font-semibold">Pedido</th>
+                                <th class="text-left p-3 font-semibold">Cliente</th>
+                                <th class="text-left p-3 font-semibold">Projeto</th>
+                                <th class="text-left p-3 font-semibold">Status</th>
+                                <th class="text-left p-3 font-semibold">Entrega</th>
+                                <th class="text-right p-3 font-semibold w-44">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`
+                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhuma implantação em aberto.</p>'}
+        </div>
+    `;
+
+    content.querySelector('#btn-pendencias-refresh-implantacao')
+        ?.addEventListener('click', () => loadPendenciasImplantacao());
+
+    content.querySelectorAll('.pendencias-implantacao-open-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const projectId = Number(button.dataset.projectId);
+            const projectName = button.dataset.projectName || '';
+            if (!projectId || typeof openImplantacaoModal !== 'function') return;
+            openImplantacaoModal(projectId, projectName, { requireExisting: true });
+        });
     });
 }
 
@@ -829,7 +1125,7 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
         }
     } catch (error) {
         const sqlHint = error.message?.includes('marceneiroId') || error.message?.includes('MontagemInterna')
-            ? '\n\nExecute supabase/add-order-project-montagem-fields.sql no Supabase.'
+            ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
         alert('Erro ao salvar: ' + error.message + sqlHint);
     }
@@ -895,7 +1191,7 @@ async function savePendenciasFabricaFimMontagem(projectId) {
         }
     } catch (error) {
         const sqlHint = error.message?.includes('fimMontagemInterna')
-            ? '\n\nExecute supabase/add-order-project-montagem-fields.sql no Supabase.'
+            ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
         alert('Erro ao salvar: ' + error.message + sqlHint);
     }

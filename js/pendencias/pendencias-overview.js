@@ -9,8 +9,9 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'projeto-tecnico': 'Projetos em projeto técnico associados a você.',
         'em-revisao': 'Projetos em revisão sob sua responsabilidade.',
         requisicao: 'Requisições aguardando sua resposta.',
+        nomear: 'Projetos aguardando nomeação pelo projetista responsável.',
         'aguardando-ppcp': 'Projetos aguardando implantação PPCP.',
-        implantacao: 'Projetos em implantação aguardando início da produção.',
+        implantacao: 'Implantações em aberto (não encerradas).',
         'aguardando-medicao': 'Pedidos com projetos aguardando medição.',
         'aguardando-planta': 'Medições com projetos aguardando planta levantada.',
         conferencias: 'Pedidos com projetos em planta levantada aguardando conferência.'
@@ -60,12 +61,16 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 const { error, requests } = await fetchPendenciasRequisicaoRequests();
                 return error ? null : requests.length;
             }
+            case 'projetista:nomear': {
+                const { error, projects } = await fetchPendenciasNomearProjects();
+                return error ? null : projects.length;
+            }
             case 'projetista:aguardando-ppcp': {
                 const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_AGUARDANDO_PPCP);
                 return error ? null : projects.length;
             }
             case 'projetista:implantacao': {
-                const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_IMPLANTACAO);
+                const { error, projects } = await fetchPendenciasImplantacoesAbertas();
                 return error ? null : projects.length;
             }
             case 'projetista:aguardando-medicao': {

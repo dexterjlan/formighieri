@@ -27,6 +27,8 @@ function initAppEvents() {
     bindAnteprojetoEvents();
     bindMedicaoEvents();
     bindFabricaEvents();
+    bindNomearEvents();
+    bindImplantacaoEvents();
     bindPpcpEvents();
     bindConversationEvents();
     bindRequestActivityEvents();

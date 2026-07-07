@@ -331,6 +331,17 @@ function canSeeOrderFabricaTab(user = currentUser) {
     return user.role === 'Admin' || isGestorFabrica(user);
 }
 
+function canSeeOrderNomearTab(user = currentUser) {
+    if (!user) return false;
+    return user.role === 'Admin' || user.role === 'Projetista';
+}
+
+function canActOrderProjectNomear(project, user = currentUser) {
+    if (!user || !project) return false;
+    return user.role === 'Projetista'
+        && Number(project.designerId) === Number(user.id);
+}
+
 function canCreateAsAdminOrConferente() {
     return isAdmin() || isConferente() || isGestorComercial();
 }
@@ -452,6 +463,7 @@ function getOrderProjectStatusBadgeClass(statusName) {
     if (statusName === 'Conferência Enviada') return 'bg-sky-100 text-sky-800';
     if (statusName === 'Medição Realizada') return 'bg-teal-100 text-teal-800';
     if (statusName === 'Planta Levantada') return 'bg-lime-100 text-lime-800';
+    if (statusName === 'Nomear') return 'bg-purple-100 text-purple-800';
     if (statusName === 'Aguardando PPCP') return 'bg-fuchsia-100 text-fuchsia-800';
     if (statusName === 'Implantação') return 'bg-teal-100 text-teal-800';
     if (statusName === 'Em Produção') return 'bg-orange-100 text-orange-800';

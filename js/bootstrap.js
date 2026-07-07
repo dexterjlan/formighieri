@@ -6,39 +6,41 @@ const PARTIALS = [
 ];
 
 const SCRIPTS = [
-    'js/config.js',
-    'js/utils.js',
-    'js/navigation.js',
-    'js/welcome.js',
-    'js/conversations-query.js',
-    'js/users-admin.js',
-    'js/gestao.js',
-    'js/gestao-orders.js',
-    'js/gestao-import.js',
-    'js/gestao-kanban.js',
-    'js/gestao-cadastros.js',
-    'js/gestao-relatorios.js',
-    'js/gestao-performance.js',
-    'js/pendencias-core.js',
-    'js/pendencias-projetista.js',
-    'js/pendencias-operacional.js',
-    'js/pendencias-comercial.js',
-    'js/pendencias-overview.js',
-    'js/system-settings.js',
-    'js/auth.js',
-    'js/orders.js',
-    'js/order-projects.js',
-    'js/anteprojeto.js',
-    'js/mediciao.js',
-    'js/fabrica.js',
-    'js/ppcp.js',
-    'js/notifications.js',
-    'js/request-activities.js',
-    'js/conversations.js',
-    'js/commercial-approval.js',
-    'js/commercial-revision.js',
-    'js/commercial-approval-query.js',
-    'js/main.js'
+    'js/core/config.js',
+    'js/core/utils.js',
+    'js/core/navigation.js',
+    'js/core/welcome.js',
+    'js/conversations/conversations-query.js',
+    'js/admin/users-admin.js',
+    'js/gestao/gestao.js',
+    'js/gestao/gestao-orders.js',
+    'js/gestao/gestao-import.js',
+    'js/gestao/gestao-kanban.js',
+    'js/gestao/gestao-cadastros.js',
+    'js/gestao/gestao-relatorios.js',
+    'js/gestao/gestao-performance.js',
+    'js/orders/nomear.js',
+    'js/orders/implantacao.js',
+    'js/pendencias/pendencias-core.js',
+    'js/pendencias/pendencias-projetista.js',
+    'js/pendencias/pendencias-operacional.js',
+    'js/pendencias/pendencias-comercial.js',
+    'js/pendencias/pendencias-overview.js',
+    'js/admin/system-settings.js',
+    'js/core/auth.js',
+    'js/orders/orders.js',
+    'js/orders/order-projects.js',
+    'js/orders/anteprojeto.js',
+    'js/orders/mediciao.js',
+    'js/orders/fabrica.js',
+    'js/orders/ppcp.js',
+    'js/core/notifications.js',
+    'js/conversations/request-activities.js',
+    'js/conversations/conversations.js',
+    'js/commercial/commercial-approval.js',
+    'js/commercial/commercial-revision.js',
+    'js/commercial/commercial-approval-query.js',
+    'js/core/main.js'
 ];
 
 function loadScript(src) {
@@ -85,7 +87,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260883`);
+            await loadScript(`${src}?v=20260891`);
         }
 
         initAppEvents();

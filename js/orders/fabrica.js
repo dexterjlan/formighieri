@@ -533,7 +533,7 @@ async function saveAllFabricaProjects() {
     }
 
     if (fimEntries.length && !expedicaoStatusId) {
-        alert(`Status "${FABRICA_EXPEDICAO_STATUS}" não encontrado. Execute supabase/add-order-project-fabrica-status.sql no Supabase.`);
+        alert(`Status "${FABRICA_EXPEDICAO_STATUS}" não encontrado. Execute supabase/create-order-project-status.sql no Supabase.`);
         return;
     }
 
@@ -553,7 +553,7 @@ async function saveAllFabricaProjects() {
         }
     } catch (error) {
         const sqlHint = error.message?.includes('marceneiroId') || error.message?.includes('MontagemInterna') || error.message?.includes('fimMontagemInterna')
-            ? '\n\nExecute supabase/add-order-project-montagem-fields.sql no Supabase.'
+            ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
         alert('Erro ao salvar: ' + error.message + sqlHint);
     } finally {
@@ -584,7 +584,7 @@ async function loadFabricaProjects(orderId = null) {
     if (!statusIds.length) {
         list.innerHTML = `
             <p class="text-xs text-amber-700 text-center py-6 bg-white rounded-xl border border-amber-100">
-                Status de fábrica não encontrados. Execute <code>supabase/add-order-project-fabrica-status.sql</code> no Supabase.
+                Status de fábrica não encontrados. Execute <code>supabase/create-order-project-status.sql</code> no Supabase.
             </p>
         `;
         updateFabricaTabCount([], orderId);
