@@ -108,11 +108,11 @@ async function showSystemSettings() {
 
 function validateSystemSettingsInput(payload) {
     if (!Number.isInteger(payload.approvalOverdueDays) || payload.approvalOverdueDays < 1) {
-        alert('Informe ao menos 1 dia para aprovação em aberto considerada atrasada.');
+        alertAppDialog('Informe ao menos 1 dia para aprovação em aberto considerada atrasada.');
         return false;
     }
     if (!Number.isInteger(payload.requestOverdueDays) || payload.requestOverdueDays < 1) {
-        alert('Informe ao menos 1 dia para requisição em aberto considerada atrasada.');
+        alertAppDialog('Informe ao menos 1 dia para requisição em aberto considerada atrasada.');
         return false;
     }
 
@@ -122,7 +122,7 @@ function validateSystemSettingsInput(payload) {
     ];
     const invalid = allEmails.find(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
     if (invalid) {
-        alert(`E-mail inválido: ${invalid}`);
+        alertAppDialog(`E-mail inválido: ${invalid}`, { variant: 'error', title: 'Erro' });
         return false;
     }
 
@@ -181,7 +181,7 @@ async function saveSystemSettings() {
         }
 
         if (error) {
-            alert('Erro ao salvar configurações: ' + error.message);
+            alertAppDialog('Erro ao salvar configurações: ' + error.message);
             return;
         }
 
@@ -201,7 +201,7 @@ async function saveSystemSettings() {
             await searchCommercialApprovalsQuery();
         }
 
-        alert('Configurações salvas com sucesso.');
+        alertAppDialog('Configurações salvas com sucesso.');
     } finally {
         setSystemSettingsFormLoading(false);
     }
@@ -209,7 +209,7 @@ async function saveSystemSettings() {
 
 function bindSystemSettingsEvents() {
     document.getElementById('btn-system-settings')?.addEventListener('click', showSystemSettings);
-    document.getElementById('system-settings-form')?.addEventListener('submit', function (e) {
+    document.getElementById('system-settings-form')?.addEventListener('submit', async function (e) {
         e.preventDefault();
         saveSystemSettings();
     });

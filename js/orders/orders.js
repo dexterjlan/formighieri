@@ -265,7 +265,7 @@ async function loadConsultants() {
     });
 }
 
-function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount, fabricaCount, ppcpCount, nomearCount) {
+function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount, fabricaCount, ppcpCount, nomearCount, comprasCount) {
     const approvalsCountEl = document.getElementById('order-tab-approvals-count');
     const requestsCountEl = document.getElementById('order-tab-requests-count');
     const projectsCountEl = document.getElementById('order-projects-count');
@@ -274,6 +274,7 @@ function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projects
     const fabricaCountEl = document.getElementById('order-tab-fabrica-count');
     const ppcpCountEl = document.getElementById('order-tab-ppcp-count');
     const nomearCountEl = document.getElementById('order-tab-nomear-count');
+    const comprasCountEl = document.getElementById('order-tab-compras-count');
 
     if (approvalsCountEl && pendingApprovalsCount !== undefined) {
         approvalsCountEl.textContent = `(${pendingApprovalsCount})`;
@@ -298,6 +299,9 @@ function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projects
     }
     if (nomearCountEl && nomearCount !== undefined && canSeeOrderNomearTab()) {
         nomearCountEl.textContent = `(${nomearCount})`;
+    }
+    if (comprasCountEl && comprasCount !== undefined && canSeeOrderComprasTab()) {
+        comprasCountEl.textContent = `(${comprasCount})`;
     }
 }
 
@@ -374,18 +378,31 @@ const ORDER_DETAIL_TABS = {
         panelId: 'order-tab-panel-fabrica',
         activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-orange-600 text-orange-800 bg-white',
         inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+    },
+    compras: {
+        tabId: 'order-tab-compras',
+        panelId: 'order-tab-panel-compras',
+        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-amber-600 text-amber-800 bg-white',
+        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
     }
 };
 
 function isOrderDetailTabVisible(tabKey) {
     if (isMarceneiro()) {
-        return tabKey === 'fabrica' && isGestorFabrica();
+        if (tabKey === 'fabrica') return isGestorFabrica();
+        if (tabKey === 'compras') return canSeeOrderComprasTab();
+        return false;
+    }
+
+    if (isCompras()) {
+        return tabKey === 'compras';
     }
 
     if (tabKey === 'medicao') return canSeeOrderMedicaoTab();
     if (tabKey === 'nomear') return canSeeOrderNomearTab();
     if (tabKey === 'ppcp') return canSeeOrderPpcpTab();
     if (tabKey === 'fabrica') return canSeeOrderFabricaTab();
+    if (tabKey === 'compras') return canSeeOrderComprasTab();
     return true;
 }
 
@@ -398,7 +415,7 @@ function hasAnyVisibleOrderDetailTab() {
 }
 
 function getFirstVisibleOrderDetailTab() {
-    const order = ['approvals', 'requests', 'anteprojeto', 'medicao', 'nomear', 'ppcp', 'fabrica'];
+    const order = ['approvals', 'requests', 'anteprojeto', 'medicao', 'nomear', 'ppcp', 'fabrica', 'compras'];
     return order.find(key => isOrderDetailTabVisible(key)) || null;
 }
 
@@ -517,8 +534,9 @@ async function selectOrder(id) {
 
     const marceneiroOnlyFabrica = isMarceneiro() && isGestorFabrica();
     const marceneiroWithoutTabs = isMarceneiro() && !isGestorFabrica();
+    const comprasOnlyUser = isCompras();
 
-    if (!marceneiroWithoutTabs && !marceneiroOnlyFabrica) {
+    if (!marceneiroWithoutTabs && !marceneiroOnlyFabrica && !comprasOnlyUser) {
         loadConversations(id);
         loadCommercialApprovals(id);
         if (typeof loadAnteprojetoConferences === 'function') {
@@ -538,49 +556,59 @@ async function selectOrder(id) {
     if (typeof loadFabricaProjects === 'function' && canSeeOrderFabricaTab()) {
         loadFabricaProjects(id);
     }
+    if (typeof loadOrderCompras === 'function' && canSeeOrderComprasTab()) {
+        loadOrderCompras(id);
+    }
     updateOrderDetailTabsVisibility();
     switchOrderDetailTab(getFirstVisibleOrderDetailTab());
 }
 
 function bindOrderEvents() {
-    document.getElementById('order-tab-approvals').addEventListener('click', function () {
+    document.getElementById('order-tab-approvals').addEventListener('click', async function () {
         switchOrderDetailTab('approvals');
     });
-    document.getElementById('order-tab-requests').addEventListener('click', function () {
+    document.getElementById('order-tab-requests').addEventListener('click', async function () {
         switchOrderDetailTab('requests');
     });
-    document.getElementById('order-tab-anteprojeto').addEventListener('click', function () {
+    document.getElementById('order-tab-anteprojeto').addEventListener('click', async function () {
         switchOrderDetailTab('anteprojeto');
     });
-    document.getElementById('order-tab-medicao').addEventListener('click', function () {
+    document.getElementById('order-tab-medicao').addEventListener('click', async function () {
         switchOrderDetailTab('medicao');
     });
-    document.getElementById('order-tab-nomear').addEventListener('click', function () {
+    document.getElementById('order-tab-nomear').addEventListener('click', async function () {
         if (!canSeeOrderNomearTab()) return;
         switchOrderDetailTab('nomear');
         if (activeOrderId && typeof loadNomearProjects === 'function') {
             loadNomearProjects(activeOrderId);
         }
     });
-    document.getElementById('order-tab-ppcp').addEventListener('click', function () {
+    document.getElementById('order-tab-ppcp').addEventListener('click', async function () {
         if (!canSeeOrderPpcpTab()) return;
         switchOrderDetailTab('ppcp');
         if (activeOrderId && typeof loadPpcpProjects === 'function') {
             loadPpcpProjects(activeOrderId);
         }
     });
-    document.getElementById('order-tab-fabrica').addEventListener('click', function () {
+    document.getElementById('order-tab-fabrica').addEventListener('click', async function () {
         if (!canSeeOrderFabricaTab()) return;
         switchOrderDetailTab('fabrica');
         if (activeOrderId && typeof loadFabricaProjects === 'function') {
             loadFabricaProjects(activeOrderId);
         }
     });
+    document.getElementById('order-tab-compras')?.addEventListener('click', async function () {
+        if (!canSeeOrderComprasTab()) return;
+        switchOrderDetailTab('compras');
+        if (activeOrderId && typeof loadOrderCompras === 'function') {
+            loadOrderCompras(activeOrderId);
+        }
+    });
 
     document.getElementById('filter-order-client').addEventListener('input', renderOrdersList);
     document.getElementById('filter-order-mine')?.addEventListener('change', renderOrdersList);
 
-    document.getElementById("ord-code").addEventListener("input", function () {
+    document.getElementById("ord-code").addEventListener("input", async function () {
         this.value = this.value.replace(/\D/g, '');
     });
 
@@ -591,17 +619,17 @@ function bindOrderEvents() {
         const consultantName = document.getElementById("ord-consultant").value.trim();
 
         if (!orderCode) {
-            alert("Informe o código do pedido (apenas números).");
+            alertAppDialog("Informe o código do pedido (apenas números).");
             document.getElementById("ord-code").focus();
             return;
         }
         if (!clientName) {
-            alert("Informe o nome do cliente.");
+            alertAppDialog("Informe o nome do cliente.");
             document.getElementById("ord-client").focus();
             return;
         }
         if (!consultantName) {
-            alert("Selecione o consultor.");
+            alertAppDialog("Selecione o consultor.");
             document.getElementById("ord-consultant").focus();
             return;
         }
@@ -613,7 +641,7 @@ function bindOrderEvents() {
             .maybeSingle();
 
         if (existing) {
-            alert("Já existe um pedido cadastrado com este código.");
+            alertAppDialog("Já existe um pedido cadastrado com este código.");
             return;
         }
 
@@ -627,7 +655,7 @@ function bindOrderEvents() {
 
         const { error } = await supabaseClient.from('salesOrders').insert([payload]);
         if (error) {
-            alert("Erro ao salvar pedido: " + error.message);
+            alertAppDialog("Erro ao salvar pedido: " + error.message);
             return;
         }
         toggleModal('order-modal', false);

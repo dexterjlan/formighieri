@@ -9,7 +9,9 @@ let activeImplantacaoRecord = null;
 let activeImplantacaoProjectName = '';
 
 function canAccessImplantacaoModal() {
-    return canSeeOrderPpcpTab() || (typeof canSeePendenciasPpcpItems === 'function' && canSeePendenciasPpcpItems());
+    return canSeeOrderPpcpTab()
+        || (typeof canSeePendenciasPpcpItems === 'function' && canSeePendenciasPpcpItems())
+        || (typeof canSeePendenciasComprasMenu === 'function' && canSeePendenciasComprasMenu());
 }
 
 function canActImplantacao() {
@@ -45,15 +47,27 @@ function readImplantacaoFormValues() {
         projetoPath: document.getElementById('implantacao-projeto-path')?.value?.trim() || '',
         projetoChecked: Boolean(document.getElementById('implantacao-projeto-checked')?.checked),
         comprasMateriaisPath: document.getElementById('implantacao-compras-path')?.value?.trim() || '',
-        comprasMateriaisChecked: Boolean(document.getElementById('implantacao-compras-checked')?.checked),
+        comprasMateriaisChecked: readImplantacaoListaChecked(
+            'implantacao-compras-checked', 'comprasMateriaisChecked', 'comprasMateriaisEnviadoComercial'
+        ),
         comprasMateriaisEnviadoComercial: Boolean(activeImplantacaoRecord?.comprasMateriaisEnviadoComercial),
         comprasMateriaisEnviadoComercialAt: activeImplantacaoRecord?.comprasMateriaisEnviadoComercialAt || null,
         listaFerragensPath: document.getElementById('implantacao-ferragens-path')?.value?.trim() || '',
-        listaFerragensChecked: Boolean(document.getElementById('implantacao-ferragens-checked')?.checked),
+        listaFerragensChecked: readImplantacaoListaChecked(
+            'implantacao-ferragens-checked', 'listaFerragensChecked', 'listaFerragensEnviadoComercial'
+        ),
         listaFerragensEnviadoComercial: Boolean(activeImplantacaoRecord?.listaFerragensEnviadoComercial),
         listaFerragensEnviadoComercialAt: activeImplantacaoRecord?.listaFerragensEnviadoComercialAt || null,
+        listaTintasPath: document.getElementById('implantacao-tintas-path')?.value?.trim() || '',
+        listaTintasChecked: readImplantacaoListaChecked(
+            'implantacao-tintas-checked', 'listaTintasChecked', 'listaTintasEnviadoComercial'
+        ),
+        listaTintasEnviadoComercial: Boolean(activeImplantacaoRecord?.listaTintasEnviadoComercial),
+        listaTintasEnviadoComercialAt: activeImplantacaoRecord?.listaTintasEnviadoComercialAt || null,
         terceirosPath: document.getElementById('implantacao-terceiros-path')?.value?.trim() || '',
-        terceirosChecked: Boolean(document.getElementById('implantacao-terceiros-checked')?.checked),
+        terceirosChecked: readImplantacaoListaChecked(
+            'implantacao-terceiros-checked', 'terceirosChecked', 'terceirosEnviadoComercial'
+        ),
         terceirosEnviadoComercial: Boolean(activeImplantacaoRecord?.terceirosEnviadoComercial),
         terceirosEnviadoComercialAt: activeImplantacaoRecord?.terceirosEnviadoComercialAt || null,
         wpsOpCode: document.getElementById('implantacao-wps-op-code')?.value?.trim() || ''
@@ -67,10 +81,13 @@ function populateImplantacaoForm(record) {
     document.getElementById('implantacao-compras-checked').checked = Boolean(record?.comprasMateriaisChecked);
     document.getElementById('implantacao-ferragens-path').value = record?.listaFerragensPath || '';
     document.getElementById('implantacao-ferragens-checked').checked = Boolean(record?.listaFerragensChecked);
+    document.getElementById('implantacao-tintas-path').value = record?.listaTintasPath || '';
+    document.getElementById('implantacao-tintas-checked').checked = Boolean(record?.listaTintasChecked);
     document.getElementById('implantacao-terceiros-path').value = record?.terceirosPath || '';
     document.getElementById('implantacao-terceiros-checked').checked = Boolean(record?.terceirosChecked);
     document.getElementById('implantacao-compras-enviado-comercial').checked = Boolean(record?.comprasMateriaisEnviadoComercial);
     document.getElementById('implantacao-ferragens-enviado-comercial').checked = Boolean(record?.listaFerragensEnviadoComercial);
+    document.getElementById('implantacao-tintas-enviado-comercial').checked = Boolean(record?.listaTintasEnviadoComercial);
     document.getElementById('implantacao-terceiros-enviado-comercial').checked = Boolean(record?.terceirosEnviadoComercial);
     document.getElementById('implantacao-wps-op-code').value = record?.wpsOpCode || '';
 
@@ -83,6 +100,11 @@ function populateImplantacaoForm(record) {
         'implantacao-ferragens-enviado-comercial',
         'implantacao-ferragens-enviado-comercial-date',
         record?.listaFerragensEnviadoComercial ? record?.listaFerragensEnviadoComercialAt : null
+    );
+    updateImplantacaoComercialDateLabel(
+        'implantacao-tintas-enviado-comercial',
+        'implantacao-tintas-enviado-comercial-date',
+        record?.listaTintasEnviadoComercial ? record?.listaTintasEnviadoComercialAt : null
     );
     updateImplantacaoComercialDateLabel(
         'implantacao-terceiros-enviado-comercial',
@@ -102,11 +124,34 @@ function setImplantacaoComercialFieldsDisabled() {
     [
         'implantacao-compras-enviado-comercial',
         'implantacao-ferragens-enviado-comercial',
+        'implantacao-tintas-enviado-comercial',
         'implantacao-terceiros-enviado-comercial'
     ].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = true;
     });
+}
+
+const IMPLANTACAO_LISTA_CHECKBOX_LOCKS = [
+    { checkboxId: 'implantacao-compras-checked', sentKey: 'comprasMateriaisEnviadoComercial', checkedKey: 'comprasMateriaisChecked' },
+    { checkboxId: 'implantacao-ferragens-checked', sentKey: 'listaFerragensEnviadoComercial', checkedKey: 'listaFerragensChecked' },
+    { checkboxId: 'implantacao-tintas-checked', sentKey: 'listaTintasEnviadoComercial', checkedKey: 'listaTintasChecked' },
+    { checkboxId: 'implantacao-terceiros-checked', sentKey: 'terceirosEnviadoComercial', checkedKey: 'terceirosChecked' }
+];
+
+function setImplantacaoListaCheckboxesLockedByComercial(record = activeImplantacaoRecord) {
+    IMPLANTACAO_LISTA_CHECKBOX_LOCKS.forEach(({ checkboxId, sentKey }) => {
+        const el = document.getElementById(checkboxId);
+        if (!el || el.disabled) return;
+        if (Boolean(record?.[sentKey])) el.disabled = true;
+    });
+}
+
+function readImplantacaoListaChecked(checkboxId, checkedKey, sentKey) {
+    if (Boolean(activeImplantacaoRecord?.[sentKey])) {
+        return Boolean(activeImplantacaoRecord?.[checkedKey]);
+    }
+    return Boolean(document.getElementById(checkboxId)?.checked);
 }
 
 function setImplantacaoProjetoFieldsDisabled(disabled) {
@@ -125,6 +170,8 @@ function setImplantacaoFormDisabled(disabled) {
         'implantacao-compras-checked',
         'implantacao-ferragens-path',
         'implantacao-ferragens-checked',
+        'implantacao-tintas-path',
+        'implantacao-tintas-checked',
         'implantacao-terceiros-path',
         'implantacao-terceiros-checked',
         'implantacao-wps-op-code'
@@ -172,6 +219,9 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
             || (values.listaFerragensChecked
                 && Boolean(values.listaFerragensPath)
                 && !record?.listaFerragensEnviadoComercial)
+            || (values.listaTintasChecked
+                && Boolean(values.listaTintasPath)
+                && !record?.listaTintasEnviadoComercial)
             || (values.terceirosChecked
                 && Boolean(values.terceirosPath)
                 && !record?.terceirosEnviadoComercial)
@@ -181,6 +231,7 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
         && values.projetoChecked
         && values.comprasMateriaisChecked
         && values.listaFerragensChecked
+        && values.listaTintasChecked
         && values.terceirosChecked;
 
     if (btnProducao) btnProducao.disabled = !canEnviarProducao;
@@ -190,6 +241,7 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
 
     setImplantacaoFormDisabled(!canAct);
     setImplantacaoProjetoFieldsDisabled(isEnviadoProducao || !canAct);
+    setImplantacaoListaCheckboxesLockedByComercial(record);
 }
 
 async function fetchImplantacaoByOrderProjectId(orderProjectId) {
@@ -236,12 +288,16 @@ function buildImplantacaoUpdatePayload(formValues, extra = {}) {
         comprasMateriaisChecked: formValues.comprasMateriaisChecked,
         listaFerragensPath: formValues.listaFerragensPath || null,
         listaFerragensChecked: formValues.listaFerragensChecked,
+        listaTintasPath: formValues.listaTintasPath || null,
+        listaTintasChecked: formValues.listaTintasChecked,
         terceirosPath: formValues.terceirosPath || null,
         terceirosChecked: formValues.terceirosChecked,
         comprasMateriaisEnviadoComercial: formValues.comprasMateriaisEnviadoComercial,
         comprasMateriaisEnviadoComercialAt: formValues.comprasMateriaisEnviadoComercialAt,
         listaFerragensEnviadoComercial: formValues.listaFerragensEnviadoComercial,
         listaFerragensEnviadoComercialAt: formValues.listaFerragensEnviadoComercialAt,
+        listaTintasEnviadoComercial: formValues.listaTintasEnviadoComercial,
+        listaTintasEnviadoComercialAt: formValues.listaTintasEnviadoComercialAt,
         terceirosEnviadoComercial: formValues.terceirosEnviadoComercial,
         terceirosEnviadoComercialAt: formValues.terceirosEnviadoComercialAt,
         wpsOpCode: formValues.wpsOpCode || null,
@@ -268,7 +324,7 @@ async function saveImplantacaoFormFields(options = {}) {
 
     if (error) {
         if (!silent) {
-            alert('Erro ao salvar implantação: ' + error.message);
+            alertAppDialog('Erro ao salvar implantação: ' + error.message);
         }
         throw error;
     }
@@ -340,6 +396,17 @@ async function refreshImplantacaoRelatedViews(orderProjectId) {
     if (!activeOrderId && orderProjectId && typeof loadPendenciasImplantacao === 'function') {
         await loadPendenciasImplantacao();
     }
+
+    if (typeof loadPendenciasContent === 'function'
+        && !document.getElementById('pendencias-view')?.classList.contains('hidden')
+        && pendenciasActiveSection === 'compras'
+        && pendenciasActiveItem === 'enviados-compras') {
+        await loadPendenciasEnviadosCompras();
+    }
+
+    if (typeof refreshActiveOrderComprasTab === 'function') {
+        await refreshActiveOrderComprasTab();
+    }
 }
 
 async function openImplantacaoModal(orderProjectId, projectName = '', options = {}) {
@@ -347,7 +414,7 @@ async function openImplantacaoModal(orderProjectId, projectName = '', options = 
     if (!orderProjectId) return;
 
     if (!canAccessImplantacaoModal()) {
-        alert('Sem permissão para acessar a implantação.');
+        alertAppDialog('Sem permissão para acessar a implantação.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -358,7 +425,7 @@ async function openImplantacaoModal(orderProjectId, projectName = '', options = 
         if (requireExisting) {
             activeImplantacaoRecord = await fetchImplantacaoByOrderProjectId(activeImplantacaoOrderProjectId);
             if (!activeImplantacaoRecord) {
-                alert('Implantação ainda não iniciada para este projeto.');
+                alertAppDialog('Implantação ainda não iniciada para este projeto.');
                 return;
             }
         } else {
@@ -371,14 +438,15 @@ async function openImplantacaoModal(orderProjectId, projectName = '', options = 
         toggleModal('implantacao-modal', true);
     } catch (error) {
         if (error.message?.includes('Implantacao') || error.message?.includes('does not exist')) {
-            alert('Tabela Implantacao não encontrada. Execute supabase/create-implantacao.sql no Supabase.');
+            alertAppDialog('Tabela Implantacao não encontrada. Execute supabase/create-implantacao.sql no Supabase.');
         } else {
-            alert('Erro ao abrir implantação: ' + error.message);
+            alertAppDialog('Erro ao abrir implantação: ' + error.message);
         }
     }
 }
 
 function closeImplantacaoModal() {
+    setImplantacaoModalLoading(false);
     toggleModal('implantacao-modal', false);
     activeImplantacaoOrderProjectId = null;
     activeImplantacaoRecord = null;
@@ -387,6 +455,59 @@ function closeImplantacaoModal() {
 window.closeImplantacaoModal = closeImplantacaoModal;
 window.openImplantacaoModal = openImplantacaoModal;
 
+function setImplantacaoModalLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('implantacao-modal-loading');
+    const messageEl = document.getElementById('implantacao-modal-loading-msg');
+    const spinner = document.getElementById('implantacao-modal-loading-spinner');
+    const successIcon = document.getElementById('implantacao-modal-loading-success');
+    const errorIcon = document.getElementById('implantacao-modal-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
+    [
+        'btn-implantacao-enviar-producao',
+        'btn-implantacao-enviar-compras',
+        'btn-implantacao-encerrar',
+        'btn-implantacao-salvar'
+    ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && show) el.disabled = true;
+    });
+
+    const closeBtn = document.querySelector('#implantacao-modal button[onclick="closeImplantacaoModal()"]');
+    if (closeBtn) closeBtn.disabled = show;
+
+    document.querySelectorAll('#implantacao-modal input:not([disabled]), #implantacao-modal textarea:not([disabled])')
+        .forEach(el => {
+            if (show) {
+                el.dataset.implantacaoLoadingDisabled = '1';
+                el.disabled = true;
+            } else if (el.dataset.implantacaoLoadingDisabled === '1') {
+                delete el.dataset.implantacaoLoadingDisabled;
+                el.disabled = false;
+            }
+        });
+
+    if (!show) {
+        updateImplantacaoActionButtons(activeImplantacaoRecord);
+    }
+}
+
+function waitImplantacaoStatus(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function createImplantacaoForProject(orderProjectId) {
     await ensureImplantacaoRecord(orderProjectId);
 }
@@ -394,16 +515,18 @@ async function createImplantacaoForProject(orderProjectId) {
 async function handleImplantacaoSalvar() {
     if (!activeImplantacaoRecord?.id) return;
 
-    const btn = document.getElementById('btn-implantacao-salvar');
-    if (btn) btn.disabled = true;
-
     try {
+        setImplantacaoModalLoading(true, 'Salvando implantação...');
         const data = await saveImplantacaoFormFields({ silent: false });
         populateImplantacaoForm(data);
         updateImplantacaoActionButtons(data);
-        alert('Implantação salva.');
+        setImplantacaoModalLoading(true, 'Implantação salva com sucesso!', 'success');
+        await waitImplantacaoStatus(1500);
+        setImplantacaoModalLoading(false);
     } catch (error) {
-        updateImplantacaoActionButtons();
+        setImplantacaoModalLoading(true, `Erro ao salvar: ${error.message}`, 'error');
+        await waitImplantacaoStatus(2500);
+        setImplantacaoModalLoading(false);
     }
 }
 
@@ -412,16 +535,21 @@ async function handleImplantacaoEnviarProducao() {
 
     const formValues = readImplantacaoFormValues();
     if (!formValues.projetoChecked || !formValues.projetoPath) {
-        alert('Marque o checklist de Projeto e informe o caminho da pasta.');
+        alertAppDialog('Marque o checklist de Projeto e informe o caminho da pasta.');
         return;
     }
 
-    if (!confirm(`Enviar "${activeImplantacaoProjectName}" para produção?`)) return;
-
-    const btn = document.getElementById('btn-implantacao-enviar-producao');
-    if (btn) btn.disabled = true;
+    const confirmed = await confirmAppDialog(
+        'O status do projeto será alterado para enviado à produção.',
+        {
+            title: `Enviar "${activeImplantacaoProjectName}" para produção?`,
+            confirmLabel: 'Enviar para produção'
+        }
+    );
+    if (!confirmed) return;
 
     try {
+        setImplantacaoModalLoading(true, 'Salvando e enviando para produção...');
         const payload = buildImplantacaoUpdatePayload(formValues, {
             status: IMPLANTACAO_STATUS_ENVIADO_PRODUCAO
         });
@@ -435,6 +563,7 @@ async function handleImplantacaoEnviarProducao() {
 
         if (error) throw error;
 
+        setImplantacaoModalLoading(true, 'Atualizando status do projeto...');
         await updateOrderProjectStatusForImplantacao(
             activeImplantacaoOrderProjectId,
             IMPLANTACAO_PROJECT_STATUS_EM_PRODUCAO
@@ -442,11 +571,18 @@ async function handleImplantacaoEnviarProducao() {
 
         activeImplantacaoRecord = data;
         populateImplantacaoForm(data);
-        updateImplantacaoActionButtons(data);
+
+        setImplantacaoModalLoading(true, 'Atualizando telas...');
         await refreshImplantacaoRelatedViews(activeImplantacaoOrderProjectId);
+
+        updateImplantacaoActionButtons(data);
+        setImplantacaoModalLoading(true, 'Envio para produção concluído!', 'success');
+        await waitImplantacaoStatus(1800);
+        setImplantacaoModalLoading(false);
     } catch (error) {
-        alert('Erro ao enviar para produção: ' + error.message);
-        updateImplantacaoActionButtons();
+        setImplantacaoModalLoading(true, `Erro ao enviar: ${error.message}`, 'error');
+        await waitImplantacaoStatus(2500);
+        setImplantacaoModalLoading(false);
     }
 }
 
@@ -456,17 +592,20 @@ async function handleImplantacaoEnviarCompras() {
     const formValues = readImplantacaoFormValues();
     const hasCompras = formValues.comprasMateriaisChecked && formValues.comprasMateriaisPath;
     const hasFerragens = formValues.listaFerragensChecked && formValues.listaFerragensPath;
+    const hasTintas = formValues.listaTintasChecked && formValues.listaTintasPath;
     const hasTerceiros = formValues.terceirosChecked && formValues.terceirosPath;
 
-    if (!hasCompras && !hasFerragens && !hasTerceiros) {
-        alert('Marque e preencha o caminho de Lista de Material, Lista de Ferragens e/ou Terceiros.');
+    if (!hasCompras && !hasFerragens && !hasTintas && !hasTerceiros) {
+        alertAppDialog('Marque e preencha o caminho de Lista de Material, Lista de Ferragens, Lista de Tintas e/ou Terceiros.');
         return;
     }
 
-    const btn = document.getElementById('btn-implantacao-enviar-compras');
-    if (btn) btn.disabled = true;
+    const itemsToSend = typeof getImplantacaoCompraSendItems === 'function'
+        ? getImplantacaoCompraSendItems(formValues, activeImplantacaoRecord)
+        : [];
 
     try {
+        setImplantacaoModalLoading(true, 'Registrando solicitações de compra...');
         const now = new Date().toISOString();
         const extra = {
             comprasEnviadoAt: now
@@ -482,11 +621,24 @@ async function handleImplantacaoEnviarCompras() {
             extra.listaFerragensEnviadoComercialAt = now;
         }
 
+        if (hasTintas && !activeImplantacaoRecord?.listaTintasEnviadoComercial) {
+            extra.listaTintasEnviadoComercial = true;
+            extra.listaTintasEnviadoComercialAt = now;
+        }
+
         if (hasTerceiros && !activeImplantacaoRecord?.terceirosEnviadoComercial) {
             extra.terceirosEnviadoComercial = true;
             extra.terceirosEnviadoComercialAt = now;
         }
 
+        await createComprasRecordsFromImplantacaoSend({
+            implantacaoId: activeImplantacaoRecord.id,
+            orderProjectId: activeImplantacaoOrderProjectId,
+            formValues,
+            record: activeImplantacaoRecord
+        });
+
+        setImplantacaoModalLoading(true, 'Salvando implantação...');
         const payload = buildImplantacaoUpdatePayload(formValues, extra);
 
         const { data, error } = await supabaseClient
@@ -500,11 +652,27 @@ async function handleImplantacaoEnviarCompras() {
 
         activeImplantacaoRecord = data;
         populateImplantacaoForm(data);
+
+        setImplantacaoModalLoading(true, 'Atualizando telas...');
+        await refreshImplantacaoRelatedViews(activeImplantacaoOrderProjectId);
+
+        if (itemsToSend.length && typeof notifyCompraLiberacaoEmails === 'function') {
+            setImplantacaoModalLoading(true, 'Enviando e-mail de liberação...');
+            await notifyCompraLiberacaoEmails({
+                items: itemsToSend,
+                formValues,
+                orderProjectId: activeImplantacaoOrderProjectId
+            });
+        }
+
         updateImplantacaoActionButtons(data);
-        alert('Envio para compras registrado.');
+        setImplantacaoModalLoading(true, 'Envio para compras concluído!', 'success');
+        await waitImplantacaoStatus(1800);
+        setImplantacaoModalLoading(false);
     } catch (error) {
-        alert('Erro ao enviar para compras: ' + error.message);
-        updateImplantacaoActionButtons();
+        setImplantacaoModalLoading(true, `Erro ao enviar: ${error.message}`, 'error');
+        await waitImplantacaoStatus(2500);
+        setImplantacaoModalLoading(false);
     }
 }
 
@@ -513,17 +681,24 @@ async function handleImplantacaoEncerrar() {
 
     const formValues = readImplantacaoFormValues();
     if (!formValues.projetoChecked || !formValues.comprasMateriaisChecked
-        || !formValues.listaFerragensChecked || !formValues.terceirosChecked) {
-        alert('Marque todos os checklists para encerrar a implantação.');
+        || !formValues.listaFerragensChecked || !formValues.listaTintasChecked
+        || !formValues.terceirosChecked) {
+        alertAppDialog('Marque todos os checklists para encerrar a implantação.');
         return;
     }
 
-    if (!confirm(`Encerrar a implantação de "${activeImplantacaoProjectName}"?`)) return;
-
-    const btn = document.getElementById('btn-implantacao-encerrar');
-    if (btn) btn.disabled = true;
+    const confirmed = await confirmAppDialog(
+        'Todos os checklists estão marcados. Esta ação encerra a implantação do projeto.',
+        {
+            title: `Encerrar implantação de "${activeImplantacaoProjectName}"?`,
+            confirmLabel: 'Encerrar implantação',
+            variant: 'danger'
+        }
+    );
+    if (!confirmed) return;
 
     try {
+        setImplantacaoModalLoading(true, 'Encerrando implantação...');
         const payload = buildImplantacaoUpdatePayload(formValues, {
             status: IMPLANTACAO_STATUS_ENCERRADO
         });
@@ -539,11 +714,18 @@ async function handleImplantacaoEncerrar() {
 
         activeImplantacaoRecord = data;
         populateImplantacaoForm(data);
-        updateImplantacaoActionButtons(data);
+
+        setImplantacaoModalLoading(true, 'Atualizando telas...');
         await refreshImplantacaoRelatedViews(activeImplantacaoOrderProjectId);
+
+        updateImplantacaoActionButtons(data);
+        setImplantacaoModalLoading(true, 'Implantação encerrada com sucesso!', 'success');
+        await waitImplantacaoStatus(1800);
+        setImplantacaoModalLoading(false);
     } catch (error) {
-        alert('Erro ao encerrar implantação: ' + error.message);
-        updateImplantacaoActionButtons();
+        setImplantacaoModalLoading(true, `Erro ao encerrar: ${error.message}`, 'error');
+        await waitImplantacaoStatus(2500);
+        setImplantacaoModalLoading(false);
     }
 }
 
@@ -552,10 +734,11 @@ function bindImplantacaoEvents() {
         'implantacao-projeto-path',
         'implantacao-compras-path',
         'implantacao-ferragens-path',
+        'implantacao-tintas-path',
         'implantacao-terceiros-path',
         'implantacao-wps-op-code'
     ].forEach(id => {
-        document.getElementById(id)?.addEventListener('input', () => {
+        document.getElementById(id)?.addEventListener('input', async () => {
             updateImplantacaoActionButtons();
         });
     });
@@ -564,9 +747,10 @@ function bindImplantacaoEvents() {
         'implantacao-projeto-checked',
         'implantacao-compras-checked',
         'implantacao-ferragens-checked',
+        'implantacao-tintas-checked',
         'implantacao-terceiros-checked'
     ].forEach(id => {
-        document.getElementById(id)?.addEventListener('change', () => {
+        document.getElementById(id)?.addEventListener('change', async () => {
             updateImplantacaoActionButtons();
         });
     });

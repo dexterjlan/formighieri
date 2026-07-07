@@ -450,7 +450,7 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
     }
 
     content.querySelectorAll('.pendencias-gestor-associar-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             const projectId = Number(button.dataset.projectId);
             const select = content.querySelector(
                 `.pendencias-gestor-designer-select[data-project-id="${projectId}"]`
@@ -485,22 +485,22 @@ async function loadPendenciasProjetosSemProjetistas() {
 
 async function associarPendenciaProjetoAProjetista(projectId, designerId) {
     if (!canSeePendenciasGestorProjetosMenu()) {
-        alert('Somente Gestor de Projetos pode associar responsáveis.');
+        alertAppDialog('Somente Gestor de Projetos pode associar responsáveis.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     if (!projectId || !designerId) {
-        alert('Selecione um projetista.');
+        alertAppDialog('Selecione um projetista.');
         return;
     }
 
     const projetista = pendenciasProjetistasCache.find(item => Number(item.id) === Number(designerId));
     if (!projetista) {
-        alert('Projetista inválido.');
+        alertAppDialog('Projetista inválido.');
         return;
     }
 
-    if (!confirm(`Associar este projeto a ${projetista.name}?`)) return;
+    if (!(await confirmAppDialog(`Associar este projeto a ${projetista.name}?`))) return;
 
     const now = new Date().toISOString();
     const { error } = await supabaseClient
@@ -513,7 +513,7 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId) {
         .eq('id', projectId);
 
     if (error) {
-        alert('Erro ao associar projetista: ' + error.message);
+        alertAppDialog('Erro ao associar projetista: ' + error.message);
         return;
     }
 
@@ -540,11 +540,11 @@ async function loadPendenciasAguardandoProjetoTecnico() {
 
 async function associarPendenciaProjetoAMim(projectId) {
     if (!projectId || currentUser?.role !== 'Projetista' && !isAdmin()) {
-        alert('Somente Projetista pode associar projetos.');
+        alertAppDialog('Somente Projetista pode associar projetos.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (!confirm('Associar este projeto a você como responsável?')) return;
+    if (!(await confirmAppDialog('Associar este projeto a você como responsável?'))) return;
 
     const now = new Date().toISOString();
     const { error } = await supabaseClient
@@ -557,7 +557,7 @@ async function associarPendenciaProjetoAMim(projectId) {
         .eq('id', projectId);
 
     if (error) {
-        alert('Erro ao associar projeto: ' + error.message);
+        alertAppDialog('Erro ao associar projeto: ' + error.message);
         return;
     }
 
@@ -1212,7 +1212,7 @@ async function openRequestFromPendencias(requestId) {
         }
 
         if (result.error || !result.data) {
-            alert('Requisição não encontrada.');
+            alertAppDialog('Requisição não encontrada.');
             return;
         }
 
@@ -1220,7 +1220,7 @@ async function openRequestFromPendencias(requestId) {
     }
 
     if (!isRequestWaitingProjetista(request) || !canEditProjetistaResponse(request)) {
-        alert('Sem permissão para visualizar esta requisição.');
+        alertAppDialog('Sem permissão para visualizar esta requisição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1376,7 +1376,7 @@ function renderPendenciasProjetistaOrdersList(config) {
         ?.addEventListener('click', refreshHandler);
 
     content.querySelectorAll(`.${actionButtonSelector}`).forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             config.onAction(Number(button.dataset.orderId));
         });
     });
@@ -1582,7 +1582,7 @@ function renderPendenciasAguardandoPlantaList(medicoes) {
         ?.addEventListener('click', () => loadPendenciasProjetistaAguardandoPlanta());
 
     content.querySelectorAll('.pendencias-projetista-editar-medicao-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             openPendenciasEditarMedicao(
                 Number(button.dataset.medicaoId),
                 Number(button.dataset.orderId)
@@ -1593,7 +1593,7 @@ function renderPendenciasAguardandoPlantaList(medicoes) {
 
 async function openPendenciasEditarMedicao(medicaoId, orderId) {
     if (!canSeePendenciasProjetistaMedicaoConferenciaMenus()) {
-        alert('Sem permissão para editar medição.');
+        alertAppDialog('Sem permissão para editar medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1606,7 +1606,7 @@ async function openPendenciasEditarMedicao(medicaoId, orderId) {
 
     const medicao = medicoesCache.find(item => Number(item.id) === Number(medicaoId));
     if (medicao && typeof canEditMedicao === 'function' && !canEditMedicao(medicao)) {
-        alert('Sem permissão para editar esta medição.');
+        alertAppDialog('Sem permissão para editar esta medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1640,7 +1640,7 @@ async function loadPendenciasProjetistaAguardandoPlanta() {
 
 async function openPendenciasNovaMedicao(orderId) {
     if (!canSeePendenciasProjetistaMedicaoConferenciaMenus()) {
-        alert('Sem permissão para criar medição.');
+        alertAppDialog('Sem permissão para criar medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1658,7 +1658,7 @@ async function openPendenciasNovaMedicao(orderId) {
 
 async function openPendenciasNovaConferencia(orderId) {
     if (!canSeePendenciasProjetistaMedicaoConferenciaMenus()) {
-        alert('Sem permissão para criar conferência.');
+        alertAppDialog('Sem permissão para criar conferência.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 

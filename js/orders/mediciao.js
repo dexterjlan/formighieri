@@ -525,12 +525,12 @@ function collectMedicaoProjectsFromDom() {
 
 async function openMedicaoModal(medicaoId = null) {
     if (!activeOrderId) {
-        alert('Selecione um pedido primeiro.');
+        alertAppDialog('Selecione um pedido primeiro.');
         return;
     }
 
     if (!medicaoId && !canCreateMedicao()) {
-        alert('Somente Admin ou usuários marcados como Conferente podem criar medições.');
+        alertAppDialog('Somente Admin ou usuários marcados como Conferente podem criar medições.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -540,7 +540,7 @@ async function openMedicaoModal(medicaoId = null) {
         : null;
 
     if (medicao && !canEditMedicao(medicao)) {
-        alert('Você não tem permissão para editar esta medição.');
+        alertAppDialog('Você não tem permissão para editar esta medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -578,11 +578,61 @@ async function openMedicaoModal(medicaoId = null) {
 window.openMedicaoModal = openMedicaoModal;
 
 function closeMedicaoModal() {
+    setMedicaoModalLoading(false);
     editingMedicaoId = null;
     toggleModal('medicao-modal', false);
 }
 
 window.closeMedicaoModal = closeMedicaoModal;
+
+function setMedicaoModalLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('medicao-modal-loading');
+    const messageEl = document.getElementById('medicao-modal-loading-msg');
+    const spinner = document.getElementById('medicao-modal-loading-spinner');
+    const successIcon = document.getElementById('medicao-modal-loading-success');
+    const errorIcon = document.getElementById('medicao-modal-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
+    const submitBtn = document.getElementById('medicao-form-submit');
+    if (submitBtn && show) submitBtn.disabled = true;
+
+    const closeBtn = document.querySelector('#medicao-modal button[onclick="closeMedicaoModal()"]');
+    if (closeBtn) closeBtn.disabled = show;
+
+    document.querySelectorAll('#medicao-modal input:not([disabled]), #medicao-modal textarea:not([disabled])')
+        .forEach(el => {
+            if (show) {
+                el.dataset.medicaoLoadingDisabled = '1';
+                el.disabled = true;
+            } else if (el.dataset.medicaoLoadingDisabled === '1') {
+                delete el.dataset.medicaoLoadingDisabled;
+                el.disabled = false;
+            }
+        });
+
+    if (!show && submitBtn) submitBtn.disabled = false;
+}
+
+async function refreshMedicaoRelatedViews() {
+    if (typeof loadPendenciasContent !== 'function') return;
+
+    const pendenciasView = document.getElementById('pendencias-view');
+    if (pendenciasView?.classList.contains('hidden')) return;
+
+    await loadPendenciasContent();
+}
 
 async function persistMedicaoProjects(medicaoId, projects) {
     const { data: current } = await supabaseClient
@@ -658,7 +708,7 @@ async function saveMedicao() {
         : null;
 
     if (!canEditMedicao(medicao)) {
-        alert('Você não tem permissão para salvar esta medição.');
+        alertAppDialog('Você não tem permissão para salvar esta medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -667,19 +717,19 @@ async function saveMedicao() {
     const projects = collectMedicaoProjectsFromDom();
 
     if (!editingMedicaoId && !defaultDate) {
-        alert('Informe a data da medição.');
+        alertAppDialog('Informe a data da medição.');
         document.getElementById('medicao-default-date')?.focus();
         return;
     }
 
     if (!editingMedicaoId && isFutureInputDate(defaultDate)) {
-        alert('A data da medição não pode ser no futuro.');
+        alertAppDialog('A data da medição não pode ser no futuro.', { variant: 'warning', title: 'Aviso' });
         document.getElementById('medicao-default-date')?.focus();
         return;
     }
 
     if (!projects.length) {
-        alert(editingMedicaoId
+        alertAppDialog(editingMedicaoId
             ? 'Nenhum projeto medido encontrado nesta medição.'
             : 'Selecione ao menos um projeto medido.');
         return;
@@ -687,30 +737,51 @@ async function saveMedicao() {
 
     for (const project of projects) {
         if (!editingMedicaoId && !project.measurementDate) {
-            alert('Informe a data de medição para todos os projetos selecionados.');
+            alertAppDialog('Informe a data de medição para todos os projetos selecionados.');
             return;
         }
         if (!editingMedicaoId && isFutureInputDate(project.measurementDate)) {
-            alert('A data de medição não pode ser no futuro.');
+            alertAppDialog('A data de medição não pode ser no futuro.', { variant: 'warning', title: 'Aviso' });
             return;
         }
         if (editingMedicaoId && project.plantaLevantada && !project.plantaLevantadaDate) {
             const row = document.querySelector(`.medicao-project-row[data-order-project-id="${project.orderProjectId}"]`);
             const projectName = row?.querySelector('.font-medium')?.textContent?.trim() || 'um projeto';
-            alert(`Informe a data da planta para o projeto "${projectName}".`);
+            alertAppDialog(`Informe a data da planta para o projeto "${projectName}".`);
             return;
         }
         if (editingMedicaoId && project.plantaLevantada && isFutureInputDate(project.plantaLevantadaDate)) {
             const row = document.querySelector(`.medicao-project-row[data-order-project-id="${project.orderProjectId}"]`);
             const projectName = row?.querySelector('.font-medium')?.textContent?.trim() || 'um projeto';
-            alert(`A data da planta do projeto "${projectName}" não pode ser no futuro.`);
+            alertAppDialog(`A data da planta do projeto "${projectName}" não pode ser no futuro.`, { variant: 'warning', title: 'Aviso' });
             return;
         }
     }
 
     const now = new Date().toISOString();
+    let previousPlantaProjectIds = new Set();
+
+    if (medicao?.id) {
+        const { data: previousRows } = await supabaseClient
+            .from('MedicaoProject')
+            .select('orderProjectId, plantaLevantada')
+            .eq('medicaoId', medicao.id);
+
+        previousPlantaProjectIds = new Set(
+            (previousRows || [])
+                .filter(row => row.plantaLevantada)
+                .map(row => Number(row.orderProjectId))
+        );
+    }
+
+    const newlyPlantaProjects = projects.filter(project => (
+        project.plantaLevantada
+        && !previousPlantaProjectIds.has(Number(project.orderProjectId))
+    ));
+    const willSendEmail = !medicao || newlyPlantaProjects.length > 0;
 
     try {
+        setMedicaoModalLoading(true, medicao ? 'Salvando medição...' : 'Registrando medição...');
         let medicaoId = medicao?.id;
 
         if (medicao) {
@@ -739,35 +810,64 @@ async function saveMedicao() {
             medicaoId = created.id;
         }
 
+        setMedicaoModalLoading(true, 'Salvando projetos medidos...');
         await persistMedicaoProjects(medicaoId, projects);
         if (!medicao) {
+            setMedicaoModalLoading(true, 'Atualizando status dos projetos...');
             await applyMedicaoRealizadaStatusToProjects(projects.map(project => project.orderProjectId));
+            if (typeof notifyMedicaoRealizadaEmail === 'function') {
+                setMedicaoModalLoading(true, 'Enviando e-mail de notificação...');
+                await notifyMedicaoRealizadaEmail({
+                    orderId: activeOrderId,
+                    projects
+                });
+            }
         } else {
             const plantaProjectIds = projects
                 .filter(project => project.plantaLevantada)
                 .map(project => project.orderProjectId);
             if (plantaProjectIds.length) {
+                setMedicaoModalLoading(true, 'Atualizando status dos projetos...');
                 await applyPlantaLevantadaStatusToProjects(plantaProjectIds);
             }
+            if (newlyPlantaProjects.length && typeof notifyPlantaLevantadaEmail === 'function') {
+                setMedicaoModalLoading(true, 'Enviando e-mail de notificação...');
+                await notifyPlantaLevantadaEmail({
+                    orderId: activeOrderId,
+                    projects: newlyPlantaProjects
+                });
+            }
         }
-        closeMedicaoModal();
+
+        setMedicaoModalLoading(true, 'Atualizando telas...');
         await loadMedicoes(activeOrderId);
         if (typeof loadOrderProjects === 'function' && activeOrderId) {
             await loadOrderProjects(activeOrderId);
         }
+        await refreshMedicaoRelatedViews();
+
+        setMedicaoModalLoading(
+            true,
+            willSendEmail ? 'Medição salva e notificação enviada!' : 'Medição salva com sucesso!',
+            'success'
+        );
+        await new Promise(resolve => setTimeout(resolve, 900));
+        closeMedicaoModal();
     } catch (error) {
-        alert('Erro ao salvar medição: ' + error.message);
+        setMedicaoModalLoading(true, `Erro ao salvar medição: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        setMedicaoModalLoading(false);
     }
 }
 
 async function deleteMedicao(medicaoId) {
     const medicao = medicoesCache.find(item => item.id === medicaoId);
     if (!medicao || !canDeleteMedicao(medicao)) {
-        alert('Você não tem permissão para excluir esta medição.');
+        alertAppDialog('Você não tem permissão para excluir esta medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (!confirm('Excluir esta medição e os projetos vinculados?')) return;
+    if (!(await confirmAppDialog('Excluir esta medição e os projetos vinculados?'))) return;
 
     const { error } = await supabaseClient
         .from('Medicao')
@@ -775,7 +875,7 @@ async function deleteMedicao(medicaoId) {
         .eq('id', medicaoId);
 
     if (error) {
-        alert('Erro ao excluir medição: ' + error.message);
+        alertAppDialog('Erro ao excluir medição: ' + error.message);
         return;
     }
 

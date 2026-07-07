@@ -107,7 +107,7 @@ function renderRevisionActivityRow(activity) {
 
     const checkbox = tr.querySelector('.revision-activity-completed');
     const completedAtEl = tr.querySelector('.revision-activity-completed-at');
-    checkbox?.addEventListener('change', function () {
+    checkbox?.addEventListener('change', async function () {
         if (this.checked) {
             const now = new Date().toISOString();
             tr.dataset.completedAt = now;
@@ -189,7 +189,7 @@ async function loadRevisionActivities(revisionId) {
     tbody.innerHTML = '';
 
     if (error) {
-        alert('Erro ao carregar atividades da revisão: ' + error.message);
+        alertAppDialog('Erro ao carregar atividades da revisão: ' + error.message);
         return;
     }
 
@@ -308,7 +308,7 @@ async function openCommercialRevisionView(approvalId) {
 
     const revision = await getLatestRevisionForApproval(approvalId);
     if (!revision) {
-        alert('Nenhuma revisão encontrada para esta aprovação.');
+        alertAppDialog('Nenhuma revisão encontrada para esta aprovação.');
         return;
     }
 
@@ -372,7 +372,7 @@ async function persistCommercialRevision() {
 
     const activities = collectRevisionActivitiesFromDom().filter(a => a.description);
     if (activities.length === 0) {
-        alert('Adicione ao menos uma atividade.');
+        alertAppDialog('Adicione ao menos uma atividade.');
         return { ok: false };
     }
 
@@ -390,7 +390,7 @@ async function persistCommercialRevision() {
             .single();
 
         if (revisionError || !revision) {
-            alert('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
+            alertAppDialog('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
             return { ok: false };
         }
 
@@ -412,7 +412,7 @@ async function persistCommercialRevision() {
                 .update({ approved: false, approvedAt: null })
                 .eq('id', approval.id);
         } else if (statusError) {
-            alert('Erro ao atualizar status da aprovação: ' + statusError.message);
+            alertAppDialog('Erro ao atualizar status da aprovação: ' + statusError.message);
             return { ok: false };
         }
 
@@ -437,7 +437,7 @@ async function persistCommercialRevision() {
                 .update(payload)
                 .eq('id', activity.id);
             if (error) {
-                alert('Erro ao salvar atividade: ' + error.message);
+                alertAppDialog('Erro ao salvar atividade: ' + error.message);
                 return { ok: false };
             }
         } else {
@@ -445,7 +445,7 @@ async function persistCommercialRevision() {
                 .from('CommercialRevisionActivity')
                 .insert([{ ...payload, revisionId }]);
             if (error) {
-                alert('Erro ao salvar atividade: ' + error.message);
+                alertAppDialog('Erro ao salvar atividade: ' + error.message);
                 return { ok: false };
             }
         }
@@ -523,11 +523,18 @@ async function sendRevisionBackToApproval() {
     if (!approval || !canSendBackToApproval(approval)) return;
 
     if (!allRevisionActivitiesCompleted()) {
-        alert('Marque todas as atividades como realizadas antes de enviar para aprovação.');
+        alertAppDialog('Marque todas as atividades como realizadas antes de enviar para aprovação.');
         return;
     }
 
-    if (!confirm('Enviar esta solicitação novamente para aprovação comercial?')) return;
+    const confirmed = await confirmAppDialog(
+        'A solicitação será reenviada para análise do gestor comercial.',
+        {
+            title: 'Reenviar para aprovação comercial?',
+            confirmLabel: 'Reenviar'
+        }
+    );
+    if (!confirmed) return;
 
     setCommercialRevisionModalLoading(true, 'Salvando revisão...');
 
@@ -554,7 +561,7 @@ async function sendRevisionBackToApproval() {
         }
 
         if (error) {
-            alert('Erro ao enviar para aprovação: ' + error.message);
+            alertAppDialog('Erro ao enviar para aprovação: ' + error.message);
             return;
         }
 
@@ -709,7 +716,7 @@ function renderCommercialRevisionsSection(revisions, approval) {
 }
 
 function bindCommercialRevisionEvents() {
-    document.getElementById('btn-add-revision-activity').addEventListener('click', function () {
+    document.getElementById('btn-add-revision-activity').addEventListener('click', async function () {
         const approval = getCurrentApproval();
         if (!canEditRevisionActivitiesConsultor(approval)) return;
         addRevisionActivityRow();

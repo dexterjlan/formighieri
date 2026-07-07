@@ -52,6 +52,11 @@ const USER_ROLE_CARD_STYLES = {
         bg: 'bg-orange-50/70',
         ring: 'ring-orange-100'
     },
+    Compras: {
+        accent: 'border-l-amber-500',
+        bg: 'bg-amber-50/70',
+        ring: 'ring-amber-100'
+    },
     '': {
         accent: 'border-l-slate-300',
         bg: 'bg-white',
@@ -245,6 +250,7 @@ function renderUsersAdminCards(users) {
                             <option value="Projetista" ${u.role === 'Projetista' ? 'selected' : ''}>Projetista</option>
                             <option value="Consultor" ${u.role === 'Consultor' ? 'selected' : ''}>Consultor</option>
                             <option value="Marceneiro" ${u.role === 'Marceneiro' ? 'selected' : ''}>Marceneiro</option>
+                            <option value="Compras" ${u.role === 'Compras' ? 'selected' : ''}>Compras</option>
                         </select>
                     </div>
 
@@ -280,7 +286,7 @@ function renderUsersAdminCards(users) {
         renderUserFlagsGrid(flagsGrid, u, isActive, initialRole);
 
         if (roleSelect && !roleSelect.disabled) {
-            roleSelect.addEventListener('change', () => {
+            roleSelect.addEventListener('change', async () => {
                 const role = roleSelect.value || '';
                 const checks = readUserFlagChecks(u.id);
                 updateCardColor(role);
@@ -334,7 +340,7 @@ async function loadUsersAdminList() {
 function bindUsersAdminEvents() {
     document.getElementById('users-filter-name')?.addEventListener('input', applyUsersAdminFilters);
     document.getElementById('users-filter-role')?.addEventListener('change', applyUsersAdminFilters);
-    document.getElementById('btn-users-clear-filters')?.addEventListener('click', () => {
+    document.getElementById('btn-users-clear-filters')?.addEventListener('click', async () => {
         const nameInput = document.getElementById('users-filter-name');
         const roleSelect = document.getElementById('users-filter-role');
         if (nameInput) nameInput.value = '';
@@ -375,7 +381,7 @@ async function saveUserRole(userId) {
     const gestorFabrica = role === 'Marceneiro' && Boolean(gestorFabricaCheck?.checked);
 
     if (!role) {
-        alert("Selecione Admin, Projetista, Consultor ou Marceneiro.");
+        alertAppDialog("Selecione Admin, Projetista, Consultor, Marceneiro ou Compras.");
         return;
     }
 
@@ -401,7 +407,7 @@ async function saveUserRole(userId) {
     }
 
     if (error) {
-        alert("Erro ao salvar usuário: " + error.message);
+        alertAppDialog("Erro ao salvar usuário: " + error.message);
         return;
     }
 
@@ -419,19 +425,19 @@ async function saveUserRole(userId) {
         refreshLoggedInUserDisplay();
     }
 
-    alert("Usuário atualizado com sucesso.");
+    alertAppDialog('Usuário atualizado com sucesso.', { variant: 'success', title: 'Sucesso' });
     loadUsersAdminList();
 }
 
 async function toggleUserActive(userId, currentlyActive) {
     if (!isAdmin()) return;
     if (userId === currentUser.id) {
-        alert("Você não pode desativar a si mesmo.");
+        alertAppDialog("Você não pode desativar a si mesmo.", { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     const action = currentlyActive ? 'desativar' : 'reativar';
-    if (!confirm(`Confirma ${action} este usuário?${currentlyActive ? ' Ele não poderá mais fazer login.' : ''}`)) {
+    if (!(await confirmAppDialog(`Confirma ${action} este usuário?${currentlyActive ? ' Ele não poderá mais fazer login.' : ''}`))) {
         return;
     }
 
@@ -441,7 +447,7 @@ async function toggleUserActive(userId, currentlyActive) {
         .eq('id', userId);
 
     if (error) {
-        alert("Erro ao atualizar status: " + error.message);
+        alertAppDialog("Erro ao atualizar status: " + error.message);
         return;
     }
 

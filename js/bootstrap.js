@@ -8,6 +8,7 @@ const PARTIALS = [
 const SCRIPTS = [
     'js/core/config.js',
     'js/core/utils.js',
+    'js/core/dialog.js',
     'js/core/navigation.js',
     'js/core/welcome.js',
     'js/conversations/conversations-query.js',
@@ -20,11 +21,13 @@ const SCRIPTS = [
     'js/gestao/gestao-relatorios.js',
     'js/gestao/gestao-performance.js',
     'js/orders/nomear.js',
+    'js/orders/compras.js',
     'js/orders/implantacao.js',
     'js/pendencias/pendencias-core.js',
     'js/pendencias/pendencias-projetista.js',
     'js/pendencias/pendencias-operacional.js',
     'js/pendencias/pendencias-comercial.js',
+    'js/pendencias/pendencias-compras.js',
     'js/pendencias/pendencias-overview.js',
     'js/admin/system-settings.js',
     'js/core/auth.js',
@@ -87,7 +90,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260891`);
+            await loadScript(`${src}?v=20260925`);
         }
 
         initAppEvents();

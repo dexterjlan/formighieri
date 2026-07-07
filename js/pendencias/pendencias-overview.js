@@ -26,6 +26,9 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     'gestor-fabrica': {
         'aguardando-montagem-interna': 'Projetos em produção aguardando início da montagem interna.',
         'em-montagem': 'Projetos em montagem interna aguardando finalização.'
+    },
+    compras: {
+        'enviados-compras': 'Solicitações de compra em aberto geradas pela implantação.'
     }
 };
 
@@ -105,6 +108,10 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             case 'gestor-fabrica:em-montagem': {
                 const { error, projects } = await fetchPendenciasFabricaProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_INTERNA);
                 return error ? null : projects.length;
+            }
+            case 'compras:enviados-compras': {
+                const { error, items } = await fetchPendenciasEnviadosCompras();
+                return error ? null : items.length;
             }
             default:
                 return null;
@@ -197,7 +204,7 @@ function renderPendenciasSectionOverview(section, cards) {
         ?.addEventListener('click', () => loadPendenciasSectionOverview());
 
     content.querySelectorAll('.pendencias-overview-card').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             pendenciasActiveItem = button.dataset.pendenciasOverviewItem;
             renderPendenciasSidebar();
             loadPendenciasContent();

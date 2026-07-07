@@ -101,7 +101,7 @@ async function saveRequestActivitiesFromCard(requestId) {
     const responseText = getRequestDraftResponseFromCard(requestId, conv);
 
     if (!activities.length && !responseText) {
-        alert('Nada para salvar.');
+        alertAppDialog('Nada para salvar.');
         return;
     }
 
@@ -115,7 +115,7 @@ async function saveRequestActivitiesFromCard(requestId) {
         if (responseText) {
             const { error } = await persistRequestDraftResponse(requestId, conv, responseText);
             if (error) {
-                alert('Erro ao salvar resposta: ' + error.message);
+                alertAppDialog('Erro ao salvar resposta: ' + error.message);
                 setRequestActivitiesSaveLoading(requestId, false);
                 return;
             }
@@ -130,7 +130,7 @@ async function saveRequestActivitiesFromCard(requestId) {
         updateRequestReplyControls(requestId);
         setTimeout(() => setRequestActivitiesSaveLoading(requestId, false), 1200);
     } catch (err) {
-        alert('Erro ao salvar: ' + (err.message || err));
+        alertAppDialog('Erro ao salvar: ' + (err.message || err));
         setRequestActivitiesSaveLoading(requestId, false);
     }
 }
@@ -183,7 +183,7 @@ async function saveRequestActivitiesFromModal() {
         : (canRespondAsProjetista(conv) ? designerResponse : '');
 
     if (!activities.length && !responseText) {
-        alert('Nada para salvar.');
+        alertAppDialog('Nada para salvar.');
         return;
     }
 
@@ -197,7 +197,7 @@ async function saveRequestActivitiesFromModal() {
         if (responseText && (canRespondAsConsultor(conv) || canRespondAsProjetista(conv))) {
             const { error } = await persistRequestDraftResponse(editingConversationId, conv, responseText);
             if (error) {
-                alert('Erro ao salvar resposta: ' + error.message);
+                alertAppDialog('Erro ao salvar resposta: ' + error.message);
                 setConvActivitiesSaveLoading(false);
                 return;
             }
@@ -212,7 +212,7 @@ async function saveRequestActivitiesFromModal() {
         updateConvModalActivitiesHint();
         setTimeout(() => setConvActivitiesSaveLoading(false), 1200);
     } catch (err) {
-        alert('Erro ao salvar: ' + (err.message || err));
+        alertAppDialog('Erro ao salvar: ' + (err.message || err));
         setConvActivitiesSaveLoading(false);
     }
 }
@@ -220,7 +220,7 @@ async function saveRequestActivitiesFromModal() {
 function validateRequestActivitiesBeforeReply(activities) {
     if (!activities.length) return true;
     if (allRequestActivitiesCompleted(activities)) return true;
-    alert('Marque todas as atividades como realizadas antes de responder.');
+    alertAppDialog('Marque todas as atividades como realizadas antes de responder.');
     return false;
 }
 
@@ -323,7 +323,7 @@ function renderRequestActivityRow(activity, conv) {
 
     const checkbox = tr.querySelector('.request-activity-completed');
     const completedAtEl = tr.querySelector('.request-activity-completed-at');
-    checkbox?.addEventListener('change', function () {
+    checkbox?.addEventListener('change', async function () {
         if (this.checked) {
             const now = new Date().toISOString();
             tr.dataset.completedAt = now;
@@ -405,7 +405,7 @@ async function loadRequestActivitiesForModal(requestId) {
             updateRequestActivityModalControls(getCurrentEditingRequest());
             return;
         }
-        alert('Erro ao carregar atividades da requisição: ' + error.message);
+        alertAppDialog('Erro ao carregar atividades da requisição: ' + error.message);
         return;
     }
 
@@ -525,7 +525,7 @@ function bindRequestActivityCardEvents(container, conv) {
     container.querySelectorAll('tr[data-row-id]').forEach(tr => {
         const checkbox = tr.querySelector('.request-activity-completed');
         const completedAtEl = tr.querySelector('.request-activity-completed-at');
-        checkbox?.addEventListener('change', function () {
+        checkbox?.addEventListener('change', async function () {
             if (this.checked) {
                 const now = new Date().toISOString();
                 tr.dataset.completedAt = now;
@@ -583,13 +583,13 @@ function appendRequestActivitiesToCard(container, conv, activities) {
 }
 
 function bindRequestActivityEvents() {
-    document.getElementById('btn-add-request-activity')?.addEventListener('click', function () {
+    document.getElementById('btn-add-request-activity')?.addEventListener('click', async function () {
         const conv = getCurrentEditingRequest();
         if (!canEditRequestActivityDescriptions(conv)) return;
         addRequestActivityRow({}, conv);
     });
 
-    document.getElementById('conv-profile')?.addEventListener('change', function () {
+    document.getElementById('conv-profile')?.addEventListener('change', async function () {
         updateRequestActivityModalControls(getCurrentEditingRequest());
     });
 

@@ -40,7 +40,7 @@ const PENDENCIAS_MINE_EXTRA_STATUSES = [
 ];
 
 const PENDENCIAS_PROJECT_SELECT = `
-    id, orderId, projectCode, name, designerId, statusId, deliveryDate,
+    id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
     order:salesOrders(id, orderCode, clientName, consultantName),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     projectStatus:OrderProjectStatus(id, name)
@@ -187,7 +187,8 @@ function canAccessPendencias() {
         || canSeePendenciasProjetistaMenu()
         || canSeePendenciasGestorComercialMenu()
         || canSeePendenciasGestorProjetosMenu()
-        || canSeePendenciasGestorFabricaMenu();
+        || canSeePendenciasGestorFabricaMenu()
+        || canSeePendenciasComprasMenu();
 }
 
 async function getPendenciasStatusIdByName(name) {
@@ -215,6 +216,7 @@ function getDefaultPendenciasSection() {
     if (canSeePendenciasProjetistaMenu()) return 'projetista';
     if (canSeePendenciasGestorComercialMenu()) return 'gestor-comercial';
     if (canSeePendenciasGestorProjetosMenu()) return 'gestor-projetos';
+    if (canSeePendenciasComprasMenu()) return 'compras';
     if (canSeePendenciasGestorFabricaMenu()) return 'gestor-fabrica';
     return null;
 }
@@ -261,6 +263,14 @@ function getPendenciasSidebarSections() {
             items: [
                 { id: 'aguardando-montagem-interna', label: 'Aguar. Mont. Int.' },
                 { id: 'em-montagem', label: 'Em Montagem' }
+            ]
+        },
+        {
+            id: 'compras',
+            label: 'Compras',
+            visible: canSeePendenciasComprasMenu(),
+            items: [
+                { id: 'enviados-compras', label: 'Enviados para Compras' }
             ]
         }
     ].filter(section => section.visible);
@@ -328,7 +338,7 @@ function renderPendenciasSidebar() {
     }).join('');
 
     nav.querySelectorAll('.pendencias-section-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             const sectionId = button.dataset.pendenciasSection;
             const isSameSection = pendenciasActiveSection === sectionId;
 
@@ -349,7 +359,7 @@ function renderPendenciasSidebar() {
     });
 
     nav.querySelectorAll('.pendencias-overview-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             pendenciasActiveItem = null;
             renderPendenciasSidebar();
             loadPendenciasContent();
@@ -357,7 +367,7 @@ function renderPendenciasSidebar() {
     });
 
     nav.querySelectorAll('.pendencias-item-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             pendenciasActiveItem = button.dataset.pendenciasItem;
             renderPendenciasSidebar();
             loadPendenciasContent();
@@ -377,6 +387,31 @@ function renderPendenciasPlaceholder(title, message) {
             <p class="text-xs text-slate-400 text-center py-10 px-4">${escapeHtml(message)}</p>
         </div>
     `;
+}
+
+function setPendenciasActionLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('pendencias-action-loading');
+    const messageEl = document.getElementById('pendencias-action-loading-msg');
+    const spinner = document.getElementById('pendencias-action-loading-spinner');
+    const successIcon = document.getElementById('pendencias-action-loading-success');
+    const errorIcon = document.getElementById('pendencias-action-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+}
+
+function waitPendenciasStatus(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 async function getPendenciasStatusIdsByNames(names) {
@@ -406,6 +441,10 @@ async function queryPendenciasProjects(filters = {}) {
     let result = await buildQuery(PENDENCIAS_PROJECT_SELECT);
 
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('designer')) {
+        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK);
+    }
+
+    if (result.error?.message?.includes('observacaoAguardandoObra')) {
         result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK);
     }
 
@@ -559,11 +598,17 @@ function loadPendenciasContent() {
         return;
     }
 
+    if (pendenciasActiveSection === 'compras' && pendenciasActiveItem === 'enviados-compras') {
+        loadPendenciasEnviadosCompras();
+        return;
+    }
+
     const titles = {
         consultor: 'Consultor',
         'gestor-comercial': 'Gestor Comercial',
         'gestor-projetos': 'Gestor de Projetos',
         'gestor-fabrica': 'Gestor de Fábrica',
+        compras: 'Compras',
         projetista: 'Projetista'
     };
 
@@ -575,7 +620,7 @@ function loadPendenciasContent() {
 
 function showPendencias() {
     if (!canAccessPendencias()) {
-        alert('Você não tem acesso à tela de pendências.');
+        alertAppDialog('Você não tem acesso à tela de pendências.');
         return;
     }
 
@@ -597,4 +642,7 @@ function updatePendenciasNav() {
 
 function bindPendenciasEvents() {
     document.getElementById('btn-pendencias')?.addEventListener('click', showPendencias);
+    if (typeof bindPendenciasAguardandoMedicaoModalEvents === 'function') {
+        bindPendenciasAguardandoMedicaoModalEvents();
+    }
 }

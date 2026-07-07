@@ -675,12 +675,12 @@ async function approveCommercialApprovalFromPendencias(approvalId) {
     const approval = await ensureCommercialApprovalInPendenciasContext(approvalId);
 
     if (!approval) {
-        alert('Solicitação comercial não encontrada.');
+        alertAppDialog('Solicitação comercial não encontrada.');
         return;
     }
 
     if (!canApproveCommercialApproval(approval)) {
-        alert('Sem permissão para aprovar esta solicitação.');
+        alertAppDialog('Sem permissão para aprovar esta solicitação.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -691,12 +691,12 @@ async function openCommercialRevisionFromPendencias(approvalId) {
     const approval = await ensureCommercialApprovalInPendenciasContext(approvalId);
 
     if (!approval) {
-        alert('Solicitação comercial não encontrada.');
+        alertAppDialog('Solicitação comercial não encontrada.');
         return;
     }
 
     if (typeof openCommercialRevisionModal !== 'function') {
-        alert('Recurso de revisão indisponível.');
+        alertAppDialog('Recurso de revisão indisponível.');
         return;
     }
 
@@ -877,7 +877,7 @@ async function openConsultorRequestFromPendencias(requestId) {
         }
 
         if (result.error || !result.data) {
-            alert('Requisição não encontrada.');
+            alertAppDialog('Requisição não encontrada.');
             return;
         }
 
@@ -885,7 +885,7 @@ async function openConsultorRequestFromPendencias(requestId) {
     }
 
     if (!isRequestWaitingConsultor(request)) {
-        alert('Esta requisição não está aguardando resposta do consultor.');
+        alertAppDialog('Esta requisição não está aguardando resposta do consultor.');
         return;
     }
 
@@ -894,7 +894,7 @@ async function openConsultorRequestFromPendencias(requestId) {
         || canEditConversation(request);
 
     if (!canOpen) {
-        alert('Sem permissão para visualizar esta requisição.');
+        alertAppDialog('Sem permissão para visualizar esta requisição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -916,7 +916,7 @@ async function iniciarPendenciaProjetoTecnico(projectId) {
 
     const statusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_PROJETO_TECNICO);
     if (!statusId) {
-        alert(`Status "${PENDENCIAS_STATUS_PROJETO_TECNICO}" não encontrado.`);
+        alertAppDialog(`Status "${PENDENCIAS_STATUS_PROJETO_TECNICO}" não encontrado.`);
         return;
     }
 
@@ -927,16 +927,16 @@ async function iniciarPendenciaProjetoTecnico(projectId) {
         .maybeSingle();
 
     if (readError || !project) {
-        alert('Projeto não encontrado.');
+        alertAppDialog('Projeto não encontrado.');
         return;
     }
 
     if (Number(project.designerId) !== Number(currentUser?.id) && !isAdmin()) {
-        alert('Somente o responsável do projeto pode iniciá-lo.');
+        alertAppDialog('Somente o responsável do projeto pode iniciá-lo.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (!confirm('Iniciar projeto técnico deste projeto?')) return;
+    if (!(await confirmAppDialog('Iniciar projeto técnico deste projeto?'))) return;
 
     const now = new Date().toISOString();
     const { error } = await supabaseClient
@@ -949,7 +949,7 @@ async function iniciarPendenciaProjetoTecnico(projectId) {
         .eq('id', projectId);
 
     if (error) {
-        alert('Erro ao iniciar projeto: ' + error.message);
+        alertAppDialog('Erro ao iniciar projeto: ' + error.message);
         return;
     }
 

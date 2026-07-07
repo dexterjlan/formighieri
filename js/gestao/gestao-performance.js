@@ -322,7 +322,7 @@ async function loadGestaoPerformance() {
 function bindGestaoPerformanceEvents() {
     document.getElementById('btn-gestao-performance-refresh')?.addEventListener('click', loadGestaoPerformance);
     document.getElementById('gestao-performance-days')?.addEventListener('change', loadGestaoPerformance);
-    document.getElementById('gestao-performance-filter-form')?.addEventListener('submit', (event) => {
+    document.getElementById('gestao-performance-filter-form')?.addEventListener('submit', async (event) => {
         event.preventDefault();
         loadGestaoPerformance();
     });

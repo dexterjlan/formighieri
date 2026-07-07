@@ -63,7 +63,7 @@ async function saveGestaoProjectStatusRow(row) {
     const isActive = Boolean(row.querySelector('.gestao-status-active')?.checked);
 
     if (!name) {
-        alert('Informe o nome do status.');
+        alertAppDialog('Informe o nome do status.');
         return;
     }
 
@@ -74,7 +74,7 @@ async function saveGestaoProjectStatusRow(row) {
         .eq('id', statusId);
 
     if (error) {
-        alert('Erro ao salvar status: ' + error.message);
+        alertAppDialog('Erro ao salvar status: ' + error.message);
         return;
     }
 
@@ -93,16 +93,16 @@ async function deleteGestaoProjectStatusRow(row) {
         .eq('statusId', statusId);
 
     if (countError) {
-        alert('Erro ao verificar uso do status: ' + countError.message);
+        alertAppDialog('Erro ao verificar uso do status: ' + countError.message);
         return;
     }
 
     if (count > 0) {
-        alert(`O status "${name}" está em uso por ${count} projeto(s). Desative-o em vez de excluir.`);
+        alertAppDialog(`O status "${name}" está em uso por ${count} projeto(s). Desative-o em vez de excluir.`);
         return;
     }
 
-    if (!confirm(`Excluir o status "${name}"?`)) return;
+    if (!(await confirmAppDialog(`Excluir o status "${name}"?`))) return;
 
     const { error } = await supabaseClient
         .from('OrderProjectStatus')
@@ -110,7 +110,7 @@ async function deleteGestaoProjectStatusRow(row) {
         .eq('id', statusId);
 
     if (error) {
-        alert('Erro ao excluir status: ' + error.message);
+        alertAppDialog('Erro ao excluir status: ' + error.message);
         return;
     }
 
@@ -125,7 +125,7 @@ async function addGestaoProjectStatus(event) {
     const sortOrder = Number(document.getElementById('gestao-new-status-sort')?.value) || 0;
 
     if (!name) {
-        alert('Informe o nome do status.');
+        alertAppDialog('Informe o nome do status.');
         return;
     }
 
@@ -140,7 +140,7 @@ async function addGestaoProjectStatus(event) {
         });
 
     if (error) {
-        alert('Erro ao adicionar status: ' + error.message);
+        alertAppDialog('Erro ao adicionar status: ' + error.message);
         return;
     }
 
@@ -237,7 +237,7 @@ async function saveGestaoMarceneiroRow(row) {
     const isActive = Boolean(row.querySelector('.gestao-marceneiro-active')?.checked);
 
     if (!name) {
-        alert('Informe o nome do marceneiro.');
+        alertAppDialog('Informe o nome do marceneiro.');
         return;
     }
 
@@ -248,7 +248,7 @@ async function saveGestaoMarceneiroRow(row) {
         .eq('id', marceneiroId);
 
     if (error) {
-        alert('Erro ao salvar marceneiro: ' + error.message);
+        alertAppDialog('Erro ao salvar marceneiro: ' + error.message);
         return;
     }
 
@@ -268,19 +268,19 @@ async function deleteGestaoMarceneiroRow(row) {
 
     if (countError) {
         if (countError.message?.includes('marceneiroId')) {
-            alert('Execute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase para habilitar a exclusão com verificação de uso.');
+            alertAppDialog('Execute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase para habilitar a exclusão com verificação de uso.');
             return;
         }
-        alert('Erro ao verificar uso do marceneiro: ' + countError.message);
+        alertAppDialog('Erro ao verificar uso do marceneiro: ' + countError.message);
         return;
     }
 
     if (count > 0) {
-        alert(`O marceneiro "${name}" está vinculado a ${count} projeto(s). Desative-o em vez de excluir.`);
+        alertAppDialog(`O marceneiro "${name}" está vinculado a ${count} projeto(s). Desative-o em vez de excluir.`);
         return;
     }
 
-    if (!confirm(`Excluir o marceneiro "${name}"?`)) return;
+    if (!(await confirmAppDialog(`Excluir o marceneiro "${name}"?`))) return;
 
     const { error } = await supabaseClient
         .from('Marceneiro')
@@ -288,7 +288,7 @@ async function deleteGestaoMarceneiroRow(row) {
         .eq('id', marceneiroId);
 
     if (error) {
-        alert('Erro ao excluir marceneiro: ' + error.message);
+        alertAppDialog('Erro ao excluir marceneiro: ' + error.message);
         return;
     }
 
@@ -303,7 +303,7 @@ async function addGestaoMarceneiro(event) {
     const sortOrder = Number(document.getElementById('gestao-new-marceneiro-sort')?.value) || 0;
 
     if (!name) {
-        alert('Informe o nome do marceneiro.');
+        alertAppDialog('Informe o nome do marceneiro.');
         return;
     }
 
@@ -318,7 +318,7 @@ async function addGestaoMarceneiro(event) {
         });
 
     if (error) {
-        alert('Erro ao adicionar marceneiro: ' + error.message);
+        alertAppDialog('Erro ao adicionar marceneiro: ' + error.message);
         return;
     }
 

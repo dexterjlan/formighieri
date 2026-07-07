@@ -473,7 +473,7 @@ async function getOpenRequestsForProjects(orderId, projectIds) {
     return (data || []).filter(isRequestOpen);
 }
 
-function confirmApprovalDespiteOpenRequests(openRequests, projects) {
+async function confirmApprovalDespiteOpenRequests(openRequests, projects) {
     const lines = openRequests.map(req => {
         const project = projects.find(p => p.id === req.orderProjectId);
         const name = project?.name || 'Projeto';
@@ -481,8 +481,13 @@ function confirmApprovalDespiteOpenRequests(openRequests, projects) {
         return `• ${name} (${status})`;
     });
 
-    return confirm(
-        `Os projetos abaixo possuem requisições em aberto:\n\n${lines.join('\n')}\n\nDeseja solicitar aprovação comercial mesmo assim?`
+    return await confirmAppDialog(
+        `Os projetos abaixo possuem requisições em aberto:\n\n${lines.join('\n')}\n\nDeseja solicitar aprovação comercial mesmo assim?`,
+        {
+            title: 'Requisições em aberto',
+            confirmLabel: 'Continuar mesmo assim',
+            variant: 'warning'
+        }
     );
 }
 
@@ -540,7 +545,7 @@ async function validateConsultorRequestAgainstOpenApproval(orderProjectId, exist
     const name = project?.name || openApprovals[0].projectName || 'Projeto';
     const status = getApprovalStatusLabel(normalizeCommercialApproval(openApprovals[0]).status);
 
-    alert(
+    alertAppDialog(
         `O projeto "${name}" possui solicitação de aprovação comercial em aberto (${status}). ` +
         'Solicite uma revisão ou edite a solicitação existente antes de criar uma nova requisição.'
     );
@@ -565,26 +570,109 @@ async function insertCommercialApprovals(payloads) {
     return { error, data: data || [] };
 }
 
+let aprovacaoCaminhoModalResolver = null;
+
+function openAprovacaoCaminhoModal(options = {}) {
+    const { projectName = '—', currentPath = '' } = options;
+
+    return new Promise(resolve => {
+        aprovacaoCaminhoModalResolver = resolve;
+        document.getElementById('aprovacao-caminho-project-name').textContent = projectName;
+        document.getElementById('aprovacao-caminho-input').value = currentPath || '';
+        toggleModal('aprovacao-caminho-modal', true);
+        window.setTimeout(() => document.getElementById('aprovacao-caminho-input')?.focus(), 0);
+    });
+}
+
+function closeAprovacaoCaminhoModal(result = null) {
+    toggleModal('aprovacao-caminho-modal', false);
+    if (aprovacaoCaminhoModalResolver) {
+        aprovacaoCaminhoModalResolver(result);
+        aprovacaoCaminhoModalResolver = null;
+    }
+}
+
+async function saveProjectCaminhoRedeAprovacao(projectId, path) {
+    const now = new Date().toISOString();
+    let { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            caminhoRedeAprovacao: path,
+            updatedById: currentUser?.id || null,
+            updatedAt: now
+        })
+        .eq('id', projectId);
+
+    if (error?.message?.includes('caminhoRedeAprovacao')) {
+        throw new Error('Campo caminhoRedeAprovacao não encontrado. Execute supabase/create-order-project-aprovacao-path.sql no Supabase.');
+    }
+
+    if (error) throw error;
+}
+
+async function promptProjectCaminhoRedeAprovacao(project) {
+    while (true) {
+        const path = await openAprovacaoCaminhoModal({
+            projectName: project?.name || '—',
+            currentPath: project?.caminhoRedeAprovacao || ''
+        });
+
+        if (path === null) return null;
+
+        const trimmed = path.trim();
+        if (!trimmed) {
+            alertAppDialog('Informe o caminho da rede para aprovação.');
+            continue;
+        }
+
+        return trimmed;
+    }
+}
+
+async function ensureProjectsCaminhoRedeAprovacao(projects) {
+    if (!projects?.length) return [];
+
+    const saved = [];
+
+    for (const project of projects) {
+        const path = await promptProjectCaminhoRedeAprovacao(project);
+        if (path === null) return null;
+
+        await saveProjectCaminhoRedeAprovacao(project.id, path);
+        saved.push({ ...project, caminhoRedeAprovacao: path });
+    }
+
+    return saved;
+}
+
 async function submitCommercialApprovalFromPendencias(projectId) {
     const normalizedId = Number(projectId);
     if (!normalizedId) return;
 
     let result = await supabaseClient
         .from('OrderProject')
-        .select('id, orderId, name, designerId, statusId, projectStatus:OrderProjectStatus(id, name)')
+        .select('id, orderId, name, designerId, statusId, caminhoRedeAprovacao, projectStatus:OrderProjectStatus(id, name)')
         .eq('id', normalizedId)
         .maybeSingle();
 
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
         result = await supabaseClient
             .from('OrderProject')
-            .select('id, orderId, name, designerId, statusId')
+            .select('id, orderId, name, designerId, statusId, caminhoRedeAprovacao')
+            .eq('id', normalizedId)
+            .maybeSingle();
+    }
+
+    if (result.error?.message?.includes('caminhoRedeAprovacao')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, orderId, name, designerId, statusId, projectStatus:OrderProjectStatus(id, name)')
             .eq('id', normalizedId)
             .maybeSingle();
     }
 
     if (result.error || !result.data) {
-        alert('Projeto não encontrado.');
+        alertAppDialog('Projeto não encontrado.');
         return;
     }
 
@@ -593,18 +681,18 @@ async function submitCommercialApprovalFromPendencias(projectId) {
     const statusName = getCommercialApprovalProjectStatusName(enrichedProject);
 
     if (statusName !== COMMERCIAL_APPROVAL_PROJECT_STATUS) {
-        alert('Este projeto não está mais em Projeto Técnico.');
+        alertAppDialog('Este projeto não está mais em Projeto Técnico.');
         return;
     }
 
     if (currentUser?.role === 'Projetista'
         && Number(enrichedProject.designerId) !== Number(currentUser.id)) {
-        alert('Sem permissão para enviar este projeto para aprovação.');
+        alertAppDialog('Sem permissão para enviar este projeto para aprovação.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     if (!enrichedProject.designerId) {
-        alert('Projeto sem responsável cadastrado.');
+        alertAppDialog('Projeto sem responsável cadastrado.');
         return;
     }
 
@@ -614,24 +702,39 @@ async function submitCommercialApprovalFromPendencias(projectId) {
     );
     if (openApprovals.length) {
         const status = getApprovalStatusLabel(normalizeCommercialApproval(openApprovals[0]).status);
-        alert(`Já existe solicitação de aprovação em aberto (${status}).`);
+        alertAppDialog(`Já existe solicitação de aprovação em aberto (${status}).`);
         return;
     }
 
-    if (!confirm(`Enviar o projeto "${enrichedProject.name}" para aprovação comercial?`)) {
+    const confirmed = await confirmAppDialog(
+        'O projeto será enviado para análise do gestor comercial.',
+        {
+            title: `Enviar "${enrichedProject.name}" para aprovação?`,
+            confirmLabel: 'Enviar para aprovação'
+        }
+    );
+    if (!confirmed) {
         return;
     }
+
+    const caminhoSaved = await ensureProjectsCaminhoRedeAprovacao([{
+        id: enrichedProject.id,
+        name: enrichedProject.name,
+        caminhoRedeAprovacao: enrichedProject.caminhoRedeAprovacao
+    }]);
+    if (!caminhoSaved) return;
 
     const openRequests = await getOpenRequestsForProjects(enrichedProject.orderId, [normalizedId]);
     if (openRequests.length) {
         const allOrderProjects = typeof fetchOrderProjectsForOrder === 'function'
             ? await fetchOrderProjectsForOrder(enrichedProject.orderId)
             : [enrichedProject];
-        const shouldContinue = confirmApprovalDespiteOpenRequests(openRequests, allOrderProjects);
+        const shouldContinue = await confirmApprovalDespiteOpenRequests(openRequests, allOrderProjects);
         if (!shouldContinue) return;
     }
 
     try {
+        setPendenciasActionLoading(true, 'Registrando solicitação de aprovação...');
         const payload = {
             orderId: enrichedProject.orderId,
             orderProjectId: normalizedId,
@@ -643,17 +746,19 @@ async function submitCommercialApprovalFromPendencias(projectId) {
         };
 
         const { error, data: insertedApprovals } = await insertCommercialApprovals([payload]);
-        if (error) {
-            alert('Erro ao enviar para aprovação: ' + error.message);
-            return;
-        }
+        if (error) throw error;
 
+        setPendenciasActionLoading(true, 'Atualizando status do projeto...');
         await applyAguardandoAprovacaoStatusToProjects([normalizedId]);
 
-        for (const inserted of insertedApprovals) {
-            await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
+        if (insertedApprovals?.length) {
+            setPendenciasActionLoading(true, 'Enviando e-mail de notificação...');
+            for (const inserted of insertedApprovals) {
+                await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
+            }
         }
 
+        setPendenciasActionLoading(true, 'Atualizando telas...');
         if (typeof loadPendenciasProjetoTecnico === 'function'
             && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
             await loadPendenciasProjetoTecnico();
@@ -666,8 +771,14 @@ async function submitCommercialApprovalFromPendencias(projectId) {
                 await loadOrderProjects(activeOrderId);
             }
         }
+
+        setPendenciasActionLoading(true, 'Envio para aprovação concluído!', 'success');
+        await waitPendenciasStatus(1800);
+        setPendenciasActionLoading(false);
     } catch (error) {
-        alert('Erro ao enviar para aprovação: ' + error.message);
+        setPendenciasActionLoading(true, `Erro ao enviar: ${error.message}`, 'error');
+        await waitPendenciasStatus(2500);
+        setPendenciasActionLoading(false);
     }
 }
 
@@ -687,12 +798,12 @@ function updateCommercialApprovalButtonVisibility() {
 
 async function openCommercialApprovalModal() {
     if (!canOpenCommercialApprovalModal()) {
-        alert('Somente Admin ou Projetista pode solicitar aprovação comercial.');
+        alertAppDialog('Somente Admin ou Projetista pode solicitar aprovação comercial.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     if (!activeOrderId) {
-        alert('Selecione um pedido primeiro.');
+        alertAppDialog('Selecione um pedido primeiro.');
         return;
     }
 
@@ -738,7 +849,15 @@ async function approveCommercialApproval(id) {
     }
     if (!approval || !canApproveCommercialApproval(approval)) return;
 
-    if (!confirm(`Aprovar a solicitação comercial "${approval.projectName}"?`)) return;
+    const confirmed = await confirmAppDialog(
+        'A solicitação será marcada como aprovada.',
+        {
+            title: `Aprovar "${approval.projectName}"?`,
+            confirmLabel: 'Aprovar',
+            variant: 'success'
+        }
+    );
+    if (!confirmed) return;
 
     const now = new Date().toISOString();
     let payload = {
@@ -764,7 +883,7 @@ async function approveCommercialApproval(id) {
         }
 
         if (error) {
-            alert('Erro ao aprovar solicitação: ' + error.message);
+            alertAppDialog('Erro ao aprovar solicitação: ' + error.message);
             return;
         }
 
@@ -1067,6 +1186,16 @@ function setApproveButtonLoading(approvalId, isLoading, message = 'Aprovando...'
 }
 
 function bindCommercialApprovalEvents() {
+    document.getElementById('aprovacao-caminho-form')?.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const path = document.getElementById('aprovacao-caminho-input')?.value || '';
+        closeAprovacaoCaminhoModal(path);
+    });
+
+    document.getElementById('btn-aprovacao-caminho-cancelar')?.addEventListener('click', async () => {
+        closeAprovacaoCaminhoModal(null);
+    });
+
     document.getElementById('commercial-approval-form').addEventListener('submit', async function (e) {
         e.preventDefault();
 
@@ -1083,19 +1212,17 @@ function bindCommercialApprovalEvents() {
 
         if (isCreateMode) {
             if (!canOpenCommercialApprovalModal()) {
-                alert('Somente Admin ou Projetista pode criar aprovação comercial.');
+                alertAppDialog('Somente Admin ou Projetista pode criar aprovação comercial.', { variant: 'warning', title: 'Aviso' });
                 return;
             }
 
             selectedProjectIds = getSelectedNewApprovalProjectIds();
 
             if (!selectedProjectIds.length) {
-                alert('Selecione ao menos um projeto que ainda não possui solicitação de aprovação.');
+                alertAppDialog('Selecione ao menos um projeto que ainda não possui solicitação de aprovação.');
                 return;
             }
         }
-
-        setCommercialApprovalFormLoading(true, 'Salvando solicitação...');
 
         try {
             const projects = await fetchCommercialApprovalEligibleProjects(activeOrderId);
@@ -1105,7 +1232,7 @@ function bindCommercialApprovalEvents() {
             });
 
             if (projectsWithoutDesigner.length) {
-                alert('Todos os projetos selecionados precisam ter responsável cadastrado no projeto.');
+                alertAppDialog('Todos os projetos selecionados precisam ter responsável cadastrado no projeto.');
                 return;
             }
 
@@ -1113,9 +1240,18 @@ function bindCommercialApprovalEvents() {
             const openRequests = await getOpenRequestsForProjects(activeOrderId, selectedProjectIds);
 
             if (openRequests.length) {
-                const shouldContinue = confirmApprovalDespiteOpenRequests(openRequests, allOrderProjects);
+                const shouldContinue = await confirmApprovalDespiteOpenRequests(openRequests, allOrderProjects);
                 if (!shouldContinue) return;
             }
+
+            const selectedProjects = selectedProjectIds
+                .map(projectId => projects.find(item => Number(item.id) === Number(projectId)))
+                .filter(Boolean);
+
+            const caminhoSaved = await ensureProjectsCaminhoRedeAprovacao(selectedProjects);
+            if (!caminhoSaved) return;
+
+            setCommercialApprovalFormLoading(true, 'Salvando solicitação...');
 
             const payloads = selectedProjectIds.map(projectId => {
                 const project = projects.find(item => Number(item.id) === Number(projectId));
@@ -1131,14 +1267,14 @@ function bindCommercialApprovalEvents() {
             }).filter(payload => payload.projectName && payload.designerId);
 
             if (!payloads.length) {
-                alert('Não foi possível montar as solicitações com o responsável dos projetos.');
+                alertAppDialog('Não foi possível montar as solicitações com o responsável dos projetos.');
                 return;
             }
 
             const { error, data: insertedApprovals } = await insertCommercialApprovals(payloads);
 
             if (error) {
-                alert('Erro ao salvar aprovação comercial: ' + error.message);
+                alertAppDialog('Erro ao salvar aprovação comercial: ' + error.message);
                 return;
             }
 
@@ -1156,7 +1292,7 @@ function bindCommercialApprovalEvents() {
                 await loadOrderProjects(activeOrderId);
             }
         } catch (error) {
-            alert('Erro ao salvar solicitação: ' + error.message);
+            alertAppDialog('Erro ao salvar solicitação: ' + error.message);
         } finally {
             setCommercialApprovalFormLoading(false);
         }

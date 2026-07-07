@@ -93,7 +93,7 @@ function updateWelcomeActions() {
 
 function bindWelcomeEvents() {
     document.getElementById('btn-welcome-go-orders')?.addEventListener('click', showDashboard);
-    document.getElementById('btn-welcome-go-pendencias')?.addEventListener('click', () => {
+    document.getElementById('btn-welcome-go-pendencias')?.addEventListener('click', async () => {
         if (typeof showPendencias === 'function') showPendencias();
     });
 }

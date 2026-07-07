@@ -305,8 +305,36 @@ function isMarceneiro(user = currentUser) {
     return user?.role === 'Marceneiro';
 }
 
+function isCompras(user = currentUser) {
+    return user?.role === 'Compras';
+}
+
+function canSeePendenciasComprasMenu(user = currentUser) {
+    return isAdmin() || isCompras(user);
+}
+
+function canActPendenciasCompras(user = currentUser) {
+    return isCompras(user);
+}
+
+function canSeeOrderComprasTab(user = currentUser) {
+    if (!user) return false;
+    return isAdmin()
+        || isCompras(user)
+        || isGestorComercial(user)
+        || isGestorFabrica(user);
+}
+
+function canSeeCompraModal(user = currentUser) {
+    return canSeeOrderComprasTab(user);
+}
+
+function canActCompraModal(user = currentUser) {
+    return isCompras(user);
+}
+
 function canSeeQueryNav(user = currentUser) {
-    return !isMarceneiro(user);
+    return !isMarceneiro(user) && !isCompras(user);
 }
 
 function canAccessGestao(user = currentUser) {
@@ -369,7 +397,7 @@ function bindCollapsibleListCardToggles(root, options = {}) {
         };
 
         btn.addEventListener('click', toggle);
-        header?.addEventListener('click', (event) => {
+        header?.addEventListener('click', async (event) => {
             if (event.target.closest('button:not(.list-card-toggle), a, input, select, textarea, label')) return;
             toggle(event);
         });

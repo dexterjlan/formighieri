@@ -59,6 +59,11 @@ async function fetchGestaoProjectsByOrderIds(orderIds) {
     if (!normalizedIds.length) return {};
 
     const selectVariants = [
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name)',
+        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name)',
+        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name)',
         'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
@@ -105,6 +110,11 @@ async function enrichGestaoOrdersWithProjectStatuses(orders) {
 
 async function fetchGestaoOrders() {
     const orderSelectVariants = [
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao)',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
@@ -200,6 +210,7 @@ async function insertGestaoProject(orderId, project, now) {
             deliveryDate: project.deliveryDate,
             statusId,
             designerId: project.designerId,
+            caminhoRedeAprovacao: project.caminhoRedeAprovacao,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -212,6 +223,7 @@ async function insertGestaoProject(orderId, project, now) {
             deliveryDate: project.deliveryDate,
             statusId,
             designerId: project.designerId,
+            caminhoRedeAprovacao: project.caminhoRedeAprovacao,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -265,6 +277,7 @@ async function updateGestaoProject(project, now) {
             deliveryDate: project.deliveryDate,
             statusId,
             designerId: project.designerId,
+            caminhoRedeAprovacao: project.caminhoRedeAprovacao,
             updatedById: currentUser.id,
             updatedAt: now
         },
@@ -275,6 +288,7 @@ async function updateGestaoProject(project, now) {
             deliveryDate: project.deliveryDate,
             statusId,
             designerId: project.designerId,
+            caminhoRedeAprovacao: project.caminhoRedeAprovacao,
             updatedById: currentUser.id,
             updatedAt: now
         },
@@ -356,33 +370,33 @@ async function saveGestaoOrder(event) {
     const projects = collectGestaoProjectsFromDom();
 
     if (!orderCode) {
-        alert('Informe o código do pedido.');
+        alertAppDialog('Informe o código do pedido.');
         return;
     }
     if (!clientName) {
-        alert('Informe o nome do cliente.');
+        alertAppDialog('Informe o nome do cliente.');
         return;
     }
     if (!consultantName) {
-        alert('Selecione o consultor.');
+        alertAppDialog('Selecione o consultor.');
         return;
     }
     if (!projects.length) {
-        alert('Adicione ao menos um projeto.');
+        alertAppDialog('Adicione ao menos um projeto.');
         return;
     }
 
     for (const project of projects) {
         if (!project.projectCode || !project.name || !project.environmentTypeId || !project.statusId) {
-            alert('Preencha código, nome, ambiente e status de todos os projetos.');
+            alertAppDialog('Preencha código, nome, ambiente e status de todos os projetos.');
             return;
         }
         if (!isNumericProjectCode(project.projectCode)) {
-            alert(`O código do projeto "${project.name}" deve conter somente números.`);
+            alertAppDialog(`O código do projeto "${project.name}" deve conter somente números.`, { variant: 'warning', title: 'Aviso' });
             return;
         }
         if (Number.isNaN(project.saleValue)) {
-            alert(`Informe um valor de venda válido para o projeto "${project.name}".`);
+            alertAppDialog(`Informe um valor de venda válido para o projeto "${project.name}".`);
             return;
         }
     }
@@ -424,7 +438,7 @@ async function saveGestaoOrder(event) {
                 .maybeSingle();
 
             if (existing) {
-                alert('Já existe um pedido com este código.');
+                alertAppDialog('Já existe um pedido com este código.');
                 return;
             }
 
@@ -477,6 +491,6 @@ async function saveGestaoOrder(event) {
             || error.message?.includes('saleValue')
             ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql e supabase/create-order-project-status.sql no Supabase.'
             : '';
-        alert('Erro ao salvar pedido: ' + error.message + sqlHint);
+        alertAppDialog('Erro ao salvar pedido: ' + error.message + sqlHint);
     }
 }

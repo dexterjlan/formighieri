@@ -206,6 +206,10 @@
                                 class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
                                 Fábrica <span id="order-tab-fabrica-count" class="font-normal opacity-80">(0)</span>
                             </button>
+                            <button type="button" id="order-tab-compras"
+                                class="order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800">
+                                Compras <span id="order-tab-compras-count" class="font-normal opacity-80">(0)</span>
+                            </button>
                             </div>
                             <p id="order-detail-tabs-empty" class="hidden px-4 py-3 text-xs text-slate-400 text-center border-b border-slate-200 bg-slate-50/50">
                                 Nenhuma aba disponível para seu perfil.
@@ -259,6 +263,10 @@
                                     Salvar
                                 </button>
                             </div>
+                        </div>
+                        <div id="order-tab-panel-compras" class="hidden p-4">
+                            <p class="text-xs text-slate-500 mb-3">Solicitações de compra geradas pela implantação deste pedido.</p>
+                            <div id="order-compras-list"></div>
                         </div>
                     </div>
                 </div>
@@ -630,9 +638,9 @@
                                         + Adicionar projeto
                                     </button>
                                 </div>
-                                <p class="text-[10px] text-slate-400">Código do projeto (somente números), nome, ambiente, valor de venda, data de entrega, status e projetista responsável.</p>
+                                <p class="text-[10px] text-slate-400">Código do projeto (somente números), nome, ambiente, valor de venda, data de entrega, status, projetista responsável e caminho da rede para aprovação.</p>
                                 <div class="overflow-x-auto border border-slate-200 rounded-lg bg-white">
-                                    <table class="w-full text-xs min-w-[1020px]">
+                                    <table class="w-full text-xs min-w-[1240px]">
                                         <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
                                             <tr>
                                                 <th class="text-left p-2 font-semibold">Código</th>
@@ -642,6 +650,7 @@
                                                 <th class="text-left p-2 font-semibold">Entrega</th>
                                                 <th class="text-left p-2 font-semibold">Status</th>
                                                 <th class="text-left p-2 font-semibold">Projetista</th>
+                                                <th class="text-left p-2 font-semibold min-w-[180px]">Caminho rede aprovação</th>
                                                 <th class="p-2 font-semibold w-16"></th>
                                             </tr>
                                         </thead>
@@ -741,7 +750,7 @@
                     <div id="gestao-usuarios-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h3 class="font-bold text-sm text-slate-900">Usuários</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Perfil, permissões e status. Cores por perfil: <span class="text-slate-700">Admin</span> · <span class="text-violet-600">Projetista</span> · <span class="text-sky-600">Consultor</span> · <span class="text-orange-600">Marceneiro</span></p>
+                            <p class="text-xs text-slate-400 mt-0.5">Perfil, permissões e status. Cores por perfil: <span class="text-slate-700">Admin</span> · <span class="text-violet-600">Projetista</span> · <span class="text-sky-600">Consultor</span> · <span class="text-orange-600">Marceneiro</span> · <span class="text-amber-600">Compras</span></p>
                         </div>
                         <div class="p-4 md:p-5 space-y-4">
                             <div class="flex flex-wrap items-end gap-2 border border-slate-200 rounded-xl p-3 bg-slate-50/40">
@@ -759,6 +768,7 @@
                                         <option value="Projetista">Projetista</option>
                                         <option value="Consultor">Consultor</option>
                                         <option value="Marceneiro">Marceneiro</option>
+                                        <option value="Compras">Compras</option>
                                         <option value="__none__">Sem perfil</option>
                                     </select>
                                 </div>
@@ -862,7 +872,17 @@
                         <nav id="pendencias-sidebar-nav" class="p-3 pendencias-sidebar-nav"></nav>
                     </div>
                 </aside>
-                <div class="flex-1 min-w-0">
+                <div class="flex-1 min-w-0 relative">
+                    <div id="pendencias-action-loading"
+                        class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                        <div id="pendencias-action-loading-spinner"
+                            class="h-8 w-8 border-2 border-slate-300 border-t-violet-700 rounded-full animate-spin"></div>
+                        <div id="pendencias-action-loading-success"
+                            class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                        <div id="pendencias-action-loading-error"
+                            class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                        <p id="pendencias-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                    </div>
                     <div id="pendencias-content">
                         <p class="text-xs text-slate-400 text-center py-10">Selecione um item no menu.</p>
                     </div>

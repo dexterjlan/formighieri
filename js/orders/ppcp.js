@@ -209,11 +209,11 @@ async function implantarPpcpProject(projectId, button, projectName) {
     if (!activeOrderId || !canSeeOrderPpcpTab() || !canActOrderPpcp()) return;
 
     const label = projectName || 'este projeto';
-    if (!confirm(`Iniciar implantação de "${label}"?`)) return;
+    if (!(await confirmAppDialog(`Iniciar implantação de "${label}"?`))) return;
 
     const implantacaoStatusId = await getPpcpImplantacaoProjectStatusId();
     if (!implantacaoStatusId) {
-        alert(`Status "${PPCP_IMPLANTACAO_STATUS}" não encontrado. Execute supabase/create-order-project-status.sql no Supabase.`);
+        alertAppDialog(`Status "${PPCP_IMPLANTACAO_STATUS}" não encontrado. Execute supabase/create-order-project-status.sql no Supabase.`);
         return;
     }
 
@@ -234,7 +234,7 @@ async function implantarPpcpProject(projectId, button, projectName) {
             .eq('id', projectId);
 
         if (error) {
-            alert('Erro ao iniciar implantação: ' + error.message);
+            alertAppDialog('Erro ao iniciar implantação: ' + error.message);
             return;
         }
 
@@ -259,7 +259,7 @@ async function openPpcpImplantacaoModal(projectId, projectName) {
 }
 
 function bindPpcpEvents() {
-    document.getElementById('ppcp-projects-list')?.addEventListener('click', (event) => {
+    document.getElementById('ppcp-projects-list')?.addEventListener('click', async (event) => {
         const implantarBtn = event.target.closest('.ppcp-implantar-btn');
         if (implantarBtn) {
             if (implantarBtn.disabled) return;

@@ -511,7 +511,7 @@ async function replyConsultorConversation(id) {
             .eq('id', id);
 
         if (error) {
-            alert('Erro ao responder requisição: ' + error.message);
+            alertAppDialog('Erro ao responder requisição: ' + error.message);
             return;
         }
 
@@ -582,7 +582,7 @@ async function replyProjetistaConversation(id) {
         }
 
         if (error) {
-            alert('Erro ao responder requisição: ' + error.message);
+            alertAppDialog('Erro ao responder requisição: ' + error.message);
             return;
         }
 
@@ -667,7 +667,7 @@ function setConvFormLoading(isLoading, message = 'Salvando requisição...') {
 }
 
 function bindConversationEvents() {
-    document.getElementById('conv-order-project')?.addEventListener('change', () => {
+    document.getElementById('conv-order-project')?.addEventListener('change', async () => {
         applyConvDesignerFromSelectedProject();
     });
 
@@ -685,7 +685,7 @@ function bindConversationEvents() {
         const respondOnly = existing && isConvRespondOnlyMode(existing);
 
         if (!respondOnly && !designerRequest) {
-            alert("Informe a solicitação.");
+            alertAppDialog("Informe a solicitação.");
             return;
         }
 
@@ -752,7 +752,7 @@ function bindConversationEvents() {
                 }
 
                 if (error) {
-                    alert("Erro ao salvar requisição: " + error.message);
+                    alertAppDialog("Erro ao salvar requisição: " + error.message);
                     return;
                 }
 
@@ -773,7 +773,7 @@ function bindConversationEvents() {
             } else {
                 const requestProfile = getRequestProfileForCreate();
                 if (!requestProfile) {
-                    alert("Selecione o perfil da requisição (Projetista ou Consultor).");
+                    alertAppDialog("Selecione o perfil da requisição (Projetista ou Consultor).");
                     document.getElementById("conv-profile")?.focus();
                     return;
                 }
@@ -810,7 +810,7 @@ function bindConversationEvents() {
                 createdRequest = data;
 
                 if (error) {
-                    alert("Erro ao criar requisição: " + error.message);
+                    alertAppDialog("Erro ao criar requisição: " + error.message);
                     return;
                 }
 

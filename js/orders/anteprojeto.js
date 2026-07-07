@@ -426,7 +426,7 @@ function clearAnteprojetoStructure() {
     refreshAnteprojetoAddProjectSelect();
 }
 
-function addAnteprojetoProjectSection(project = {}, options = {}) {
+async function addAnteprojetoProjectSection(project = {}, options = {}) {
     const container = document.getElementById('anteprojeto-projects-structure');
     if (!container || !project.orderProjectId) return null;
 
@@ -458,19 +458,19 @@ function addAnteprojetoProjectSection(project = {}, options = {}) {
         </div>
     `;
 
-    section.querySelector('.anteprojeto-add-module-btn')?.addEventListener('click', () => {
+    section.querySelector('.anteprojeto-add-module-btn')?.addEventListener('click', async () => {
         addModuleFromSectionInput(section, options);
     });
 
-    section.querySelector('.anteprojeto-new-module-name')?.addEventListener('keydown', (event) => {
+    section.querySelector('.anteprojeto-new-module-name')?.addEventListener('keydown', async (event) => {
         if (event.key === 'Enter') {
             event.preventDefault();
             addModuleFromSectionInput(section, options);
         }
     });
 
-    section.querySelector('.anteprojeto-remove-project-btn')?.addEventListener('click', () => {
-        if (!confirm('Remover este projeto e todos os módulos dele?')) return;
+    section.querySelector('.anteprojeto-remove-project-btn')?.addEventListener('click', async () => {
+        if (!(await confirmAppDialog('Remover este projeto e todos os módulos dele?'))) return;
         section.remove();
         updateAnteprojetoProjectsEmptyState();
         refreshAnteprojetoAddProjectSelect();
@@ -490,7 +490,7 @@ function addAnteprojetoProjectFromSelect(options = {}) {
     const select = document.getElementById('anteprojeto-add-project-select');
     const orderProjectId = Number(select?.value);
     if (!orderProjectId) {
-        alert('Selecione um projeto para adicionar.');
+        alertAppDialog('Selecione um projeto para adicionar.');
         return;
     }
 
@@ -606,7 +606,7 @@ function renderObservationItem(observation = {}, options = {}) {
         removeBtn.type = 'button';
         removeBtn.className = 'anteprojeto-remove-observation text-red-600 hover:text-red-800 px-1 shrink-0 text-xs';
         removeBtn.textContent = '×';
-        removeBtn.addEventListener('click', () => {
+        removeBtn.addEventListener('click', async () => {
             const card = item.closest('.anteprojeto-module-card');
             item.remove();
             if (card) {
@@ -642,7 +642,7 @@ function renderObservationItem(observation = {}, options = {}) {
 function addObservationToModule(card, text, options = {}) {
     const trimmed = (text || '').trim();
     if (!trimmed) {
-        alert('Informe a observação.');
+        alertAppDialog('Informe a observação.');
         return false;
     }
 
@@ -664,13 +664,13 @@ function bindModuleCardEvents(card, options = {}) {
     const structureDisabled = readOnly || !canEditStructure;
     const extendDisabled = readOnly || !canExtendStructure;
 
-    card.querySelector('.anteprojeto-toggle-observations')?.addEventListener('click', () => {
+    card.querySelector('.anteprojeto-toggle-observations')?.addEventListener('click', async () => {
         const panel = card.querySelector('.module-observations-panel');
         if (!panel) return;
         panel.classList.toggle('hidden');
     });
 
-    card.querySelector('.anteprojeto-add-observation-btn')?.addEventListener('click', () => {
+    card.querySelector('.anteprojeto-add-observation-btn')?.addEventListener('click', async () => {
         const input = card.querySelector('.anteprojeto-new-observation');
         if (!input) return;
         if (addObservationToModule(card, input.value, options)) {
@@ -679,7 +679,7 @@ function bindModuleCardEvents(card, options = {}) {
         }
     });
 
-    card.querySelector('.anteprojeto-new-observation')?.addEventListener('keydown', (event) => {
+    card.querySelector('.anteprojeto-new-observation')?.addEventListener('keydown', async (event) => {
         if (event.key === 'Enter') {
             event.preventDefault();
             const input = event.target;
@@ -689,7 +689,7 @@ function bindModuleCardEvents(card, options = {}) {
         }
     });
 
-    card.querySelector('.anteprojeto-remove-module')?.addEventListener('click', () => {
+    card.querySelector('.anteprojeto-remove-module')?.addEventListener('click', async () => {
         const section = card.closest('.anteprojeto-project-section');
         card.remove();
         if (section) updateProjectSectionEmptyState(section);
@@ -759,7 +759,7 @@ function addModuleFromSectionInput(section, options = {}) {
     const input = section.querySelector('.anteprojeto-new-module-name');
     const name = input?.value.trim() || '';
     if (!name) {
-        alert('Informe o nome do módulo.');
+        alertAppDialog('Informe o nome do módulo.');
         return;
     }
 
@@ -1011,7 +1011,7 @@ async function fetchAnteprojetoConferenceById(conferenceId) {
 async function openAnteprojetoConferenceFromPendencias(conferenceId) {
     const conference = await fetchAnteprojetoConferenceById(conferenceId);
     if (!conference) {
-        alert('Conferência não encontrada.');
+        alertAppDialog('Conferência não encontrada.');
         return;
     }
 
@@ -1030,14 +1030,53 @@ async function openAnteprojetoConferenceFromPendencias(conferenceId) {
 
 window.openAnteprojetoConferenceFromPendencias = openAnteprojetoConferenceFromPendencias;
 
+async function updateAnteprojetoModalOrderContext(orderId) {
+    const orderLineEl = document.getElementById('anteprojeto-modal-order-line');
+    const consultantEl = document.getElementById('anteprojeto-modal-consultant-name');
+    if (!orderLineEl || !consultantEl) return;
+
+    let orderCode = '—';
+    let clientName = '—';
+    let consultantName = '—';
+
+    if (orderId) {
+        const cached = typeof ordersCache !== 'undefined'
+            ? ordersCache.find(order => Number(order.id) === Number(orderId))
+            : null;
+
+        if (cached) {
+            orderCode = cached.orderCode || '—';
+            clientName = cached.clientName || '—';
+            consultantName = cached.consultantName || '—';
+        } else {
+            const { data, error } = await supabaseClient
+                .from('salesOrders')
+                .select('orderCode, clientName, consultantName')
+                .eq('id', orderId)
+                .maybeSingle();
+
+            if (!error && data) {
+                orderCode = data.orderCode || '—';
+                clientName = data.clientName || '—';
+                consultantName = data.consultantName || '—';
+            }
+        }
+    }
+
+    orderLineEl.textContent = orderCode !== '—' || clientName !== '—'
+        ? `${orderCode} - ${clientName}`
+        : '—';
+    consultantEl.textContent = consultantName;
+}
+
 async function openAnteprojetoModal(conferenceId = null) {
     if (!activeOrderId && !conferenceId) {
-        alert('Selecione um pedido primeiro.');
+        alertAppDialog('Selecione um pedido primeiro.');
         return;
     }
 
     if (!conferenceId && !canCreateAnteprojetoConference()) {
-        alert('Somente Admin ou usuários marcados como Conferente podem criar conferências de anteprojeto.');
+        alertAppDialog('Somente Admin ou usuários marcados como Conferente podem criar conferências de anteprojeto.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1086,12 +1125,14 @@ async function openAnteprojetoModal(conferenceId = null) {
     submitBtn.textContent = conference ? 'Salvar Conferência' : 'Criar Conferência';
     updateAnteprojetoModalConfirmControls(conference);
     updateAnteprojetoModalApproveControls(conference);
+    await updateAnteprojetoModalOrderContext(conference?.orderId || activeOrderId);
     toggleModal('anteprojeto-modal', true);
 }
 
 window.openAnteprojetoModal = openAnteprojetoModal;
 
 function closeAnteprojetoModal() {
+    setAnteprojetoModalLoading(false);
     editingAnteprojetoConferenceId = null;
     updateAnteprojetoModalConfirmControls(null);
     updateAnteprojetoModalApproveControls(null);
@@ -1099,6 +1140,128 @@ function closeAnteprojetoModal() {
 }
 
 window.closeAnteprojetoModal = closeAnteprojetoModal;
+
+async function refreshAnteprojetoRelatedViews() {
+    if (typeof loadPendenciasContent === 'function'
+        && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
+        await loadPendenciasContent();
+    }
+}
+
+function isAnteprojetoModalVisible() {
+    const modal = document.getElementById('anteprojeto-modal');
+    return Boolean(modal && !modal.classList.contains('hidden'));
+}
+
+function isPendenciasViewVisible() {
+    const view = document.getElementById('pendencias-view');
+    return Boolean(view && !view.classList.contains('hidden'));
+}
+
+function setAnteprojetoConferenceActionLoading(active, message = 'Processando...', status = 'loading') {
+    if (isAnteprojetoModalVisible()) {
+        setAnteprojetoModalLoading(active, message, status);
+        return;
+    }
+
+    if (isPendenciasViewVisible() && typeof setPendenciasActionLoading === 'function') {
+        setPendenciasActionLoading(active, message, status);
+    }
+}
+
+async function refreshViewsAfterAnteprojetoConfirmation() {
+    if (typeof loadAnteprojetoConferences === 'function' && activeOrderId) {
+        await loadAnteprojetoConferences(activeOrderId);
+    }
+    if (typeof loadOrderProjects === 'function' && activeOrderId) {
+        await loadOrderProjects(activeOrderId);
+    }
+
+    if (!isPendenciasViewVisible()) return;
+
+    if (typeof pendenciasActiveSection !== 'undefined'
+        && typeof pendenciasActiveItem !== 'undefined'
+        && pendenciasActiveSection === 'consultor'
+        && pendenciasActiveItem === 'conferencia'
+        && typeof loadPendenciasConsultorConferencia === 'function') {
+        await loadPendenciasConsultorConferencia();
+        return;
+    }
+
+    await refreshAnteprojetoRelatedViews();
+}
+
+async function refreshViewsAfterAnteprojetoApproval() {
+    if (typeof loadAnteprojetoConferences === 'function' && activeOrderId) {
+        await loadAnteprojetoConferences(activeOrderId);
+    }
+    if (typeof loadOrderProjects === 'function' && activeOrderId) {
+        await loadOrderProjects(activeOrderId);
+    }
+
+    if (!isPendenciasViewVisible()) return;
+
+    if (typeof pendenciasActiveSection !== 'undefined'
+        && typeof pendenciasActiveItem !== 'undefined'
+        && pendenciasActiveSection === 'gestor-comercial'
+        && pendenciasActiveItem === 'aprovar-conferencia'
+        && typeof loadPendenciasAprovarConferencia === 'function') {
+        await loadPendenciasAprovarConferencia();
+        return;
+    }
+
+    await refreshAnteprojetoRelatedViews();
+}
+
+function setAnteprojetoModalLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('anteprojeto-modal-loading');
+    const messageEl = document.getElementById('anteprojeto-modal-loading-msg');
+    const spinner = document.getElementById('anteprojeto-modal-loading-spinner');
+    const successIcon = document.getElementById('anteprojeto-modal-loading-success');
+    const errorIcon = document.getElementById('anteprojeto-modal-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
+    [
+        'anteprojeto-form-submit',
+        'btn-add-anteprojeto-project',
+        'btn-anteprojeto-modal-confirm',
+        'btn-anteprojeto-modal-approve'
+    ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && show) el.disabled = true;
+    });
+
+    const closeBtn = document.querySelector('#anteprojeto-modal button[onclick="closeAnteprojetoModal()"]');
+    if (closeBtn) closeBtn.disabled = show;
+
+    document.querySelectorAll('#anteprojeto-modal input:not([disabled]), #anteprojeto-modal textarea:not([disabled]), #anteprojeto-modal select:not([disabled])')
+        .forEach(el => {
+            if (show) {
+                el.dataset.anteprojetoLoadingDisabled = '1';
+                el.disabled = true;
+            } else if (el.dataset.anteprojetoLoadingDisabled === '1') {
+                delete el.dataset.anteprojetoLoadingDisabled;
+                el.disabled = false;
+            }
+        });
+
+    if (!show) {
+        const submitBtn = document.getElementById('anteprojeto-form-submit');
+        if (submitBtn) submitBtn.disabled = false;
+    }
+}
 
 async function attachModuleObservationsToConferences(conferences) {
     const moduleIds = conferences.flatMap(conference =>
@@ -1403,7 +1566,7 @@ async function saveAnteprojetoConference() {
     const canEditConsultor = canEditAnteprojetoConsultorFields(conference);
 
     if (!canEditStructure && !canEditConsultor) {
-        alert('Você não tem permissão para salvar esta conferência.');
+        alertAppDialog('Você não tem permissão para salvar esta conferência.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1415,15 +1578,15 @@ async function saveAnteprojetoConference() {
 
     if (canEditStructure) {
         if (!selectedProjects.length) {
-            alert('Adicione ao menos um projeto.');
+            alertAppDialog('Adicione ao menos um projeto.');
             return;
         }
         if (!designerId) {
-            alert('Selecione o projetista.');
+            alertAppDialog('Selecione o projetista.');
             return;
         }
         if (!modules.length) {
-            alert('Adicione ao menos um módulo.');
+            alertAppDialog('Adicione ao menos um módulo.');
             return;
         }
 
@@ -1441,26 +1604,28 @@ async function saveAnteprojetoConference() {
                     `.anteprojeto-project-section[data-order-project-id="${project.orderProjectId}"]`
                 );
                 const label = section?.dataset.projectLabel || 'um projeto';
-                alert(`Adicione ao menos um módulo em ${label}.`);
+                alertAppDialog(`Adicione ao menos um módulo em ${label}.`);
                 return;
             }
         }
 
         for (const module of modules) {
             if (!module.name) {
-                alert('Informe o nome de todos os módulos.');
+                alertAppDialog('Informe o nome de todos os módulos.');
                 return;
             }
             if (!module.observations.length) {
-                alert(`Adicione ao menos uma observação no módulo "${module.name}".`);
+                alertAppDialog(`Adicione ao menos uma observação no módulo "${module.name}".`);
                 return;
             }
         }
     }
 
     const now = new Date().toISOString();
+    const isNewConference = !conference;
 
     try {
+        setAnteprojetoModalLoading(true, isNewConference ? 'Registrando conferência...' : 'Salvando conferência...');
         let conferenceId = conference?.id;
 
         if (conference) {
@@ -1496,6 +1661,7 @@ async function saveAnteprojetoConference() {
             conferenceId = created.id;
         }
 
+        setAnteprojetoModalLoading(true, 'Salvando projetos e módulos...');
         await persistAnteprojetoConferenceData(
             conferenceId,
             selectedProjects,
@@ -1503,21 +1669,43 @@ async function saveAnteprojetoConference() {
             { canEditStructure, canExtendStructure, canEditConsultor }
         );
 
-        if (!conference) {
+        if (isNewConference) {
+            setAnteprojetoModalLoading(true, 'Atualizando status dos projetos...');
             await applyConferenciaEnviadaStatusToProjects(
                 selectedProjects.map(project => project.orderProjectId)
             );
+            if (typeof notifyConferenciaEnviadaEmail === 'function') {
+                setAnteprojetoModalLoading(true, 'Enviando e-mail de notificação...');
+                await notifyConferenciaEnviadaEmail({
+                    orderId: activeOrderId,
+                    orderProjectIds: selectedProjects.map(project => project.orderProjectId),
+                    designerId,
+                    sketchUpPath,
+                    conferenceObservation
+                });
+            }
         }
 
-        closeAnteprojetoModal();
+        setAnteprojetoModalLoading(true, 'Atualizando telas...');
         await loadAnteprojetoObservations();
         refreshAnteprojetoObservationDatalist();
         await loadAnteprojetoConferences(activeOrderId);
         if (typeof loadOrderProjects === 'function' && activeOrderId) {
             await loadOrderProjects(activeOrderId);
         }
+        await refreshAnteprojetoRelatedViews();
+
+        setAnteprojetoModalLoading(
+            true,
+            isNewConference ? 'Conferência criada e notificação enviada!' : 'Conferência salva com sucesso!',
+            'success'
+        );
+        await new Promise(resolve => setTimeout(resolve, 900));
+        closeAnteprojetoModal();
     } catch (error) {
-        alert('Erro ao salvar conferência: ' + error.message);
+        setAnteprojetoModalLoading(true, `Erro ao salvar conferência: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        setAnteprojetoModalLoading(false);
     }
 }
 
@@ -1526,23 +1714,25 @@ async function confirmAnteprojetoConference(conferenceId) {
     if (!conference) return;
 
     if (!canConfirmAnteprojetoConference(conference)) {
-        alert('Somente o consultor do pedido ou Admin podem confirmar a conferência.');
+        alertAppDialog('Somente o consultor do pedido ou Admin podem confirmar a conferência.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     const moduleObservations = getConferenceModuleObservations(conference);
     if (!moduleObservations.length) {
-        alert('A conferência precisa ter ao menos uma observação.');
+        alertAppDialog('A conferência precisa ter ao menos uma observação.');
         return;
     }
     if (!moduleObservations.every(obs => obs.consultorChecked)) {
-        alert('Marque todas as observações como conferidas antes de confirmar.');
+        alertAppDialog('Marque todas as observações como conferidas antes de confirmar.');
         return;
     }
 
     const now = new Date().toISOString();
 
     try {
+        setAnteprojetoConferenceActionLoading(true, 'Registrando confirmação da conferência...');
+
         const { error } = await supabaseClient
             .from('AnteprojetoConference')
             .update({
@@ -1556,18 +1746,32 @@ async function confirmAnteprojetoConference(conferenceId) {
 
         if (error) throw error;
 
+        setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
         await applyConferenciaRealizadaStatusToProjects(getConferenceOrderProjectIds(conference));
 
-        await loadAnteprojetoConferences(activeOrderId);
-        if (typeof loadOrderProjects === 'function' && activeOrderId) {
-            await loadOrderProjects(activeOrderId);
+        if (typeof notifyConferenciaConfirmadaEmail === 'function') {
+            setAnteprojetoConferenceActionLoading(true, 'Enviando e-mail de notificação...');
+            await notifyConferenciaConfirmadaEmail({
+                orderId: conference.orderId,
+                orderProjectIds: getConferenceOrderProjectIds(conference)
+            });
         }
-        if (typeof loadPendenciasConsultorConferencia === 'function'
-            && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
-            await loadPendenciasConsultorConferencia();
+
+        setAnteprojetoConferenceActionLoading(true, 'Atualizando telas...');
+        await refreshViewsAfterAnteprojetoConfirmation();
+
+        setAnteprojetoConferenceActionLoading(true, 'Conferência confirmada!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+
+        if (isAnteprojetoModalVisible()) {
+            closeAnteprojetoModal();
         }
+
+        setAnteprojetoConferenceActionLoading(false);
     } catch (error) {
-        alert('Erro ao confirmar conferência: ' + error.message);
+        setAnteprojetoConferenceActionLoading(true, `Erro ao confirmar conferência: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        setAnteprojetoConferenceActionLoading(false);
     }
 }
 
@@ -1579,11 +1783,13 @@ async function confirmAnteprojetoConferenceFromModal() {
     if (!conference || !canConfirmAnteprojetoConference(conference)) return;
 
     if (!areAllAnteprojetoModalObservationsChecked()) {
-        alert('Marque todas as observações como conferidas antes de confirmar.');
+        alertAppDialog('Marque todas as observações como conferidas antes de confirmar.');
         return;
     }
 
     try {
+        setAnteprojetoConferenceActionLoading(true, 'Salvando alterações da conferência...');
+
         const selectedProjects = collectSelectedProjectsFromDom();
         const modules = collectAnteprojetoModulesFromDom();
         await persistAnteprojetoConferenceData(
@@ -1603,17 +1809,18 @@ async function confirmAnteprojetoConferenceFromModal() {
             }
         }
 
-        closeAnteprojetoModal();
         await confirmAnteprojetoConference(conferenceId);
     } catch (error) {
-        alert('Erro ao confirmar conferência: ' + error.message);
+        setAnteprojetoConferenceActionLoading(true, `Erro ao confirmar conferência: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        setAnteprojetoConferenceActionLoading(false);
     }
 }
 
 async function confirmAnteprojetoConferenceFromPendencias(conferenceId) {
     const conference = await fetchAnteprojetoConferenceById(conferenceId);
     if (!conference) {
-        alert('Conferência não encontrada.');
+        alertAppDialog('Conferência não encontrada.');
         return;
     }
 
@@ -1631,7 +1838,7 @@ async function confirmAnteprojetoConferenceFromPendencias(conferenceId) {
 async function approveAnteprojetoConferenceFromPendencias(conferenceId) {
     const conference = await fetchAnteprojetoConferenceById(conferenceId);
     if (!conference) {
-        alert('Conferência não encontrada.');
+        alertAppDialog('Conferência não encontrada.');
         return;
     }
 
@@ -1656,15 +1863,16 @@ async function approveAnteprojetoConference(conferenceId) {
     if (!conference) return;
 
     if (!canApproveAnteprojetoConference(conference)) {
-        alert('Somente Admin com flag Gestor comercial pode aprovar a conferência.');
+        alertAppDialog('Somente Admin com flag Gestor comercial pode aprovar a conferência.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (!confirm('Aprovar esta conferência e alterar os projetos para Aguardando Projeto Técnico?')) {
+    if (!(await confirmAppDialog('Aprovar esta conferência e alterar os projetos para Aguardando Projeto Técnico?'))) {
         return;
     }
 
     try {
+        setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
         await applyAguardandoProjetoTecnicoStatusToProjects(getConferenceOrderProjectIds(conference));
 
         const now = new Date().toISOString();
@@ -1675,6 +1883,8 @@ async function approveAnteprojetoConference(conferenceId) {
             updatedAt: now,
             updatedById: currentUser.id
         };
+
+        setAnteprojetoConferenceActionLoading(true, 'Registrando aprovação da conferência...');
 
         let { error: conferenceError } = await supabaseClient
             .from('AnteprojetoConference')
@@ -1695,17 +1905,29 @@ async function approveAnteprojetoConference(conferenceId) {
 
         if (conferenceError) throw conferenceError;
 
-        closeAnteprojetoModal();
-        await loadAnteprojetoConferences(activeOrderId);
-        if (typeof loadOrderProjects === 'function' && activeOrderId) {
-            await loadOrderProjects(activeOrderId);
+        if (typeof notifyConferenciaAprovadaEmail === 'function') {
+            setAnteprojetoConferenceActionLoading(true, 'Enviando e-mail de notificação...');
+            await notifyConferenciaAprovadaEmail({
+                orderId: conference.orderId,
+                orderProjectIds: getConferenceOrderProjectIds(conference)
+            });
         }
-        if (typeof loadPendenciasAprovarConferencia === 'function'
-            && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
-            await loadPendenciasAprovarConferencia();
+
+        setAnteprojetoConferenceActionLoading(true, 'Atualizando telas...');
+        await refreshViewsAfterAnteprojetoApproval();
+
+        setAnteprojetoConferenceActionLoading(true, 'Conferência aprovada!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+
+        if (isAnteprojetoModalVisible()) {
+            closeAnteprojetoModal();
         }
+
+        setAnteprojetoConferenceActionLoading(false);
     } catch (error) {
-        alert('Erro ao aprovar conferência: ' + error.message);
+        setAnteprojetoConferenceActionLoading(true, `Erro ao aprovar conferência: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        setAnteprojetoConferenceActionLoading(false);
     }
 }
 
@@ -1719,7 +1941,7 @@ function bindAnteprojetoTreeToggles(root) {
         const btn = row?.querySelector('.anteprojeto-tree-toggle');
         if (!row || !children || !btn) return;
 
-        btn.addEventListener('click', (event) => {
+        btn.addEventListener('click', async (event) => {
             event.stopPropagation();
             const collapsed = children.classList.toggle('hidden');
             btn.textContent = collapsed ? '▶' : '▼';
@@ -2063,10 +2285,10 @@ function updateAnteprojetoActionButtons() {
 
 function bindAnteprojetoEvents() {
     document.getElementById('btn-new-anteprojeto')?.addEventListener('click', () => openAnteprojetoModal());
-    document.getElementById('btn-anteprojeto-modal-confirm')?.addEventListener('click', () => {
+    document.getElementById('btn-anteprojeto-modal-confirm')?.addEventListener('click', async () => {
         confirmAnteprojetoConferenceFromModal();
     });
-    document.getElementById('btn-anteprojeto-modal-approve')?.addEventListener('click', () => {
+    document.getElementById('btn-anteprojeto-modal-approve')?.addEventListener('click', async () => {
         if (!editingAnteprojetoConferenceId) return;
         approveAnteprojetoConference(editingAnteprojetoConferenceId);
     });
@@ -2075,7 +2297,7 @@ function bindAnteprojetoEvents() {
             refreshAnteprojetoModalConfirmButton();
         }
     });
-    document.getElementById('btn-add-anteprojeto-project')?.addEventListener('click', () => {
+    document.getElementById('btn-add-anteprojeto-project')?.addEventListener('click', async () => {
         const conference = editingAnteprojetoConferenceId
             ? anteprojetoConferencesCache.find(c => c.id === editingAnteprojetoConferenceId)
             : null;

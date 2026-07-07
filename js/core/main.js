@@ -15,6 +15,7 @@ function showLoginScreen() {
 function initAppEvents() {
     document.getElementById("btn-show-register").addEventListener("click", showRegisterScreen);
     document.getElementById("btn-show-login").addEventListener("click", showLoginScreen);
+    bindAppDialogEvents();
     bindAuthEvents();
     bindNavigationEvents();
     bindWelcomeEvents();
@@ -29,6 +30,7 @@ function initAppEvents() {
     bindFabricaEvents();
     bindNomearEvents();
     bindImplantacaoEvents();
+    bindCompraEvents();
     bindPpcpEvents();
     bindConversationEvents();
     bindRequestActivityEvents();

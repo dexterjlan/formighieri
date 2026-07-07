@@ -206,7 +206,7 @@ function normalizeProjectCodeInput(value) {
 function bindGestaoProjectCodeInput(input) {
     if (!input) return;
 
-    input.addEventListener('input', () => {
+    input.addEventListener('input', async () => {
         const normalized = normalizeProjectCodeInput(input.value);
         if (input.value !== normalized) {
             input.value = normalized;
@@ -257,12 +257,16 @@ function addGestaoProjectRow(project = {}) {
                 ${getProjetistaOptionsHtml(project.designerId)}
             </select>
         </td>
+        <td class="p-2">
+            <input type="text" class="gestao-project-caminho-rede-aprovacao w-full min-w-[180px] px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                value="${escapeHtml(project.caminhoRedeAprovacao || '')}" placeholder="Preenchido ao solicitar aprovação">
+        </td>
         <td class="p-2 text-center">
             <button type="button" class="gestao-remove-project text-red-600 hover:text-red-800 text-xs font-medium">×</button>
         </td>
     `;
 
-    row.querySelector('.gestao-remove-project')?.addEventListener('click', () => {
+    row.querySelector('.gestao-remove-project')?.addEventListener('click', async () => {
         row.remove();
         updateGestaoProjectsEmptyState();
     });
@@ -290,7 +294,8 @@ function collectGestaoProjectsFromDom() {
         statusId: Number(row.querySelector('.gestao-project-status')?.value) || getDefaultProjectStatusId(),
         designerId: row.querySelector('.gestao-project-designer')?.value
             ? Number(row.querySelector('.gestao-project-designer').value)
-            : null
+            : null,
+        caminhoRedeAprovacao: row.querySelector('.gestao-project-caminho-rede-aprovacao')?.value?.trim() || null
     }));
 }
 
@@ -366,7 +371,7 @@ function showGestaoMarceneirosPanel() {
 
 function showGestaoUsuariosPanel() {
     if (!isAdmin()) {
-        alert('Somente administradores podem gerenciar usuários.');
+        alertAppDialog('Somente administradores podem gerenciar usuários.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -406,7 +411,7 @@ function showGestaoPerformancePanel() {
 
 function showGestao() {
     if (!canAccessGestao()) {
-        alert('Somente administradores e gestores podem acessar a Gestão.');
+        alertAppDialog('Somente administradores e gestores podem acessar a Gestão.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -423,58 +428,58 @@ function showGestao() {
 function bindGestaoEvents() {
     document.getElementById('btn-gestao')?.addEventListener('click', showGestao);
     document.getElementById('btn-gestao-create-order')?.addEventListener('click', openGestaoCreateOrderForm);
-    document.getElementById('btn-gestao-back-list')?.addEventListener('click', () => {
+    document.getElementById('btn-gestao-back-list')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoPedidoListPanel();
     });
-    document.getElementById('btn-gestao-cancel-order')?.addEventListener('click', () => {
+    document.getElementById('btn-gestao-cancel-order')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoPedidoListPanel();
     });
     document.getElementById('btn-gestao-add-project')?.addEventListener('click', () => addGestaoProjectRow());
     document.getElementById('gestao-order-form')?.addEventListener('submit', saveGestaoOrder);
-    document.getElementById('gestao-ord-code')?.addEventListener('input', function () {
+    document.getElementById('gestao-ord-code')?.addEventListener('input', async function () {
         this.value = this.value.replace(/\D/g, '');
     });
-    document.getElementById('gestao-nav-cadastros-toggle')?.addEventListener('click', () => {
+    document.getElementById('gestao-nav-cadastros-toggle')?.addEventListener('click', async () => {
         const items = document.getElementById('gestao-nav-cadastros-items');
         if (!items) return;
         setGestaoCadastrosNavExpanded(items.classList.contains('hidden'));
     });
-    document.getElementById('gestao-nav-pedido')?.addEventListener('click', () => {
+    document.getElementById('gestao-nav-pedido')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoPedidoListPanel();
         loadGestaoOrdersList();
     });
-    document.getElementById('gestao-nav-project-status')?.addEventListener('click', () => {
+    document.getElementById('gestao-nav-project-status')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoProjectStatusPanel();
         loadGestaoProjectStatusList();
     });
-    document.getElementById('gestao-nav-marceneiros')?.addEventListener('click', () => {
+    document.getElementById('gestao-nav-marceneiros')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoMarceneirosPanel();
         loadGestaoMarceneirosList();
     });
-    document.getElementById('gestao-nav-usuarios')?.addEventListener('click', () => {
+    document.getElementById('gestao-nav-usuarios')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoUsuariosPanel();
     });
-    document.getElementById('gestao-nav-kanban')?.addEventListener('click', () => {
+    document.getElementById('gestao-nav-kanban')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoKanbanPanel();
     });
-    document.getElementById('gestao-nav-relatorios')?.addEventListener('click', () => {
+    document.getElementById('gestao-nav-relatorios')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoRelatoriosPanel();
     });
-    document.getElementById('gestao-nav-performance')?.addEventListener('click', () => {
+    document.getElementById('gestao-nav-performance')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoPerformancePanel();
     });
     document.getElementById('btn-gestao-kanban-refresh')?.addEventListener('click', loadGestaoKanban);
     document.getElementById('btn-gestao-project-history-back')?.addEventListener('click', showGestaoKanbanPanel);
-    document.getElementById('gestao-kanban-board')?.addEventListener('click', (event) => {
+    document.getElementById('gestao-kanban-board')?.addEventListener('click', async (event) => {
         const button = event.target.closest('.gestao-kanban-history-btn');
         if (!button) return;
 

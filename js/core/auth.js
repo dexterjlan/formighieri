@@ -13,7 +13,7 @@ async function enterApp(authUserId) {
         await enterAppInProgress;
     } catch (err) {
         console.error("enterApp:", err);
-        alert(err.message || "Erro ao entrar no sistema.");
+        alertAppDialog(err.message || "Erro ao entrar no sistema.");
         currentUser = null;
     } finally {
         enterAppInProgress = null;
@@ -279,14 +279,14 @@ function bindAuthEvents() {
             });
 
             if (error || !data.user) {
-                alert("Usuário ou senha inválidos." + (error ? " " + formatAuthError(error) : ""));
+                alertAppDialog("Usuário ou senha inválidos." + (error ? " " + formatAuthError(error) : ""), { variant: 'error', title: 'Erro' });
                 return;
             }
 
             await enterApp(data.user.id);
         } catch (err) {
             console.error("login:", err);
-            alert(err.message || "Erro ao entrar no sistema.");
+            alertAppDialog(err.message || "Erro ao entrar no sistema.");
         } finally {
             btn.disabled = false;
             btn.textContent = originalText;
@@ -303,12 +303,12 @@ function bindAuthEvents() {
         const role = document.getElementById("reg-role").value;
 
         if (password !== passwordConfirm) {
-            alert("As senhas não coincidem.");
+            alertAppDialog("As senhas não coincidem.");
             return;
         }
 
         if (!role) {
-            alert("Selecione o perfil (Consultor, Projetista ou Marceneiro).");
+            alertAppDialog("Selecione o perfil (Consultor, Projetista, Marceneiro ou Comprador).");
             document.getElementById("reg-role").focus();
             return;
         }
@@ -323,12 +323,12 @@ function bindAuthEvents() {
 
         if (error) {
             console.error("signUp error:", error);
-            alert("Erro ao criar usuário: " + formatAuthError(error));
+            alertAppDialog("Erro ao criar usuário: " + formatAuthError(error));
             return;
         }
 
         if (!data?.user) {
-            alert("Não foi possível criar a conta. Este e-mail pode já estar cadastrado.");
+            alertAppDialog("Não foi possível criar a conta. Este e-mail pode já estar cadastrado.");
             showLoginScreen();
             return;
         }
@@ -348,8 +348,8 @@ function bindAuthEvents() {
         );
         if (profileError) {
             console.error("syncRegisteredUserProfile:", profileError);
-            alert("Conta criada no login, mas falhou ao salvar o perfil: " + formatAuthError(profileError)
-                + " — Execute supabase/rls-policies.sql no SQL Editor do Supabase.");
+            alertAppDialog("Conta criada no login, mas falhou ao salvar o perfil: " + formatAuthError(profileError)
+                + " — Execute supabase/rls-policies.sql no SQL Editor do Supabase.", { variant: 'error', title: 'Erro' });
         }
 
         if (data.session) {
@@ -358,7 +358,7 @@ function bindAuthEvents() {
             return;
         }
 
-        alert("Conta criada! Faça login após a confirmação do e-mail (se solicitada).");
+        alertAppDialog("Conta criada! Faça login após a confirmação do e-mail (se solicitada).", { variant: 'success', title: 'Sucesso' });
         document.getElementById("register-form").reset();
         showLoginScreen();
     });

@@ -27,62 +27,385 @@ async function fetchPendenciasAguardandoMedicaoProjects() {
     };
 }
 
-function renderPendenciasAguardandoMedicaoActionButtons(project, canEdit) {
-    const statusName = getPendenciasProjectStatusName(project);
-    const obraDisabled = !canEdit || statusName === PENDENCIAS_STATUS_AGUARDANDO_OBRA;
-    const medicaoDisabled = !canEdit;
-    const disabledClass = 'opacity-50 cursor-not-allowed';
+let pendenciasAguardandoMedicaoProjectsCache = [];
+let pendenciasAguardandoMedicaoEditGroup = null;
+
+function groupPendenciasAguardandoMedicaoProjects(projects) {
+    const groups = new Map();
+
+    projects.forEach(project => {
+        const orderId = Number(project.orderId);
+        const statusName = getPendenciasProjectStatusName(project);
+        const key = `${orderId}::${statusName}`;
+
+        if (!groups.has(key)) {
+            groups.set(key, {
+                orderId,
+                statusName,
+                orderCode: project.order?.orderCode || '—',
+                clientName: project.order?.clientName || '—',
+                consultantName: project.order?.consultantName || '—',
+                projects: []
+            });
+        }
+
+        groups.get(key).projects.push(project);
+    });
+
+    return [...groups.values()].sort((a, b) => {
+        const orderCompare = String(a.orderCode).localeCompare(String(b.orderCode), 'pt-BR', { numeric: true });
+        if (orderCompare !== 0) return orderCompare;
+        return String(a.statusName).localeCompare(String(b.statusName), 'pt-BR');
+    });
+}
+
+function getPendenciasAguardandoMedicaoGroupProjects(orderId, statusName) {
+    return pendenciasAguardandoMedicaoProjectsCache.filter(project => (
+        Number(project.orderId) === Number(orderId)
+        && getPendenciasProjectStatusName(project) === statusName
+    ));
+}
+
+function setPendenciasAguardandoMedicaoModalLoading(active, message = 'Processando...') {
+    const overlay = document.getElementById('pendencias-aguardando-medicao-modal-loading');
+    const messageEl = document.getElementById('pendencias-aguardando-medicao-modal-loading-msg');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) messageEl.textContent = message;
+
+    [
+        'btn-pendencias-am-obra',
+        'btn-pendencias-am-medicao',
+        'btn-pendencias-am-fechar',
+        'pendencias-am-select-all-check'
+    ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = show;
+    });
+
+    document.querySelectorAll('#pendencias-am-modal-projects-list input, #pendencias-am-modal-projects-list textarea')
+        .forEach(el => {
+            if (show) {
+                el.dataset.pendenciasAmLoadingDisabled = '1';
+                el.disabled = true;
+            } else if (el.dataset.pendenciasAmLoadingDisabled === '1') {
+                delete el.dataset.pendenciasAmLoadingDisabled;
+                el.disabled = false;
+            }
+        });
+}
+
+function closePendenciasAguardandoMedicaoModal() {
+    setPendenciasAguardandoMedicaoModalLoading(false);
+    pendenciasAguardandoMedicaoEditGroup = null;
+    toggleModal('pendencias-aguardando-medicao-modal', false);
+}
+
+function getPendenciasAguardandoMedicaoProjectLabel(project) {
+    return typeof getPendenciasProjectDetailLabel === 'function'
+        ? getPendenciasProjectDetailLabel(project)
+        : (project?.name || 'Projeto');
+}
+
+function renderPendenciasAguardandoMedicaoModalProjectRow(project) {
+    const label = getPendenciasAguardandoMedicaoProjectLabel(project);
+    const observation = project.observacaoAguardandoObra || '';
 
     return `
-        <div class="flex flex-wrap justify-end gap-1.5">
-            <button type="button"
-                class="pendencias-status-obra-btn text-xs bg-orange-50 text-orange-800 border border-orange-200 px-2.5 py-1 rounded-lg font-medium ${obraDisabled ? disabledClass : 'hover:bg-orange-100'}"
-                data-project-id="${project.id}"
-                data-target-status="${escapeHtml(PENDENCIAS_STATUS_AGUARDANDO_OBRA)}"
-                ${obraDisabled ? 'disabled' : ''}>
-                Aguardando Obra
-            </button>
-            <button type="button"
-                class="pendencias-status-medicao-btn text-xs bg-cyan-50 text-cyan-800 border border-cyan-200 px-2.5 py-1 rounded-lg font-medium ${medicaoDisabled ? disabledClass : 'hover:bg-cyan-100'}"
-                data-project-id="${project.id}"
-                data-target-status="${escapeHtml(PENDENCIAS_STATUS_AGUARDANDO_MEDICAO)}"
-                ${medicaoDisabled ? 'disabled' : ''}>
-                Aguardando Medição
-            </button>
+        <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/40 flex items-start gap-3"
+            data-project-id="${project.id}">
+            <input type="checkbox"
+                class="pendencias-am-project-check mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-violet-600 focus:ring-violet-500">
+            <span class="text-sm font-medium text-slate-800 min-w-[7rem] max-w-[40%] shrink-0 pt-0.5 leading-snug">${escapeHtml(label)}</span>
+            <textarea rows="2"
+                class="pendencias-am-project-obs flex-1 min-w-0 px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-orange-500 resize-y"
+                placeholder="Observação (Aguardando Obra)">${escapeHtml(observation)}</textarea>
         </div>
     `;
+}
+
+function openPendenciasAguardandoMedicaoEditModal(orderId, statusName) {
+    if (!canEditPendenciasAguardandoMedicaoStatus()) return;
+
+    const groupProjects = getPendenciasAguardandoMedicaoGroupProjects(orderId, statusName);
+    if (!groupProjects.length) {
+        alertAppDialog('Nenhum projeto encontrado neste grupo. Atualize a lista.');
+        return;
+    }
+
+    const sample = groupProjects[0];
+    pendenciasAguardandoMedicaoEditGroup = {
+        orderId: Number(orderId),
+        statusName,
+        orderCode: sample.order?.orderCode || '—',
+        clientName: sample.order?.clientName || '—',
+        consultantName: sample.order?.consultantName || '—'
+    };
+
+    document.getElementById('pendencias-am-modal-order-line').textContent =
+        `${pendenciasAguardandoMedicaoEditGroup.orderCode} - ${pendenciasAguardandoMedicaoEditGroup.clientName}`;
+    document.getElementById('pendencias-am-modal-consultant-name').textContent =
+        pendenciasAguardandoMedicaoEditGroup.consultantName || '—';
+
+    const listEl = document.getElementById('pendencias-am-modal-projects-list');
+    if (listEl) {
+        listEl.innerHTML = groupProjects.map(renderPendenciasAguardandoMedicaoModalProjectRow).join('');
+    }
+
+    const selectAllEl = document.getElementById('pendencias-am-select-all-check');
+    if (selectAllEl) {
+        selectAllEl.checked = false;
+        selectAllEl.indeterminate = false;
+    }
+
+    toggleModal('pendencias-aguardando-medicao-modal', true);
+}
+
+function syncPendenciasAguardandoMedicaoSelectAllCheckbox() {
+    const selectAllEl = document.getElementById('pendencias-am-select-all-check');
+    const projectChecks = document.querySelectorAll('#pendencias-am-modal-projects-list .pendencias-am-project-check');
+
+    if (!selectAllEl || !projectChecks.length) return;
+
+    const checkedCount = [...projectChecks].filter(checkbox => checkbox.checked).length;
+    selectAllEl.checked = checkedCount === projectChecks.length;
+    selectAllEl.indeterminate = checkedCount > 0 && checkedCount < projectChecks.length;
+}
+
+function setPendenciasAguardandoMedicaoSelectAllChecked(checked) {
+    document.querySelectorAll('#pendencias-am-modal-projects-list .pendencias-am-project-check')
+        .forEach(checkbox => {
+            checkbox.checked = checked;
+        });
+
+    const selectAllEl = document.getElementById('pendencias-am-select-all-check');
+    if (selectAllEl) {
+        selectAllEl.checked = checked;
+        selectAllEl.indeterminate = false;
+    }
+}
+
+function collectPendenciasAguardandoMedicaoModalSelections() {
+    const rows = document.querySelectorAll('#pendencias-am-modal-projects-list [data-project-id]');
+    const selections = [];
+
+    rows.forEach(row => {
+        const checkbox = row.querySelector('.pendencias-am-project-check');
+        if (!checkbox?.checked) return;
+
+        const projectId = Number(row.dataset.projectId);
+        const project = pendenciasAguardandoMedicaoProjectsCache.find(item => Number(item.id) === projectId);
+        if (!project) return;
+
+        selections.push({
+            project,
+            observation: row.querySelector('.pendencias-am-project-obs')?.value.trim() || ''
+        });
+    });
+
+    return selections;
+}
+
+async function updateOrderProjectStatusWithObservation(projectId, statusId, observation = null) {
+    const now = new Date().toISOString();
+    let payload = {
+        statusId,
+        updatedById: currentUser.id,
+        updatedAt: now
+    };
+
+    if (observation !== null) {
+        payload.observacaoAguardandoObra = observation || null;
+    }
+
+    let { error } = await supabaseClient
+        .from('OrderProject')
+        .update(payload)
+        .eq('id', projectId);
+
+    if (error?.message?.includes('observacaoAguardandoObra')) {
+        ({ error } = await supabaseClient
+            .from('OrderProject')
+            .update({
+                statusId,
+                updatedById: currentUser.id,
+                updatedAt: now
+            })
+            .eq('id', projectId));
+    }
+
+    return error;
+}
+
+async function applyPendenciasAguardandoObraToSelections(selections) {
+    if (!selections.length) {
+        alertAppDialog('Selecione ao menos um projeto.');
+        return false;
+    }
+
+    const statusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_AGUARDANDO_OBRA);
+    if (!statusId) {
+        alertAppDialog(`Status "${PENDENCIAS_STATUS_AGUARDANDO_OBRA}" não encontrado.`);
+        return false;
+    }
+
+    if (!(await confirmAppDialog(
+        `Marcar ${selections.length} projeto(s) como Aguardando Obra?`,
+        { confirmLabel: 'Confirmar', variant: 'warning' }
+    ))) {
+        return false;
+    }
+
+    setPendenciasAguardandoMedicaoModalLoading(true, 'Salvando observações e status...');
+
+    try {
+        for (const item of selections) {
+            const error = await updateOrderProjectStatusWithObservation(
+                item.project.id,
+                statusId,
+                item.observation
+            );
+            if (error) throw error;
+        }
+
+        closePendenciasAguardandoMedicaoModal();
+        await loadPendenciasAguardandoMedicao();
+        return true;
+    } catch (error) {
+        alertAppDialog('Erro ao alterar status: ' + error.message);
+        setPendenciasAguardandoMedicaoModalLoading(false);
+        return false;
+    }
+}
+
+async function applyPendenciasAguardandoMedicaoToSelections(selections) {
+    if (!selections.length) {
+        alertAppDialog('Selecione ao menos um projeto.');
+        return false;
+    }
+
+    const statusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_AGUARDANDO_MEDICAO);
+    if (!statusId) {
+        alertAppDialog(`Status "${PENDENCIAS_STATUS_AGUARDANDO_MEDICAO}" não encontrado.`);
+        return false;
+    }
+
+    if (!(await confirmAppDialog(
+        `Liberar ${selections.length} projeto(s) para medição?`,
+        { confirmLabel: 'Liberar para medição', variant: 'confirm' }
+    ))) {
+        return false;
+    }
+
+    setPendenciasAguardandoMedicaoModalLoading(true, 'Atualizando status dos projetos...');
+
+    try {
+        const updatedProjects = [];
+
+        for (const item of selections) {
+            const currentStatusName = getPendenciasProjectStatusName(item.project);
+            if (!PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES.includes(currentStatusName)) {
+                continue;
+            }
+
+            const error = await updateOrderProjectStatusWithObservation(item.project.id, statusId);
+            if (error) throw error;
+
+            updatedProjects.push({
+                id: item.project.id,
+                name: getPendenciasAguardandoMedicaoProjectLabel(item.project)
+            });
+        }
+
+        if (!updatedProjects.length) {
+            alertAppDialog('Nenhum projeto elegível para liberar. Atualize a lista.');
+            setPendenciasAguardandoMedicaoModalLoading(false);
+            return false;
+        }
+
+        if (typeof notifyLiberacaoMedicaoEmail === 'function' && pendenciasAguardandoMedicaoEditGroup) {
+            setPendenciasAguardandoMedicaoModalLoading(true, 'Enviando e-mail de notificação...');
+            await notifyLiberacaoMedicaoEmail({
+                orderId: pendenciasAguardandoMedicaoEditGroup.orderId,
+                projects: updatedProjects
+            });
+        }
+
+        closePendenciasAguardandoMedicaoModal();
+        await loadPendenciasAguardandoMedicao();
+        return true;
+    } catch (error) {
+        alertAppDialog('Erro ao alterar status: ' + error.message);
+        setPendenciasAguardandoMedicaoModalLoading(false);
+        return false;
+    }
+}
+
+function bindPendenciasAguardandoMedicaoModalEvents() {
+    document.getElementById('btn-pendencias-am-fechar')
+        ?.addEventListener('click', closePendenciasAguardandoMedicaoModal);
+
+    document.getElementById('pendencias-am-select-all-check')
+        ?.addEventListener('change', (event) => {
+            setPendenciasAguardandoMedicaoSelectAllChecked(event.target.checked);
+        });
+
+    document.getElementById('pendencias-am-modal-projects-list')
+        ?.addEventListener('change', (event) => {
+            if (!event.target.classList.contains('pendencias-am-project-check')) return;
+            syncPendenciasAguardandoMedicaoSelectAllCheckbox();
+        });
+
+    document.getElementById('btn-pendencias-am-obra')
+        ?.addEventListener('click', async () => {
+            const selections = collectPendenciasAguardandoMedicaoModalSelections();
+            await applyPendenciasAguardandoObraToSelections(selections);
+        });
+
+    document.getElementById('btn-pendencias-am-medicao')
+        ?.addEventListener('click', async () => {
+            const selections = collectPendenciasAguardandoMedicaoModalSelections();
+            await applyPendenciasAguardandoMedicaoToSelections(selections);
+        });
 }
 
 function renderPendenciasAguardandoMedicaoList(projects) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
+    pendenciasAguardandoMedicaoProjectsCache = projects;
     const canEdit = canEditPendenciasAguardandoMedicaoStatus();
     const subtitle = canEdit
-        ? 'Projetos vendidos ou aguardando obra. Altere o status conforme o andamento.'
+        ? 'Projetos agrupados por pedido e status. Use Editar para alterar status e observações.'
         : 'Visualização dos projetos vendidos ou aguardando obra.';
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const statusName = getPendenciasProjectStatusName(project);
-        const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
+    const groups = groupPendenciasAguardandoMedicaoProjects(projects);
+    const rows = groups.map(group => {
+        const statusClass = getPendenciasProjectStatusBadgeClass(group.statusName);
+        const projectNames = group.projects
+            .map(project => getPendenciasAguardandoMedicaoProjectLabel(project))
+            .join(' | ');
 
         return `
             <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
+                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(group.orderCode)}</td>
+                <td class="p-3 text-xs text-slate-600">${escapeHtml(group.clientName)}</td>
                 <td class="p-3">
                     <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
-                        ${escapeHtml(statusName || '—')}
+                        ${escapeHtml(group.statusName || '—')}
                     </span>
                 </td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
+                <td class="p-3 text-xs text-slate-700">${escapeHtml(projectNames)}</td>
                 <td class="p-3 text-right whitespace-nowrap">
-                    ${renderPendenciasAguardandoMedicaoActionButtons(project, canEdit)}
+                    ${canEdit
+                        ? `<button type="button"
+                            class="pendencias-am-edit-btn text-xs bg-violet-50 text-violet-800 border border-violet-200 px-2.5 py-1 rounded-lg font-medium hover:bg-violet-100"
+                            data-order-id="${group.orderId}"
+                            data-status-name="${escapeHtml(group.statusName)}">
+                            Editar
+                        </button>`
+                        : '<span class="text-xs text-slate-400">—</span>'}
                 </td>
             </tr>
         `;
@@ -100,17 +423,16 @@ function renderPendenciasAguardandoMedicaoList(projects) {
                     Atualizar
                 </button>
             </div>
-            ${projects.length
+            ${groups.length
                 ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[920px]">
+                    <table class="w-full text-sm min-w-[820px]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Status</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-56">Ações</th>
+                                <th class="text-left p-3 font-semibold">Projetos</th>
+                                <th class="text-right p-3 font-semibold w-28">Ações</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>
@@ -123,95 +445,14 @@ function renderPendenciasAguardandoMedicaoList(projects) {
     content.querySelector('#btn-pendencias-refresh-aguardando-medicao')
         ?.addEventListener('click', () => loadPendenciasAguardandoMedicao());
 
-    content.querySelectorAll('.pendencias-status-obra-btn:not([disabled]), .pendencias-status-medicao-btn')
-        .forEach(button => {
-            button.addEventListener('click', () => {
-                updatePendenciasAguardandoMedicaoStatus(
-                    Number(button.dataset.projectId),
-                    button.dataset.targetStatus
-                );
-            });
+    content.querySelectorAll('.pendencias-am-edit-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            openPendenciasAguardandoMedicaoEditModal(
+                Number(button.dataset.orderId),
+                button.dataset.statusName
+            );
         });
-}
-
-async function updatePendenciasAguardandoMedicaoStatus(projectId, targetStatusName) {
-    if (!canEditPendenciasAguardandoMedicaoStatus()) {
-        alert('Sem permissão para alterar status.');
-        return;
-    }
-
-    if (!projectId || !targetStatusName) return;
-
-    const allowedTargets = [PENDENCIAS_STATUS_AGUARDANDO_OBRA, PENDENCIAS_STATUS_AGUARDANDO_MEDICAO];
-    if (!allowedTargets.includes(targetStatusName)) return;
-
-    const { data: rawProject, error: readError } = await supabaseClient
-        .from('OrderProject')
-        .select('id, statusId, projectStatus:OrderProjectStatus(id, name)')
-        .eq('id', projectId)
-        .maybeSingle();
-
-    let project = rawProject;
-
-    if (readError?.message?.includes('projectStatus')) {
-        const fallback = await supabaseClient
-            .from('OrderProject')
-            .select('id, statusId')
-            .eq('id', projectId)
-            .maybeSingle();
-
-        if (fallback.error || !fallback.data) {
-            alert('Projeto não encontrado.');
-            return;
-        }
-
-        project = (await enrichPendenciasProjectsWithStatus([fallback.data]))[0];
-    } else if (readError || !project) {
-        alert('Projeto não encontrado.');
-        return;
-    }
-
-    const currentStatusName = getPendenciasProjectStatusName(project);
-    if (!PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES.includes(currentStatusName)) {
-        alert('O status do projeto foi alterado. Atualize a lista.');
-        await loadPendenciasAguardandoMedicao();
-        return;
-    }
-
-    if (targetStatusName === PENDENCIAS_STATUS_AGUARDANDO_OBRA
-        && currentStatusName === PENDENCIAS_STATUS_AGUARDANDO_OBRA) {
-        return;
-    }
-
-    if (currentStatusName === targetStatusName) {
-        await loadPendenciasAguardandoMedicao();
-        return;
-    }
-
-    if (!confirm(`Alterar status do projeto para "${targetStatusName}"?`)) return;
-
-    const statusId = await getPendenciasStatusIdByName(targetStatusName);
-    if (!statusId) {
-        alert(`Status "${targetStatusName}" não encontrado.`);
-        return;
-    }
-
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('OrderProject')
-        .update({
-            statusId,
-            updatedById: currentUser.id,
-            updatedAt: now
-        })
-        .eq('id', projectId);
-
-    if (error) {
-        alert('Erro ao alterar status: ' + error.message);
-        return;
-    }
-
-    await loadPendenciasAguardandoMedicao();
+    });
 }
 
 async function fetchPendenciasProjectsByStatusName(statusName) {
@@ -325,7 +566,7 @@ function renderPendenciasPpcpProjectList(config) {
         ?.addEventListener('click', refreshHandler);
 
     content.querySelectorAll('.pendencias-ppcp-action-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             updatePendenciasPpcpProjectStatus(
                 Number(button.dataset.projectId),
                 button.dataset.expectedStatus,
@@ -338,7 +579,7 @@ function renderPendenciasPpcpProjectList(config) {
 
 async function updatePendenciasPpcpProjectStatus(projectId, expectedStatusName, targetStatusName, confirmMessage) {
     if (!canActPendenciasPpcpStatus()) {
-        alert('Sem permissão para alterar status.');
+        alertAppDialog('Sem permissão para alterar status.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -360,28 +601,28 @@ async function updatePendenciasPpcpProjectStatus(projectId, expectedStatusName, 
             .maybeSingle();
 
         if (fallback.error || !fallback.data) {
-            alert('Projeto não encontrado.');
+            alertAppDialog('Projeto não encontrado.');
             return;
         }
 
         project = (await enrichPendenciasProjectsWithStatus([fallback.data]))[0];
     } else if (readError || !project) {
-        alert('Projeto não encontrado.');
+        alertAppDialog('Projeto não encontrado.');
         return;
     }
 
     const currentStatusName = getPendenciasProjectStatusName(project);
     if (currentStatusName !== expectedStatusName) {
-        alert('O status do projeto foi alterado. Atualize a lista.');
+        alertAppDialog('O status do projeto foi alterado. Atualize a lista.');
         await reloadActivePendenciasPpcpList();
         return;
     }
 
-    if (!confirm(confirmMessage || `Alterar status do projeto para "${targetStatusName}"?`)) return;
+    if (!(await confirmAppDialog(confirmMessage || `Alterar status do projeto para "${targetStatusName}"?`))) return;
 
     const statusId = await getPendenciasStatusIdByName(targetStatusName);
     if (!statusId) {
-        alert(`Status "${targetStatusName}" não encontrado.`);
+        alertAppDialog(`Status "${targetStatusName}" não encontrado.`);
         return;
     }
 
@@ -396,7 +637,7 @@ async function updatePendenciasPpcpProjectStatus(projectId, expectedStatusName, 
         .eq('id', projectId);
 
     if (error) {
-        alert('Erro ao alterar status: ' + error.message);
+        alertAppDialog('Erro ao alterar status: ' + error.message);
         return;
     }
 
@@ -786,7 +1027,7 @@ function renderPendenciasImplantacaoList(projects) {
         ?.addEventListener('click', () => loadPendenciasImplantacao());
 
     content.querySelectorAll('.pendencias-implantacao-open-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             const projectId = Number(button.dataset.projectId);
             const projectName = button.dataset.projectName || '';
             if (!projectId || typeof openImplantacaoModal !== 'function') return;
@@ -966,7 +1207,7 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
         ?.addEventListener('click', () => loadPendenciasAguardandoMontagemInterna());
 
     content.querySelectorAll('.pendencias-fabrica-inicio-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             savePendenciasFabricaInicioMontagem(Number(button.dataset.projectId));
         });
     });
@@ -1052,7 +1293,7 @@ function renderPendenciasEmMontagemList(projects) {
         ?.addEventListener('click', () => loadPendenciasEmMontagem());
 
     content.querySelectorAll('.pendencias-fabrica-fim-btn').forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             savePendenciasFabricaFimMontagem(Number(button.dataset.projectId));
         });
     });
@@ -1060,7 +1301,7 @@ function renderPendenciasEmMontagemList(projects) {
 
 async function savePendenciasFabricaInicioMontagem(projectId) {
     if (!canActPendenciasGestorFabrica()) {
-        alert('Sem permissão para registrar montagem.');
+        alertAppDialog('Sem permissão para registrar montagem.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1072,26 +1313,26 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
     const projectLabel = row.querySelector('td:nth-child(3)')?.textContent?.trim() || 'Projeto';
 
     if (!marceneiroId) {
-        alert(`"${projectLabel}": selecione o marceneiro responsável.`);
+        alertAppDialog(`"${projectLabel}": selecione o marceneiro responsável.`);
         return;
     }
     if (!inicioMontagemInterna) {
-        alert(`"${projectLabel}": informe a data de início da montagem interna.`);
+        alertAppDialog(`"${projectLabel}": informe a data de início da montagem interna.`);
         return;
     }
     if (typeof isFabricaDateInFuture === 'function' && isFabricaDateInFuture(inicioMontagemInterna)) {
-        alert(`"${projectLabel}": a data de início não pode ser no futuro.`);
+        alertAppDialog(`"${projectLabel}": a data de início não pode ser no futuro.`, { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (!confirm(`Registrar início da montagem interna de "${projectLabel}"?`)) return;
+    if (!(await confirmAppDialog(`Registrar início da montagem interna de "${projectLabel}"?`))) return;
 
     const montagemInternaStatusId = typeof getMontagemInternaProjectStatusId === 'function'
         ? await getMontagemInternaProjectStatusId()
         : await getPendenciasStatusIdByName(PENDENCIAS_STATUS_MONTAGEM_INTERNA);
 
     if (!montagemInternaStatusId) {
-        alert(`Status "${PENDENCIAS_STATUS_MONTAGEM_INTERNA}" não encontrado.`);
+        alertAppDialog(`Status "${PENDENCIAS_STATUS_MONTAGEM_INTERNA}" não encontrado.`);
         return;
     }
 
@@ -1127,13 +1368,13 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
         const sqlHint = error.message?.includes('marceneiroId') || error.message?.includes('MontagemInterna')
             ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
-        alert('Erro ao salvar: ' + error.message + sqlHint);
+        alertAppDialog('Erro ao salvar: ' + error.message + sqlHint);
     }
 }
 
 async function savePendenciasFabricaFimMontagem(projectId) {
     if (!canActPendenciasGestorFabrica()) {
-        alert('Sem permissão para registrar montagem.');
+        alertAppDialog('Sem permissão para registrar montagem.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1144,22 +1385,22 @@ async function savePendenciasFabricaFimMontagem(projectId) {
     const projectLabel = row.querySelector('td:nth-child(3)')?.textContent?.trim() || 'Projeto';
 
     if (!fimMontagemInterna) {
-        alert(`"${projectLabel}": informe a data de fim da montagem interna.`);
+        alertAppDialog(`"${projectLabel}": informe a data de fim da montagem interna.`);
         return;
     }
     if (typeof isFabricaDateInFuture === 'function' && isFabricaDateInFuture(fimMontagemInterna)) {
-        alert(`"${projectLabel}": a data de fim não pode ser no futuro.`);
+        alertAppDialog(`"${projectLabel}": a data de fim não pode ser no futuro.`, { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (!confirm(`Finalizar montagem interna de "${projectLabel}" e enviar à expedição?`)) return;
+    if (!(await confirmAppDialog(`Finalizar montagem interna de "${projectLabel}" e enviar à expedição?`))) return;
 
     const expedicaoStatusId = typeof getExpedicaoProjectStatusId === 'function'
         ? await getExpedicaoProjectStatusId()
         : await getPendenciasStatusIdByName(PENDENCIAS_STATUS_EXPEDICAO);
 
     if (!expedicaoStatusId) {
-        alert(`Status "${PENDENCIAS_STATUS_EXPEDICAO}" não encontrado.`);
+        alertAppDialog(`Status "${PENDENCIAS_STATUS_EXPEDICAO}" não encontrado.`);
         return;
     }
 
@@ -1193,7 +1434,7 @@ async function savePendenciasFabricaFimMontagem(projectId) {
         const sqlHint = error.message?.includes('fimMontagemInterna')
             ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
-        alert('Erro ao salvar: ' + error.message + sqlHint);
+        alertAppDialog('Erro ao salvar: ' + error.message + sqlHint);
     }
 }
 

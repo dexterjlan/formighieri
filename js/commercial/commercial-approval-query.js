@@ -212,11 +212,11 @@ function refreshApprovalsQueryIfVisible() {
 }
 
 function bindCommercialApprovalQueryEvents() {
-    document.getElementById('approvals-query-form').addEventListener('submit', function (e) {
+    document.getElementById('approvals-query-form').addEventListener('submit', async function (e) {
         e.preventDefault();
         searchCommercialApprovalsQuery();
     });
-    document.getElementById('btn-clear-approval-filters').addEventListener('click', function () {
+    document.getElementById('btn-clear-approval-filters').addEventListener('click', async function () {
         document.getElementById('approval-filter-pedido').value = '';
         document.getElementById('approval-filter-consultor').value = '';
         document.getElementById('approval-filter-projetista').value = '';

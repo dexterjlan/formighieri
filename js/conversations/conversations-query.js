@@ -160,11 +160,11 @@ async function searchConversations() {
 }
 
 function bindConversationsQueryEvents() {
-    document.getElementById("conversations-query-form").addEventListener("submit", function (e) {
+    document.getElementById("conversations-query-form").addEventListener("submit", async function (e) {
         e.preventDefault();
         searchConversations();
     });
-    document.getElementById("btn-clear-filters").addEventListener("click", function () {
+    document.getElementById("btn-clear-filters").addEventListener("click", async function () {
         document.getElementById("filter-pedido").value = "";
         document.getElementById("filter-cliente").value = "";
         resetRequestQueryStatusFilter();

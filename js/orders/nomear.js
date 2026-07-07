@@ -121,7 +121,7 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
     ]);
 
     if (!nomearStatusId || !aguardandoPpcpStatusId) {
-        alert('Status de projeto não encontrados. Execute supabase/create-order-project-status.sql no Supabase.');
+        alertAppDialog('Status de projeto não encontrados. Execute supabase/create-order-project-status.sql no Supabase.');
         return false;
     }
 
@@ -140,29 +140,29 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
     }
 
     if (result.error || !result.data) {
-        alert('Projeto não encontrado.');
+        alertAppDialog('Projeto não encontrado.');
         return false;
     }
 
     const project = result.data;
 
     if (!canActOrderProjectNomear(project)) {
-        alert('Somente o projetista responsável pode confirmar o projeto como nomeado.');
+        alertAppDialog('Somente o projetista responsável pode confirmar o projeto como nomeado.', { variant: 'warning', title: 'Aviso' });
         return false;
     }
 
     if (Number(project.statusId) !== Number(nomearStatusId)
         && getOrderProjectStatusName(project) !== ORDER_NOMEAR_STATUS) {
-        alert('O status do projeto foi alterado. Atualize a lista.');
+        alertAppDialog('O status do projeto foi alterado. Atualize a lista.');
         return false;
     }
 
     if (isOrderProjectNomeado(project)) {
-        alert('Este projeto já está marcado como nomeado.');
+        alertAppDialog('Este projeto já está marcado como nomeado.');
         return false;
     }
 
-    if (!confirm(confirmMessage)) return false;
+    if (!(await confirmAppDialog(confirmMessage))) return false;
 
     const now = new Date().toISOString();
     const updatePayload = {
@@ -181,15 +181,15 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
 
     if (error) {
         if (error.message?.includes('nomeado')) {
-            alert('Coluna nomeado não encontrada. Execute supabase/create-gestao-order-fields.sql no Supabase.');
+            alertAppDialog('Coluna nomeado não encontrada. Execute supabase/create-gestao-order-fields.sql no Supabase.');
         } else {
-            alert('Erro ao confirmar projeto como nomeado: ' + error.message);
+            alertAppDialog('Erro ao confirmar projeto como nomeado: ' + error.message);
         }
         return false;
     }
 
     if (updatedProject?.nomeado !== true) {
-        alert('Não foi possível marcar o projeto como nomeado. Verifique a coluna nomeado no Supabase.');
+        alertAppDialog('Não foi possível marcar o projeto como nomeado. Verifique a coluna nomeado no Supabase.');
         return false;
     }
 
@@ -333,7 +333,7 @@ async function confirmOrderProjectNomeado(projectId, button, projectName) {
             button.classList.remove('opacity-60', 'cursor-not-allowed');
         }
     } catch (error) {
-        alert('Erro ao confirmar projeto como nomeado: ' + error.message);
+        alertAppDialog('Erro ao confirmar projeto como nomeado: ' + error.message);
         button.disabled = false;
         button.textContent = originalText;
         button.classList.remove('opacity-60', 'cursor-not-allowed');
@@ -341,7 +341,7 @@ async function confirmOrderProjectNomeado(projectId, button, projectName) {
 }
 
 function bindNomearEvents() {
-    document.getElementById('nomear-projects-list')?.addEventListener('click', (event) => {
+    document.getElementById('nomear-projects-list')?.addEventListener('click', async (event) => {
         const button = event.target.closest('.nomear-confirm-btn');
         if (!button || button.disabled) return;
 

@@ -60,7 +60,7 @@ async function populateEnvironmentTypeSelect() {
 
 async function openOrderProjectModal() {
     if (!activeOrderId) {
-        alert('Selecione um pedido primeiro.');
+        alertAppDialog('Selecione um pedido primeiro.');
         return;
     }
 
@@ -218,7 +218,7 @@ function bindOrderProjectEvents() {
         e.preventDefault();
 
         if (!activeOrderId) {
-            alert('Selecione um pedido primeiro.');
+            alertAppDialog('Selecione um pedido primeiro.');
             return;
         }
 
@@ -226,27 +226,27 @@ function bindOrderProjectEvents() {
         const environmentTypeId = document.getElementById('project-environment-type').value;
 
         if (!name) {
-            alert('Informe o nome do projeto.');
+            alertAppDialog('Informe o nome do projeto.');
             document.getElementById('project-name').focus();
             return;
         }
 
         if (!environmentTypeId) {
-            alert('Selecione o tipo de ambiente.');
+            alertAppDialog('Selecione o tipo de ambiente.');
             document.getElementById('project-environment-type').focus();
             return;
         }
 
         const saleValue = parseSaleValueInput(document.getElementById('project-sale-value')?.value);
         if (Number.isNaN(saleValue)) {
-            alert('Informe um valor de venda válido.');
+            alertAppDialog('Informe um valor de venda válido.');
             document.getElementById('project-sale-value')?.focus();
             return;
         }
 
         const statusId = await getVendidoProjectStatusId();
         if (!statusId) {
-            alert('Status "Vendido" não encontrado. Cadastre em Gestão → Status de Projeto.');
+            alertAppDialog('Status "Vendido" não encontrado. Cadastre em Gestão → Status de Projeto.');
             return;
         }
 
@@ -265,6 +265,11 @@ function bindOrderProjectEvents() {
             payload.saleValue = saleValue;
         }
 
+        const caminhoRedeAprovacao = document.getElementById('project-caminho-rede-aprovacao')?.value?.trim();
+        if (caminhoRedeAprovacao) {
+            payload.caminhoRedeAprovacao = caminhoRedeAprovacao;
+        }
+
         let { error } = await supabaseClient.from('OrderProject').insert([payload]);
 
         if (error?.message?.includes('saleValue')) {
@@ -272,8 +277,13 @@ function bindOrderProjectEvents() {
             ({ error } = await supabaseClient.from('OrderProject').insert([payload]));
         }
 
+        if (error?.message?.includes('caminhoRedeAprovacao')) {
+            delete payload.caminhoRedeAprovacao;
+            ({ error } = await supabaseClient.from('OrderProject').insert([payload]));
+        }
+
         if (error) {
-            alert('Erro ao salvar projeto: ' + error.message);
+            alertAppDialog('Erro ao salvar projeto: ' + error.message);
             return;
         }
 

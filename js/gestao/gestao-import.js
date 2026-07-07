@@ -405,7 +405,7 @@ async function downloadGestaoImportTemplate() {
         XLSX.utils.book_append_sheet(workbook, referencesSheet, 'Referencias');
         XLSX.writeFile(workbook, GESTAO_IMPORT_TEMPLATE_FILENAME);
     } catch (error) {
-        alert('Erro ao gerar template: ' + error.message);
+        alertAppDialog('Erro ao gerar template: ' + error.message);
     }
 }
 
@@ -876,7 +876,7 @@ function showGestaoImportPanel() {
 async function submitGestaoImport() {
     if (!canAccessGestao()) return;
     if (!gestaoImportSelectedFile) {
-        alert('Selecione um arquivo Excel para importar.');
+        alertAppDialog('Selecione um arquivo Excel para importar.');
         return;
     }
 
@@ -903,13 +903,13 @@ async function submitGestaoImport() {
 
 function bindGestaoImportEvents() {
     document.getElementById('btn-gestao-import-orders')?.addEventListener('click', showGestaoImportPanel);
-    document.getElementById('btn-gestao-import-back')?.addEventListener('click', () => {
+    document.getElementById('btn-gestao-import-back')?.addEventListener('click', async () => {
         resetGestaoImportForm();
         showGestaoPedidoListPanel();
         loadGestaoOrdersList();
     });
     document.getElementById('btn-gestao-import-template')?.addEventListener('click', downloadGestaoImportTemplate);
-    document.getElementById('gestao-import-file')?.addEventListener('change', (event) => {
+    document.getElementById('gestao-import-file')?.addEventListener('change', async (event) => {
         const file = event.target.files?.[0] || null;
         gestaoImportSelectedFile = file;
         updateGestaoImportFileLabel(file);

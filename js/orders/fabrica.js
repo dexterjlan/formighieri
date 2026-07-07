@@ -166,7 +166,7 @@ function renderFabricaEmProducaoCard(project) {
         </div>
     `;
 
-    card.querySelector('.fabrica-inicio-select')?.addEventListener('change', function () {
+    card.querySelector('.fabrica-inicio-select')?.addEventListener('change', async function () {
         setFabricaInicioFieldsEnabled(card, this.checked);
     });
 
@@ -205,7 +205,7 @@ function renderFabricaMontagemInternaCard(project) {
         </div>
     `;
 
-    card.querySelector('.fabrica-fim-select')?.addEventListener('change', function () {
+    card.querySelector('.fabrica-fim-select')?.addEventListener('change', async function () {
         setFabricaFimFieldsEnabled(card, this.checked);
     });
 
@@ -497,7 +497,7 @@ async function saveAllFabricaProjects() {
     const fimCards = collectSelectedFabricaFimCards();
 
     if (!inicioCards.length && !fimCards.length) {
-        alert('Marque ao menos um projeto para salvar.');
+        alertAppDialog('Marque ao menos um projeto para salvar.');
         return;
     }
 
@@ -507,7 +507,7 @@ async function saveAllFabricaProjects() {
     for (const card of inicioCards) {
         const result = validateFabricaInicioCard(card);
         if (!result.ok) {
-            alert(result.message);
+            alertAppDialog(result.message);
             return;
         }
         inicioEntries.push(result);
@@ -516,7 +516,7 @@ async function saveAllFabricaProjects() {
     for (const card of fimCards) {
         const result = validateFabricaFimCard(card);
         if (!result.ok) {
-            alert(result.message);
+            alertAppDialog(result.message);
             return;
         }
         fimEntries.push(result);
@@ -528,12 +528,12 @@ async function saveAllFabricaProjects() {
     ]);
 
     if (inicioEntries.length && !montagemInternaStatusId) {
-        alert(`Status "${FABRICA_MONTAGEM_INTERNA_STATUS}" não encontrado. Cadastre em Gestão → Status de Projeto.`);
+        alertAppDialog(`Status "${FABRICA_MONTAGEM_INTERNA_STATUS}" não encontrado. Cadastre em Gestão → Status de Projeto.`);
         return;
     }
 
     if (fimEntries.length && !expedicaoStatusId) {
-        alert(`Status "${FABRICA_EXPEDICAO_STATUS}" não encontrado. Execute supabase/create-order-project-status.sql no Supabase.`);
+        alertAppDialog(`Status "${FABRICA_EXPEDICAO_STATUS}" não encontrado. Execute supabase/create-order-project-status.sql no Supabase.`);
         return;
     }
 
@@ -555,7 +555,7 @@ async function saveAllFabricaProjects() {
         const sqlHint = error.message?.includes('marceneiroId') || error.message?.includes('MontagemInterna') || error.message?.includes('fimMontagemInterna')
             ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
-        alert('Erro ao salvar: ' + error.message + sqlHint);
+        alertAppDialog('Erro ao salvar: ' + error.message + sqlHint);
     } finally {
         setFabricaSaveButtonLoading(false);
     }
@@ -628,7 +628,7 @@ async function loadFabricaProjects(orderId = null) {
 }
 
 function bindFabricaEvents() {
-    document.getElementById('fabrica-projects-list')?.addEventListener('click', (event) => {
+    document.getElementById('fabrica-projects-list')?.addEventListener('click', async (event) => {
         const toggleBtn = event.target.closest('.fabrica-order-toggle');
         if (!toggleBtn) return;
 
