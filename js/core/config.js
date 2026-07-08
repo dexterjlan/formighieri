@@ -10,6 +10,9 @@ const NOTIFICATION_TEST_EMAIL = 'dexterjl@gmail.com';
 const NOTIFICATION_FROM_EMAIL = 'formighieri.notificacoes@gmail.com';
 const NOTIFICATION_FROM_NAME = 'FGP - Formighieri';
 
+// URL pública do app (para imagens em e-mails). Se vazio, usa window.location.origin no navegador.
+const APP_PUBLIC_URL = 'https://dexterjlan.github.io/formighieri';
+
 // Google Apps Script — envia pelo Gmail formighieri.notificacoes@gmail.com
 // Cole o script de google-apps-script/FormighieriNotificacoes.gs e publique como Web App
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP1IkfR8OfsYRQEq3IGB_VF_XSGnTQkN5WAjngfTCNGHohp4IcEd4fzaxb3a_o72A/exec';

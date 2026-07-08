@@ -1,13 +1,15 @@
     <!-- PAINEL PRINCIPAL (Oculto antes do login) -->
     <div id="main-panel" class="hidden flex flex-col flex-1">
         <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md">
-            <div>
-                <img src="images/logo.jpg" alt="FGP - Formighieri Gestão de Processo" class="h-9 w-auto object-contain">
-                <p class="text-[10px] text-amber-400/90 font-semibold tracking-wide mt-1">
-                    FGP · Formighieri Gestão de Processo
-                    <span id="app-version" class="text-amber-300/70 font-normal"></span>
+            <div class="min-w-0">
+                <div class="fgp-brand fgp-brand--compact">
+                    <div class="fgp-brand__logo-surface">
+                        <img src="images/fgp_logo.png" alt="FGP - Formighieri Gestão de Processo" class="fgp-brand__logo">
+                    </div>
+                </div>
+                <p class="fgp-header-meta">
+                    <span id="user-display">Usuário: -</span><span id="app-version" class="fgp-header-meta__version"></span>
                 </p>
-                <p class="text-xs text-slate-400 mt-0.5" id="user-display">Usuário: -</p>
             </div>
             <div class="flex items-center gap-2">
                 <button type="button" id="btn-inicio"
@@ -33,10 +35,14 @@
         <main id="welcome-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6 overflow-auto">
             <div class="max-w-5xl mx-auto space-y-8 pb-8">
                 <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 px-6 py-8 md:px-10 md:py-10 text-white">
-                        <p class="text-[10px] uppercase tracking-widest text-amber-400 font-semibold mb-2">FGP</p>
-                        <h1 class="text-2xl md:text-3xl font-bold leading-tight">Bem-vindo ao FGP - Formighieri Gestão de Processo</h1>
-                        <p class="text-sm text-slate-300 mt-3 max-w-2xl leading-relaxed">
+                    <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 px-6 py-8 md:px-10 md:py-12 text-white text-center flex flex-col items-center">
+                        <div class="fgp-brand fgp-brand--hero mb-6 md:mb-8">
+                            <div class="fgp-brand__logo-surface">
+                                <img src="images/fgp_logo.png" alt="FGP - Formighieri Gestão de Processo" class="fgp-brand__logo">
+                            </div>
+                        </div>
+                        <h1 class="text-2xl md:text-4xl font-bold leading-tight text-white">Bem-vindo</h1>
+                        <p class="text-sm md:text-base text-slate-300 mt-3 max-w-2xl leading-relaxed mx-auto">
                             Centralizamos aqui todas as etapas do processo do pedido ao cliente — da venda à expedição —
                             com comunicação integrada, histórico completo e pendências visíveis para cada perfil.
                         </p>

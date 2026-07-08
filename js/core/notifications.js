@@ -12,6 +12,36 @@ function buildEmailNoReplyFooterHtml() {
     return `<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;text-align:center;">${escapeHtml(EMAIL_NO_REPLY_FOOTER_TEXT)}</p>`;
 }
 
+function getAppPublicUrl() {
+    if (typeof APP_PUBLIC_URL === 'string' && APP_PUBLIC_URL.trim()) {
+        return APP_PUBLIC_URL.trim().replace(/\/$/, '');
+    }
+    if (typeof window !== 'undefined' && window.location?.origin) {
+        return window.location.origin.replace(/\/$/, '');
+    }
+    return '';
+}
+
+function getFgpLogoEmailUrl() {
+    const base = getAppPublicUrl();
+    return base ? `${base}/images/fgp_logo.png` : '';
+}
+
+function buildEmailBrandHeaderHtml(eventTitle, accentColor = '#f59e0b') {
+    const logoUrl = getFgpLogoEmailUrl();
+    const brandContent = logoUrl
+        ? `<img src="${escapeHtml(logoUrl)}" alt="FGP - Formighieri Gestão de Processo" style="height:54px;width:auto;display:block;max-width:300px;" />`
+        : `<p style="margin:0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#d97706;">FGP</p>
+           <p style="margin:2px 0 0;font-size:10px;color:#64748b;">Formighieri Gestão de Processo</p>`;
+
+    return `<div style="background:#0f172a;padding:20px 24px;">
+      <div style="display:inline-block;background:#ffffff;border-radius:8px;padding:3px 8px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,0.15);">
+        ${brandContent}
+      </div>
+      <h1 style="margin:0;font-size:20px;font-weight:700;color:#ffffff;border-left:4px solid ${accentColor};padding-left:12px;line-height:1.3;">${escapeHtml(eventTitle)}</h1>
+    </div>`;
+}
+
 function buildOrderRequestEmailSubject(eventType, orderCode, clientName) {
     const eventLabel = eventType === 'created' ? 'Criada' : 'Respondida';
     let subject = `Requisição ${eventLabel}: Pedido ${orderCode}`;
@@ -101,12 +131,8 @@ function buildOrderRequestEmailHtml(payload) {
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
-  <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
-    <div style="background:#0f172a;color:#f59e0b;padding:18px 24px;">
-      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">FGP</p>
-      <p style="margin:2px 0 0;font-size:10px;color:#64748b;">Formighieri Gestão de Processo</p>
-      <h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff;">Requisição ${escapeHtml(payload.eventLabel)}</h1>
-    </div>
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
+    ${buildEmailBrandHeaderHtml(`Requisição ${payload.eventLabel}`, '#f59e0b')}
     <div style="padding:24px;">
       <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
         <tr>
@@ -334,12 +360,8 @@ function buildApprovalEmailHtml(payload) {
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
-  <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
-    <div style="background:#0f172a;color:#10b981;padding:18px 24px;">
-      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">FGP</p>
-      <p style="margin:2px 0 0;font-size:10px;color:#64748b;">Formighieri Gestão de Processo</p>
-      <h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff;">${escapeHtml(payload.eventTitle)}</h1>
-    </div>
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
+    ${buildEmailBrandHeaderHtml(payload.eventTitle, '#10b981')}
     <div style="padding:24px;">
       <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
         <tr>
@@ -589,12 +611,8 @@ function buildCompraLiberacaoEmailHtml(payload) {
     return `<!DOCTYPE html>
 <html lang="pt-BR">
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
-  <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
-    <div style="background:#0f172a;color:#f59e0b;padding:18px 24px;">
-      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">FGP</p>
-      <p style="margin:2px 0 0;font-size:10px;color:#64748b;">Formighieri Gestão de Processo</p>
-      <h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff;">${escapeHtml(payload.eventTitle)}</h1>
-    </div>
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
+    ${buildEmailBrandHeaderHtml(payload.eventTitle, '#f59e0b')}
     <div style="padding:24px;">
       <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
         <tr>
@@ -1004,11 +1022,7 @@ function buildProcessEmailHtml(payload) {
 <html lang="pt-BR">
 <body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
   <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
-    <div style="background:#0f172a;color:${accentColor};padding:18px 24px;">
-      <p style="margin:0;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;">FGP</p>
-      <p style="margin:2px 0 0;font-size:10px;color:#64748b;">Formighieri Gestão de Processo</p>
-      <h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff;">${escapeHtml(payload.eventTitle)}</h1>
-    </div>
+    ${buildEmailBrandHeaderHtml(payload.eventTitle, accentColor)}
     <div style="padding:24px;">
       <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
         <tr>
