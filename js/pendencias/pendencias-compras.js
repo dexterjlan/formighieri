@@ -31,19 +31,21 @@ async function fetchPendenciasEnviadosCompras() {
     }
 
     const projectsById = Object.fromEntries(
-        (await enrichPendenciasProjectsWithStatus(projectResult.data || []))
+        excludeInactivePendenciasProjects(await enrichPendenciasProjectsWithStatus(projectResult.data || []))
             .map(project => [project.id, project])
     );
 
-    const items = compras.map(compra => {
-        const project = projectsById[compra.orderProjectId];
-        return {
-            ...compra,
-            project,
-            clientName: project?.order?.clientName || '',
-            projectName: project?.name || ''
-        };
-    });
+    const items = compras
+        .map(compra => {
+            const project = projectsById[compra.orderProjectId];
+            return {
+                ...compra,
+                project,
+                clientName: project?.order?.clientName || '',
+                projectName: project?.name || ''
+            };
+        })
+        .filter(item => item.project);
 
     return { error: null, items };
 }

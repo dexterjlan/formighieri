@@ -383,6 +383,7 @@ async function loadAnteprojetoAvailableProjects(conference = null, editingConfer
             const id = Number(project.id);
             if (selectedMap[id]) return true;
             if (usedProjectIds.has(id)) return false;
+            if (isComplementarOrderProject(project) || isSubstituidoOrderProject(project)) return false;
             return isProjectPlantaLevantada(project);
         })
         .map(project => ({

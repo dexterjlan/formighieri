@@ -139,11 +139,17 @@ function renderFabricaEmProducaoCard(project) {
     card.innerHTML = `
         <div class="p-4 flex items-start gap-3">
             <input type="checkbox" class="fabrica-inicio-select mt-1 h-4 w-4 rounded border-slate-300 text-orange-600 focus:ring-orange-500 shrink-0"
-                aria-label="Selecionar projeto ${escapeHtml(project.name)}">
+                aria-label="Selecionar projeto ${escapeHtml(project.name)}"
+                ${isComplementarOrderProject(project) || isSubstituidoOrderProject(project) ? 'disabled' : ''}>
             <div class="flex-1 min-w-0 space-y-3">
                 <div class="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                        <p class="text-sm font-semibold text-slate-900">${escapeHtml(project.name)}</p>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <p class="text-sm font-semibold text-slate-900">${escapeHtml(project.name)}</p>
+                            ${renderComplementarProjectNoticeHtml(project)}
+                            ${renderSubstituidoProjectNoticeHtml(project)}
+                            ${renderSubstituicaoProjectNoticeHtml(project)}
+                        </div>
                         <p class="text-xs text-slate-500 mt-0.5">${escapeHtml(getFabricaProjectSubtitle(project))}</p>
                     </div>
                     <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-orange-100 text-orange-800">${escapeHtml(FABRICA_EM_PRODUCAO_STATUS)}</span>
@@ -170,6 +176,8 @@ function renderFabricaEmProducaoCard(project) {
         setFabricaInicioFieldsEnabled(card, this.checked);
     });
 
+    applyOrderProjectReadOnlyToElement(card, project);
+
     return card;
 }
 
@@ -182,11 +190,17 @@ function renderFabricaMontagemInternaCard(project) {
     card.innerHTML = `
         <div class="p-4 flex items-start gap-3">
             <input type="checkbox" class="fabrica-fim-select mt-1 h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500 shrink-0"
-                aria-label="Registrar fim da montagem ${escapeHtml(project.name)}">
+                aria-label="Registrar fim da montagem ${escapeHtml(project.name)}"
+                ${isComplementarOrderProject(project) || isSubstituidoOrderProject(project) ? 'disabled' : ''}>
             <div class="flex-1 min-w-0 space-y-3">
                 <div class="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                        <p class="text-sm font-semibold text-slate-900">${escapeHtml(project.name)}</p>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <p class="text-sm font-semibold text-slate-900">${escapeHtml(project.name)}</p>
+                            ${renderComplementarProjectNoticeHtml(project)}
+                            ${renderSubstituidoProjectNoticeHtml(project)}
+                            ${renderSubstituicaoProjectNoticeHtml(project)}
+                        </div>
                         <p class="text-xs text-slate-500 mt-0.5">${escapeHtml(getFabricaProjectSubtitle(project))}</p>
                     </div>
                     <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-amber-100 text-amber-800">${escapeHtml(FABRICA_MONTAGEM_INTERNA_STATUS)}</span>
@@ -208,6 +222,8 @@ function renderFabricaMontagemInternaCard(project) {
     card.querySelector('.fabrica-fim-select')?.addEventListener('change', async function () {
         setFabricaFimFieldsEnabled(card, this.checked);
     });
+
+    applyOrderProjectReadOnlyToElement(card, project);
 
     return card;
 }
@@ -231,7 +247,7 @@ function sortFabricaProjects(a, b) {
     return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
 }
 
-const FABRICA_PROJECT_SELECT = 'id, orderId, name, projectCode, marceneiroId, inicioMontagemInterna, fimMontagemInterna, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), marceneiro:Marceneiro(id, name), order:salesOrders(id, orderCode, clientName)';
+const FABRICA_PROJECT_SELECT = 'id, orderId, name, projectCode, isComplementar, parentProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), marceneiroId, inicioMontagemInterna, fimMontagemInterna, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), marceneiro:Marceneiro(id, name), order:salesOrders(id, orderCode, clientName)';
 
 function groupFabricaProjectsByOrder(projects) {
     const groupsByOrderId = {};
@@ -355,7 +371,7 @@ async function fetchFabricaProjects(statusIds, orderId = null) {
 
     let result = await query.order('name', { ascending: true });
 
-    if (result.error?.message?.includes('marceneiro') || result.error?.message?.includes('MontagemInterna') || result.error?.message?.includes('salesOrders')) {
+    if (result.error?.message?.includes('marceneiro') || result.error?.message?.includes('MontagemInterna') || result.error?.message?.includes('salesOrders') || result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementar')) {
         query = supabaseClient
             .from('OrderProject')
             .select('id, orderId, name, projectCode, marceneiroId, inicioMontagemInterna, fimMontagemInterna, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')

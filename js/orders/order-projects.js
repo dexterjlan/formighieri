@@ -111,9 +111,27 @@ window.toggleOrderProjectsList = toggleOrderProjectsList;
 async function fetchOrderProjectsForOrder(orderId) {
     let result = await supabaseClient
         .from('OrderProject')
-        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
+        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
         .eq('orderId', orderId)
         .order('createdAt', { ascending: true });
+
+    if (result.error?.message?.includes('designer')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
+            .eq('orderId', orderId)
+            .order('createdAt', { ascending: true });
+    }
+
+    if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementar')
+        || result.error?.message?.includes('substituidoPor') || result.error?.message?.includes('substitui')
+        || result.error?.message?.includes('isSubstituido') || result.error?.message?.includes('isSubstituicao')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
+            .eq('orderId', orderId)
+            .order('createdAt', { ascending: true });
+    }
 
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
         result = await supabaseClient
@@ -179,10 +197,10 @@ async function loadOrderProjects(orderId) {
     }
 
     list.innerHTML = `
-        <div class="grid grid-cols-[minmax(0,1fr)_88px_1fr] gap-2 px-2.5 py-1 text-[9px] uppercase font-semibold text-slate-400 border-b border-violet-100">
+        <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-2.5 py-1 text-[9px] uppercase font-semibold text-slate-400 border-b border-violet-100">
             <span>Projeto</span>
-            <span>Ambiente</span>
             <span>Status</span>
+            <span class="text-right pr-1">Ações</span>
         </div>
     `;
 
@@ -192,13 +210,22 @@ async function loadOrderProjects(orderId) {
             const statusName = getOrderProjectStatusName(p);
             const statusClass = getOrderProjectStatusBadgeClass(statusName);
             const div = document.createElement('div');
-            div.className = 'grid grid-cols-[minmax(0,1fr)_88px_1fr] gap-2 items-center px-2.5 py-1.5 rounded-md border border-violet-100 bg-violet-50/40';
+            div.className = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-center px-2.5 py-1.5 rounded-md border border-violet-100 bg-violet-50/40';
             div.innerHTML = `
                 <div class="min-w-0">
-                    <span class="text-xs font-semibold text-slate-800 truncate block" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="text-xs font-semibold text-slate-800 truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                        ${renderComplementarProjectNoticeHtml(p)}
+                        ${renderSubstituidoProjectNoticeHtml(p)}
+                        ${renderSubstituicaoProjectNoticeHtml(p)}
+                    </div>
                 </div>
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-violet-100 text-violet-800 whitespace-nowrap truncate" title="${escapeHtml(p.environmentType?.name || '-')}">${escapeHtml(p.environmentType?.name || '-')}</span>
                 <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+                <button type="button"
+                    class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
+                    data-project-id="${p.id}">
+                    Detalhes
+                </button>
             `;
             list.appendChild(div);
         });
@@ -213,6 +240,20 @@ async function loadOrderProjects(orderId) {
 
 function bindOrderProjectEvents() {
     document.getElementById('btn-toggle-projects-list')?.addEventListener('click', toggleOrderProjectsList);
+
+    document.getElementById('order-projects-list')?.addEventListener('click', async (event) => {
+        const button = event.target.closest('.order-project-details-btn');
+        if (!button) return;
+
+        event.stopPropagation();
+        const projectId = Number(button.dataset.projectId);
+        if (!projectId) return;
+
+        const project = orderProjectsCache.find(item => Number(item.id) === projectId);
+        if (typeof openProjectViewModal === 'function') {
+            await openProjectViewModal(project || projectId);
+        }
+    });
 
     document.getElementById('order-project-form').addEventListener('submit', async function (e) {
         e.preventDefault();

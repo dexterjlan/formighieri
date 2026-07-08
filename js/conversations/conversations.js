@@ -80,7 +80,9 @@ async function loadConvOrderProjects(selectedId) {
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
         .forEach(p => {
             const env = p.environmentType?.name ? ` (${p.environmentType.name})` : '';
-            select.innerHTML += `<option value="${p.id}">${p.name}${env}</option>`;
+            const complementar = isComplementarOrderProject(p);
+            const label = `${p.name}${env}${complementar ? ' — complementar' : ''}`;
+            select.innerHTML += `<option value="${p.id}" ${complementar ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
         });
 
     if (selectedId) {

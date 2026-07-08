@@ -684,6 +684,102 @@
         </div>
     </div>
 
+    <!-- MODAL: DETALHES DO PROJETO (SOMENTE LEITURA) -->
+    <div id="order-project-view-modal"
+        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[65]">
+        <div class="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start gap-3">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900">Detalhes do Projeto</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Visualização dos dados cadastrados do projeto.</p>
+                </div>
+                <button type="button" id="btn-close-order-project-view"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
+            </div>
+            <div class="p-5 md:p-6 overflow-y-auto space-y-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Código do projeto</p>
+                        <p id="project-view-code" class="font-mono text-slate-800">—</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Nome do projeto</p>
+                        <p id="project-view-name" class="text-slate-800">—</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Ambiente</p>
+                        <p id="project-view-environment" class="text-slate-800">—</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Data de entrega</p>
+                        <p id="project-view-delivery" class="text-slate-800">—</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Status</p>
+                        <p id="project-view-status" class="text-slate-800">—</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Projetista responsável</p>
+                        <p id="project-view-designer" class="text-slate-800">—</p>
+                    </div>
+                    <div class="md:col-span-2">
+                        <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Caminho da rede para aprovação</p>
+                        <p id="project-view-caminho-rede" class="text-slate-800 break-all">—</p>
+                    </div>
+                </div>
+                <div id="project-view-complementar-child-wrap" class="hidden border border-slate-200 rounded-xl p-4 bg-slate-50/40 space-y-3">
+                    <p class="text-xs font-semibold text-slate-700">Projeto Complementar</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Código do projeto vinculado</p>
+                            <p id="project-view-parent-code" class="font-mono text-slate-800">—</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Pedido</p>
+                            <p id="project-view-parent-order" class="font-mono text-slate-800">—</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="project-view-complementar-parent-wrap" class="hidden border border-slate-200 rounded-xl p-4 bg-slate-50/40 space-y-3">
+                    <p class="text-xs font-semibold text-slate-700">Projeto Complementar</p>
+                    <div id="project-view-complementar-children-list" class="space-y-2 text-sm"></div>
+                </div>
+                <div id="project-view-substituido-wrap" class="hidden border border-slate-200 rounded-xl p-4 bg-slate-50/40 space-y-3">
+                    <p class="text-xs font-semibold text-slate-700">Projeto Substituído</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Código do projeto substituto</p>
+                            <p id="project-view-substituido-por-code" class="font-mono text-slate-800">—</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Pedido substituto</p>
+                            <p id="project-view-substituido-por-order" class="font-mono text-slate-800">—</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="project-view-substituicao-wrap" class="hidden border border-slate-200 rounded-xl p-4 bg-slate-50/40 space-y-3">
+                    <p class="text-xs font-semibold text-slate-700">Projeto Substituição</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Código do projeto original</p>
+                            <p id="project-view-substitui-code" class="font-mono text-slate-800">—</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase text-slate-400 mb-1">Pedido original</p>
+                            <p id="project-view-substitui-order" class="font-mono text-slate-800">—</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-100 bg-white">
+                <button type="button" id="btn-close-order-project-view-footer"
+                    class="w-full bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-medium hover:bg-slate-200">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: DIÁLOGO DE CONFIRMAÇÃO / AVISO -->
     <div id="app-dialog-modal"
         class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[70]">

@@ -478,6 +478,209 @@ function getOrderProjectStatusName(project) {
     return project?.projectStatus?.name || project?.statusName || '—';
 }
 
+const COMPLEMENTAR_PARENT_BLOCKED_FROM_SORT_ORDER = 10;
+
+const COMPLEMENTAR_PARENT_BLOCKED_STATUS_NAMES = new Set([
+    'Aguardando Aprovação',
+    'Em Revisão',
+    'Em revisão',
+    'Nomear',
+    'Aguardando PPCP',
+    'Implantação',
+    'Em Produção',
+    'Montagem Interna',
+    'Expedição'
+]);
+
+function isComplementarOrderProject(project) {
+    return project?.isComplementar === true;
+}
+
+function canActOnOrderProject(project) {
+    return !isComplementarOrderProject(project) && !isSubstituidoOrderProject(project);
+}
+
+function getComplementarParentProjectCode(project) {
+    return project?.parentProject?.projectCode
+        || project?.parentProjectCode
+        || '';
+}
+
+function getComplementarParentOrderCode(project) {
+    return project?.parentProject?.order?.orderCode
+        || project?.parentOrderCode
+        || '';
+}
+
+function isComplementarParentStatusAllowed(statusName, sortOrder = null) {
+    if (sortOrder != null && Number(sortOrder) >= COMPLEMENTAR_PARENT_BLOCKED_FROM_SORT_ORDER) {
+        return false;
+    }
+    return !COMPLEMENTAR_PARENT_BLOCKED_STATUS_NAMES.has(statusName);
+}
+
+function renderComplementarProjectNoticeHtml(project) {
+    if (!isComplementarOrderProject(project)) return '';
+
+    const parentCode = getComplementarParentProjectCode(project) || '—';
+    const orderCode = getComplementarParentOrderCode(project);
+    const orderSuffix = orderCode ? ` · pedido ${escapeHtml(orderCode)}` : '';
+
+    return `<span class="inline-flex items-center text-[10px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-full shrink-0" title="Projeto Complementar vinculado ao projeto ${escapeHtml(parentCode)}">Projeto Complementar · ${escapeHtml(parentCode)}${orderSuffix}</span>`;
+}
+
+function excludeComplementarPendenciasProjects(projects) {
+    return (projects || []).filter(project => !isComplementarOrderProject(project));
+}
+
+const SUBSTITUIDO_STATUS_NAME = 'Projeto Substituído';
+const SUBSTITUICAO_MAX_ORIGINAL_SORT_ORDER = 8;
+
+const SUBSTITUICAO_BLOCKED_STATUS_NAMES = new Set([
+    'Projeto Técnico',
+    'Aguardando Aprovação',
+    'Em Revisão',
+    'Em revisão',
+    'Nomear',
+    'Aguardando PPCP',
+    'Implantação',
+    'Em Produção',
+    'Montagem Interna',
+    'Expedição',
+    SUBSTITUIDO_STATUS_NAME
+]);
+
+function isSubstituidoOrderProject(project) {
+    return project?.isSubstituido === true
+        || getOrderProjectStatusName(project) === SUBSTITUIDO_STATUS_NAME;
+}
+
+function isSubstituicaoOrderProject(project) {
+    return project?.isSubstituicao === true || Boolean(project?.substituiProjectId);
+}
+
+function isSubstituidoStatusName(statusName) {
+    return statusName === SUBSTITUIDO_STATUS_NAME;
+}
+
+function getSubstituidoPorProjectCode(project) {
+    return project?.substituidoPorProject?.projectCode
+        || project?.substituidoPorProjectCode
+        || '';
+}
+
+function getSubstituidoPorOrderCode(project) {
+    return project?.substituidoPorProject?.order?.orderCode
+        || project?.substituidoPorOrderCode
+        || '';
+}
+
+function getSubstituiProjectCode(project) {
+    return project?.substituiProject?.projectCode
+        || project?.substituiProjectCode
+        || '';
+}
+
+function getSubstituiOrderCode(project) {
+    return project?.substituiProject?.order?.orderCode
+        || project?.substituiOrderCode
+        || '';
+}
+
+function canMarkProjectAsSubstituido(project) {
+    if (isSubstituidoOrderProject(project)) return false;
+    return isSubstituidoEligibleStatus(project);
+}
+
+function isSubstituidoEligibleStatus(project) {
+    if (isComplementarOrderProject(project) || isSubstituicaoOrderProject(project)) return false;
+
+    const statusName = getOrderProjectStatusName(project);
+    const sortOrder = project?.projectStatus?.sortOrder ?? null;
+
+    if (sortOrder != null) {
+        return Number(sortOrder) <= SUBSTITUICAO_MAX_ORIGINAL_SORT_ORDER;
+    }
+
+    return !SUBSTITUICAO_BLOCKED_STATUS_NAMES.has(statusName);
+}
+
+function getSubstituidoStatusId(statuses = []) {
+    const list = statuses.length ? statuses : (typeof gestaoProjectStatusesCache !== 'undefined' ? gestaoProjectStatusesCache : []);
+    const match = list.find(status => status.name === SUBSTITUIDO_STATUS_NAME);
+    return match?.id || null;
+}
+
+function getProjectEffectiveSaleValue(project) {
+    const base = Number(project?.saleValue);
+    const normalizedBase = Number.isFinite(base) ? base : 0;
+
+    if (!isSubstituicaoOrderProject(project)) {
+        return normalizedBase;
+    }
+
+    const originalValue = Number(
+        project?.substituiProject?.saleValue
+        || project?.substituiOriginalSaleValue
+    );
+    return normalizedBase + (Number.isFinite(originalValue) ? originalValue : 0);
+}
+
+function renderSubstituidoProjectNoticeHtml(project) {
+    if (!isSubstituidoOrderProject(project)) return '';
+
+    const replacementCode = getSubstituidoPorProjectCode(project) || '—';
+    const orderCode = getSubstituidoPorOrderCode(project);
+    const orderSuffix = orderCode ? ` · pedido ${escapeHtml(orderCode)}` : '';
+
+    return `<span class="inline-flex items-center text-[10px] font-semibold text-rose-800 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-full shrink-0" title="Projeto Substituído pelo projeto ${escapeHtml(replacementCode)}">Projeto Substituído · ${escapeHtml(replacementCode)}${orderSuffix}</span>`;
+}
+
+function renderSubstituicaoProjectNoticeHtml(project) {
+    if (!isSubstituicaoOrderProject(project)) return '';
+
+    const originalCode = getSubstituiProjectCode(project) || '—';
+    const orderCode = getSubstituiOrderCode(project);
+    const orderSuffix = orderCode ? ` · pedido ${escapeHtml(orderCode)}` : '';
+
+    return `<span class="inline-flex items-center text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0" title="Projeto Substituição do projeto ${escapeHtml(originalCode)}">Projeto Substituição · ${escapeHtml(originalCode)}${orderSuffix}</span>`;
+}
+
+function excludeSubstituidoPendenciasProjects(projects) {
+    return (projects || []).filter(project => !isSubstituidoOrderProject(project));
+}
+
+function excludeInactivePendenciasProjects(projects) {
+    return excludeSubstituidoPendenciasProjects(excludeComplementarPendenciasProjects(projects));
+}
+
+function applyComplementarReadOnlyToElement(root, project) {
+    if (!root || !isComplementarOrderProject(project)) return false;
+
+    root.classList.add('order-project-complementar-readonly', 'opacity-70');
+    root.querySelectorAll('input:not([type="hidden"]), button, select, textarea').forEach(element => {
+        element.disabled = true;
+    });
+
+    return true;
+}
+
+function applySubstituidoReadOnlyToElement(root, project) {
+    if (!root || !isSubstituidoOrderProject(project)) return false;
+
+    root.classList.add('order-project-substituido-readonly', 'opacity-70');
+    root.querySelectorAll('input:not([type="hidden"]), button, select, textarea').forEach(element => {
+        element.disabled = true;
+    });
+
+    return true;
+}
+
+function applyOrderProjectReadOnlyToElement(root, project) {
+    return applyComplementarReadOnlyToElement(root, project)
+        || applySubstituidoReadOnlyToElement(root, project);
+}
+
 function getOrderProjectStatusBadgeClass(statusName) {
     if (!statusName || statusName === '—') return 'bg-slate-100 text-slate-600';
     if (statusName === 'Aguardando Aprovação') return 'bg-amber-100 text-amber-800';
@@ -497,5 +700,6 @@ function getOrderProjectStatusBadgeClass(statusName) {
     if (statusName === 'Em Produção') return 'bg-orange-100 text-orange-800';
     if (statusName === 'Montagem Interna') return 'bg-amber-100 text-amber-800';
     if (statusName === 'Expedição') return 'bg-slate-200 text-slate-800';
+    if (statusName === SUBSTITUIDO_STATUS_NAME) return 'bg-rose-100 text-rose-800';
     return 'bg-slate-100 text-slate-700';
 }

@@ -424,7 +424,7 @@ async function loadApprovalProjectCheckboxes() {
         const hasApproval = Boolean(existing);
         const statusLabel = hasApproval ? getApprovalStatusLabel(normalizeCommercialApproval(existing).status) : '';
         const designerName = project.designer?.name || 'Sem responsável';
-        const canSelect = hasApproval || Boolean(project.designerId);
+        const canSelect = (hasApproval || Boolean(project.designerId)) && canActOnOrderProject(project);
         const showDesignerName = !isProjetista;
 
         const label = document.createElement('label');
@@ -439,9 +439,13 @@ async function loadApprovalProjectCheckboxes() {
                 ${hasApproval ? 'checked disabled' : !canSelect ? 'disabled' : ''}>
             <span class="flex-1 min-w-0 text-xs leading-tight">
                 <span class="font-semibold text-slate-800">${escapeHtml(project.name)}</span>
+                ${renderComplementarProjectNoticeHtml(project)}
+                ${renderSubstituidoProjectNoticeHtml(project)}
+                ${renderSubstituicaoProjectNoticeHtml(project)}
                 ${showDesignerName ? `<span class="text-slate-400"> · ${escapeHtml(designerName)}</span>` : ''}
                 ${hasApproval ? `<span class="text-[10px] text-emerald-700 font-medium"> · ${statusLabel}</span>` : ''}
-                ${showDesignerName && !hasApproval && !project.designerId ? '<span class="text-[10px] text-amber-700 font-medium"> · Cadastre o responsável no projeto</span>' : ''}
+                ${showDesignerName && !hasApproval && !project.designerId && canActOnOrderProject(project) ? '<span class="text-[10px] text-amber-700 font-medium"> · Cadastre o responsável no projeto</span>' : ''}
+                ${!canActOnOrderProject(project) ? '<span class="text-[10px] text-sky-700 font-medium"> · Projeto vinculado sem ações</span>' : ''}
             </span>
         `;
 
@@ -651,7 +655,7 @@ async function submitCommercialApprovalFromPendencias(projectId) {
 
     let result = await supabaseClient
         .from('OrderProject')
-        .select('id, orderId, name, designerId, statusId, caminhoRedeAprovacao, projectStatus:OrderProjectStatus(id, name)')
+        .select('id, orderId, name, designerId, statusId, caminhoRedeAprovacao, isComplementar, projectStatus:OrderProjectStatus(id, name)')
         .eq('id', normalizedId)
         .maybeSingle();
 
@@ -678,6 +682,17 @@ async function submitCommercialApprovalFromPendencias(projectId) {
 
     const project = await enrichCommercialApprovalProjectsWithStatus([result.data]);
     const enrichedProject = project[0];
+
+    if (isComplementarOrderProject(enrichedProject)) {
+        alertAppDialog('Projetos complementares acompanham o status do projeto pai e não podem ser enviados para aprovação.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (isSubstituidoOrderProject(enrichedProject)) {
+        alertAppDialog('Projetos substituídos não podem ser enviados para aprovação.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
     const statusName = getCommercialApprovalProjectStatusName(enrichedProject);
 
     if (statusName !== COMMERCIAL_APPROVAL_PROJECT_STATUS) {
@@ -1216,7 +1231,11 @@ function bindCommercialApprovalEvents() {
                 return;
             }
 
-            selectedProjectIds = getSelectedNewApprovalProjectIds();
+            selectedProjectIds = getSelectedNewApprovalProjectIds()
+                .filter(projectId => {
+                    const project = document.querySelector(`input[name="approval-project"][value="${projectId}"]`);
+                    return project && !project.disabled;
+                });
 
             if (!selectedProjectIds.length) {
                 alertAppDialog('Selecione ao menos um projeto que ainda não possui solicitação de aprovação.');

@@ -644,20 +644,16 @@
                                         + Adicionar projeto
                                     </button>
                                 </div>
-                                <p class="text-[10px] text-slate-400">Código do projeto (somente números), nome, ambiente, valor de venda, data de entrega, status, projetista responsável e caminho da rede para aprovação.</p>
+                                <p class="text-[10px] text-slate-400">Resumo dos projetos. Use Editar para abrir o cadastro completo de cada projeto.</p>
                                 <div class="overflow-x-auto border border-slate-200 rounded-lg bg-white">
-                                    <table class="w-full text-xs min-w-[1240px]">
+                                    <table class="w-full text-xs">
                                         <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
                                             <tr>
-                                                <th class="text-left p-2 font-semibold">Código</th>
-                                                <th class="text-left p-2 font-semibold">Nome</th>
-                                                <th class="text-left p-2 font-semibold">Ambiente</th>
-                                                <th class="text-left p-2 font-semibold">Valor venda</th>
-                                                <th class="text-left p-2 font-semibold">Entrega</th>
-                                                <th class="text-left p-2 font-semibold">Status</th>
-                                                <th class="text-left p-2 font-semibold">Projetista</th>
-                                                <th class="text-left p-2 font-semibold min-w-[180px]">Caminho rede aprovação</th>
-                                                <th class="p-2 font-semibold w-16"></th>
+                                                <th class="text-left p-3 font-semibold">Nome</th>
+                                                <th class="text-left p-3 font-semibold">Status</th>
+                                                <th class="text-left p-3 font-semibold">Entrega</th>
+                                                <th class="text-left p-3 font-semibold">Pedido pai</th>
+                                                <th class="text-left p-3 font-semibold w-24">Ações</th>
                                             </tr>
                                         </thead>
                                         <tbody id="gestao-projects-rows" class="divide-y divide-slate-100"></tbody>
@@ -671,6 +667,115 @@
                                     class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
                                 <button type="submit" id="gestao-order-form-submit"
                                     class="flex-1 bg-indigo-700 text-white py-2 rounded-lg text-xs font-medium">Salvar Pedido</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="gestao-project-form-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
+                            <div>
+                                <h3 id="gestao-project-form-title" class="font-bold text-sm text-slate-900">Novo Projeto</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Cadastre todos os dados do projeto do pedido.</p>
+                            </div>
+                            <button type="button" id="btn-gestao-back-order-form"
+                                class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg font-medium">
+                                ← Voltar ao pedido
+                            </button>
+                        </div>
+                        <form id="gestao-project-form" class="p-4 md:p-5 space-y-5">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Código do projeto <span class="text-red-500">*</span></label>
+                                    <input type="text" id="gestao-project-code" inputmode="numeric" pattern="[0-9]+" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Somente números">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Nome do projeto <span class="text-red-500">*</span></label>
+                                    <input type="text" id="gestao-project-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Ambiente <span class="text-red-500">*</span></label>
+                                    <select id="gestao-project-environment" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                        <option value="">Selecione...</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Valor de venda</label>
+                                    <input type="text" id="gestao-project-sale-value" inputmode="decimal"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="0,00">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Data de entrega</label>
+                                    <input type="date" id="gestao-project-delivery"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Status <span class="text-red-500">*</span></label>
+                                    <select id="gestao-project-status" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                        <option value="">Selecione...</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Projetista responsável</label>
+                                    <select id="gestao-project-designer"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                        <option value="">Selecione...</option>
+                                    </select>
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Caminho da rede para aprovação</label>
+                                    <input type="text" id="gestao-project-caminho-rede-aprovacao"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Preenchido ao solicitar aprovação">
+                                </div>
+                            </div>
+
+                            <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/40 space-y-3">
+                                <label class="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                    <input type="checkbox" id="gestao-project-complementar"
+                                        class="h-4 w-4 rounded border-slate-300 text-indigo-700 focus:ring-indigo-600">
+                                    Projeto complementar
+                                </label>
+                                <p class="text-[10px] text-slate-400">Projetos complementares acompanham o status do projeto original informado abaixo.</p>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Código do projeto pai</label>
+                                    <input type="text" id="gestao-project-parent-code" inputmode="numeric" pattern="[0-9]+"
+                                        class="w-full max-w-xs px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 disabled:bg-slate-100"
+                                        placeholder="Somente números" disabled>
+                                </div>
+                            </div>
+
+                            <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/40 space-y-3">
+                                <label class="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                    <input type="checkbox" id="gestao-project-substituido"
+                                        class="h-4 w-4 rounded border-slate-300 text-rose-700 focus:ring-rose-600">
+                                    Projeto Substituído
+                                </label>
+                                <p class="text-[10px] text-slate-400">Marque no pedido antigo quando o projeto foi substituído por outro. Só permitido até Aguardando Projeto Técnico. O vínculo com o projeto substituto é criado automaticamente pelo sistema.</p>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Código do projeto substituto</label>
+                                    <input type="text" id="gestao-project-substituido-por-code" inputmode="numeric" pattern="[0-9]+"
+                                        class="w-full max-w-xs px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 disabled:bg-slate-100"
+                                        placeholder="Somente números" disabled>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap gap-2 pt-2">
+                                <button type="button" id="btn-gestao-remove-project"
+                                    class="hidden text-xs bg-red-50 text-red-700 border border-red-200 px-4 py-2 rounded-lg font-medium hover:bg-red-100">
+                                    Remover projeto
+                                </button>
+                                <div class="flex-1 flex gap-2 min-w-[220px]">
+                                    <button type="button" id="btn-gestao-cancel-project"
+                                        class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
+                                    <button type="submit" id="gestao-project-form-submit"
+                                        class="flex-1 bg-indigo-700 text-white py-2 rounded-lg text-xs font-medium">Salvar Projeto</button>
+                                </div>
                             </div>
                         </form>
                     </div>

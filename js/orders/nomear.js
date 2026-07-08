@@ -1,7 +1,7 @@
 const ORDER_NOMEAR_STATUS = 'Nomear';
 const ORDER_AGUARDANDO_PPCP_STATUS = 'Aguardando PPCP';
 
-const ORDER_NOMEAR_PROJECT_SELECT = 'id, orderId, name, projectCode, statusId, designerId, nomeado, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)';
+const ORDER_NOMEAR_PROJECT_SELECT = 'id, orderId, name, projectCode, statusId, designerId, nomeado, isComplementar, parentProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)';
 const ORDER_NOMEAR_PROJECT_SELECT_FALLBACK = 'id, orderId, name, projectCode, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)';
 
 let orderProjectNomeadoColumnAvailable = true;
@@ -66,7 +66,8 @@ function isOrderProjectInNomearStatus(project) {
 function canShowOrderProjectNomearAction(project) {
     return isOrderProjectInNomearStatus(project)
         && !isOrderProjectNomeado(project)
-        && canActOrderProjectNomear(project);
+        && canActOrderProjectNomear(project)
+        && canActOnOrderProject(project);
 }
 
 function getNomearProjectDesignerHtml(project) {
@@ -87,6 +88,12 @@ async function queryOrderNomearProjects(orderId) {
 
     if (result.error?.message?.includes('nomeado')) {
         orderProjectNomeadoColumnAvailable = false;
+        result = await supabaseClient
+            .from('OrderProject')
+            .select(ORDER_NOMEAR_PROJECT_SELECT_FALLBACK)
+            .eq('orderId', orderId)
+            .order('name', { ascending: true });
+    } else if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementar')) {
         result = await supabaseClient
             .from('OrderProject')
             .select(ORDER_NOMEAR_PROJECT_SELECT_FALLBACK)
@@ -232,6 +239,9 @@ function renderOrderNomearProjectCard(project) {
         <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2 mb-1">
                 <p class="text-sm font-semibold text-slate-900">${escapeHtml(project.name)}</p>
+                ${renderComplementarProjectNoticeHtml(project)}
+                ${renderSubstituidoProjectNoticeHtml(project)}
+                ${renderSubstituicaoProjectNoticeHtml(project)}
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
                     ${escapeHtml(statusName)}
                 </span>

@@ -2,17 +2,53 @@ function getProjectStatusId(project) {
     return Number(project?.statusId || project?.projectStatus?.id || 0) || null;
 }
 
+function isGestaoKanbanComplementarProject(project) {
+    return isComplementarOrderProject(project) || Boolean(project?.parentProjectId);
+}
+
+function isGestaoKanbanHiddenProject(project) {
+    return isGestaoKanbanComplementarProject(project) || isSubstituidoOrderProject(project);
+}
+
 function buildGestaoKanbanCardsForStatus(statusId, orders) {
+    const normalizedStatusId = Number(statusId);
+    const complementarByParentId = {};
+
+    orders.forEach(order => {
+        (order.projects || []).forEach(project => {
+            if (getProjectStatusId(project) !== normalizedStatusId) return;
+            if (!isGestaoKanbanComplementarProject(project)) return;
+
+            const parentId = Number(project.parentProjectId);
+            if (!parentId) return;
+
+            if (!complementarByParentId[parentId]) {
+                complementarByParentId[parentId] = [];
+            }
+            complementarByParentId[parentId].push(project);
+        });
+    });
+
     const cards = [];
 
     orders.forEach(order => {
-        const projectsInStatus = (order.projects || []).filter(project =>
-            getProjectStatusId(project) === Number(statusId)
+        const parentProjects = (order.projects || []).filter(project =>
+            getProjectStatusId(project) === normalizedStatusId
+            && !isGestaoKanbanHiddenProject(project)
         );
 
-        if (projectsInStatus.length) {
-            cards.push({ order, projects: projectsInStatus });
-        }
+        if (!parentProjects.length) return;
+
+        const projectTree = parentProjects
+            .map(project => ({
+                project,
+                children: (complementarByParentId[Number(project.id)] || [])
+                    .slice()
+                    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
+            }))
+            .sort((a, b) => String(a.project.name || '').localeCompare(String(b.project.name || ''), 'pt-BR'));
+
+        cards.push({ order, projectTree });
     });
 
     cards.sort((a, b) => String(a.order.orderCode || '').localeCompare(
@@ -24,33 +60,45 @@ function buildGestaoKanbanCardsForStatus(statusId, orders) {
     return cards;
 }
 
-function renderGestaoKanbanCard(order, projects) {
+function renderGestaoKanbanProjectRow(project, options = {}) {
+    const { nested = false, labelPrefix = '' } = options;
+    const name = `${labelPrefix}${project.name || 'Projeto'}`;
+
+    return `
+        <div class="flex items-start justify-between gap-2 ${nested ? 'ml-4 pl-2 border-l border-indigo-100' : ''}">
+            <span class="text-[11px] leading-snug min-w-0 ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(name)}</span>
+            <button type="button"
+                class="gestao-kanban-history-btn shrink-0 text-[10px] bg-white border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-medium hover:bg-indigo-50"
+                data-order-project-id="${project.id}">
+                Histórico
+            </button>
+        </div>
+    `;
+}
+
+function renderGestaoKanbanCard(order, projectTree) {
     const card = document.createElement('div');
     card.className = 'bg-white border border-indigo-100 rounded-lg shadow-sm p-3 space-y-2';
 
-    const projectsHtml = projects
-        .slice()
-        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
-        .map(project => {
-            return `
-                <li class="flex items-start justify-between gap-2">
-                    <span class="text-[11px] text-slate-700 leading-snug min-w-0">${escapeHtml(project.name || 'Projeto')}</span>
-                    <button type="button"
-                        class="gestao-kanban-history-btn shrink-0 text-[10px] bg-white border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-medium hover:bg-indigo-50"
-                        data-order-project-id="${project.id}">
-                        Histórico
-                    </button>
-                </li>
-            `;
-        })
-        .join('');
+    const projectsHtml = projectTree.map(({ project, children }) => {
+        const childrenHtml = (children || [])
+            .map(child => renderGestaoKanbanProjectRow(child, { nested: true, labelPrefix: 'Projeto Complementar — ' }))
+            .join('');
+
+        return `
+            <li class="space-y-1.5 list-none">
+                ${renderGestaoKanbanProjectRow(project)}
+                ${childrenHtml}
+            </li>
+        `;
+    }).join('');
 
     card.innerHTML = `
         <div class="space-y-0.5">
             <div class="font-mono text-xs font-bold text-indigo-800">${escapeHtml(order.orderCode || '—')}</div>
             <div class="text-xs font-semibold text-slate-800">${escapeHtml(order.clientName || '—')}</div>
         </div>
-        <ul class="space-y-1.5 m-0 p-0 list-none">${projectsHtml}</ul>
+        <ul class="space-y-2 m-0 p-0 list-none">${projectsHtml}</ul>
     `;
 
     return card;
@@ -245,7 +293,9 @@ function getGestaoProjectHistoryContext(orderProjectId) {
 
 function renderGestaoKanbanColumn(status, orders) {
     const cards = buildGestaoKanbanCardsForStatus(status.id, orders);
-    const projectCount = cards.reduce((total, card) => total + card.projects.length, 0);
+    const projectCount = cards.reduce((total, card) => (
+        total + card.projectTree.reduce((sum, entry) => sum + 1 + (entry.children?.length || 0), 0)
+    ), 0);
 
     const column = document.createElement('div');
     column.className = 'w-72 shrink-0 flex flex-col max-h-[calc(100vh-240px)]';
@@ -264,8 +314,8 @@ function renderGestaoKanbanColumn(status, orders) {
         return column;
     }
 
-    cards.forEach(({ order, projects }) => {
-        body.appendChild(renderGestaoKanbanCard(order, projects));
+    cards.forEach(({ order, projectTree }) => {
+        body.appendChild(renderGestaoKanbanCard(order, projectTree));
     });
 
     return column;
@@ -287,9 +337,28 @@ async function loadGestaoKanban() {
         return;
     }
 
-    gestaoOrdersCache = ordersResult.data || [];
+    let orders = ordersResult.data || [];
+    const needsRelationFields = orders.some(order =>
+        (order.projects || []).some(project =>
+            project.isComplementar === undefined && project.parentProjectId === undefined
+            || project.isSubstituido === undefined && project.substituidoPorProjectId === undefined
+            || project.isSubstituicao === undefined && project.substituiProjectId === undefined
+        )
+    );
 
-    if (!statuses.length) {
+    if (needsRelationFields && orders.length) {
+        const projectsByOrderId = await fetchGestaoProjectsByOrderIds(orders.map(order => order.id));
+        orders = orders.map(order => ({
+            ...order,
+            projects: projectsByOrderId[order.id] || order.projects || []
+        }));
+    }
+
+    gestaoOrdersCache = orders;
+
+    const visibleStatuses = statuses.filter(status => !isSubstituidoStatusName(status.name));
+
+    if (!visibleStatuses.length) {
         board.innerHTML = `
             <p class="text-xs text-amber-700 text-center py-8 bg-amber-50 rounded-xl border border-amber-100">
                 Nenhum status cadastrado. Execute <code>supabase/create-order-project-status.sql</code> no Supabase.
@@ -301,7 +370,7 @@ async function loadGestaoKanban() {
     const boardInner = document.createElement('div');
     boardInner.className = 'flex gap-3 min-w-max items-start';
 
-    statuses.forEach(status => {
+    visibleStatuses.forEach(status => {
         boardInner.appendChild(renderGestaoKanbanColumn(status, gestaoOrdersCache));
     });
 

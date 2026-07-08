@@ -1037,23 +1037,36 @@ function renderPendenciasImplantacaoList(projects) {
 }
 
 async function queryPendenciasFabricaProjects(statusId) {
-    const buildQuery = (selectColumns) => supabaseClient
-        .from('OrderProject')
-        .select(selectColumns)
-        .eq('statusId', statusId);
+    const buildQuery = (selectColumns, withInactiveFilter = true) => {
+        let query = supabaseClient
+            .from('OrderProject')
+            .select(selectColumns)
+            .eq('statusId', statusId);
+        if (withInactiveFilter) {
+            query = query.eq('isComplementar', false).eq('isSubstituido', false);
+        }
+        return query;
+    };
 
     let result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT);
+
+    if (result.error?.message?.includes('isComplementar') || result.error?.message?.includes('isSubstituido')) {
+        result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT, false);
+    }
 
     if (result.error?.message?.includes('marceneiro')
         || result.error?.message?.includes('MontagemInterna')
         || result.error?.message?.includes('projectStatus')) {
-        result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT_FALLBACK);
+        result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT_FALLBACK, false);
     }
 
     if (result.error) return result;
 
     const projects = await enrichPendenciasProjectsWithStatus(result.data || []);
-    return { ...result, data: projects };
+    return {
+        ...result,
+        data: excludeInactivePendenciasProjects(projects)
+    };
 }
 
 async function fetchPendenciasFabricaProjectsByStatusName(statusName) {

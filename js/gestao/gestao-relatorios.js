@@ -4,12 +4,15 @@ const GESTAO_RELATORIO_EXPEDICAO_STATUS = 'Expedição';
 
 const GESTAO_RELATORIO_PROJECT_SELECT = `
     id, orderId, projectCode, name, saleValue, deliveryDate, fimMontagemInterna, statusId,
+    isSubstituicao, substituiProjectId,
+    substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)),
     order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
 
 const GESTAO_RELATORIO_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, saleValue, deliveryDate, statusId,
+    isSubstituicao, substituiProjectId,
     order:salesOrders(id, orderCode, clientName),
     projectStatus:OrderProjectStatus(id, name)
 `;
@@ -47,7 +50,10 @@ async function fetchGestaoRelatorioProjects() {
     if (result.error?.message?.includes('projectStatus')
         || result.error?.message?.includes('sortOrder')
         || result.error?.message?.includes('fimMontagemInterna')
-        || result.error?.message?.includes('clientDeliveryDate')) {
+        || result.error?.message?.includes('clientDeliveryDate')
+        || result.error?.message?.includes('substitui')
+        || result.error?.message?.includes('isSubstituicao')
+        || result.error?.message?.includes('substituiProjectId')) {
         result = await supabaseClient
             .from('OrderProject')
             .select(GESTAO_RELATORIO_PROJECT_SELECT_FALLBACK)
@@ -110,6 +116,77 @@ function enrichGestaoRelatorioProjectsWithMeasurementDates(projects, measurement
         ...project,
         measurementDate: measurementByProjectId[Number(project.id)] || null
     }));
+}
+
+async function enrichGestaoRelatorioProjectsWithSubstituicaoValues(projects) {
+    const list = projects || [];
+    const needsEnrich = list.filter(project => {
+        if (!Number(project.substituiProjectId)) return false;
+        if (project.substituiProject?.saleValue != null && project.substituiProject.saleValue !== '') return false;
+        if (project.substituiOriginalSaleValue != null && project.substituiOriginalSaleValue !== '') return false;
+        return true;
+    });
+
+    if (!needsEnrich.length) {
+        return list.map(project => (
+            project.substituiProjectId && !isSubstituicaoOrderProject(project)
+                ? { ...project, isSubstituicao: true }
+                : project
+        ));
+    }
+
+    const originalIds = [...new Set(needsEnrich.map(project => Number(project.substituiProjectId)).filter(Boolean))];
+    const selectVariants = [
+        'id, projectCode, saleValue, order:salesOrders(orderCode)',
+        'id, projectCode, saleValue',
+        'id, saleValue'
+    ];
+
+    let originals = [];
+    for (const selectCols of selectVariants) {
+        const { data, error } = await supabaseClient
+            .from('OrderProject')
+            .select(selectCols)
+            .in('id', originalIds);
+
+        if (!error) {
+            originals = data || [];
+            break;
+        }
+    }
+
+    const originalById = Object.fromEntries(originals.map(item => [Number(item.id), item]));
+
+    return list.map(project => {
+        const originalId = Number(project.substituiProjectId);
+        if (!originalId) return project;
+
+        const original = originalById[originalId];
+        const hasOriginalValue = original?.saleValue != null && original.saleValue !== '';
+        const alreadyHasValue = project.substituiProject?.saleValue != null && project.substituiProject.saleValue !== ''
+            || project.substituiOriginalSaleValue != null && project.substituiOriginalSaleValue !== '';
+
+        if (!hasOriginalValue && !alreadyHasValue) {
+            return { ...project, isSubstituicao: true };
+        }
+
+        if (alreadyHasValue) {
+            return { ...project, isSubstituicao: true };
+        }
+
+        return {
+            ...project,
+            isSubstituicao: true,
+            substituiOriginalSaleValue: original.saleValue,
+            substituiProject: {
+                ...(project.substituiProject || {}),
+                id: originalId,
+                projectCode: original.projectCode || project.substituiProject?.projectCode || null,
+                saleValue: original.saleValue,
+                order: original.order || project.substituiProject?.order || null
+            }
+        };
+    });
 }
 
 function buildGestaoRelatorioStatusCounts(projects, statuses) {
@@ -334,6 +411,9 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project) {
     const projectDeliveryDate = typeof formatGestaoDate === 'function'
         ? formatGestaoDate(project.deliveryDate)
         : (project.deliveryDate || '—');
+    const saleValue = typeof formatSaleValue === 'function'
+        ? formatSaleValue(getProjectEffectiveSaleValue(project))
+        : (getProjectEffectiveSaleValue(project) ?? '—');
 
     return `
         <tr class="border-b border-slate-100 last:border-0">
@@ -345,6 +425,7 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project) {
             </td>
             <td class="p-2.5 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(measurementDate)}</td>
             <td class="p-2.5 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(projectDeliveryDate)}</td>
+            <td class="p-2.5 text-xs text-slate-700 whitespace-nowrap text-right font-medium">${escapeHtml(saleValue)}</td>
         </tr>
     `;
 }
@@ -374,13 +455,14 @@ function renderGestaoRelatorioPedidosPendentesOrderGroup(orderGroup) {
             </div>
             <div class="collapsible-list-body hidden p-2">
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[560px]">
+                    <table class="w-full text-sm min-w-[660px]">
                         <thead class="bg-slate-50 text-[10px] uppercase text-slate-400">
                             <tr>
                                 <th class="text-left p-2.5 font-semibold">Projeto</th>
                                 <th class="text-left p-2.5 font-semibold">Status</th>
                                 <th class="text-left p-2.5 font-semibold">Data medição</th>
                                 <th class="text-left p-2.5 font-semibold">Entrega projeto</th>
+                                <th class="text-right p-2.5 font-semibold">Valor de venda</th>
                             </tr>
                         </thead>
                         <tbody>${orderGroup.projects.map(renderGestaoRelatorioPedidosPendentesProjectRow).join('')}</tbody>
@@ -433,7 +515,9 @@ function formatGestaoRelatorioMonthLabel(monthKey, emptyLabel = 'Sem fim de mont
 
 function sumGestaoRelatorioSaleValues(projects) {
     return projects.reduce((sum, project) => {
-        const value = Number(project.saleValue);
+        const value = typeof getProjectEffectiveSaleValue === 'function'
+            ? getProjectEffectiveSaleValue(project)
+            : Number(project.saleValue);
         return sum + (Number.isFinite(value) ? value : 0);
     }, 0);
 }
@@ -474,8 +558,8 @@ function renderGestaoRelatorioFechamentoProducaoProjectRow(project) {
         ? formatGestaoDate(project.fimMontagemInterna)
         : (project.fimMontagemInterna || '—');
     const saleValue = typeof formatSaleValue === 'function'
-        ? formatSaleValue(project.saleValue)
-        : (project.saleValue ?? '—');
+        ? formatSaleValue(getProjectEffectiveSaleValue(project))
+        : (getProjectEffectiveSaleValue(project) ?? '—');
 
     return `
         <tr class="border-b border-slate-100 last:border-0">
@@ -616,8 +700,11 @@ async function loadGestaoRelatorios() {
         projectList,
         measurementByProjectId
     );
+    const projectsWithSubstituicaoValues = await enrichGestaoRelatorioProjectsWithSubstituicaoValues(
+        enrichedProjects
+    );
 
-    renderGestaoRelatoriosPanel(enrichedProjects, statuses || []);
+    renderGestaoRelatoriosPanel(projectsWithSubstituicaoValues, statuses || []);
 }
 
 function bindGestaoRelatoriosEvents() {

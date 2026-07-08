@@ -86,7 +86,7 @@ function showAppDialog(options = {}) {
         cancelLabel = 'Cancelar',
         variant = 'confirm',
         showCancel = true,
-        showIcon = true,
+        showIcon = false,
         focusCancel = variant === 'danger'
     } = options;
 
@@ -139,7 +139,7 @@ function confirmAppDialog(message, options = {}) {
         cancelLabel: options.cancelLabel || 'Cancelar',
         variant: options.variant || 'confirm',
         showCancel: true,
-        showIcon: options.showIcon !== false,
+        showIcon: false,
         ...options
     }).then(result => result === true);
 }
@@ -168,7 +168,7 @@ function alertAppDialog(message, options = {}) {
         confirmLabel: resolved.confirmLabel || 'OK',
         variant: resolved.variant || 'info',
         showCancel: false,
-        showIcon: resolved.showIcon !== false,
+        showIcon: false,
         ...resolved
     });
 }

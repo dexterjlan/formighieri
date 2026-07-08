@@ -429,28 +429,36 @@ async function getPendenciasStatusIdsByNames(names) {
 async function queryPendenciasProjects(filters = {}) {
     const { statusId, statusIds, designerId, unassignedOnly = false } = filters;
 
-    const buildQuery = (selectColumns) => {
+    const buildQuery = (selectColumns, withInactiveFilter = true) => {
         let query = supabaseClient.from('OrderProject').select(selectColumns);
         if (statusId) query = query.eq('statusId', statusId);
         if (statusIds?.length) query = query.in('statusId', statusIds);
         if (designerId) query = query.eq('designerId', designerId);
         if (unassignedOnly) query = query.is('designerId', null);
+        if (withInactiveFilter) {
+            query = query.eq('isComplementar', false).eq('isSubstituido', false);
+        }
         return query;
     };
 
     let result = await buildQuery(PENDENCIAS_PROJECT_SELECT);
 
+    if (result.error?.message?.includes('isComplementar') || result.error?.message?.includes('isSubstituido')) {
+        result = await buildQuery(PENDENCIAS_PROJECT_SELECT, false);
+    }
+
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('designer')) {
-        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK);
+        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK, false);
     }
 
     if (result.error?.message?.includes('observacaoAguardandoObra')) {
-        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK);
+        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK, false);
     }
 
     if (result.error) return result;
 
-    const projects = await enrichPendenciasProjectsWithStatus(result.data || []);
+    let projects = await enrichPendenciasProjectsWithStatus(result.data || []);
+    projects = excludeInactivePendenciasProjects(projects);
     return { ...result, data: projects };
 }
 

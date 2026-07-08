@@ -285,7 +285,12 @@ function renderMedicaoProjectEditRow(project, medicaoProject) {
     row.dataset.measured = 'true';
     row.innerHTML = `
         <div class="flex flex-wrap items-center justify-between gap-2">
-            <span class="font-medium text-xs text-slate-700">${escapeHtml(project.name || 'Projeto')}${escapeHtml(env)}</span>
+            <div class="flex flex-wrap items-center gap-2 min-w-0">
+                <span class="font-medium text-xs text-slate-700">${escapeHtml(project.name || 'Projeto')}${escapeHtml(env)}</span>
+                ${renderComplementarProjectNoticeHtml(project)}
+                ${renderSubstituidoProjectNoticeHtml(project)}
+                ${renderSubstituicaoProjectNoticeHtml(project)}
+            </div>
             <div class="flex items-center gap-1.5 shrink-0">
                 <span class="text-[10px] text-slate-500">Data medição:</span>
                 <span class="text-xs font-semibold text-teal-800">${formatDateOnly(medicaoProject.measurementDate)}</span>
@@ -295,7 +300,10 @@ function renderMedicaoProjectEditRow(project, medicaoProject) {
         ${plantaSectionHtml}
     `;
 
-    if (plantaLocked) return row;
+    if (plantaLocked) {
+        applyOrderProjectReadOnlyToElement(row, project);
+        return row;
+    }
 
     const plantaCheckbox = row.querySelector('.medicao-project-planta-check');
     const plantaDateInput = row.querySelector('.medicao-project-planta-date');
@@ -349,8 +357,11 @@ function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '
         <div class="flex flex-wrap items-center gap-2">
             <label class="flex items-center gap-2 flex-1 min-w-[180px] text-xs text-slate-700">
                 <input type="checkbox" class="medicao-project-check h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                    ${checked ? 'checked' : ''}>
+                    ${checked ? 'checked' : ''} ${!canActOnOrderProject(project) ? 'disabled' : ''}>
                 <span class="font-medium">${escapeHtml(project.name)}${escapeHtml(env)}</span>
+                ${renderComplementarProjectNoticeHtml(project)}
+                ${renderSubstituidoProjectNoticeHtml(project)}
+                ${renderSubstituicaoProjectNoticeHtml(project)}
             </label>
             <div class="flex items-center gap-1.5 shrink-0">
                 <span class="text-[10px] text-slate-500">Data medição:</span>
@@ -400,6 +411,8 @@ function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '
 
     setMedicaoDateInputMax(dateInput);
     setMedicaoDateInputMax(plantaDateInput);
+
+    applyOrderProjectReadOnlyToElement(row, project);
 
     return row;
 }

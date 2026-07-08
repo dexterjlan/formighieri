@@ -9,8 +9,7 @@ async function openGestaoCreateOrderForm() {
 
     await loadGestaoFormOptions();
     await loadGestaoConsultants();
-    clearGestaoProjectRows();
-    addGestaoProjectRow();
+    clearGestaoOrderProjectsDraft();
     showGestaoPedidoFormPanel();
 }
 
@@ -31,14 +30,7 @@ async function openGestaoEditOrderForm(orderId) {
     await loadGestaoFormOptions();
     await loadGestaoConsultants(order.consultantName || '');
 
-    clearGestaoProjectRows();
-    const projects = order.projects || [];
-    if (projects.length) {
-        projects.forEach(project => addGestaoProjectRow(project));
-    } else {
-        addGestaoProjectRow();
-    }
-
+    setGestaoOrderProjectsDraft(order.projects || []);
     showGestaoPedidoFormPanel();
 }
 
@@ -54,12 +46,273 @@ function groupGestaoProjectsByOrderId(projects) {
     return byOrderId;
 }
 
+async function fetchGestaoParentProjectsByCodes(projectCodes) {
+    const codes = [...new Set((projectCodes || []).map(code => normalizeProjectCodeInput(code)).filter(Boolean))];
+    if (!codes.length) return {};
+
+    const selectVariants = [
+        'id, projectCode, statusId, saleValue, isComplementar, isSubstituido, isSubstituicao, projectStatus:OrderProjectStatus(id, name, sortOrder), order:salesOrders(orderCode)',
+        'id, projectCode, statusId, saleValue, isComplementar, isSubstituido, isSubstituicao, projectStatus:OrderProjectStatus(id, name, sortOrder)',
+        'id, projectCode, statusId, isComplementar, isSubstituido, isSubstituicao, projectStatus:OrderProjectStatus(id, name, sortOrder), order:salesOrders(orderCode)',
+        'id, projectCode, statusId, isComplementar, isSubstituido, isSubstituicao, projectStatus:OrderProjectStatus(id, name, sortOrder)',
+        'id, projectCode, statusId, isComplementar, isSubstituido, isSubstituicao',
+        'id, projectCode, statusId, isComplementar',
+        'id, projectCode, statusId'
+    ];
+
+    for (const selectCols of selectVariants) {
+        const { data, error } = await supabaseClient
+            .from('OrderProject')
+            .select(selectCols)
+            .in('projectCode', codes);
+
+        if (!error) {
+            return Object.fromEntries((data || []).map(project => [project.projectCode, project]));
+        }
+    }
+
+    return {};
+}
+
+async function validateAndResolveGestaoComplementarProjects(projects) {
+    const deferred = [];
+    const byCode = new Map();
+
+    (projects || []).forEach(project => {
+        if (project.projectCode) {
+            byCode.set(project.projectCode, project);
+        }
+    });
+
+    const dbLookupCodes = new Set();
+    for (const project of projects) {
+        if (!project.isComplementar) {
+            project.parentProjectId = null;
+            continue;
+        }
+
+        if (!project.parentProjectCode) {
+            throw new Error(`Projeto "${project.name}": informe o código do projeto pai.`);
+        }
+
+        if (project.parentProjectCode === project.projectCode) {
+            throw new Error(`Projeto "${project.name}": o código do projeto pai não pode ser o próprio projeto.`);
+        }
+
+        const batchParent = byCode.get(project.parentProjectCode);
+        if (!batchParent || batchParent.id) {
+            dbLookupCodes.add(project.parentProjectCode);
+        }
+    }
+
+    const dbParentsByCode = await fetchGestaoParentProjectsByCodes([...dbLookupCodes]);
+
+    for (const project of projects) {
+        if (!project.isComplementar) continue;
+
+        let parent = dbParentsByCode[project.parentProjectCode] || byCode.get(project.parentProjectCode);
+
+        if (!parent) {
+            throw new Error(`Projeto "${project.name}": projeto pai "${project.parentProjectCode}" não encontrado.`);
+        }
+
+        if (parent.isComplementar) {
+            throw new Error(`Projeto "${project.name}": o projeto pai não pode ser complementar.`);
+        }
+
+        const statusName = parent.projectStatus?.name || '';
+        const sortOrder = parent.projectStatus?.sortOrder ?? null;
+        if (!isComplementarParentStatusAllowed(statusName, sortOrder)) {
+            throw new Error(
+                `Projeto "${project.name}": o projeto pai não pode estar em "${statusName || 'Aguardando Aprovação'}" ou status posterior.`
+            );
+        }
+
+        if (!parent.statusId) {
+            throw new Error(`Projeto "${project.name}": o projeto pai não possui status válido.`);
+        }
+
+        project.statusId = parent.statusId;
+
+        if (parent.id) {
+            project.parentProjectId = parent.id;
+            delete project._pendingParentCode;
+        } else {
+            project.parentProjectId = null;
+            project._pendingParentCode = project.parentProjectCode;
+            deferred.push({
+                project,
+                parentProjectCode: project.parentProjectCode
+            });
+        }
+    }
+
+    return { projects, deferred };
+}
+
+async function validateAndResolveGestaoSubstituidoProjects(projects) {
+    const dbLookupCodes = new Set();
+
+    for (const project of projects) {
+        if (project.isComplementar && project.isSubstituido) {
+            throw new Error(`Projeto "${project.name}": não pode ser complementar e substituído ao mesmo tempo.`);
+        }
+
+        if (!project.isSubstituido) {
+            project.substituidoPorProjectId = null;
+        }
+
+        if (!project.isSubstituicao) {
+            project.substituiProjectId = null;
+        }
+
+        if (project.isSubstituido) {
+            if (!project.substituidoPorProjectCode) {
+                throw new Error(`Projeto "${project.name}": informe o código do projeto substituto.`);
+            }
+
+            if (project.substituidoPorProjectCode === project.projectCode) {
+                throw new Error(`Projeto "${project.name}": o código do projeto substituto não pode ser o próprio projeto.`);
+            }
+
+            if (!isSubstituidoEligibleStatus(project)) {
+                throw new Error(
+                    `Projeto "${project.name}": só pode ser marcado como substituído até "Aguardando Projeto Técnico".`
+                );
+            }
+
+            dbLookupCodes.add(project.substituidoPorProjectCode);
+        }
+    }
+
+    const linkedByCode = await fetchGestaoParentProjectsByCodes([...dbLookupCodes]);
+    const substituidoStatusId = getSubstituidoStatusId();
+
+    if (!substituidoStatusId) {
+        const needsSubstituidoStatus = projects.some(project => project.isSubstituido);
+        if (needsSubstituidoStatus) {
+            throw new Error('Status "Projeto Substituído" não encontrado. Execute supabase/create-order-project-substituido.sql no Supabase.');
+        }
+    }
+
+    for (const project of projects) {
+        if (project.isSubstituido) {
+            const replacement = linkedByCode[project.substituidoPorProjectCode];
+            if (!replacement) {
+                throw new Error(`Projeto "${project.name}": projeto substituto "${project.substituidoPorProjectCode}" não encontrado.`);
+            }
+
+            if (replacement.isComplementar) {
+                throw new Error(`Projeto "${project.name}": o projeto substituto não pode ser complementar.`);
+            }
+
+            if (replacement.isSubstituido) {
+                throw new Error(`Projeto "${project.name}": o projeto substituto já está marcado como substituído.`);
+            }
+
+            project.substituidoPorProjectId = replacement.id;
+            project.substituidoPorProject = {
+                projectCode: replacement.projectCode,
+                order: replacement.order || null
+            };
+            project.statusId = substituidoStatusId;
+            project.projectStatus = gestaoProjectStatusesCache.find(status => status.id === substituidoStatusId) || {
+                id: substituidoStatusId,
+                name: SUBSTITUIDO_STATUS_NAME
+            };
+        }
+    }
+
+    return { projects };
+}
+
+async function protectGestaoSubstituicaoFields(projects) {
+    const persistedSubstituicao = (projects || []).filter(project => project.id && project.isSubstituicao);
+    if (!persistedSubstituicao.length) return projects;
+
+    const selectVariants = [
+        'id, isSubstituicao, substituiProjectId, substitui:substituiProjectId(projectCode)',
+        'id, isSubstituicao, substituiProjectId'
+    ];
+
+    let rows = [];
+    for (const selectCols of selectVariants) {
+        const { data, error } = await supabaseClient
+            .from('OrderProject')
+            .select(selectCols)
+            .in('id', persistedSubstituicao.map(project => project.id));
+
+        if (!error) {
+            rows = data || [];
+            break;
+        }
+    }
+
+    const byId = Object.fromEntries(rows.map(row => [Number(row.id), row]));
+
+    return (projects || []).map(project => {
+        const original = byId[Number(project.id)];
+        if (!original?.isSubstituicao) return project;
+
+        const originalCode = normalizeProjectCodeInput(original.substitui?.projectCode || '');
+        const incomingCode = normalizeProjectCodeInput(project.substituiProjectCode || '');
+
+        if (!project.isSubstituicao) {
+            throw new Error(`Projeto "${project.name}": a flag de substituição não pode ser removida.`);
+        }
+
+        if (incomingCode && originalCode && incomingCode !== originalCode) {
+            throw new Error(`Projeto "${project.name}": o código do projeto original não pode ser alterado.`);
+        }
+
+        return {
+            ...project,
+            isSubstituicao: true,
+            substituiProjectId: original.substituiProjectId || project.substituiProjectId || null,
+            substituiProjectCode: originalCode || incomingCode,
+            substituiProject: original.substitui || project.substituiProject || null
+        };
+    });
+}
+
+async function syncGestaoSubstituidoCrossLinks(projects, now) {
+    for (const project of projects) {
+        if (!project.isSubstituido || !project.substituidoPorProjectId) continue;
+
+        const payload = {
+            isSubstituicao: true,
+            substituiProjectId: project.id,
+            updatedById: currentUser.id,
+            updatedAt: now
+        };
+
+        let { error } = await supabaseClient
+            .from('OrderProject')
+            .update(payload)
+            .eq('id', project.substituidoPorProjectId);
+
+        if (error?.message?.includes('isSubstituicao') || error?.message?.includes('substituiProjectId')) {
+            delete payload.isSubstituicao;
+            delete payload.substituiProjectId;
+            ({ error } = await supabaseClient
+                .from('OrderProject')
+                .update(payload)
+                .eq('id', project.substituidoPorProjectId));
+        }
+
+        if (error) throw error;
+    }
+}
+
 async function fetchGestaoProjectsByOrderIds(orderIds) {
     const normalizedIds = [...new Set(orderIds.map(id => Number(id)).filter(Boolean))];
     if (!normalizedIds.length) return {};
 
     const selectVariants = [
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name)',
         'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name)',
@@ -110,7 +363,9 @@ async function enrichGestaoOrdersWithProjectStatuses(orders) {
 
 async function fetchGestaoOrders() {
     const orderSelectVariants = [
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))',
@@ -200,6 +455,16 @@ async function loadGestaoOrdersList() {
 
 async function insertGestaoProject(orderId, project, now) {
     const statusId = project.statusId || getDefaultProjectStatusId();
+    const complementarFields = {
+        isComplementar: Boolean(project.isComplementar),
+        parentProjectId: project.parentProjectId || null
+    };
+    const substituidoFields = {
+        isSubstituido: Boolean(project.isSubstituido),
+        substituidoPorProjectId: project.isSubstituido ? (project.substituidoPorProjectId || null) : null,
+        isSubstituicao: Boolean(project.isSubstituicao),
+        substituiProjectId: project.isSubstituicao ? (project.substituiProjectId || null) : null
+    };
     const payloadVariants = [
         {
             orderId,
@@ -211,6 +476,8 @@ async function insertGestaoProject(orderId, project, now) {
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
+            ...complementarFields,
+            ...substituidoFields,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -224,6 +491,8 @@ async function insertGestaoProject(orderId, project, now) {
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
+            ...complementarFields,
+            ...substituidoFields,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -258,9 +527,33 @@ async function insertGestaoProject(orderId, project, now) {
         if (seen.has(key)) continue;
         seen.add(key);
 
-        const { error } = await supabaseClient.from('OrderProject').insert(cleanPayload);
-        if (!error) return;
-        lastError = error;
+        const insertResult = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
+        if (!insertResult.error) return insertResult.data?.id || null;
+
+        if (insertResult.error.message?.includes('isComplementar') || insertResult.error.message?.includes('parentProjectId')) {
+            delete cleanPayload.isComplementar;
+            delete cleanPayload.parentProjectId;
+            const retry = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
+            if (!retry.error) return retry.data?.id || null;
+            lastError = retry.error;
+            continue;
+        }
+
+        if (insertResult.error.message?.includes('isSubstituido')
+            || insertResult.error.message?.includes('substituidoPorProjectId')
+            || insertResult.error.message?.includes('isSubstituicao')
+            || insertResult.error.message?.includes('substituiProjectId')) {
+            delete cleanPayload.isSubstituido;
+            delete cleanPayload.substituidoPorProjectId;
+            delete cleanPayload.isSubstituicao;
+            delete cleanPayload.substituiProjectId;
+            const retry = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
+            if (!retry.error) return retry.data?.id || null;
+            lastError = retry.error;
+            continue;
+        }
+
+        lastError = insertResult.error;
     }
 
     throw lastError;
@@ -268,6 +561,16 @@ async function insertGestaoProject(orderId, project, now) {
 
 async function updateGestaoProject(project, now) {
     const statusId = project.statusId || getDefaultProjectStatusId();
+    const complementarFields = {
+        isComplementar: Boolean(project.isComplementar),
+        parentProjectId: project.isComplementar ? (project.parentProjectId || null) : null
+    };
+    const substituidoFields = {
+        isSubstituido: Boolean(project.isSubstituido),
+        substituidoPorProjectId: project.isSubstituido ? (project.substituidoPorProjectId || null) : null,
+        isSubstituicao: Boolean(project.isSubstituicao),
+        substituiProjectId: project.isSubstituicao ? (project.substituiProjectId || null) : null
+    };
     const payloadVariants = [
         {
             projectCode: project.projectCode,
@@ -278,6 +581,8 @@ async function updateGestaoProject(project, now) {
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
+            ...complementarFields,
+            ...substituidoFields,
             updatedById: currentUser.id,
             updatedAt: now
         },
@@ -289,6 +594,8 @@ async function updateGestaoProject(project, now) {
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
+            ...complementarFields,
+            ...substituidoFields,
             updatedById: currentUser.id,
             updatedAt: now
         },
@@ -324,6 +631,36 @@ async function updateGestaoProject(project, now) {
             .eq('id', project.id);
 
         if (!error) return;
+
+        if (error.message?.includes('isComplementar') || error.message?.includes('parentProjectId')) {
+            delete cleanPayload.isComplementar;
+            delete cleanPayload.parentProjectId;
+            const retry = await supabaseClient
+                .from('OrderProject')
+                .update(cleanPayload)
+                .eq('id', project.id);
+            if (!retry.error) return;
+            lastError = retry.error;
+            continue;
+        }
+
+        if (error.message?.includes('isSubstituido')
+            || error.message?.includes('substituidoPorProjectId')
+            || error.message?.includes('isSubstituicao')
+            || error.message?.includes('substituiProjectId')) {
+            delete cleanPayload.isSubstituido;
+            delete cleanPayload.substituidoPorProjectId;
+            delete cleanPayload.isSubstituicao;
+            delete cleanPayload.substituiProjectId;
+            const retry = await supabaseClient
+                .from('OrderProject')
+                .update(cleanPayload)
+                .eq('id', project.id);
+            if (!retry.error) return;
+            lastError = retry.error;
+            continue;
+        }
+
         lastError = error;
     }
 
@@ -332,12 +669,15 @@ async function updateGestaoProject(project, now) {
 
 async function persistGestaoProjects(orderId, projects) {
     const now = new Date().toISOString();
+    const { projects: complementarResolved, deferred } = await validateAndResolveGestaoComplementarProjects(projects);
+    const { projects: substituidoResolved } = await validateAndResolveGestaoSubstituidoProjects(complementarResolved);
+    const resolvedProjects = await protectGestaoSubstituicaoFields(substituidoResolved);
     const { data: current } = await supabaseClient
         .from('OrderProject')
         .select('id')
         .eq('orderId', orderId);
 
-    const keepIds = projects.filter(project => project.id).map(project => project.id);
+    const keepIds = resolvedProjects.filter(project => project.id).map(project => project.id);
     const deleteIds = (current || [])
         .map(row => row.id)
         .filter(id => !keepIds.includes(id));
@@ -350,13 +690,50 @@ async function persistGestaoProjects(orderId, projects) {
         if (error) throw error;
     }
 
-    for (const project of projects) {
+    const idByCode = {};
+
+    for (const project of resolvedProjects) {
+        if (project._pendingParentCode) continue;
+
         if (project.id) {
             await updateGestaoProject(project, now);
+            if (project.projectCode) idByCode[project.projectCode] = project.id;
             continue;
         }
-        await insertGestaoProject(orderId, project, now);
+
+        const insertedId = await insertGestaoProject(orderId, project, now);
+        if (project.projectCode && insertedId) {
+            idByCode[project.projectCode] = insertedId;
+        }
     }
+
+    for (const item of deferred) {
+        const parentId = idByCode[item.parentProjectCode];
+        if (!parentId) {
+            throw new Error(`Projeto "${item.project.name}": não foi possível vincular ao projeto pai "${item.parentProjectCode}". Salve o projeto pai antes do complementar.`);
+        }
+
+        const batchParent = resolvedProjects.find(project => project.projectCode === item.parentProjectCode);
+        item.project.parentProjectId = parentId;
+        if (batchParent?.statusId) {
+            item.project.statusId = batchParent.statusId;
+        }
+
+        if (item.project.id) {
+            await updateGestaoProject(item.project, now);
+            if (item.project.projectCode) {
+                idByCode[item.project.projectCode] = item.project.id;
+            }
+            continue;
+        }
+
+        const insertedId = await insertGestaoProject(orderId, item.project, now);
+        if (item.project.projectCode && insertedId) {
+            idByCode[item.project.projectCode] = insertedId;
+        }
+    }
+
+    await syncGestaoSubstituidoCrossLinks(resolvedProjects, now);
 }
 
 async function saveGestaoOrder(event) {
@@ -367,7 +744,7 @@ async function saveGestaoOrder(event) {
     const clientName = document.getElementById('gestao-ord-client')?.value.trim();
     const consultantName = document.getElementById('gestao-ord-consultant')?.value.trim();
     const clientDeliveryDate = document.getElementById('gestao-ord-client-delivery')?.value || null;
-    const projects = collectGestaoProjectsFromDom();
+    const projects = gestaoOrderProjectsDraft || [];
 
     if (!orderCode) {
         alertAppDialog('Informe o código do pedido.');
@@ -389,6 +766,14 @@ async function saveGestaoOrder(event) {
     for (const project of projects) {
         if (!project.projectCode || !project.name || !project.environmentTypeId || !project.statusId) {
             alertAppDialog('Preencha código, nome, ambiente e status de todos os projetos.');
+            return;
+        }
+        if (project.isComplementar && !project.parentProjectCode) {
+            alertAppDialog(`Projeto "${project.name}": informe o código do projeto pai.`);
+            return;
+        }
+        if (project.isSubstituido && !project.substituidoPorProjectCode) {
+            alertAppDialog(`Projeto "${project.name}": informe o código do projeto substituto.`);
             return;
         }
         if (!isNumericProjectCode(project.projectCode)) {
@@ -489,7 +874,9 @@ async function saveGestaoOrder(event) {
             || error.message?.includes('statusId')
             || error.message?.includes('OrderProjectStatus')
             || error.message?.includes('saleValue')
-            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql e supabase/create-order-project-status.sql no Supabase.'
+            || error.message?.includes('isComplementar')
+            || error.message?.includes('parentProjectId')
+            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql, supabase/create-order-project-status.sql, supabase/create-order-project-complementar.sql e supabase/create-order-project-substituido.sql no Supabase.'
             : '';
         alertAppDialog('Erro ao salvar pedido: ' + error.message + sqlHint);
     }

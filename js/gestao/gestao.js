@@ -4,6 +4,8 @@ let gestaoProjetistasCache = [];
 let gestaoProjectStatusesCache = [];
 let gestaoMarceneirosCache = [];
 let editingGestaoOrderId = null;
+let gestaoOrderProjectsDraft = [];
+let editingGestaoProjectDraftIndex = null;
 
 const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
 const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
@@ -83,6 +85,7 @@ function updateGestaoCadastrosNavVisibility() {
 function hideAllGestaoPanels() {
     document.getElementById('gestao-pedido-list-panel')?.classList.add('hidden');
     document.getElementById('gestao-pedido-form-panel')?.classList.add('hidden');
+    document.getElementById('gestao-project-form-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-usuarios-panel')?.classList.add('hidden');
@@ -167,14 +170,20 @@ function resolveGestaoProjectStatusId(project = {}) {
 }
 
 function getOrderProjectStatusOptionsHtml(selectedId = null) {
-    const activeStatuses = gestaoProjectStatusesCache.filter(status => status.isActive !== false);
+    const activeStatuses = gestaoProjectStatusesCache.filter(status =>
+        status.isActive !== false && !isSubstituidoStatusName(status.name)
+    );
+    const selectedStatus = gestaoProjectStatusesCache.find(status => String(status.id) === String(selectedId));
+    const statuses = selectedStatus && isSubstituidoStatusName(selectedStatus.name)
+        ? [...activeStatuses, selectedStatus]
+        : activeStatuses;
     const defaultId = selectedId ?? getDefaultProjectStatusId();
 
-    if (!activeStatuses.length) {
+    if (!statuses.length) {
         return '<option value="">Cadastre status em Gestão → Status de Projeto</option>';
     }
 
-    return activeStatuses.map(status => `
+    return statuses.map(status => `
         <option value="${status.id}" ${String(status.id) === String(defaultId) ? 'selected' : ''}>${escapeHtml(status.name)}</option>
     `).join('');
 }
@@ -214,90 +223,604 @@ function bindGestaoProjectCodeInput(input) {
     });
 }
 
-function addGestaoProjectRow(project = {}) {
+function renderProjectViewComplementarChildrenList(children = []) {
+    const listEl = document.getElementById('project-view-complementar-children-list');
+    if (!listEl) return;
+
+    if (!children.length) {
+        listEl.innerHTML = '<p class="text-slate-500">—</p>';
+        return;
+    }
+
+    listEl.innerHTML = children
+        .slice()
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
+        .map(child => {
+            const code = normalizeProjectCodeInput(child.projectCode || '');
+            const name = child.name || '—';
+            const statusName = getGestaoProjectStatusName(child);
+            const statusClass = getOrderProjectStatusBadgeClass(statusName);
+
+            return `
+                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="font-mono text-slate-800">${escapeHtml(code)}</span>
+                    <span class="text-slate-400">·</span>
+                    <span class="text-slate-800">${escapeHtml(name)}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusClass}">${escapeHtml(statusName)}</span>
+                </div>
+            `;
+        })
+        .join('');
+}
+
+function findComplementarChildrenInCaches(parentProjectId) {
+    const normalizedId = Number(parentProjectId);
+    if (!normalizedId) return [];
+
+    const matches = [];
+    const seen = new Set();
+
+    const addMatch = (project) => {
+        if (!isComplementarOrderProject(project)) return;
+        if (Number(project.parentProjectId) !== normalizedId) return;
+
+        const key = Number(project.id) || `${project.projectCode || ''}-${project.name || ''}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        matches.push(project);
+    };
+
+    if (Array.isArray(orderProjectsCache)) {
+        orderProjectsCache.forEach(addMatch);
+    }
+
+    if (Array.isArray(gestaoOrderProjectsDraft)) {
+        gestaoOrderProjectsDraft.forEach(addMatch);
+    }
+
+    return matches;
+}
+
+async function fetchComplementarChildrenForProject(parentProjectId) {
+    const cached = findComplementarChildrenInCaches(parentProjectId);
+    if (cached.length) return cached;
+
+    const normalizedId = Number(parentProjectId);
+    if (!normalizedId) return [];
+
+    const selectVariants = [
+        'id, projectCode, name, deliveryDate, statusId, isComplementar, parentProjectId, projectStatus:OrderProjectStatus(id, name)',
+        'id, projectCode, name, isComplementar, parentProjectId'
+    ];
+
+    for (const selectCols of selectVariants) {
+        const { data, error } = await supabaseClient
+            .from('OrderProject')
+            .select(selectCols)
+            .eq('parentProjectId', normalizedId)
+            .eq('isComplementar', true);
+
+        if (!error && Array.isArray(data)) {
+            return data.map(item => {
+                if (item.statusId && !item.projectStatus && gestaoProjectStatusesCache.length) {
+                    item.projectStatus = gestaoProjectStatusesCache.find(status => status.id === item.statusId) || null;
+                }
+                return item;
+            });
+        }
+
+        if (error?.message?.includes('isComplementar') || error?.message?.includes('parentProjectId')) {
+            break;
+        }
+    }
+
+    return [];
+}
+
+function fillProjectViewModal(project = {}, complementarChildren = []) {
+    const statusName = getGestaoProjectStatusName(project);
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value || '—';
+    };
+
+    setText('project-view-code', normalizeProjectCodeInput(project.projectCode || ''));
+    setText('project-view-name', project.name || '—');
+    setText('project-view-environment', project.environmentType?.name || '—');
+    setText('project-view-delivery', typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(project.deliveryDate)
+        : (project.deliveryDate || '—'));
+    setText('project-view-status', statusName);
+    setText('project-view-designer', project.designer?.name || '—');
+    setText('project-view-caminho-rede', project.caminhoRedeAprovacao || '—');
+
+    const childWrap = document.getElementById('project-view-complementar-child-wrap');
+    const parentWrap = document.getElementById('project-view-complementar-parent-wrap');
+    const isComplementar = isComplementarOrderProject(project);
+
+    childWrap?.classList.toggle('hidden', !isComplementar);
+    parentWrap?.classList.toggle('hidden', isComplementar || !complementarChildren.length);
+
+    if (isComplementar) {
+        setText(
+            'project-view-parent-code',
+            project.parentProject?.projectCode || project.parentProjectCode || '—'
+        );
+        setText(
+            'project-view-parent-order',
+            project.parentProject?.order?.orderCode || getComplementarParentOrderCode(project) || '—'
+        );
+    } else {
+        renderProjectViewComplementarChildrenList(complementarChildren);
+    }
+
+    const substituidoWrap = document.getElementById('project-view-substituido-wrap');
+    const substituicaoWrap = document.getElementById('project-view-substituicao-wrap');
+    const isSubstituido = isSubstituidoOrderProject(project);
+    const isSubstituicao = isSubstituicaoOrderProject(project);
+
+    substituidoWrap?.classList.toggle('hidden', !isSubstituido);
+    substituicaoWrap?.classList.toggle('hidden', !isSubstituicao);
+
+    if (isSubstituido) {
+        setText(
+            'project-view-substituido-por-code',
+            getSubstituidoPorProjectCode(project) || '—'
+        );
+        setText(
+            'project-view-substituido-por-order',
+            getSubstituidoPorOrderCode(project) || '—'
+        );
+    }
+
+    if (isSubstituicao) {
+        setText(
+            'project-view-substitui-code',
+            getSubstituiProjectCode(project) || '—'
+        );
+        setText(
+            'project-view-substitui-order',
+            getSubstituiOrderCode(project) || '—'
+        );
+    }
+}
+
+async function fetchProjectDetailsForView(projectId) {
+    const normalizedId = Number(projectId);
+    if (!normalizedId) return null;
+
+    const selectVariants = [
+        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)'
+    ];
+
+    for (const selectCols of selectVariants) {
+        const { data, error } = await supabaseClient
+            .from('OrderProject')
+            .select(selectCols)
+            .eq('id', normalizedId)
+            .maybeSingle();
+
+        if (!error && data) {
+            if (data.statusId && !data.projectStatus && gestaoProjectStatusesCache.length) {
+                data.projectStatus = gestaoProjectStatusesCache.find(item => item.id === data.statusId) || null;
+            }
+            return data;
+        }
+    }
+
+    return null;
+}
+
+async function openProjectViewModal(projectOrId) {
+    let project = projectOrId;
+
+    if (typeof projectOrId === 'number' || (typeof projectOrId === 'string' && projectOrId)) {
+        const cached = typeof fetchOrderProjectsForOrder === 'function' && Array.isArray(orderProjectsCache)
+            ? orderProjectsCache.find(item => Number(item.id) === Number(projectOrId))
+            : null;
+        project = cached || await fetchProjectDetailsForView(projectOrId);
+    }
+
+    if (!project) {
+        alertAppDialog('Projeto não encontrado.');
+        return;
+    }
+
+    if (!project.designer?.name && project.designerId) {
+        const enriched = await fetchProjectDetailsForView(project.id);
+        if (enriched) project = enriched;
+    }
+
+    const complementarChildren = isComplementarOrderProject(project)
+        ? []
+        : await fetchComplementarChildrenForProject(project.id);
+
+    fillProjectViewModal(project, complementarChildren);
+    toggleModal('order-project-view-modal', true);
+}
+
+window.openProjectViewModal = openProjectViewModal;
+
+function bindGestaoComplementarToggle() {
+    const checkbox = document.getElementById('gestao-project-complementar');
+    const parentInput = document.getElementById('gestao-project-parent-code');
+    const statusSelect = document.getElementById('gestao-project-status');
+    if (!checkbox || !parentInput || !statusSelect) return;
+
+    const isComplementar = checkbox.checked;
+    parentInput.disabled = !isComplementar;
+    if (!isComplementar) {
+        parentInput.value = '';
+    }
+    statusSelect.disabled = isComplementar;
+    parentInput.required = isComplementar;
+}
+
+function bindGestaoSubstituidoToggle() {
+    const checkbox = document.getElementById('gestao-project-substituido');
+    const replacementInput = document.getElementById('gestao-project-substituido-por-code');
+    const statusSelect = document.getElementById('gestao-project-status');
+    const complementarCheckbox = document.getElementById('gestao-project-complementar');
+    if (!checkbox || !replacementInput || !statusSelect) return;
+
+    const isSubstituido = checkbox.checked;
+    replacementInput.disabled = !isSubstituido;
+    if (!isSubstituido) {
+        replacementInput.value = '';
+    }
+    replacementInput.required = isSubstituido;
+
+    if (isSubstituido) {
+        statusSelect.disabled = true;
+        if (complementarCheckbox) complementarCheckbox.checked = false;
+        bindGestaoComplementarToggle();
+    } else if (!document.getElementById('gestao-project-complementar')?.checked) {
+        statusSelect.disabled = false;
+    }
+}
+
+function bindGestaoProjectRelationToggles(project = {}) {
+    const locked = isSubstituidoOrderProject(project);
+    const relationInputs = [
+        'gestao-project-complementar',
+        'gestao-project-parent-code',
+        'gestao-project-substituido',
+        'gestao-project-substituido-por-code',
+        'gestao-project-status',
+        'gestao-project-code',
+        'gestao-project-name',
+        'gestao-project-environment',
+        'gestao-project-sale-value',
+        'gestao-project-delivery',
+        'gestao-project-designer',
+        'gestao-project-caminho-rede-aprovacao'
+    ];
+
+    if (locked) {
+        relationInputs.forEach(id => {
+            const element = document.getElementById(id);
+            if (element) element.disabled = true;
+        });
+        document.getElementById('gestao-project-form-submit')?.setAttribute('disabled', 'disabled');
+        return;
+    }
+
+    document.getElementById('gestao-project-form-submit')?.removeAttribute('disabled');
+    bindGestaoComplementarToggle();
+    bindGestaoSubstituidoToggle();
+}
+
+function getGestaoProjectStatusName(project) {
+    if (!project) return '—';
+    if (project.projectStatus?.name) return project.projectStatus.name;
+    const status = gestaoProjectStatusesCache.find(item => Number(item.id) === Number(project.statusId));
+    return status?.name || '—';
+}
+
+function populateGestaoProjectFormSelects(project = {}) {
+    const environmentSelect = document.getElementById('gestao-project-environment');
+    if (environmentSelect) {
+        environmentSelect.innerHTML = '<option value="">Selecione...</option>'
+            + getEnvironmentOptionsHtml(project.environmentTypeId);
+    }
+
+    const statusSelect = document.getElementById('gestao-project-status');
+    if (statusSelect) {
+        statusSelect.innerHTML = getOrderProjectStatusOptionsHtml(resolveGestaoProjectStatusId(project));
+    }
+
+    const designerSelect = document.getElementById('gestao-project-designer');
+    if (designerSelect) {
+        designerSelect.innerHTML = '<option value="">Selecione...</option>'
+            + getProjetistaOptionsHtml(project.designerId);
+    }
+}
+
+function resetGestaoProjectForm() {
+    document.getElementById('gestao-project-form')?.reset();
+    populateGestaoProjectFormSelects();
+    document.getElementById('gestao-project-parent-code').disabled = true;
+    document.getElementById('gestao-project-parent-code').required = false;
+    document.getElementById('gestao-project-substituido-por-code').disabled = true;
+    document.getElementById('gestao-project-substituido-por-code').required = false;
+    document.getElementById('gestao-project-substituido').checked = false;
+    document.getElementById('btn-gestao-remove-project')?.classList.add('hidden');
+}
+
+function fillGestaoProjectForm(project = {}) {
+    document.getElementById('gestao-project-code').value = normalizeProjectCodeInput(project.projectCode || '');
+    document.getElementById('gestao-project-name').value = project.name || '';
+    document.getElementById('gestao-project-sale-value').value = formatSaleValueForInput(project.saleValue);
+    document.getElementById('gestao-project-delivery').value = toGestaoInputDate(project.deliveryDate);
+    document.getElementById('gestao-project-caminho-rede-aprovacao').value = project.caminhoRedeAprovacao || '';
+    document.getElementById('gestao-project-complementar').checked = Boolean(project.isComplementar);
+    document.getElementById('gestao-project-parent-code').value = normalizeProjectCodeInput(
+        project.parentProject?.projectCode || project.parentProjectCode || ''
+    );
+    document.getElementById('gestao-project-substituido').checked = Boolean(project.isSubstituido);
+    document.getElementById('gestao-project-substituido-por-code').value = normalizeProjectCodeInput(
+        project.substituidoPorProject?.projectCode || project.substituidoPorProjectCode || ''
+    );
+
+    populateGestaoProjectFormSelects(project);
+    bindGestaoProjectRelationToggles(project);
+}
+
+function collectGestaoProjectFormData() {
+    const existing = editingGestaoProjectDraftIndex != null
+        ? gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex]
+        : null;
+
+    return {
+        id: editingGestaoProjectDraftIndex != null
+            ? (gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex]?.id || null)
+            : null,
+        projectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-code')?.value || ''),
+        name: document.getElementById('gestao-project-name')?.value.trim() || '',
+        environmentTypeId: Number(document.getElementById('gestao-project-environment')?.value) || null,
+        saleValue: parseSaleValueInput(document.getElementById('gestao-project-sale-value')?.value),
+        deliveryDate: document.getElementById('gestao-project-delivery')?.value || null,
+        statusId: Number(document.getElementById('gestao-project-status')?.value) || getDefaultProjectStatusId(),
+        designerId: document.getElementById('gestao-project-designer')?.value
+            ? Number(document.getElementById('gestao-project-designer').value)
+            : null,
+        caminhoRedeAprovacao: document.getElementById('gestao-project-caminho-rede-aprovacao')?.value?.trim() || null,
+        isComplementar: Boolean(document.getElementById('gestao-project-complementar')?.checked),
+        parentProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-parent-code')?.value || ''),
+        isSubstituido: Boolean(document.getElementById('gestao-project-substituido')?.checked),
+        substituidoPorProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-substituido-por-code')?.value || ''),
+        isSubstituicao: Boolean(existing?.isSubstituicao),
+        substituiProjectId: existing?.substituiProjectId || null,
+        substituiProjectCode: normalizeProjectCodeInput(
+            existing?.substituiProject?.projectCode || existing?.substituiProjectCode || ''
+        ),
+        substituiProject: existing?.substituiProject || null,
+        substituiOriginalSaleValue: existing?.substituiOriginalSaleValue,
+        parentProject: editingGestaoProjectDraftIndex != null
+            ? gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex]?.parentProject || null
+            : null
+    };
+}
+
+function renderGestaoProjectsSummaryList() {
     const tbody = document.getElementById('gestao-projects-rows');
     if (!tbody) return;
 
-    const row = document.createElement('tr');
-    row.className = 'gestao-project-row';
-    if (project.id) row.dataset.projectId = String(project.id);
+    tbody.innerHTML = '';
 
-    row.innerHTML = `
-        <td class="p-2">
-            <input type="text" class="gestao-project-code w-full px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
-                value="${escapeHtml(normalizeProjectCodeInput(project.projectCode || ''))}" placeholder="Somente números"
-                inputmode="numeric" pattern="[0-9]+" title="Informe somente números" required>
-        </td>
-        <td class="p-2">
-            <input type="text" class="gestao-project-name w-full px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
-                value="${escapeHtml(project.name || '')}" placeholder="Nome" required>
-        </td>
-        <td class="p-2">
-            <select class="gestao-project-environment w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600" required>
-                <option value="">Selecione...</option>
-                ${getEnvironmentOptionsHtml(project.environmentTypeId)}
-            </select>
-        </td>
-        <td class="p-2">
-            <input type="text" class="gestao-project-sale-value w-full px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
-                value="${escapeHtml(formatSaleValueForInput(project.saleValue))}" placeholder="0,00" inputmode="decimal">
-        </td>
-        <td class="p-2">
-            <input type="date" class="gestao-project-delivery w-full px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
-                value="${toGestaoInputDate(project.deliveryDate)}">
-        </td>
-        <td class="p-2">
-            <select class="gestao-project-status w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600" required>
-                ${getOrderProjectStatusOptionsHtml(resolveGestaoProjectStatusId(project))}
-            </select>
-        </td>
-        <td class="p-2">
-            <select class="gestao-project-designer w-full px-2 py-1.5 border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
-                <option value="">Selecione...</option>
-                ${getProjetistaOptionsHtml(project.designerId)}
-            </select>
-        </td>
-        <td class="p-2">
-            <input type="text" class="gestao-project-caminho-rede-aprovacao w-full min-w-[180px] px-2 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
-                value="${escapeHtml(project.caminhoRedeAprovacao || '')}" placeholder="Preenchido ao solicitar aprovação">
-        </td>
-        <td class="p-2 text-center">
-            <button type="button" class="gestao-remove-project text-red-600 hover:text-red-800 text-xs font-medium">×</button>
-        </td>
-    `;
+    gestaoOrderProjectsDraft.forEach((project, index) => {
+        const statusName = getGestaoProjectStatusName(project);
+        const statusClass = getOrderProjectStatusBadgeClass(statusName);
+        const parentDisplay = project.isComplementar
+            ? (project.parentProject?.order?.orderCode || project.parentOrderCode || '—')
+            : project.isSubstituido
+                ? (project.substituidoPorProject?.order?.orderCode || project.substituidoPorOrderCode || '—')
+                : project.isSubstituicao
+                    ? (project.substituiProject?.order?.orderCode || project.substituiOrderCode || '—')
+                    : '—';
+        const tr = document.createElement('tr');
+        tr.className = 'gestao-project-summary-row';
+        tr.innerHTML = `
+            <td class="p-3 font-medium text-slate-800">${escapeHtml(project.name || '—')}</td>
+            <td class="p-3">
+                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>
+            </td>
+            <td class="p-3 text-slate-600 whitespace-nowrap">${formatGestaoDate(project.deliveryDate)}</td>
+            <td class="p-3 font-mono text-slate-600">${escapeHtml(parentDisplay)}</td>
+            <td class="p-3">
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" class="gestao-view-project-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium">
+                        Detalhes
+                    </button>
+                    <button type="button" class="gestao-edit-project-btn text-xs bg-white border border-indigo-200 text-indigo-800 hover:bg-indigo-50 px-2.5 py-1 rounded-lg font-medium">
+                        Editar
+                    </button>
+                </div>
+            </td>
+        `;
 
-    row.querySelector('.gestao-remove-project')?.addEventListener('click', async () => {
-        row.remove();
-        updateGestaoProjectsEmptyState();
+        tr.querySelector('.gestao-view-project-btn')?.addEventListener('click', () => {
+            openProjectViewModal(project);
+        });
+
+        tr.querySelector('.gestao-edit-project-btn')?.addEventListener('click', () => {
+            openGestaoProjectForm(index);
+        });
+
+        tbody.appendChild(tr);
     });
 
-    bindGestaoProjectCodeInput(row.querySelector('.gestao-project-code'));
-
-    tbody.appendChild(row);
     updateGestaoProjectsEmptyState();
 }
 
-function clearGestaoProjectRows() {
-    const tbody = document.getElementById('gestao-projects-rows');
-    if (tbody) tbody.innerHTML = '';
-    updateGestaoProjectsEmptyState();
+function clearGestaoOrderProjectsDraft() {
+    gestaoOrderProjectsDraft = [];
+    editingGestaoProjectDraftIndex = null;
+    renderGestaoProjectsSummaryList();
 }
 
-function collectGestaoProjectsFromDom() {
-    return Array.from(document.querySelectorAll('.gestao-project-row')).map(row => ({
-        id: row.dataset.projectId ? Number(row.dataset.projectId) : null,
-        projectCode: row.querySelector('.gestao-project-code')?.value.trim() || '',
-        name: row.querySelector('.gestao-project-name')?.value.trim() || '',
-        environmentTypeId: Number(row.querySelector('.gestao-project-environment')?.value) || null,
-        saleValue: parseSaleValueInput(row.querySelector('.gestao-project-sale-value')?.value),
-        deliveryDate: row.querySelector('.gestao-project-delivery')?.value || null,
-        statusId: Number(row.querySelector('.gestao-project-status')?.value) || getDefaultProjectStatusId(),
-        designerId: row.querySelector('.gestao-project-designer')?.value
-            ? Number(row.querySelector('.gestao-project-designer').value)
-            : null,
-        caminhoRedeAprovacao: row.querySelector('.gestao-project-caminho-rede-aprovacao')?.value?.trim() || null
-    }));
+function setGestaoOrderProjectsDraft(projects = []) {
+    gestaoOrderProjectsDraft = (projects || []).map(project => ({ ...project }));
+    editingGestaoProjectDraftIndex = null;
+    renderGestaoProjectsSummaryList();
 }
+
+async function openGestaoProjectForm(index = null) {
+    if (!canAccessGestao()) return;
+
+    editingGestaoProjectDraftIndex = index;
+    await loadGestaoFormOptions();
+    resetGestaoProjectForm();
+
+    const title = document.getElementById('gestao-project-form-title');
+    const removeBtn = document.getElementById('btn-gestao-remove-project');
+
+    if (index != null && gestaoOrderProjectsDraft[index]) {
+        if (title) title.textContent = 'Editar Projeto';
+        fillGestaoProjectForm(gestaoOrderProjectsDraft[index]);
+        removeBtn?.classList.remove('hidden');
+    } else {
+        if (title) title.textContent = 'Novo Projeto';
+        const defaultStatusId = getDefaultProjectStatusId();
+        if (defaultStatusId) {
+            document.getElementById('gestao-project-status').value = String(defaultStatusId);
+        }
+        bindGestaoProjectRelationToggles();
+    }
+
+    showGestaoProjectFormPanel();
+}
+
+function showGestaoProjectFormPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-project-form-panel')?.classList.remove('hidden');
+    setGestaoNavActive('pedido');
+}
+
+function saveGestaoProjectDraft(event) {
+    event.preventDefault();
+    if (!canAccessGestao()) return;
+
+    saveGestaoProjectDraftAsync();
+}
+
+async function saveGestaoProjectDraftAsync() {
+    const project = collectGestaoProjectFormData();
+
+    if (!project.projectCode || !project.name || !project.environmentTypeId || !project.statusId) {
+        alertAppDialog('Preencha código, nome, ambiente e status do projeto.');
+        return;
+    }
+
+    if (!isNumericProjectCode(project.projectCode)) {
+        alertAppDialog('O código do projeto deve conter somente números.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (project.isComplementar && !project.parentProjectCode) {
+        alertAppDialog('Informe o código do projeto pai para projetos complementares.');
+        return;
+    }
+
+    if (project.isSubstituido && !project.substituidoPorProjectCode) {
+        alertAppDialog('Informe o código do projeto substituto.');
+        return;
+    }
+
+    if (project.isComplementar && project.isSubstituido) {
+        alertAppDialog('O projeto não pode ser complementar e substituído ao mesmo tempo.');
+        return;
+    }
+
+    if (project.isSubstituido && !canMarkProjectAsSubstituido(
+        editingGestaoProjectDraftIndex != null
+            ? gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex]
+            : project
+    )) {
+        alertAppDialog('Este projeto só pode ser marcado como substituído até "Aguardando Projeto Técnico".', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (Number.isNaN(project.saleValue)) {
+        alertAppDialog('Informe um valor de venda válido.');
+        return;
+    }
+
+    const duplicateCodeIndex = gestaoOrderProjectsDraft.findIndex((item, itemIndex) =>
+        item.projectCode === project.projectCode && itemIndex !== editingGestaoProjectDraftIndex
+    );
+    if (duplicateCodeIndex !== -1) {
+        alertAppDialog('Já existe outro projeto neste pedido com o mesmo código.');
+        return;
+    }
+
+    if (project.isComplementar && project.parentProjectCode) {
+        const parents = await fetchGestaoParentProjectsByCodes([project.parentProjectCode]);
+        const parent = parents[project.parentProjectCode];
+        if (parent) {
+            project.parentProject = {
+                projectCode: parent.projectCode,
+                order: parent.order || null
+            };
+        }
+    }
+
+    if (project.isSubstituido && project.substituidoPorProjectCode) {
+        const replacements = await fetchGestaoParentProjectsByCodes([project.substituidoPorProjectCode]);
+        const replacement = replacements[project.substituidoPorProjectCode];
+        if (replacement) {
+            project.substituidoPorProject = {
+                projectCode: replacement.projectCode,
+                order: replacement.order || null
+            };
+        }
+    }
+
+    if (project.isSubstituido) {
+        const substituidoStatusId = getSubstituidoStatusId();
+        if (substituidoStatusId) {
+            project.statusId = substituidoStatusId;
+            project.projectStatus = gestaoProjectStatusesCache.find(status => status.id === substituidoStatusId) || {
+                id: substituidoStatusId,
+                name: SUBSTITUIDO_STATUS_NAME
+            };
+        }
+    }
+
+    if (editingGestaoProjectDraftIndex != null) {
+        gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex] = {
+            ...gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex],
+            ...project
+        };
+    } else {
+        gestaoOrderProjectsDraft.push(project);
+    }
+
+    editingGestaoProjectDraftIndex = null;
+    renderGestaoProjectsSummaryList();
+    showGestaoPedidoFormPanel();
+}
+
+async function removeGestaoProjectDraft() {
+    if (editingGestaoProjectDraftIndex == null) return;
+
+    const project = gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex];
+    const confirmed = await confirmAppDialog(
+        `Remover o projeto "${project?.name || 'sem nome'}" deste pedido?`,
+        { title: 'Remover projeto', confirmLabel: 'Remover' }
+    );
+    if (!confirmed) return;
+
+    gestaoOrderProjectsDraft.splice(editingGestaoProjectDraftIndex, 1);
+    editingGestaoProjectDraftIndex = null;
+    renderGestaoProjectsSummaryList();
+    showGestaoPedidoFormPanel();
+}
+
+window.openGestaoProjectForm = openGestaoProjectForm;
 
 async function loadGestaoConsultants(selectedName = '') {
     const select = document.getElementById('gestao-ord-consultant');
@@ -436,8 +959,34 @@ function bindGestaoEvents() {
         editingGestaoOrderId = null;
         showGestaoPedidoListPanel();
     });
-    document.getElementById('btn-gestao-add-project')?.addEventListener('click', () => addGestaoProjectRow());
+    document.getElementById('btn-gestao-add-project')?.addEventListener('click', () => openGestaoProjectForm());
     document.getElementById('gestao-order-form')?.addEventListener('submit', saveGestaoOrder);
+    document.getElementById('gestao-project-form')?.addEventListener('submit', saveGestaoProjectDraft);
+    document.getElementById('btn-gestao-back-order-form')?.addEventListener('click', () => {
+        editingGestaoProjectDraftIndex = null;
+        showGestaoPedidoFormPanel();
+    });
+    document.getElementById('btn-gestao-cancel-project')?.addEventListener('click', () => {
+        editingGestaoProjectDraftIndex = null;
+        showGestaoPedidoFormPanel();
+    });
+    document.getElementById('btn-gestao-remove-project')?.addEventListener('click', removeGestaoProjectDraft);
+    bindGestaoProjectCodeInput(document.getElementById('gestao-project-code'));
+    bindGestaoProjectCodeInput(document.getElementById('gestao-project-parent-code'));
+    bindGestaoProjectCodeInput(document.getElementById('gestao-project-substituido-por-code'));
+    document.getElementById('gestao-project-complementar')?.addEventListener('change', () => {
+        if (document.getElementById('gestao-project-complementar')?.checked) {
+            document.getElementById('gestao-project-substituido').checked = false;
+        }
+        bindGestaoProjectRelationToggles();
+    });
+    document.getElementById('gestao-project-substituido')?.addEventListener('change', bindGestaoProjectRelationToggles);
+    document.getElementById('btn-close-order-project-view')?.addEventListener('click', () => {
+        toggleModal('order-project-view-modal', false);
+    });
+    document.getElementById('btn-close-order-project-view-footer')?.addEventListener('click', () => {
+        toggleModal('order-project-view-modal', false);
+    });
     document.getElementById('gestao-ord-code')?.addEventListener('input', async function () {
         this.value = this.value.replace(/\D/g, '');
     });

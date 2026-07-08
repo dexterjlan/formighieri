@@ -74,7 +74,7 @@ function renderPpcpProjectCard(project, implantacao) {
 
     const statusName = getPpcpProjectStatusName(project);
     const projectStatusClass = getOrderProjectStatusBadgeClass(statusName);
-    const canAct = canActOrderPpcp();
+    const canAct = canActOrderPpcp() && canActOnOrderProject(project);
     const isAguardandoPpcp = statusName === PPCP_AGUARDANDO_STATUS;
     const hasImplantacao = Boolean(implantacao);
 
@@ -123,6 +123,9 @@ function renderPpcpProjectCard(project, implantacao) {
         <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-center gap-2">
                 <p class="text-sm font-semibold text-slate-900">${escapeHtml(project.name)}</p>
+                ${renderComplementarProjectNoticeHtml(project)}
+                ${renderSubstituidoProjectNoticeHtml(project)}
+                ${renderSubstituicaoProjectNoticeHtml(project)}
                 ${statusBadgeHtml}
             </div>
         </div>
@@ -167,11 +170,21 @@ async function loadPpcpProjects(orderId) {
         return;
     }
 
-    const { data: projects, error } = await supabaseClient
+    let result = await supabaseClient
         .from('OrderProject')
-        .select('id, name, statusId, projectStatus:OrderProjectStatus(id, name)')
+        .select('id, name, statusId, isComplementar, parentProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), projectStatus:OrderProjectStatus(id, name)')
         .eq('orderId', orderId)
         .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementar')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, statusId, projectStatus:OrderProjectStatus(id, name)')
+            .eq('orderId', orderId)
+            .order('name', { ascending: true });
+    }
+
+    const { data: projects, error } = result;
 
     if (error) {
         console.error('loadPpcpProjects:', error);
