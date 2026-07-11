@@ -234,6 +234,40 @@ function formatSaleValueForInput(value) {
     return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatSaleValueAsCurrencyInput(value) {
+    if (value === null || value === undefined || value === '') return '';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return '';
+    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function formatSaleValueCurrencyMaskFromDigits(digits) {
+    if (!digits) return '';
+    const num = Number(digits) / 100;
+    return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function bindSaleValueCurrencyInput(input) {
+    if (!input || input.dataset.saleValueCurrencyBound === '1') return;
+    input.dataset.saleValueCurrencyBound = '1';
+
+    input.addEventListener('input', () => {
+        const digits = String(input.value).replace(/\D/g, '');
+        input.value = formatSaleValueCurrencyMaskFromDigits(digits);
+    });
+}
+
+function isProjectTechnicalDeliveryBeforeOrderDelivery(projectDeliveryDate, orderDeliveryDate) {
+    if (!projectDeliveryDate || !orderDeliveryDate) return true;
+    return String(projectDeliveryDate) < String(orderDeliveryDate);
+}
+
+function isPrevisaoConclusaoProjetoTecnicoValid(previsaoDate, projectDeliveryDate) {
+    if (!previsaoDate) return false;
+    if (!projectDeliveryDate) return true;
+    return String(previsaoDate) <= String(projectDeliveryDate);
+}
+
 function formatSaleValue(value) {
     if (value === null || value === undefined || value === '') return '—';
     const num = Number(value);
@@ -362,6 +396,46 @@ function canSeeOrderFabricaTab(user = currentUser) {
 function canSeeOrderNomearTab(user = currentUser) {
     if (!user) return false;
     return user.role === 'Admin' || user.role === 'Projetista';
+}
+
+const ORDER_DETAIL_TAB_RESPONSIBLE_LABELS = {
+    approvals: 'Projetista ou Admin',
+    requests: 'Consultor, Projetista ou Admin',
+    anteprojeto: 'Conferente, Gestor Comercial ou Admin',
+    medicao: 'Conferente, Gestor Comercial ou Admin',
+    nomear: 'Projetista responsável pelo projeto',
+    ppcp: 'Projetista PPCP ou Admin',
+    fabrica: 'Gestor de Fábrica ou Admin',
+    compras: 'Equipe de Compras'
+};
+
+function getOrderDetailTabResponsibleLabel(tabKey) {
+    return ORDER_DETAIL_TAB_RESPONSIBLE_LABELS[tabKey] || 'o responsável';
+}
+
+function canActOrderDetailTab(tabKey, user = currentUser) {
+    if (!user) return false;
+    if (isAdmin(user)) return true;
+
+    switch (tabKey) {
+        case 'approvals':
+            return user.role === 'Projetista';
+        case 'requests':
+            return user.role === 'Consultor' || user.role === 'Projetista';
+        case 'anteprojeto':
+        case 'medicao':
+            return isConferente(user) || isGestorComercial(user);
+        case 'nomear':
+            return user.role === 'Projetista';
+        case 'ppcp':
+            return isPpcp(user);
+        case 'fabrica':
+            return isGestorFabrica(user);
+        case 'compras':
+            return isCompras(user);
+        default:
+            return false;
+    }
 }
 
 function canActOrderProjectNomear(project, user = currentUser) {
@@ -629,21 +703,21 @@ function getProjectEffectiveSaleValue(project) {
 function renderSubstituidoProjectNoticeHtml(project) {
     if (!isSubstituidoOrderProject(project)) return '';
 
-    const replacementCode = getSubstituidoPorProjectCode(project) || '—';
-    const orderCode = getSubstituidoPorOrderCode(project);
-    const orderSuffix = orderCode ? ` · pedido ${escapeHtml(orderCode)}` : '';
+    const orderCode = getSubstituidoPorOrderCode(project) || '—';
+    const replacementCode = getSubstituidoPorProjectCode(project);
+    const projectSuffix = replacementCode ? ` · proj. ${escapeHtml(replacementCode)}` : '';
 
-    return `<span class="inline-flex items-center text-[10px] font-semibold text-rose-800 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-full shrink-0" title="Projeto Substituído pelo projeto ${escapeHtml(replacementCode)}">Projeto Substituído · ${escapeHtml(replacementCode)}${orderSuffix}</span>`;
+    return `<span class="inline-flex items-center text-[10px] font-semibold text-rose-800 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded-full shrink-0" title="Projeto Substituído pelo pedido ${escapeHtml(orderCode)}${replacementCode ? ` (projeto ${escapeHtml(replacementCode)})` : ''}">Projeto Substituído · pedido ${escapeHtml(orderCode)}${projectSuffix}</span>`;
 }
 
 function renderSubstituicaoProjectNoticeHtml(project) {
     if (!isSubstituicaoOrderProject(project)) return '';
 
-    const originalCode = getSubstituiProjectCode(project) || '—';
-    const orderCode = getSubstituiOrderCode(project);
-    const orderSuffix = orderCode ? ` · pedido ${escapeHtml(orderCode)}` : '';
+    const orderCode = getSubstituiOrderCode(project) || '—';
+    const originalCode = getSubstituiProjectCode(project);
+    const projectSuffix = originalCode ? ` · proj. ${escapeHtml(originalCode)}` : '';
 
-    return `<span class="inline-flex items-center text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0" title="Projeto Substituição do projeto ${escapeHtml(originalCode)}">Projeto Substituição · ${escapeHtml(originalCode)}${orderSuffix}</span>`;
+    return `<span class="inline-flex items-center text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full shrink-0" title="Projeto Substituição do pedido ${escapeHtml(orderCode)}${originalCode ? ` (projeto ${escapeHtml(originalCode)})` : ''}">Projeto Substituição · pedido ${escapeHtml(orderCode)}${projectSuffix}</span>`;
 }
 
 function excludeSubstituidoPendenciasProjects(projects) {

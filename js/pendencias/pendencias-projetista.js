@@ -61,26 +61,75 @@ function formatPendenciasDeliveryDate(dateStr) {
     return new Date(dateStr).toLocaleDateString('pt-BR');
 }
 
+function getPendenciasPrevisaoInputMaxDate(deliveryDate) {
+    if (!deliveryDate) return '';
+    return String(deliveryDate).slice(0, 10);
+}
+
+function validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate) {
+    if (!previsaoDate) {
+        alertAppDialog('Informe a previsão de conclusão do projeto técnico.');
+        return false;
+    }
+    if (!isPrevisaoConclusaoProjetoTecnicoValid(previsaoDate, deliveryDate)) {
+        alertAppDialog('A previsão de conclusão deve ser anterior ou igual à data de entrega do projeto técnico.', { variant: 'warning', title: 'Aviso' });
+        return false;
+    }
+    return true;
+}
+
+function getPendenciasPrevisaoInputValue(dateStr) {
+    if (!dateStr) return '';
+    return String(dateStr).slice(0, 10);
+}
+
+function renderPendenciasAssociacaoPrevisaoInput(project) {
+    const maxDate = getPendenciasPrevisaoInputMaxDate(project.deliveryDate);
+    return `<input type="date"
+        class="pendencias-previsao-input px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+        data-project-id="${project.id}"
+        ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
+        title="Previsão de conclusão do projeto técnico">`;
+}
+
+function renderPendenciasWorkloadPrevisaoInput(project) {
+    const maxDate = getPendenciasPrevisaoInputMaxDate(project.deliveryDate);
+    const value = getPendenciasPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
+    return `<input type="date"
+        class="pendencias-workload-previsao-input w-full mt-1.5 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+        data-project-id="${project.id}"
+        data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}"
+        ${value ? `value="${escapeHtml(value)}"` : ''}
+        ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
+        title="Previsão de conclusão do projeto técnico">`;
+}
+
 function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const renderRow = (project, mode) => {
+    const renderRow = (project, mode, options = {}) => {
         const orderCode = project.order?.orderCode || '—';
         const clientName = project.order?.clientName || '—';
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
+        const previsaoConclusao = formatPendenciasDeliveryDate(project.previsaoConclusaoProjetoTecnico);
         const projectLabel = project.projectCode
             ? `${project.projectCode} — ${project.name || 'Projeto'}`
             : (project.name || 'Projeto');
         const statusName = getPendenciasProjectStatusName(project);
+        const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
 
         let actionCell = '';
         if (mode === 'unassigned') {
-            actionCell = `<button type="button"
-                class="pendencias-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium"
-                data-project-id="${project.id}">
-                Associar a mim
-            </button>`;
+            actionCell = `<div class="flex flex-wrap items-center justify-end gap-2">
+                ${renderPendenciasAssociacaoPrevisaoInput(project)}
+                <button type="button"
+                    class="pendencias-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium"
+                    data-project-id="${project.id}"
+                    data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
+                    Associar a mim
+                </button>
+            </div>`;
         } else if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) {
             actionCell = `<button type="button"
                 class="pendencias-iniciar-projeto-btn text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-1.5 rounded-lg font-medium"
@@ -98,12 +147,19 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
+                ${showPrevisaoColumn
+                    ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(previsaoConclusao)}</td>`
+                    : ''}
                 <td class="p-3 text-right">${actionCell}</td>
             </tr>
         `;
     };
 
-    const renderTable = (title, rows, emptyMessage, lastColumnLabel = 'Ação') => `
+    const renderTable = (title, rows, emptyMessage, options = {}) => {
+        const lastColumnLabel = options.lastColumnLabel || 'Ação';
+        const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
+
+        return `
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                 <div>
@@ -124,7 +180,10 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-40">${escapeHtml(lastColumnLabel)}</th>
+                                ${showPrevisaoColumn
+                                    ? '<th class="text-left p-3 font-semibold">Previsão conclusão</th>'
+                                    : ''}
+                                <th class="text-right p-3 font-semibold min-w-[18rem]">${escapeHtml(lastColumnLabel)}</th>
                             </tr>
                         </thead>
                         <tbody>${rows.join('')}</tbody>
@@ -133,19 +192,21 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
                 : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
         </div>
     `;
+    };
 
     content.innerHTML = `
         <div class="space-y-4">
             ${renderTable(
                 'Sem responsável',
                 unassigned.map(project => renderRow(project, 'unassigned')),
-                'Nenhum projeto aguardando projeto técnico sem responsável.'
+                'Nenhum projeto aguardando projeto técnico sem responsável.',
+                { lastColumnLabel: 'Previsão e associar' }
             )}
             ${renderTable(
                 'Associados a mim',
-                mine.map(project => renderRow(project, 'mine')),
+                mine.map(project => renderRow(project, 'mine', { showPrevisaoColumn: true })),
                 'Nenhum projeto associado a você.',
-                'Status'
+                { lastColumnLabel: 'Status', showPrevisaoColumn: true }
             )}
         </div>
     `;
@@ -154,7 +215,15 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
         ?.addEventListener('click', () => loadPendenciasAguardandoProjetoTecnico());
 
     content.querySelectorAll('.pendencias-associar-btn').forEach(button => {
-        button.addEventListener('click', () => associarPendenciaProjetoAMim(Number(button.dataset.projectId)));
+        button.addEventListener('click', () => {
+            const row = button.closest('tr');
+            const previsaoDate = row?.querySelector('.pendencias-previsao-input')?.value || '';
+            associarPendenciaProjetoAMim(
+                Number(button.dataset.projectId),
+                previsaoDate,
+                button.dataset.deliveryDate || ''
+            );
+        });
     });
 
     content.querySelectorAll('.pendencias-iniciar-projeto-btn').forEach(button => {
@@ -291,6 +360,13 @@ function getPendenciasProjetistaOptionsHtml(selectedId = null) {
     }).join('');
 }
 
+function getPendenciasWorkloadProjetistaOptionsHtml(currentDesignerId = null) {
+    return pendenciasProjetistasCache
+        .filter(projetista => Number(projetista.id) !== Number(currentDesignerId))
+        .map(projetista => `<option value="${projetista.id}">${escapeHtml(projetista.name)}</option>`)
+        .join('');
+}
+
 function groupPendenciasProjectsByStatus(projects) {
     const grouped = Object.fromEntries(
         PENDENCIAS_GESTOR_WORKLOAD_COLUMNS.map(status => [status, []])
@@ -319,13 +395,40 @@ function renderPendenciasWorkloadStatusSections(projects) {
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
         const projectsHtml = statusProjects.length
             ? statusProjects.map(project => {
-                const orderCode = project.order?.orderCode || '—';
-                const projectLabel = getPendenciasProjectLabel(project);
+                const projectName = project.name || 'Projeto';
 
                 return `
-                    <li class="py-2 border-b border-slate-100 last:border-0">
-                        <p class="text-[11px] font-mono text-slate-500">${escapeHtml(orderCode)}</p>
-                        <p class="text-xs font-medium text-slate-800 mt-0.5">${escapeHtml(projectLabel)}</p>
+                    <li class="collapsible-list-card border-b border-slate-100 last:border-0" data-project-id="${project.id}">
+                        <div class="collapsible-list-header py-1.5 cursor-pointer">
+                            <div class="flex items-center gap-1.5 min-w-0">
+                                <button type="button"
+                                    class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
+                                    aria-label="Expandir">▶</button>
+                                <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(projectName)}">
+                                    ${escapeHtml(projectName)}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="collapsible-list-body hidden pl-6 pr-1 pb-2">
+                            <label class="block text-[10px] text-slate-500 mt-0.5">Previsão conclusão</label>
+                            ${renderPendenciasWorkloadPrevisaoInput(project)}
+                            <label class="block text-[10px] text-slate-500 mt-2">Trocar projetista</label>
+                            <div class="flex items-center gap-1.5 mt-1">
+                                <select class="pendencias-workload-designer-select flex-1 min-w-0 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                                    data-project-id="${project.id}"
+                                    data-current-designer-id="${project.designerId || ''}">
+                                    <option value="">Selecione...</option>
+                                    ${getPendenciasWorkloadProjetistaOptionsHtml(project.designerId)}
+                                </select>
+                                <button type="button"
+                                    class="pendencias-workload-trocar-projetista-btn shrink-0 text-[10px] bg-violet-700 text-white hover:bg-violet-800 px-2 py-1 rounded-lg font-medium whitespace-nowrap"
+                                    data-project-id="${project.id}"
+                                    data-current-designer-id="${project.designerId || ''}"
+                                    data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
+                                    Trocar
+                                </button>
+                            </div>
+                        </div>
                     </li>
                 `;
             }).join('')
@@ -382,6 +485,7 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 <td class="p-3">
                     <div class="flex flex-wrap items-center justify-end gap-2">
+                        ${renderPendenciasAssociacaoPrevisaoInput(project)}
                         <select class="pendencias-gestor-designer-select px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
                             data-project-id="${project.id}">
                             <option value="">Selecione...</option>
@@ -389,7 +493,8 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
                         </select>
                         <button type="button"
                             class="pendencias-gestor-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
-                            data-project-id="${project.id}">
+                            data-project-id="${project.id}"
+                            data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
                             Associar
                         </button>
                     </div>
@@ -404,7 +509,7 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
                 <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                     <div>
                         <h3 class="font-bold text-sm text-slate-900">Carga por projetista</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Projeto Técnico, Em Revisão, Aguardando Aprovação e Aguardando PPCP.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão, Aguardando Aprovação e Aguardando PPCP.</p>
                     </div>
                     <button type="button" id="btn-pendencias-refresh-sem-projetistas"
                         class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
@@ -429,8 +534,8 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
                                     <th class="text-left p-3 font-semibold">Pedido</th>
                                     <th class="text-left p-3 font-semibold">Cliente</th>
                                     <th class="text-left p-3 font-semibold">Projeto</th>
-                                    <th class="text-left p-3 font-semibold">Entrega</th>
-                                    <th class="text-right p-3 font-semibold w-72">Associar projetista</th>
+                                    <th class="text-left p-3 font-semibold">Entrega Proj. Téc.</th>
+                                    <th class="text-right p-3 font-semibold min-w-[24rem]">Previsão e associar projetista</th>
                                 </tr>
                             </thead>
                             <tbody>${projectRows}</tbody>
@@ -447,15 +552,45 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
     const workloadCardsRoot = content.querySelector('#pendencias-workload-cards');
     if (workloadCardsRoot) {
         bindCollapsibleListCardToggles(workloadCardsRoot, { defaultCollapsed: true });
+        workloadCardsRoot.querySelectorAll('.pendencias-workload-previsao-input').forEach(input => {
+            input.addEventListener('change', () => {
+                salvarPendenciasWorkloadPrevisaoConclusao(
+                    Number(input.dataset.projectId),
+                    input.value,
+                    input.dataset.deliveryDate || ''
+                );
+            });
+        });
+        workloadCardsRoot.querySelectorAll('.pendencias-workload-trocar-projetista-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const projectId = Number(button.dataset.projectId);
+                const item = button.closest('li');
+                const select = item?.querySelector('.pendencias-workload-designer-select');
+                const previsaoDate = item?.querySelector('.pendencias-workload-previsao-input')?.value || '';
+                trocarPendenciaProjetoProjetista(
+                    projectId,
+                    Number(select?.value),
+                    Number(button.dataset.currentDesignerId),
+                    previsaoDate,
+                    button.dataset.deliveryDate || ''
+                );
+            });
+        });
     }
 
     content.querySelectorAll('.pendencias-gestor-associar-btn').forEach(button => {
         button.addEventListener('click', async () => {
             const projectId = Number(button.dataset.projectId);
-            const select = content.querySelector(
-                `.pendencias-gestor-designer-select[data-project-id="${projectId}"]`
+            const row = button.closest('tr');
+            const select = row?.querySelector('.pendencias-gestor-designer-select')
+                || content.querySelector(`.pendencias-gestor-designer-select[data-project-id="${projectId}"]`);
+            const previsaoDate = row?.querySelector('.pendencias-previsao-input')?.value || '';
+            associarPendenciaProjetoAProjetista(
+                projectId,
+                Number(select?.value),
+                previsaoDate,
+                button.dataset.deliveryDate || ''
             );
-            associarPendenciaProjetoAProjetista(projectId, Number(select?.value));
         });
     });
 }
@@ -483,7 +618,120 @@ async function loadPendenciasProjetosSemProjetistas() {
     renderPendenciasProjetosSemProjetistas(workloadResult.workload, projectsResult.projects);
 }
 
-async function associarPendenciaProjetoAProjetista(projectId, designerId) {
+async function salvarPendenciasWorkloadPrevisaoConclusao(projectId, previsaoDate, deliveryDate = '') {
+    if (!canSeePendenciasGestorProjetosMenu()) {
+        alertAppDialog('Somente Gestor de Projetos pode alterar a previsão.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (!projectId) return;
+
+    if (!validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate)) {
+        await loadPendenciasProjetosSemProjetistas();
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const payload = {
+        previsaoConclusaoProjetoTecnico: previsaoDate,
+        updatedById: currentUser.id,
+        updatedAt: now
+    };
+
+    try {
+        setPendenciasActionLoading(true, 'Salvando previsão...');
+
+        const { error } = await supabaseClient
+            .from('OrderProject')
+            .update(payload)
+            .eq('id', projectId);
+
+        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+            alertAppDialog('O campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
+
+        if (error) {
+            alertAppDialog('Erro ao salvar previsão: ' + error.message);
+            return;
+        }
+
+        await loadPendenciasProjetosSemProjetistas();
+    } finally {
+        setPendenciasActionLoading(false);
+    }
+}
+
+async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, currentDesignerId, previsaoDate, deliveryDate = '') {
+    if (!canSeePendenciasGestorProjetosMenu()) {
+        alertAppDialog('Somente Gestor de Projetos pode trocar responsáveis.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (!projectId || !newDesignerId) {
+        alertAppDialog('Selecione o novo projetista.');
+        return;
+    }
+
+    if (Number(newDesignerId) === Number(currentDesignerId)) {
+        alertAppDialog('Selecione um projetista diferente do responsável atual.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (!validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate)) {
+        return;
+    }
+
+    const projetista = pendenciasProjetistasCache.find(item => Number(item.id) === Number(newDesignerId));
+    if (!projetista) {
+        alertAppDialog('Projetista inválido.');
+        return;
+    }
+
+    if (!(await confirmAppDialog(`Transferir este projeto para ${projetista.name}?`))) return;
+
+    const now = new Date().toISOString();
+    const payload = {
+        designerId: newDesignerId,
+        previsaoConclusaoProjetoTecnico: previsaoDate,
+        updatedById: currentUser.id,
+        updatedAt: now
+    };
+
+    try {
+        setPendenciasActionLoading(true, 'Trocando projetista...');
+
+        let { error } = await supabaseClient
+            .from('OrderProject')
+            .update(payload)
+            .eq('id', projectId);
+
+        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+            ({ error } = await supabaseClient
+                .from('OrderProject')
+                .update({
+                    designerId: newDesignerId,
+                    updatedById: currentUser.id,
+                    updatedAt: now
+                })
+                .eq('id', projectId));
+            if (!error) {
+                alertAppDialog('Projetista alterado, mas o campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+            }
+        }
+
+        if (error) {
+            alertAppDialog('Erro ao trocar projetista: ' + error.message);
+            return;
+        }
+
+        await loadPendenciasProjetosSemProjetistas();
+    } finally {
+        setPendenciasActionLoading(false);
+    }
+}
+
+async function associarPendenciaProjetoAProjetista(projectId, designerId, previsaoDate, deliveryDate = '') {
     if (!canSeePendenciasGestorProjetosMenu()) {
         alertAppDialog('Somente Gestor de Projetos pode associar responsáveis.', { variant: 'warning', title: 'Aviso' });
         return;
@@ -491,6 +739,10 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId) {
 
     if (!projectId || !designerId) {
         alertAppDialog('Selecione um projetista.');
+        return;
+    }
+
+    if (!validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate)) {
         return;
     }
 
@@ -503,21 +755,44 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId) {
     if (!(await confirmAppDialog(`Associar este projeto a ${projetista.name}?`))) return;
 
     const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('OrderProject')
-        .update({
-            designerId,
-            updatedById: currentUser.id,
-            updatedAt: now
-        })
-        .eq('id', projectId);
+    const payload = {
+        designerId,
+        previsaoConclusaoProjetoTecnico: previsaoDate,
+        updatedById: currentUser.id,
+        updatedAt: now
+    };
 
-    if (error) {
-        alertAppDialog('Erro ao associar projetista: ' + error.message);
-        return;
+    try {
+        setPendenciasActionLoading(true, 'Associando projetista...');
+
+        let { error } = await supabaseClient
+            .from('OrderProject')
+            .update(payload)
+            .eq('id', projectId);
+
+        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+            ({ error } = await supabaseClient
+                .from('OrderProject')
+                .update({
+                    designerId,
+                    updatedById: currentUser.id,
+                    updatedAt: now
+                })
+                .eq('id', projectId));
+            if (!error) {
+                alertAppDialog('Projetista associado, mas o campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+            }
+        }
+
+        if (error) {
+            alertAppDialog('Erro ao associar projetista: ' + error.message);
+            return;
+        }
+
+        await loadPendenciasProjetosSemProjetistas();
+    } finally {
+        setPendenciasActionLoading(false);
     }
-
-    await loadPendenciasProjetosSemProjetistas();
 }
 
 async function loadPendenciasAguardandoProjetoTecnico() {
@@ -538,30 +813,57 @@ async function loadPendenciasAguardandoProjetoTecnico() {
     renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine);
 }
 
-async function associarPendenciaProjetoAMim(projectId) {
+async function associarPendenciaProjetoAMim(projectId, previsaoDate, deliveryDate = '') {
     if (!projectId || currentUser?.role !== 'Projetista' && !isAdmin()) {
         alertAppDialog('Somente Projetista pode associar projetos.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (!validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate)) {
         return;
     }
 
     if (!(await confirmAppDialog('Associar este projeto a você como responsável?'))) return;
 
     const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('OrderProject')
-        .update({
-            designerId: currentUser.id,
-            updatedById: currentUser.id,
-            updatedAt: now
-        })
-        .eq('id', projectId);
+    const payload = {
+        designerId: currentUser.id,
+        previsaoConclusaoProjetoTecnico: previsaoDate,
+        updatedById: currentUser.id,
+        updatedAt: now
+    };
 
-    if (error) {
-        alertAppDialog('Erro ao associar projeto: ' + error.message);
-        return;
+    try {
+        setPendenciasActionLoading(true, 'Associando projeto...');
+
+        let { error } = await supabaseClient
+            .from('OrderProject')
+            .update(payload)
+            .eq('id', projectId);
+
+        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+            ({ error } = await supabaseClient
+                .from('OrderProject')
+                .update({
+                    designerId: currentUser.id,
+                    updatedById: currentUser.id,
+                    updatedAt: now
+                })
+                .eq('id', projectId));
+            if (!error) {
+                alertAppDialog('Projeto associado, mas o campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+            }
+        }
+
+        if (error) {
+            alertAppDialog('Erro ao associar projeto: ' + error.message);
+            return;
+        }
+
+        await loadPendenciasAguardandoProjetoTecnico();
+    } finally {
+        setPendenciasActionLoading(false);
     }
-
-    await loadPendenciasAguardandoProjetoTecnico();
 }
 
 async function fetchEmRevisaoStatusChangedAtByProjectIds(projectIds) {

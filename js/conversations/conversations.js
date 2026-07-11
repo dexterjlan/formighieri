@@ -1,5 +1,67 @@
 let convOrderProjectsCache = [];
 
+const CONV_PROJECT_STATUS_END = 'Projeto Técnico';
+
+async function loadConvProjectStatusesForFilter() {
+    if (typeof loadGestaoProjectStatuses === 'function') {
+        return loadGestaoProjectStatuses(true);
+    }
+
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id, name, sortOrder')
+        .order('sortOrder', { ascending: true });
+
+    if (error) {
+        console.error('loadConvProjectStatusesForFilter:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+function getConvProjectStatusSortOrder(project, statuses = []) {
+    const statusFromProject = project?.projectStatus;
+    if (statusFromProject?.sortOrder != null) {
+        return Number(statusFromProject.sortOrder);
+    }
+
+    const statusId = project?.statusId || statusFromProject?.id;
+    const status = statusId
+        ? statuses.find(item => Number(item.id) === Number(statusId))
+        : null;
+    if (status?.sortOrder != null) {
+        return Number(status.sortOrder);
+    }
+
+    const statusName = statusFromProject?.name || status?.name;
+    const byName = statusName
+        ? statuses.find(item => item.name === statusName)
+        : null;
+    return byName?.sortOrder != null ? Number(byName.sortOrder) : null;
+}
+
+function isProjectEligibleForConvPicker(project, statuses, maxSortOrder) {
+    if (typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project)) {
+        return false;
+    }
+    if (typeof isSubstituidoOrderProject === 'function' && isSubstituidoOrderProject(project)) {
+        return false;
+    }
+    if (maxSortOrder == null) return true;
+
+    const sortOrder = getConvProjectStatusSortOrder(project, statuses);
+    return sortOrder != null && sortOrder <= maxSortOrder;
+}
+
+function filterProjectsForConvPicker(projects, selectedId, statuses, maxSortOrder) {
+    const selectedNum = Number(selectedId);
+    return (projects || []).filter(project =>
+        isProjectEligibleForConvPicker(project, statuses, maxSortOrder)
+        || (selectedNum && Number(project.id) === selectedNum)
+    );
+}
+
 async function loadProjetistas() {
     const select = document.getElementById("conv-designer");
     select.disabled = false;
@@ -66,17 +128,28 @@ async function loadConvOrderProjects(selectedId) {
     const select = document.getElementById('conv-order-project');
     if (!select) return;
 
-    const projects = activeOrderId ? await fetchOrderProjectsForOrder(activeOrderId) : [];
-    convOrderProjectsCache = projects;
+    const [projects, statuses] = await Promise.all([
+        activeOrderId ? fetchOrderProjectsForOrder(activeOrderId) : Promise.resolve([]),
+        loadConvProjectStatusesForFilter()
+    ]);
+
+    const endStatus = statuses.find(status => status.name === CONV_PROJECT_STATUS_END);
+    const maxSortOrder = endStatus?.sortOrder != null ? Number(endStatus.sortOrder) : null;
+    const filteredProjects = filterProjectsForConvPicker(projects, selectedId, statuses, maxSortOrder);
+
+    convOrderProjectsCache = filteredProjects;
 
     select.innerHTML = '<option value="">Nenhum</option>';
 
-    if (!projects.length) {
-        select.innerHTML += '<option value="" disabled>Nenhum projeto cadastrado no pedido</option>';
+    if (!filteredProjects.length) {
+        const emptyLabel = projects.length
+            ? 'Nenhum projeto elegível (status até Projeto Técnico)'
+            : 'Nenhum projeto cadastrado no pedido';
+        select.innerHTML += `<option value="" disabled>${emptyLabel}</option>`;
         return;
     }
 
-    [...projects]
+    [...filteredProjects]
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
         .forEach(p => {
             const env = p.environmentType?.name ? ` (${p.environmentType.name})` : '';

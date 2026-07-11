@@ -333,11 +333,6 @@ async function loadOrderCompras(orderId) {
     const list = document.getElementById('order-compras-list');
     if (!orderId || !list) return;
 
-    if (!canSeeOrderComprasTab()) {
-        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Sem permissão para visualizar compras deste pedido.</p>';
-        return;
-    }
-
     list.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando compras...</p>';
 
     try {
@@ -433,11 +428,6 @@ function populateCompraForm(record) {
 
 async function openCompraModal(compraId) {
     if (!compraId) return;
-
-    if (!canSeeCompraModal()) {
-        alertAppDialog('Sem permissão para acessar a compra.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
 
     try {
         const record = await fetchCompraById(compraId);

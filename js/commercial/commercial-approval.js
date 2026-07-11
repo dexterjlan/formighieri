@@ -165,6 +165,7 @@ async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
     }
 
     const now = new Date().toISOString();
+    const today = now.slice(0, 10);
     const { error } = await supabaseClient
         .from('OrderProject')
         .update({
@@ -175,6 +176,39 @@ async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (error) throw error;
+
+    const { data: projects, error: fetchError } = await supabaseClient
+        .from('OrderProject')
+        .select('id, conclusaoProjetoTecnico')
+        .in('id', uniqueIds);
+
+    if (fetchError?.message?.includes('conclusaoProjetoTecnico')) {
+        return;
+    }
+
+    if (fetchError) throw fetchError;
+
+    const idsNeedingConclusao = (projects || [])
+        .filter(project => !project.conclusaoProjetoTecnico)
+        .map(project => project.id);
+
+    if (!idsNeedingConclusao.length) return;
+
+    const { error: conclusaoError } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            conclusaoProjetoTecnico: today,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', idsNeedingConclusao)
+        .is('conclusaoProjetoTecnico', null);
+
+    if (conclusaoError?.message?.includes('conclusaoProjetoTecnico')) {
+        return;
+    }
+
+    if (conclusaoError) throw conclusaoError;
 }
 
 const COMMERCIAL_REVISION_PROJECT_STATUS = 'Em Revisão';
@@ -920,7 +954,7 @@ async function approveCommercialApproval(id) {
             if (typeof loadOrderProjects === 'function') {
                 await loadOrderProjects(activeOrderId);
             }
-            if (typeof loadNomearProjects === 'function' && canSeeOrderNomearTab()) {
+            if (typeof loadNomearProjects === 'function') {
                 await loadNomearProjects(activeOrderId);
             }
         }

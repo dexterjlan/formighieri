@@ -509,6 +509,11 @@ async function persistFabricaFimProject(entry, expedicaoStatusId) {
 }
 
 async function saveAllFabricaProjects() {
+    if (!canActOrderDetailTab('fabrica')) {
+        alertAppDialog('Somente o Gestor de Fábrica ou Admin pode registrar montagem.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
     const inicioCards = collectSelectedFabricaInicioCards();
     const fimCards = collectSelectedFabricaFimCards();
 
@@ -581,12 +586,6 @@ async function loadFabricaProjects(orderId = null) {
     const list = document.getElementById('fabrica-projects-list');
     if (!list) return;
 
-    if (!canSeeOrderFabricaTab()) {
-        list.innerHTML = '';
-        updateFabricaSaveFooterVisibility(false);
-        return;
-    }
-
     updateFabricaSaveFooterVisibility(false);
     fabricaMarceneirosCache = [];
     await loadFabricaMarceneiros();
@@ -641,6 +640,17 @@ async function loadFabricaProjects(orderId = null) {
     }
 
     updateFabricaSaveFooterVisibility(projects);
+    applyFabricaTabReadonlyMode();
+}
+
+function applyFabricaTabReadonlyMode() {
+    const list = document.getElementById('fabrica-projects-list');
+    const canAct = canActOrderDetailTab('fabrica');
+    list?.classList.toggle('order-tab-content--readonly', !canAct);
+
+    if (!canAct) {
+        updateFabricaSaveFooterVisibility([]);
+    }
 }
 
 function bindFabricaEvents() {

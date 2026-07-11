@@ -309,7 +309,7 @@ async function fetchGestaoProjectsByOrderIds(orderIds) {
     if (!normalizedIds.length) return {};
 
     const selectVariants = [
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
@@ -363,8 +363,8 @@ async function enrichGestaoOrdersWithProjectStatuses(orders) {
 
 async function fetchGestaoOrders() {
     const orderSelectVariants = [
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
@@ -473,6 +473,7 @@ async function insertGestaoProject(orderId, project, now) {
             environmentTypeId: project.environmentTypeId,
             saleValue: project.saleValue,
             deliveryDate: project.deliveryDate,
+            previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
@@ -488,6 +489,7 @@ async function insertGestaoProject(orderId, project, now) {
             name: project.name,
             environmentTypeId: project.environmentTypeId,
             deliveryDate: project.deliveryDate,
+            previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
@@ -578,6 +580,7 @@ async function updateGestaoProject(project, now) {
             environmentTypeId: project.environmentTypeId,
             saleValue: project.saleValue,
             deliveryDate: project.deliveryDate,
+            previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
@@ -591,6 +594,7 @@ async function updateGestaoProject(project, now) {
             name: project.name,
             environmentTypeId: project.environmentTypeId,
             deliveryDate: project.deliveryDate,
+            previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
@@ -782,6 +786,11 @@ async function saveGestaoOrder(event) {
         }
         if (Number.isNaN(project.saleValue)) {
             alertAppDialog(`Informe um valor de venda válido para o projeto "${project.name}".`);
+            return;
+        }
+        if (project.deliveryDate && clientDeliveryDate
+            && !isProjectTechnicalDeliveryBeforeOrderDelivery(project.deliveryDate, clientDeliveryDate)) {
+            alertAppDialog(`Projeto "${project.name}": a data de entrega do projeto técnico deve ser anterior à data de entrega do pedido.`, { variant: 'warning', title: 'Aviso' });
             return;
         }
     }

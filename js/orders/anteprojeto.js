@@ -2280,7 +2280,7 @@ function updateAnteprojetoActionButtons() {
     const onTab = panel && !panel.classList.contains('hidden');
     const newBtn = document.getElementById('btn-new-anteprojeto');
     if (newBtn) {
-        newBtn.classList.toggle('hidden', !onTab || !canCreateAnteprojetoConference());
+        newBtn.classList.toggle('hidden', !onTab || !canActOrderDetailTab('anteprojeto'));
     }
 }
 

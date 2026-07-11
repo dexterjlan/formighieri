@@ -1,4 +1,5 @@
 let gestaoOrdersCache = [];
+let orderProjectViewContext = null;
 let gestaoEnvironmentTypesCache = [];
 let gestaoProjetistasCache = [];
 let gestaoProjectStatusesCache = [];
@@ -50,7 +51,9 @@ function setGestaoNavActive(navKey) {
         'project-status': document.getElementById('gestao-nav-project-status'),
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
         usuarios: document.getElementById('gestao-nav-usuarios'),
+        dashboard: document.getElementById('gestao-nav-dashboard'),
         kanban: document.getElementById('gestao-nav-kanban'),
+        gantt: document.getElementById('gestao-nav-gantt'),
         relatorios: document.getElementById('gestao-nav-relatorios'),
         performance: document.getElementById('gestao-nav-performance')
     };
@@ -89,11 +92,16 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-project-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-usuarios-panel')?.classList.add('hidden');
+    document.getElementById('gestao-dashboard-panel')?.classList.add('hidden');
     document.getElementById('gestao-kanban-panel')?.classList.add('hidden');
+    document.getElementById('gestao-gantt-panel')?.classList.add('hidden');
     document.getElementById('gestao-relatorios-panel')?.classList.add('hidden');
     document.getElementById('gestao-performance-panel')?.classList.add('hidden');
     document.getElementById('gestao-import-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-history-panel')?.classList.add('hidden');
+    if (typeof setGestaoDashboardFullscreen === 'function') {
+        setGestaoDashboardFullscreen(false);
+    }
 }
 
 function formatGestaoDateTime(dateStr) {
@@ -223,6 +231,44 @@ function bindGestaoProjectCodeInput(input) {
     });
 }
 
+function getGestaoOrderClientDeliveryDate() {
+    return document.getElementById('gestao-ord-client-delivery')?.value || '';
+}
+
+function getGestaoMaxProjectTechnicalDeliveryDate(orderDeliveryDate = getGestaoOrderClientDeliveryDate()) {
+    if (!orderDeliveryDate) return '';
+    const [year, month, day] = orderDeliveryDate.split('-').map(Number);
+    if (!year || !month || !day) return '';
+
+    const date = new Date(year, month - 1, day);
+    date.setDate(date.getDate() - 1);
+
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function syncGestaoProjectTechnicalDeliveryConstraints() {
+    const projectDelivery = document.getElementById('gestao-project-delivery');
+    if (!projectDelivery) return;
+
+    const orderDelivery = getGestaoOrderClientDeliveryDate();
+    const maxDate = getGestaoMaxProjectTechnicalDeliveryDate(orderDelivery);
+
+    if (maxDate) {
+        projectDelivery.max = maxDate;
+    } else {
+        projectDelivery.removeAttribute('max');
+    }
+}
+
+function applyGestaoProjectStatusReadonly() {
+    const statusSelect = document.getElementById('gestao-project-status');
+    if (!statusSelect) return;
+    statusSelect.disabled = true;
+}
+
 function renderProjectViewComplementarChildrenList(children = []) {
     const listEl = document.getElementById('project-view-complementar-children-list');
     if (!listEl) return;
@@ -330,6 +376,12 @@ function fillProjectViewModal(project = {}, complementarChildren = []) {
     setText('project-view-delivery', typeof formatGestaoDate === 'function'
         ? formatGestaoDate(project.deliveryDate)
         : (project.deliveryDate || '—'));
+    setText('project-view-previsao-conclusao', typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(project.previsaoConclusaoProjetoTecnico)
+        : (project.previsaoConclusaoProjetoTecnico || '—'));
+    setText('project-view-conclusao-projeto-tecnico', typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(project.conclusaoProjetoTecnico)
+        : (project.conclusaoProjetoTecnico || '—'));
     setText('project-view-status', statusName);
     setText('project-view-designer', project.designer?.name || '—');
     setText('project-view-caminho-rede', project.caminhoRedeAprovacao || '—');
@@ -390,8 +442,8 @@ async function fetchProjectDetailsForView(projectId) {
     if (!normalizedId) return null;
 
     const selectVariants = [
-        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
-        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), order:salesOrders(orderCode, clientName), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), order:salesOrders(orderCode, clientName), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
         'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)'
     ];
@@ -439,6 +491,9 @@ async function openProjectViewModal(projectOrId) {
         : await fetchComplementarChildrenForProject(project.id);
 
     fillProjectViewModal(project, complementarChildren);
+    orderProjectViewContext = typeof buildProjectStatusHistoryContext === 'function'
+        ? buildProjectStatusHistoryContext(project)
+        : null;
     toggleModal('order-project-view-modal', true);
 }
 
@@ -455,8 +510,8 @@ function bindGestaoComplementarToggle() {
     if (!isComplementar) {
         parentInput.value = '';
     }
-    statusSelect.disabled = isComplementar;
     parentInput.required = isComplementar;
+    applyGestaoProjectStatusReadonly();
 }
 
 function bindGestaoSubstituidoToggle() {
@@ -474,12 +529,14 @@ function bindGestaoSubstituidoToggle() {
     replacementInput.required = isSubstituido;
 
     if (isSubstituido) {
-        statusSelect.disabled = true;
+        const substituidoStatusId = getSubstituidoStatusId(gestaoProjectStatusesCache);
+        if (substituidoStatusId) {
+            statusSelect.value = String(substituidoStatusId);
+        }
         if (complementarCheckbox) complementarCheckbox.checked = false;
         bindGestaoComplementarToggle();
-    } else if (!document.getElementById('gestao-project-complementar')?.checked) {
-        statusSelect.disabled = false;
     }
+    applyGestaoProjectStatusReadonly();
 }
 
 function bindGestaoProjectRelationToggles(project = {}) {
@@ -495,7 +552,6 @@ function bindGestaoProjectRelationToggles(project = {}) {
         'gestao-project-environment',
         'gestao-project-sale-value',
         'gestao-project-delivery',
-        'gestao-project-designer',
         'gestao-project-caminho-rede-aprovacao'
     ];
 
@@ -531,12 +587,6 @@ function populateGestaoProjectFormSelects(project = {}) {
     if (statusSelect) {
         statusSelect.innerHTML = getOrderProjectStatusOptionsHtml(resolveGestaoProjectStatusId(project));
     }
-
-    const designerSelect = document.getElementById('gestao-project-designer');
-    if (designerSelect) {
-        designerSelect.innerHTML = '<option value="">Selecione...</option>'
-            + getProjetistaOptionsHtml(project.designerId);
-    }
 }
 
 function resetGestaoProjectForm() {
@@ -548,12 +598,14 @@ function resetGestaoProjectForm() {
     document.getElementById('gestao-project-substituido-por-code').required = false;
     document.getElementById('gestao-project-substituido').checked = false;
     document.getElementById('btn-gestao-remove-project')?.classList.add('hidden');
+    syncGestaoProjectTechnicalDeliveryConstraints();
+    applyGestaoProjectStatusReadonly();
 }
 
 function fillGestaoProjectForm(project = {}) {
     document.getElementById('gestao-project-code').value = normalizeProjectCodeInput(project.projectCode || '');
     document.getElementById('gestao-project-name').value = project.name || '';
-    document.getElementById('gestao-project-sale-value').value = formatSaleValueForInput(project.saleValue);
+    document.getElementById('gestao-project-sale-value').value = formatSaleValueAsCurrencyInput(project.saleValue);
     document.getElementById('gestao-project-delivery').value = toGestaoInputDate(project.deliveryDate);
     document.getElementById('gestao-project-caminho-rede-aprovacao').value = project.caminhoRedeAprovacao || '';
     document.getElementById('gestao-project-complementar').checked = Boolean(project.isComplementar);
@@ -566,6 +618,7 @@ function fillGestaoProjectForm(project = {}) {
     );
 
     populateGestaoProjectFormSelects(project);
+    syncGestaoProjectTechnicalDeliveryConstraints();
     bindGestaoProjectRelationToggles(project);
 }
 
@@ -584,9 +637,8 @@ function collectGestaoProjectFormData() {
         saleValue: parseSaleValueInput(document.getElementById('gestao-project-sale-value')?.value),
         deliveryDate: document.getElementById('gestao-project-delivery')?.value || null,
         statusId: Number(document.getElementById('gestao-project-status')?.value) || getDefaultProjectStatusId(),
-        designerId: document.getElementById('gestao-project-designer')?.value
-            ? Number(document.getElementById('gestao-project-designer').value)
-            : null,
+        designerId: existing?.designerId ?? null,
+        previsaoConclusaoProjetoTecnico: existing?.previsaoConclusaoProjetoTecnico ?? null,
         caminhoRedeAprovacao: document.getElementById('gestao-project-caminho-rede-aprovacao')?.value?.trim() || null,
         isComplementar: Boolean(document.getElementById('gestao-project-complementar')?.checked),
         parentProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-parent-code')?.value || ''),
@@ -614,13 +666,7 @@ function renderGestaoProjectsSummaryList() {
     gestaoOrderProjectsDraft.forEach((project, index) => {
         const statusName = getGestaoProjectStatusName(project);
         const statusClass = getOrderProjectStatusBadgeClass(statusName);
-        const parentDisplay = project.isComplementar
-            ? (project.parentProject?.order?.orderCode || project.parentOrderCode || '—')
-            : project.isSubstituido
-                ? (project.substituidoPorProject?.order?.orderCode || project.substituidoPorOrderCode || '—')
-                : project.isSubstituicao
-                    ? (project.substituiProject?.order?.orderCode || project.substituiOrderCode || '—')
-                    : '—';
+        const saleValueDisplay = formatSaleValue(project.saleValue);
         const tr = document.createElement('tr');
         tr.className = 'gestao-project-summary-row';
         tr.innerHTML = `
@@ -629,7 +675,7 @@ function renderGestaoProjectsSummaryList() {
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>
             </td>
             <td class="p-3 text-slate-600 whitespace-nowrap">${formatGestaoDate(project.deliveryDate)}</td>
-            <td class="p-3 font-mono text-slate-600">${escapeHtml(parentDisplay)}</td>
+            <td class="p-3 text-slate-600 whitespace-nowrap">${escapeHtml(saleValueDisplay)}</td>
             <td class="p-3">
                 <div class="flex flex-wrap gap-1.5">
                     <button type="button" class="gestao-view-project-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium">
@@ -688,6 +734,7 @@ async function openGestaoProjectForm(index = null) {
         if (defaultStatusId) {
             document.getElementById('gestao-project-status').value = String(defaultStatusId);
         }
+        syncGestaoProjectTechnicalDeliveryConstraints();
         bindGestaoProjectRelationToggles();
     }
 
@@ -746,6 +793,13 @@ async function saveGestaoProjectDraftAsync() {
 
     if (Number.isNaN(project.saleValue)) {
         alertAppDialog('Informe um valor de venda válido.');
+        return;
+    }
+
+    const orderDeliveryDate = getGestaoOrderClientDeliveryDate();
+    if (project.deliveryDate && orderDeliveryDate
+        && !isProjectTechnicalDeliveryBeforeOrderDelivery(project.deliveryDate, orderDeliveryDate)) {
+        alertAppDialog('A data de entrega do projeto técnico deve ser anterior à data de entrega do pedido.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -907,11 +961,29 @@ function showGestaoUsuariosPanel() {
     }
 }
 
+function showGestaoDashboardPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-dashboard-panel')?.classList.remove('hidden');
+    setGestaoNavActive('dashboard');
+    if (typeof loadGestaoDashboard === 'function') {
+        loadGestaoDashboard();
+    }
+}
+
 function showGestaoKanbanPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-kanban-panel')?.classList.remove('hidden');
     setGestaoNavActive('kanban');
     loadGestaoKanban();
+}
+
+function showGestaoGanttPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-gantt-panel')?.classList.remove('hidden');
+    setGestaoNavActive('gantt');
+    if (typeof loadGestaoGantt === 'function') {
+        loadGestaoGantt();
+    }
 }
 
 function showGestaoRelatoriosPanel() {
@@ -974,6 +1046,8 @@ function bindGestaoEvents() {
     bindGestaoProjectCodeInput(document.getElementById('gestao-project-code'));
     bindGestaoProjectCodeInput(document.getElementById('gestao-project-parent-code'));
     bindGestaoProjectCodeInput(document.getElementById('gestao-project-substituido-por-code'));
+    bindSaleValueCurrencyInput(document.getElementById('gestao-project-sale-value'));
+    document.getElementById('gestao-ord-client-delivery')?.addEventListener('change', syncGestaoProjectTechnicalDeliveryConstraints);
     document.getElementById('gestao-project-complementar')?.addEventListener('change', () => {
         if (document.getElementById('gestao-project-complementar')?.checked) {
             document.getElementById('gestao-project-substituido').checked = false;
@@ -983,9 +1057,23 @@ function bindGestaoEvents() {
     document.getElementById('gestao-project-substituido')?.addEventListener('change', bindGestaoProjectRelationToggles);
     document.getElementById('btn-close-order-project-view')?.addEventListener('click', () => {
         toggleModal('order-project-view-modal', false);
+        orderProjectViewContext = null;
     });
     document.getElementById('btn-close-order-project-view-footer')?.addEventListener('click', () => {
         toggleModal('order-project-view-modal', false);
+        orderProjectViewContext = null;
+    });
+    document.getElementById('btn-order-project-status-history')?.addEventListener('click', () => {
+        if (!orderProjectViewContext) return;
+        if (typeof openProjectStatusHistoryModal === 'function') {
+            openProjectStatusHistoryModal(orderProjectViewContext);
+        }
+    });
+    document.getElementById('btn-close-project-status-history')?.addEventListener('click', () => {
+        toggleModal('order-project-status-history-modal', false);
+    });
+    document.getElementById('btn-close-project-status-history-footer')?.addEventListener('click', () => {
+        toggleModal('order-project-status-history-modal', false);
     });
     document.getElementById('gestao-ord-code')?.addEventListener('input', async function () {
         this.value = this.value.replace(/\D/g, '');
@@ -1014,9 +1102,17 @@ function bindGestaoEvents() {
         editingGestaoOrderId = null;
         showGestaoUsuariosPanel();
     });
+    document.getElementById('gestao-nav-dashboard')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoDashboardPanel();
+    });
     document.getElementById('gestao-nav-kanban')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoKanbanPanel();
+    });
+    document.getElementById('gestao-nav-gantt')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoGanttPanel();
     });
     document.getElementById('gestao-nav-relatorios')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
@@ -1044,5 +1140,11 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoImportEvents === 'function') {
         bindGestaoImportEvents();
+    }
+    if (typeof bindGestaoGanttEvents === 'function') {
+        bindGestaoGanttEvents();
+    }
+    if (typeof bindGestaoDashboardEvents === 'function') {
+        bindGestaoDashboardEvents();
     }
 }

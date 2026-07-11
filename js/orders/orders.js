@@ -291,16 +291,16 @@ function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projects
     if (medicaoCountEl && medicoesCount !== undefined) {
         medicaoCountEl.textContent = `(${medicoesCount})`;
     }
-    if (fabricaCountEl && fabricaCount !== undefined && canSeeOrderFabricaTab()) {
+    if (fabricaCountEl && fabricaCount !== undefined) {
         fabricaCountEl.textContent = `(${fabricaCount})`;
     }
-    if (ppcpCountEl && ppcpCount !== undefined && canSeeOrderPpcpTab()) {
+    if (ppcpCountEl && ppcpCount !== undefined) {
         ppcpCountEl.textContent = `(${ppcpCount})`;
     }
-    if (nomearCountEl && nomearCount !== undefined && canSeeOrderNomearTab()) {
+    if (nomearCountEl && nomearCount !== undefined) {
         nomearCountEl.textContent = `(${nomearCount})`;
     }
-    if (comprasCountEl && comprasCount !== undefined && canSeeOrderComprasTab()) {
+    if (comprasCountEl && comprasCount !== undefined) {
         comprasCountEl.textContent = `(${comprasCount})`;
     }
 }
@@ -322,9 +322,15 @@ function updateOrderDetailActionButtons() {
     const approvalsPanel = document.getElementById('order-tab-panel-approvals');
     const onApprovalsTab = approvalsPanel && !approvalsPanel.classList.contains('hidden');
     const approvalBtn = document.getElementById('btn-commercial-approval');
+    const requestsPanel = document.getElementById('order-tab-panel-requests');
+    const onRequestsTab = requestsPanel && !requestsPanel.classList.contains('hidden');
+    const requestsBtn = document.getElementById('btn-new-request');
 
     if (approvalBtn) {
-        approvalBtn.classList.toggle('hidden', !onApprovalsTab || !canOpenCommercialApprovalModal());
+        approvalBtn.classList.toggle('hidden', !onApprovalsTab || !canActOrderDetailTab('approvals'));
+    }
+    if (requestsBtn) {
+        requestsBtn.classList.toggle('hidden', !onRequestsTab || !canActOrderDetailTab('requests'));
     }
 
     if (typeof updateAnteprojetoActionButtons === 'function') {
@@ -336,73 +342,69 @@ function updateOrderDetailActionButtons() {
     }
 }
 
+function updateOrderTabReadonlyNotice(activeTab = null) {
+    const notice = document.getElementById('order-tab-readonly-notice');
+    if (!notice) return;
+
+    if (!activeTab || canActOrderDetailTab(activeTab)) {
+        notice.classList.add('hidden');
+        notice.textContent = '';
+        return;
+    }
+
+    notice.textContent = `Visualização somente leitura. Apenas ${getOrderDetailTabResponsibleLabel(activeTab)} pode executar ações nesta aba.`;
+    notice.classList.remove('hidden');
+}
+
 const ORDER_DETAIL_TABS = {
     approvals: {
         tabId: 'order-tab-approvals',
         panelId: 'order-tab-panel-approvals',
-        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-emerald-600 text-emerald-800 bg-white',
-        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+        accent: 'emerald'
     },
     requests: {
         tabId: 'order-tab-requests',
         panelId: 'order-tab-panel-requests',
-        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-amber-600 text-amber-800 bg-white',
-        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+        accent: 'amber'
     },
     anteprojeto: {
         tabId: 'order-tab-anteprojeto',
         panelId: 'order-tab-panel-anteprojeto',
-        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-sky-600 text-sky-800 bg-white',
-        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+        accent: 'sky'
     },
     medicao: {
         tabId: 'order-tab-medicao',
         panelId: 'order-tab-panel-medicao',
-        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-teal-600 text-teal-800 bg-white',
-        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+        accent: 'teal'
     },
     nomear: {
         tabId: 'order-tab-nomear',
         panelId: 'order-tab-panel-nomear',
-        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-purple-600 text-purple-800 bg-white',
-        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+        accent: 'purple'
     },
     ppcp: {
         tabId: 'order-tab-ppcp',
         panelId: 'order-tab-panel-ppcp',
-        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-violet-600 text-violet-800 bg-white',
-        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+        accent: 'violet'
     },
     fabrica: {
         tabId: 'order-tab-fabrica',
         panelId: 'order-tab-panel-fabrica',
-        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-orange-600 text-orange-800 bg-white',
-        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+        accent: 'orange'
     },
     compras: {
         tabId: 'order-tab-compras',
         panelId: 'order-tab-panel-compras',
-        activeClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-amber-600 text-amber-800 bg-white',
-        inactiveClass: 'order-detail-tab flex-1 px-4 py-3 text-xs font-semibold border-b-2 border-transparent text-slate-500 hover:text-slate-800'
+        accent: 'rose'
     }
 };
 
-function isOrderDetailTabVisible(tabKey) {
-    if (isMarceneiro()) {
-        if (tabKey === 'fabrica') return isGestorFabrica();
-        if (tabKey === 'compras') return canSeeOrderComprasTab();
-        return false;
-    }
+function getOrderDetailTabClassNames(tabKey, isActive) {
+    const accent = ORDER_DETAIL_TABS[tabKey]?.accent || 'slate';
+    return `order-detail-tab order-detail-tab--${accent}${isActive ? ' is-active' : ''}`;
+}
 
-    if (isCompras()) {
-        return tabKey === 'compras';
-    }
-
-    if (tabKey === 'medicao') return canSeeOrderMedicaoTab();
-    if (tabKey === 'nomear') return canSeeOrderNomearTab();
-    if (tabKey === 'ppcp') return canSeeOrderPpcpTab();
-    if (tabKey === 'fabrica') return canSeeOrderFabricaTab();
-    if (tabKey === 'compras') return canSeeOrderComprasTab();
+function isOrderDetailTabVisible() {
     return true;
 }
 
@@ -410,33 +412,19 @@ function getOrderDetailTabKeys() {
     return Object.keys(ORDER_DETAIL_TABS);
 }
 
-function hasAnyVisibleOrderDetailTab() {
-    return getOrderDetailTabKeys().some(key => isOrderDetailTabVisible(key));
-}
-
 function getFirstVisibleOrderDetailTab() {
-    const order = ['approvals', 'requests', 'anteprojeto', 'medicao', 'nomear', 'ppcp', 'fabrica', 'compras'];
-    return order.find(key => isOrderDetailTabVisible(key)) || null;
+    return 'approvals';
 }
 
 function applyOrderTabButtonsVisibility() {
     getOrderDetailTabKeys().forEach(tabKey => {
         const config = ORDER_DETAIL_TABS[tabKey];
-        const tabEl = document.getElementById(config?.tabId);
-        if (!tabEl) return;
-
-        if (isOrderDetailTabVisible(tabKey)) {
-            tabEl.classList.remove('hidden');
-        } else {
-            tabEl.classList.add('hidden');
-        }
+        document.getElementById(config?.tabId)?.classList.remove('hidden');
     });
 }
 
 function updateOrderTabsChromeVisibility() {
-    const hasAnyTab = hasAnyVisibleOrderDetailTab();
-    document.getElementById('order-detail-tabs-bar')?.classList.toggle('hidden', !hasAnyTab);
-    document.getElementById('order-detail-tabs-empty')?.classList.toggle('hidden', hasAnyTab);
+    document.getElementById('order-detail-tabs-bar')?.classList.remove('hidden');
 }
 
 function hideAllOrderDetailPanels() {
@@ -447,39 +435,13 @@ function hideAllOrderDetailPanels() {
 }
 
 function updateOrderDetailTabsVisibility() {
-    getOrderDetailTabKeys().forEach(tabKey => {
-        const config = ORDER_DETAIL_TABS[tabKey];
-        if (!config) return;
-        if (!isOrderDetailTabVisible(tabKey)) {
-            document.getElementById(config.panelId)?.classList.add('hidden');
-        }
-    });
-
     applyOrderTabButtonsVisibility();
     updateOrderTabsChromeVisibility();
-
-    const activePanel = Object.entries(ORDER_DETAIL_TABS).find(([, config]) => {
-        const panel = document.getElementById(config.panelId);
-        return panel && !panel.classList.contains('hidden');
-    });
-
-    if (activePanel && !isOrderDetailTabVisible(activePanel[0])) {
-        switchOrderDetailTab(getFirstVisibleOrderDetailTab());
-    } else if (!hasAnyVisibleOrderDetailTab()) {
-        hideAllOrderDetailPanels();
-    }
 }
 
 function switchOrderDetailTab(tab) {
-    if (!tab || !isOrderDetailTabVisible(tab)) {
-        const first = getFirstVisibleOrderDetailTab();
-        if (!first) {
-            hideAllOrderDetailPanels();
-            updateOrderTabsChromeVisibility();
-            applyOrderTabButtonsVisibility();
-            return;
-        }
-        switchOrderDetailTab(first);
+    if (!tab || !ORDER_DETAIL_TABS[tab]) {
+        switchOrderDetailTab('approvals');
         return;
     }
 
@@ -489,16 +451,15 @@ function switchOrderDetailTab(tab) {
         const panelEl = document.getElementById(config.panelId);
 
         if (tabEl) {
-            tabEl.className = isActive ? config.activeClass : config.inactiveClass;
+            tabEl.className = getOrderDetailTabClassNames(key, isActive);
         }
         if (panelEl) {
-            panelEl.classList.toggle('hidden', !isActive || !isOrderDetailTabVisible(key));
+            panelEl.classList.toggle('hidden', !isActive);
         }
     });
 
-    applyOrderTabButtonsVisibility();
-    updateOrderTabsChromeVisibility();
     updateOrderDetailActionButtons();
+    updateOrderTabReadonlyNotice(tab);
 }
 
 async function openOrderModal() {
@@ -528,37 +489,35 @@ async function selectOrder(id) {
     document.getElementById("det-client").innerText = order.clientName;
     document.getElementById("det-info").innerText =
         `📋 Consultor: ${order.consultantName} | Criado por: ${order.creator?.name || 'Sistema'}`;
+    const orderDeliveryDate = typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(order.clientDeliveryDate)
+        : (order.clientDeliveryDate || '—');
+    document.getElementById("det-delivery").innerText = `Entrega pedido: ${orderDeliveryDate}`;
 
     loadOrders();
     loadOrderProjects(id);
+    loadConversations(id);
+    loadCommercialApprovals(id);
 
-    const marceneiroOnlyFabrica = isMarceneiro() && isGestorFabrica();
-    const marceneiroWithoutTabs = isMarceneiro() && !isGestorFabrica();
-    const comprasOnlyUser = isCompras();
-
-    if (!marceneiroWithoutTabs && !marceneiroOnlyFabrica && !comprasOnlyUser) {
-        loadConversations(id);
-        loadCommercialApprovals(id);
-        if (typeof loadAnteprojetoConferences === 'function') {
-            loadAnteprojetoConferences(id);
-        }
-        if (typeof loadMedicoes === 'function' && canSeeOrderMedicaoTab()) {
-            loadMedicoes(id);
-        }
-        if (typeof loadNomearProjects === 'function' && canSeeOrderNomearTab()) {
-            loadNomearProjects(id);
-        }
-        if (typeof loadPpcpProjects === 'function' && canSeeOrderPpcpTab()) {
-            loadPpcpProjects(id);
-        }
+    if (typeof loadAnteprojetoConferences === 'function') {
+        loadAnteprojetoConferences(id);
     }
-
-    if (typeof loadFabricaProjects === 'function' && canSeeOrderFabricaTab()) {
+    if (typeof loadMedicoes === 'function') {
+        loadMedicoes(id);
+    }
+    if (typeof loadNomearProjects === 'function') {
+        loadNomearProjects(id);
+    }
+    if (typeof loadPpcpProjects === 'function') {
+        loadPpcpProjects(id);
+    }
+    if (typeof loadFabricaProjects === 'function') {
         loadFabricaProjects(id);
     }
-    if (typeof loadOrderCompras === 'function' && canSeeOrderComprasTab()) {
+    if (typeof loadOrderCompras === 'function') {
         loadOrderCompras(id);
     }
+
     updateOrderDetailTabsVisibility();
     switchOrderDetailTab(getFirstVisibleOrderDetailTab());
 }
@@ -577,28 +536,24 @@ function bindOrderEvents() {
         switchOrderDetailTab('medicao');
     });
     document.getElementById('order-tab-nomear').addEventListener('click', async function () {
-        if (!canSeeOrderNomearTab()) return;
         switchOrderDetailTab('nomear');
         if (activeOrderId && typeof loadNomearProjects === 'function') {
             loadNomearProjects(activeOrderId);
         }
     });
     document.getElementById('order-tab-ppcp').addEventListener('click', async function () {
-        if (!canSeeOrderPpcpTab()) return;
         switchOrderDetailTab('ppcp');
         if (activeOrderId && typeof loadPpcpProjects === 'function') {
             loadPpcpProjects(activeOrderId);
         }
     });
     document.getElementById('order-tab-fabrica').addEventListener('click', async function () {
-        if (!canSeeOrderFabricaTab()) return;
         switchOrderDetailTab('fabrica');
         if (activeOrderId && typeof loadFabricaProjects === 'function') {
             loadFabricaProjects(activeOrderId);
         }
     });
     document.getElementById('order-tab-compras')?.addEventListener('click', async function () {
-        if (!canSeeOrderComprasTab()) return;
         switchOrderDetailTab('compras');
         if (activeOrderId && typeof loadOrderCompras === 'function') {
             loadOrderCompras(activeOrderId);

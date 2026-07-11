@@ -213,6 +213,8 @@ function renderPendenciasSectionOverview(section, cards) {
 }
 
 async function loadPendenciasSectionOverview() {
+    setPendenciasActionLoading(false);
+
     const content = document.getElementById('pendencias-content');
     if (content) {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando resumo...</p>';

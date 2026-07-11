@@ -146,7 +146,7 @@ async function fetchOrderProjectsForOrder(orderId) {
         return [];
     }
 
-    return enrichOrderProjectsWithStatus(result.data || []);
+    return enrichOrderProjectsForList(result.data || []);
 }
 
 async function enrichOrderProjectsWithStatus(projects) {
@@ -175,6 +175,132 @@ async function enrichOrderProjectsWithStatus(projects) {
     }));
 }
 
+async function enrichOrderProjectsWithDesigner(projects) {
+    if (!projects.length) return projects;
+
+    const needsEnrich = projects.some(project => project.designerId && !project.designer?.name);
+    if (!needsEnrich) return projects;
+
+    const designerIds = [...new Set(projects.map(project => project.designerId).filter(Boolean))];
+    if (!designerIds.length) return projects;
+
+    const { data: designers, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, name')
+        .in('id', designerIds);
+
+    if (error) {
+        console.error('enrichOrderProjectsWithDesigner:', error);
+        return projects;
+    }
+
+    const designerById = Object.fromEntries((designers || []).map(designer => [designer.id, designer]));
+    return projects.map(project => ({
+        ...project,
+        designer: project.designer || designerById[project.designerId] || null
+    }));
+}
+
+async function enrichOrderProjectsWithSubstitutionRelations(projects) {
+    if (!projects.length) return projects;
+
+    const relatedIds = new Set();
+    projects.forEach(project => {
+        if (project.substituidoPorProjectId) relatedIds.add(Number(project.substituidoPorProjectId));
+        if (project.substituiProjectId) relatedIds.add(Number(project.substituiProjectId));
+        if (project.parentProjectId) relatedIds.add(Number(project.parentProjectId));
+    });
+
+    if (!relatedIds.size) return projects;
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('id, projectCode, orderId, order:salesOrders(orderCode)')
+        .in('id', [...relatedIds]);
+
+    if (result.error?.message?.includes('order')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, projectCode, orderId')
+            .in('id', [...relatedIds]);
+    }
+
+    if (result.error) {
+        console.error('enrichOrderProjectsWithSubstitutionRelations:', result.error);
+        return projects;
+    }
+
+    const relatedById = Object.fromEntries((result.data || []).map(item => [item.id, item]));
+    const missingOrderIds = [...new Set(
+        (result.data || [])
+            .filter(item => item.orderId && !item.order?.orderCode)
+            .map(item => item.orderId)
+    )];
+
+    let orderCodeById = {};
+    if (missingOrderIds.length) {
+        const ordersResult = await supabaseClient
+            .from('salesOrders')
+            .select('id, orderCode')
+            .in('id', missingOrderIds);
+
+        if (!ordersResult.error) {
+            orderCodeById = Object.fromEntries(
+                (ordersResult.data || []).map(order => [order.id, order.orderCode])
+            );
+        }
+    }
+
+    return projects.map(project => {
+        const enriched = { ...project };
+
+        if (project.substituidoPorProjectId && relatedById[project.substituidoPorProjectId]) {
+            const related = relatedById[project.substituidoPorProjectId];
+            const orderCode = related.order?.orderCode || orderCodeById[related.orderId] || '';
+            enriched.substituidoPorProject = {
+                ...(enriched.substituidoPorProject || {}),
+                projectCode: related.projectCode,
+                order: { orderCode }
+            };
+            enriched.substituidoPorProjectCode = related.projectCode || enriched.substituidoPorProjectCode;
+            enriched.substituidoPorOrderCode = orderCode || enriched.substituidoPorOrderCode;
+        }
+
+        if (project.substituiProjectId && relatedById[project.substituiProjectId]) {
+            const related = relatedById[project.substituiProjectId];
+            const orderCode = related.order?.orderCode || orderCodeById[related.orderId] || '';
+            enriched.substituiProject = {
+                ...(enriched.substituiProject || {}),
+                projectCode: related.projectCode,
+                order: { orderCode }
+            };
+            enriched.substituiProjectCode = related.projectCode || enriched.substituiProjectCode;
+            enriched.substituiOrderCode = orderCode || enriched.substituiOrderCode;
+        }
+
+        if (project.parentProjectId && relatedById[project.parentProjectId]) {
+            const related = relatedById[project.parentProjectId];
+            const orderCode = related.order?.orderCode || orderCodeById[related.orderId] || '';
+            enriched.parentProject = {
+                ...(enriched.parentProject || {}),
+                projectCode: related.projectCode,
+                order: { orderCode }
+            };
+            enriched.parentProjectCode = related.projectCode || enriched.parentProjectCode;
+            enriched.parentOrderCode = orderCode || enriched.parentOrderCode;
+        }
+
+        return enriched;
+    });
+}
+
+async function enrichOrderProjectsForList(projects) {
+    let enriched = await enrichOrderProjectsWithStatus(projects);
+    enriched = await enrichOrderProjectsWithDesigner(enriched);
+    enriched = await enrichOrderProjectsWithSubstitutionRelations(enriched);
+    return enriched;
+}
+
 async function loadOrderProjects(orderId) {
     const list = document.getElementById('order-projects-list');
 
@@ -196,23 +322,33 @@ async function loadOrderProjects(orderId) {
         return;
     }
 
-    list.innerHTML = `
-        <div class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-2.5 py-1 text-[9px] uppercase font-semibold text-slate-400 border-b border-violet-100">
-            <span>Projeto</span>
-            <span>Status</span>
-            <span class="text-right pr-1">Ações</span>
-        </div>
+    list.innerHTML = '<div class="order-projects-grid"></div>';
+    const grid = list.querySelector('.order-projects-grid');
+
+    const header = document.createElement('div');
+    header.className = 'order-projects-grid__header';
+    header.innerHTML = `
+        <span class="order-projects-grid__head">Projeto</span>
+        <span class="order-projects-grid__head">Projetista</span>
+        <span class="order-projects-grid__head">Entrega</span>
+        <span class="order-projects-grid__head">Status</span>
+        <span class="order-projects-grid__head order-projects-grid__head--actions">Ações</span>
     `;
+    grid.appendChild(header);
 
     [...orderProjectsCache]
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
         .forEach(p => {
             const statusName = getOrderProjectStatusName(p);
             const statusClass = getOrderProjectStatusBadgeClass(statusName);
-            const div = document.createElement('div');
-            div.className = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-center px-2.5 py-1.5 rounded-md border border-violet-100 bg-violet-50/40';
-            div.innerHTML = `
-                <div class="min-w-0">
+            const deliveryDate = typeof formatGestaoDate === 'function'
+                ? formatGestaoDate(p.deliveryDate)
+                : (p.deliveryDate || '—');
+            const designerName = p.designer?.name || '—';
+            const row = document.createElement('div');
+            row.className = 'order-projects-grid__row';
+            row.innerHTML = `
+                <div class="order-projects-grid__cell order-projects-grid__cell--project min-w-0">
                     <div class="flex flex-wrap items-center gap-1.5">
                         <span class="text-xs font-semibold text-slate-800 truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
                         ${renderComplementarProjectNoticeHtml(p)}
@@ -220,14 +356,18 @@ async function loadOrderProjects(orderId) {
                         ${renderSubstituicaoProjectNoticeHtml(p)}
                     </div>
                 </div>
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
-                <button type="button"
-                    class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
-                    data-project-id="${p.id}">
-                    Detalhes
-                </button>
+                <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
+                <span class="order-projects-grid__cell text-[10px] text-slate-600 whitespace-nowrap" title="Entrega do projeto técnico">${escapeHtml(deliveryDate)}</span>
+                <span class="order-projects-grid__cell text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+                <div class="order-projects-grid__cell order-projects-grid__cell--actions">
+                    <button type="button"
+                        class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
+                        data-project-id="${p.id}">
+                        Detalhes
+                    </button>
+                </div>
             `;
-            list.appendChild(div);
+            grid.appendChild(row);
         });
 
     applyProjectsListCollapse();

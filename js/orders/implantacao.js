@@ -9,7 +9,7 @@ let activeImplantacaoRecord = null;
 let activeImplantacaoProjectName = '';
 
 function canAccessImplantacaoModal() {
-    return canSeeOrderPpcpTab()
+    return Boolean(activeOrderId)
         || (typeof canSeePendenciasPpcpItems === 'function' && canSeePendenciasPpcpItems())
         || (typeof canSeePendenciasComprasMenu === 'function' && canSeePendenciasComprasMenu());
 }
@@ -385,7 +385,7 @@ async function refreshImplantacaoRelatedViews(orderProjectId) {
         await loadPendenciasImplantacao();
     }
 
-    if (activeOrderId && typeof loadFabricaProjects === 'function' && canSeeOrderFabricaTab()) {
+    if (activeOrderId && typeof loadFabricaProjects === 'function') {
         await loadFabricaProjects(activeOrderId);
     }
 

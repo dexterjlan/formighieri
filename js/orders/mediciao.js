@@ -1081,7 +1081,7 @@ function updateMedicaoActionButtons() {
     const onTab = panel && !panel.classList.contains('hidden');
     const newBtn = document.getElementById('btn-new-medicao');
     if (newBtn) {
-        newBtn.classList.toggle('hidden', !onTab || !canCreateMedicao());
+        newBtn.classList.toggle('hidden', !onTab || !canActOrderDetailTab('medicao'));
     }
 }
 

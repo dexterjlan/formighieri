@@ -261,7 +261,7 @@ async function refreshNomearRelatedViews(orderId) {
     if (typeof loadOrderProjects === 'function') {
         await loadOrderProjects(orderId);
     }
-    if (typeof loadPpcpProjects === 'function' && canSeeOrderPpcpTab()) {
+    if (typeof loadPpcpProjects === 'function') {
         await loadPpcpProjects(orderId);
     }
     if (typeof loadPendenciasContent === 'function'
@@ -275,11 +275,6 @@ async function refreshNomearRelatedViews(orderId) {
 async function loadNomearProjects(orderId) {
     const list = document.getElementById('nomear-projects-list');
     if (!list) return;
-
-    if (!canSeeOrderNomearTab()) {
-        list.innerHTML = '';
-        return;
-    }
 
     const nomearStatusId = await getNomearProjectStatusIdForOrder();
     const { data: projects, error } = await queryOrderNomearProjects(orderId);
@@ -323,7 +318,7 @@ async function loadNomearProjects(orderId) {
 }
 
 async function confirmOrderProjectNomeado(projectId, button, projectName) {
-    if (!activeOrderId || !canSeeOrderNomearTab()) return;
+    if (!activeOrderId || !canActOrderProjectNomear({ id: projectId })) return;
 
     const label = projectName || 'este projeto';
     const originalText = button.textContent;

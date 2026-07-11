@@ -179,6 +179,213 @@ async function fetchOrderProjectStatusHistory(orderProjectId) {
     return enrichProjectStatusHistoryEntries(result.data || []);
 }
 
+const PROJECT_STATUS_HISTORY_BAR_COLORS = {
+    'Vendido': '#10b981',
+    'Aguardando Obra': '#f97316',
+    'Aguardando Medição': '#06b6d4',
+    'Medição Realizada': '#14b8a6',
+    'Planta Levantada': '#84cc16',
+    'Conferência Enviada': '#0ea5e9',
+    'Conferência Realizada': '#14b8a6',
+    'Aguardando Projeto Técnico': '#6366f1',
+    'Projeto Técnico': '#8b5cf6',
+    'Aguardando Aprovação': '#f59e0b',
+    'Em Revisão': '#0ea5e9',
+    'Em revisão': '#0ea5e9',
+    'Nomear': '#a855f7',
+    'Aguardando PPCP': '#d946ef',
+    'Implantação': '#14b8a6',
+    'Em Produção': '#f97316',
+    'Montagem Interna': '#f59e0b',
+    'Expedição': '#64748b'
+};
+
+let projectStatusHistoryState = {
+    entries: [],
+    viewMode: 'flow'
+};
+
+function getProjectStatusHistoryBarColor(statusName) {
+    return PROJECT_STATUS_HISTORY_BAR_COLORS[statusName] || '#94a3b8';
+}
+
+function formatProjectStatusHistoryAxisDate(dateStr) {
+    if (!dateStr) return '—';
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return '—';
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear()).slice(-2);
+    return `${day}/${month}/${year}`;
+}
+
+function buildProjectStatusHistorySegments(entries) {
+    return (entries || []).map((entry, index) => {
+        const statusName = entry.newStatus?.name || 'Status';
+        const startAt = entry.changedAt;
+        const isLast = index === entries.length - 1;
+        const durationSeconds = isLast
+            ? Math.max(0, Math.floor((Date.now() - new Date(startAt).getTime()) / 1000))
+            : Number(entries[index + 1].previousStatusDurationSeconds) || 0;
+
+        return {
+            statusName,
+            startAt,
+            endAt: isLast ? null : entries[index + 1].changedAt,
+            durationSeconds,
+            changedBy: entry.changedBy?.name || '—',
+            isCurrent: isLast
+        };
+    });
+}
+
+function renderProjectStatusHistoryToolbar(viewMode) {
+    return `
+        <div class="project-status-history-toolbar">
+            <span class="project-status-history-toolbar__label">Visualização</span>
+            <div class="project-status-history-toolbar__buttons">
+                <button type="button"
+                    class="project-status-history-view-btn ${viewMode === 'flow' ? 'is-active' : ''}"
+                    data-project-status-history-view="flow">
+                    Fluxo
+                </button>
+                <button type="button"
+                    class="project-status-history-view-btn ${viewMode === 'timeline' ? 'is-active' : ''}"
+                    data-project-status-history-view="timeline">
+                    Linha do tempo
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function renderProjectStatusHistoryTimeline(entries) {
+    if (!entries.length) {
+        return '<p class="text-xs text-slate-400 text-center py-12">Nenhum registro de histórico para este projeto.</p>';
+    }
+
+    const segments = buildProjectStatusHistorySegments(entries);
+    const totalDuration = segments.reduce((sum, segment) => sum + Math.max(segment.durationSeconds, 1), 0);
+    let cumulative = 0;
+
+    const barSegments = segments.map(segment => {
+        const weight = Math.max(segment.durationSeconds, 1);
+        const color = getProjectStatusHistoryBarColor(segment.statusName);
+        const durationLabel = formatStatusDurationSeconds(segment.durationSeconds) || '—';
+        const startLabel = formatProjectStatusHistoryAxisDate(segment.startAt);
+        const endLabel = segment.isCurrent
+            ? 'Em andamento'
+            : formatProjectStatusHistoryAxisDate(segment.endAt);
+        const tooltip = `${segment.statusName}\n${startLabel} → ${endLabel}\n${durationLabel} · ${segment.changedBy}`;
+
+        return `
+            <div class="project-status-history-timeline__segment"
+                style="flex-grow:${weight};background-color:${color}"
+                title="${escapeHtml(tooltip)}">
+                <span class="project-status-history-timeline__segment-label">${escapeHtml(segment.statusName)}</span>
+            </div>
+        `;
+    }).join('');
+
+    const dateMarkers = [];
+    dateMarkers.push({
+        left: 0,
+        label: formatProjectStatusHistoryAxisDate(segments[0].startAt)
+    });
+
+    segments.forEach((segment, index) => {
+        cumulative += Math.max(segment.durationSeconds, 1);
+        const left = Math.min(100, (cumulative / totalDuration) * 100);
+        if (index < segments.length - 1) {
+            dateMarkers.push({
+                left,
+                label: formatProjectStatusHistoryAxisDate(segments[index + 1].startAt)
+            });
+        } else {
+            dateMarkers.push({
+                left: 100,
+                label: segment.isCurrent ? 'Agora' : formatProjectStatusHistoryAxisDate(segment.endAt)
+            });
+        }
+    });
+
+    const markersHtml = dateMarkers.map((marker, index) => `
+        <span class="project-status-history-timeline__date-marker ${index === 0 ? 'is-start' : ''} ${index === dateMarkers.length - 1 ? 'is-end' : ''}"
+            style="left:${marker.left}%">
+            ${escapeHtml(marker.label)}
+        </span>
+    `).join('');
+
+    const legendItems = segments.map(segment => {
+        const color = getProjectStatusHistoryBarColor(segment.statusName);
+        const durationLabel = formatStatusDurationSeconds(segment.durationSeconds) || '—';
+        const periodLabel = segment.isCurrent
+            ? `${formatGestaoDateTime(segment.startAt)} → agora`
+            : `${formatGestaoDateTime(segment.startAt)} → ${formatGestaoDateTime(segment.endAt)}`;
+
+        return `
+            <li class="project-status-history-timeline__legend-item">
+                <span class="project-status-history-timeline__legend-swatch" style="background-color:${color}"></span>
+                <div class="project-status-history-timeline__legend-content min-w-0">
+                    <div class="project-status-history-timeline__legend-title">${escapeHtml(segment.statusName)}</div>
+                    <div class="project-status-history-timeline__legend-meta">${escapeHtml(periodLabel)} · ${escapeHtml(durationLabel)} · ${escapeHtml(segment.changedBy)}</div>
+                </div>
+            </li>
+        `;
+    }).join('');
+
+    return `
+        <div class="project-status-history-timeline">
+            <div class="project-status-history-timeline__bar">${barSegments}</div>
+            <div class="project-status-history-timeline__dates">${markersHtml}</div>
+            <ul class="project-status-history-timeline__legend">${legendItems}</ul>
+        </div>
+    `;
+}
+
+function renderProjectStatusHistoryView(entries, viewMode = 'flow') {
+    const content = viewMode === 'timeline'
+        ? renderProjectStatusHistoryTimeline(entries)
+        : renderProjectStatusHistoryFlow(entries);
+
+    return `
+        ${renderProjectStatusHistoryToolbar(viewMode)}
+        <div class="project-status-history-view-content">
+            ${content}
+        </div>
+    `;
+}
+
+function setProjectStatusHistoryContent(containerId, entries, viewMode = 'flow') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    projectStatusHistoryState = {
+        entries: entries || [],
+        viewMode
+    };
+
+    container.dataset.projectStatusHistoryContainer = 'true';
+    container.innerHTML = renderProjectStatusHistoryView(projectStatusHistoryState.entries, viewMode);
+}
+
+function bindProjectStatusHistoryViewToggle() {
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-project-status-history-view]');
+        if (!button) return;
+
+        const container = button.closest('[data-project-status-history-container]');
+        if (!container || !projectStatusHistoryState.entries.length) return;
+
+        const viewMode = button.dataset.projectStatusHistoryView;
+        if (!viewMode || viewMode === projectStatusHistoryState.viewMode) return;
+
+        setProjectStatusHistoryContent(container.id, projectStatusHistoryState.entries, viewMode);
+    });
+}
+
+bindProjectStatusHistoryViewToggle();
+
 function renderProjectStatusHistoryConnector(durationSeconds) {
     const durationLabel = formatStatusDurationSeconds(durationSeconds);
     const durationHtml = durationLabel
@@ -255,9 +462,7 @@ async function openGestaoProjectStatusHistory(context = {}) {
 
     try {
         const entries = await fetchOrderProjectStatusHistory(orderProjectId);
-        if (flow) {
-            flow.innerHTML = renderProjectStatusHistoryFlow(entries);
-        }
+        setProjectStatusHistoryContent('gestao-project-history-flow', entries, 'flow');
     } catch (error) {
         if (flow) {
             flow.innerHTML = `<p class="text-xs text-red-500 text-center py-8">Erro ao carregar histórico: ${escapeHtml(error.message)}</p>`;
@@ -290,6 +495,92 @@ function getGestaoProjectHistoryContext(orderProjectId) {
         clientName: '—'
     };
 }
+
+function buildProjectStatusHistoryContext(project = {}) {
+    const normalizedId = Number(project.id);
+    if (!normalizedId) return null;
+
+    const projectCode = typeof normalizeProjectCodeInput === 'function'
+        ? normalizeProjectCodeInput(project.projectCode || '')
+        : (project.projectCode || '');
+    const projectLabel = `${projectCode ? `${projectCode} — ` : ''}${project.name || 'Projeto'}`;
+
+    const fromKanban = getGestaoProjectHistoryContext(normalizedId);
+    if (fromKanban.orderCode !== '—' || fromKanban.clientName !== '—') {
+        return {
+            ...fromKanban,
+            projectLabel: fromKanban.projectLabel !== 'Projeto' ? fromKanban.projectLabel : projectLabel
+        };
+    }
+
+    let orderCode = project.order?.orderCode || '—';
+    let clientName = project.order?.clientName || '—';
+
+    if (project.orderId && (orderCode === '—' || clientName === '—')) {
+        const gestaoOrder = Array.isArray(gestaoOrdersCache)
+            ? gestaoOrdersCache.find(order => Number(order.id) === Number(project.orderId))
+            : null;
+        if (gestaoOrder) {
+            orderCode = gestaoOrder.orderCode || orderCode;
+            clientName = gestaoOrder.clientName || clientName;
+        }
+
+        const ordersOrder = typeof ordersCache !== 'undefined' && Array.isArray(ordersCache)
+            ? ordersCache.find(order => Number(order.id) === Number(project.orderId))
+            : null;
+        if (ordersOrder) {
+            orderCode = ordersOrder.orderCode || orderCode;
+            clientName = ordersOrder.clientName || clientName;
+        }
+    }
+
+    if (project.orderId && (orderCode === '—' || clientName === '—')
+        && typeof activeOrderId !== 'undefined'
+        && Number(activeOrderId) === Number(project.orderId)) {
+        orderCode = document.getElementById('det-code')?.textContent?.trim() || orderCode;
+        clientName = document.getElementById('det-client')?.textContent?.trim() || clientName;
+    }
+
+    return {
+        orderProjectId: normalizedId,
+        projectLabel,
+        orderCode,
+        clientName
+    };
+}
+
+async function openProjectStatusHistoryModal(context = {}) {
+    const orderProjectId = Number(context.orderProjectId);
+    if (!orderProjectId) return;
+
+    const subtitle = document.getElementById('project-status-history-subtitle');
+    const flow = document.getElementById('project-status-history-flow');
+    const projectLabel = context.projectLabel || 'Projeto';
+    const orderCode = context.orderCode || '—';
+    const clientName = context.clientName || '—';
+
+    if (subtitle) {
+        subtitle.textContent = `Pedido ${orderCode} · ${clientName} · ${projectLabel}`;
+    }
+
+    toggleModal('order-project-status-history-modal', true);
+
+    if (flow) {
+        flow.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando histórico...</p>';
+    }
+
+    try {
+        const entries = await fetchOrderProjectStatusHistory(orderProjectId);
+        setProjectStatusHistoryContent('project-status-history-flow', entries, 'flow');
+    } catch (error) {
+        if (flow) {
+            flow.innerHTML = `<p class="text-xs text-red-500 text-center py-8">Erro ao carregar histórico: ${escapeHtml(error.message)}</p>`;
+        }
+    }
+}
+
+window.buildProjectStatusHistoryContext = buildProjectStatusHistoryContext;
+window.openProjectStatusHistoryModal = openProjectStatusHistoryModal;
 
 function renderGestaoKanbanColumn(status, orders) {
     const cards = buildGestaoKanbanCardsForStatus(status.id, orders);

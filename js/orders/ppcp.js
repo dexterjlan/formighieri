@@ -109,11 +109,9 @@ function renderPpcpProjectCard(project, implantacao) {
     }
 
     if (hasImplantacao) {
-        const implantacaoDisabled = !canAct;
         buttons.push(`
             <button type="button"
-                class="ppcp-implantacao-btn bg-teal-700 text-white text-xs px-4 py-2 rounded-lg font-medium hover:bg-teal-800 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                ${implantacaoDisabled ? 'disabled' : ''}>
+                class="ppcp-implantacao-btn bg-teal-700 text-white text-xs px-4 py-2 rounded-lg font-medium hover:bg-teal-800 whitespace-nowrap">
                 Implantação
             </button>
         `);
@@ -165,11 +163,6 @@ async function loadPpcpProjects(orderId) {
     const list = document.getElementById('ppcp-projects-list');
     if (!list) return;
 
-    if (!canSeeOrderPpcpTab()) {
-        list.innerHTML = '';
-        return;
-    }
-
     let result = await supabaseClient
         .from('OrderProject')
         .select('id, name, statusId, isComplementar, parentProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), projectStatus:OrderProjectStatus(id, name)')
@@ -219,7 +212,7 @@ async function loadPpcpProjects(orderId) {
 }
 
 async function implantarPpcpProject(projectId, button, projectName) {
-    if (!activeOrderId || !canSeeOrderPpcpTab() || !canActOrderPpcp()) return;
+    if (!activeOrderId || !canActOrderPpcp()) return;
 
     const label = projectName || 'este projeto';
     if (!(await confirmAppDialog(`Iniciar implantação de "${label}"?`))) return;
@@ -264,7 +257,7 @@ async function implantarPpcpProject(projectId, button, projectName) {
 }
 
 async function openPpcpImplantacaoModal(projectId, projectName) {
-    if (!activeOrderId || !canSeeOrderPpcpTab()) return;
+    if (!activeOrderId) return;
 
     if (typeof openImplantacaoModal === 'function') {
         await openImplantacaoModal(projectId, projectName, { requireExisting: true });

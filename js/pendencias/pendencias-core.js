@@ -40,18 +40,19 @@ const PENDENCIAS_MINE_EXTRA_STATUSES = [
 ];
 
 const PENDENCIAS_PROJECT_SELECT = `
-    id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
+    id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico, observacaoAguardandoObra,
     order:salesOrders(id, orderCode, clientName, consultantName),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
 const PENDENCIAS_PROJECT_SELECT_FALLBACK = `
-    id, orderId, projectCode, name, designerId, statusId, deliveryDate,
+    id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico,
     order:salesOrders(id, orderCode, clientName, consultantName)
 `;
 
 const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
+    PENDENCIAS_STATUS_AGUARDANDO_PT,
     PENDENCIAS_STATUS_PROJETO_TECNICO,
     'Em Revisão',
     'Em revisão',
@@ -60,6 +61,7 @@ const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
 ];
 
 const PENDENCIAS_GESTOR_WORKLOAD_COLUMNS = [
+    PENDENCIAS_STATUS_AGUARDANDO_PT,
     PENDENCIAS_STATUS_PROJETO_TECNICO,
     'Em Revisão',
     'Aguardando Aprovação',
@@ -443,6 +445,23 @@ async function queryPendenciasProjects(filters = {}) {
 
     let result = await buildQuery(PENDENCIAS_PROJECT_SELECT);
 
+    if (result.error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+        result = await buildQuery(`
+            id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
+            order:salesOrders(id, orderCode, clientName, consultantName),
+            designer:appUsers!OrderProject_designerId_fkey(id, name),
+            projectStatus:OrderProjectStatus(id, name)
+        `, true);
+        if (result.error?.message?.includes('isComplementar') || result.error?.message?.includes('isSubstituido')) {
+            result = await buildQuery(`
+                id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
+                order:salesOrders(id, orderCode, clientName, consultantName),
+                designer:appUsers!OrderProject_designerId_fkey(id, name),
+                projectStatus:OrderProjectStatus(id, name)
+            `, false);
+        }
+    }
+
     if (result.error?.message?.includes('isComplementar') || result.error?.message?.includes('isSubstituido')) {
         result = await buildQuery(PENDENCIAS_PROJECT_SELECT, false);
     }
@@ -451,8 +470,12 @@ async function queryPendenciasProjects(filters = {}) {
         result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK, false);
     }
 
-    if (result.error?.message?.includes('observacaoAguardandoObra')) {
-        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK, false);
+    if (result.error?.message?.includes('observacaoAguardandoObra')
+        || result.error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+        result = await buildQuery(`
+            id, orderId, projectCode, name, designerId, statusId, deliveryDate,
+            order:salesOrders(id, orderCode, clientName, consultantName)
+        `, false);
     }
 
     if (result.error) return result;
@@ -511,6 +534,8 @@ function getPendenciasProjectStatusBadgeClass(statusName) {
 }
 
 function loadPendenciasContent() {
+    setPendenciasActionLoading(false);
+
     if (!pendenciasActiveItem) {
         loadPendenciasSectionOverview();
         return;

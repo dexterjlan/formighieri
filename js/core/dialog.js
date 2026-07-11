@@ -33,16 +33,18 @@ const APP_DIALOG_VARIANTS = {
     }
 };
 
-function applyAppDialogVariant(variant) {
+function applyAppDialogVariant(variant, showIcon = false) {
     const config = APP_DIALOG_VARIANTS[variant] || APP_DIALOG_VARIANTS.confirm;
     const iconWrap = document.getElementById('app-dialog-icon-wrap');
     const icon = document.getElementById('app-dialog-icon');
     const confirmBtn = document.getElementById('btn-app-dialog-confirm');
 
     if (iconWrap && icon) {
-        iconWrap.classList.remove('hidden');
-        icon.className = `w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${config.iconBg}`;
-        icon.textContent = config.icon;
+        iconWrap.classList.toggle('hidden', !showIcon);
+        if (showIcon) {
+            icon.className = `w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${config.iconBg}`;
+            icon.textContent = config.icon;
+        }
     }
 
     if (confirmBtn) {
@@ -54,6 +56,7 @@ function closeAppDialog(result) {
     const modal = document.getElementById('app-dialog-modal');
     if (modal) modal.classList.add('hidden');
 
+    document.getElementById('app-dialog-icon-wrap')?.classList.add('hidden');
     document.removeEventListener('keydown', handleAppDialogKeydown);
 
     if (appDialogResolver) {
@@ -118,7 +121,7 @@ function showAppDialog(options = {}) {
             iconWrap.classList.toggle('hidden', !showIcon);
         }
 
-        applyAppDialogVariant(variant);
+        applyAppDialogVariant(variant, showIcon);
 
         modal.classList.remove('hidden');
         document.addEventListener('keydown', handleAppDialogKeydown);
