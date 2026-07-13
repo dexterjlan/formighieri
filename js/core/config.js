@@ -22,6 +22,19 @@ function getFormighieriEnvConfig(env = resolveFormighieriAppEnv()) {
 const FORMIGHIERI_APP_ENV = resolveFormighieriAppEnv();
 const FORMIGHIERI_ENV_CONFIG = getFormighieriEnvConfig(FORMIGHIERI_APP_ENV);
 
+function getAppPublicUrl() {
+    const configured = FORMIGHIERI_ENV_CONFIG.APP_PUBLIC_URL;
+    if (configured) {
+        return String(configured).replace(/\/$/, '');
+    }
+
+    if (FORMIGHIERI_APP_ENV === 'prod') {
+        return 'https://dexterjlan.github.io/formighieri';
+    }
+
+    return window.location.origin.replace(/\/$/, '');
+}
+
 const SUPABASE_URL = FORMIGHIERI_ENV_CONFIG.SUPABASE_URL || '';
 const SUPABASE_KEY = FORMIGHIERI_ENV_CONFIG.SUPABASE_KEY || '';
 
@@ -41,8 +54,8 @@ const NOTIFICATION_TEST_EMAIL = FORMIGHIERI_ENV_CONFIG.NOTIFICATION_TEST_EMAIL |
 const NOTIFICATION_FROM_EMAIL = 'formighieri.notificacoes@gmail.com';
 const NOTIFICATION_FROM_NAME = 'FGP - Formighieri';
 
-// URL pública do app (para imagens em e-mails). Se vazio, usa window.location.origin no navegador.
-const APP_PUBLIC_URL = 'https://dexterjlan.github.io/formighieri';
+// URL pública do app (e-mails, confirmação de cadastro no Supabase Auth).
+const APP_PUBLIC_URL = getAppPublicUrl();
 
 // Google Apps Script — envia pelo Gmail formighieri.notificacoes@gmail.com
 // Cole o script de google-apps-script/FormighieriNotificacoes.gs e publique como Web App
@@ -69,3 +82,4 @@ let systemSettingsCache = null;
 let enterAppInProgress = null;
 
 window.FORMIGHIERI_APP_ENV = FORMIGHIERI_APP_ENV;
+window.getAppPublicUrl = getAppPublicUrl;

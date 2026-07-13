@@ -301,6 +301,9 @@ function bindAuthEvents() {
         const password = document.getElementById("reg-password").value;
         const passwordConfirm = document.getElementById("reg-password-confirm").value;
         const role = document.getElementById("reg-role").value;
+        const btn = document.getElementById("btn-register-submit");
+        const statusEl = document.getElementById("register-status");
+        const originalText = btn?.textContent || 'Criar Usuário';
 
         if (password !== passwordConfirm) {
             alertAppDialog("As senhas não coincidem.");
@@ -313,54 +316,85 @@ function bindAuthEvents() {
             return;
         }
 
-        const { data, error } = await supabaseClient.auth.signUp({
-            email,
-            password,
-            options: {
-                data: { name, role }
-            }
-        });
-
-        if (error) {
-            console.error("signUp error:", error);
-            alertAppDialog("Erro ao criar usuário: " + formatAuthError(error));
-            return;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Criando usuário...';
+        }
+        if (statusEl) {
+            statusEl.textContent = `Criando usuário: ${name} (${email})`;
+            statusEl.classList.remove('hidden');
         }
 
-        if (!data?.user) {
-            alertAppDialog("Não foi possível criar a conta. Este e-mail pode já estar cadastrado.");
-            showLoginScreen();
-            return;
-        }
+        try {
+            const emailRedirectTo = typeof getAppPublicUrl === 'function'
+                ? getAppPublicUrl()
+                : window.location.origin.replace(/\/$/, '');
 
-        if (data.session) {
-            await supabaseClient.auth.updateUser({
-                data: { name, role }
+            const { data, error } = await supabaseClient.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: { name, role },
+                    emailRedirectTo
+                }
             });
-        }
 
-        const profileError = await syncRegisteredUserProfile(
-            data.user,
-            name,
-            email,
-            role,
-            data.session
-        );
-        if (profileError) {
-            console.error("syncRegisteredUserProfile:", profileError);
-            alertAppDialog("Conta criada no login, mas falhou ao salvar o perfil: " + formatAuthError(profileError)
-                + " — Execute supabase/rls-policies.sql no SQL Editor do Supabase.", { variant: 'error', title: 'Erro' });
-        }
+            if (error) {
+                console.error("signUp error:", error);
+                alertAppDialog("Erro ao criar usuário: " + formatAuthError(error));
+                return;
+            }
 
-        if (data.session) {
-            await enterApp(data.user.id);
+            if (!data?.user) {
+                alertAppDialog("Não foi possível criar a conta. Este e-mail pode já estar cadastrado.");
+                showLoginScreen();
+                return;
+            }
+
+            if (data.session) {
+                await supabaseClient.auth.updateUser({
+                    data: { name, role }
+                });
+            }
+
+            const profileError = await syncRegisteredUserProfile(
+                data.user,
+                name,
+                email,
+                role,
+                data.session
+            );
+            if (profileError) {
+                console.error("syncRegisteredUserProfile:", profileError);
+                alertAppDialog("Conta criada no login, mas falhou ao salvar o perfil: " + formatAuthError(profileError)
+                    + " — Execute supabase/rls-policies.sql no SQL Editor do Supabase.", { variant: 'error', title: 'Erro' });
+            }
+
+            if (data.session) {
+                await enterApp(data.user.id);
+                document.getElementById("register-form").reset();
+                return;
+            }
+
+            alertAppDialog(
+                `Conta criada para ${email}. Verifique sua caixa de entrada e confirme o e-mail para entrar no sistema.`,
+                { variant: 'success', title: 'Usuário criado' }
+            );
             document.getElementById("register-form").reset();
-            return;
+            showLoginScreen();
+        } catch (err) {
+            console.error("register:", err);
+            alertAppDialog(err.message || "Erro ao criar usuário.");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+            if (statusEl) {
+                statusEl.textContent = '';
+                statusEl.classList.add('hidden');
+            }
         }
-
-        alertAppDialog("Conta criada! Faça login após a confirmação do e-mail (se solicitada).", { variant: 'success', title: 'Sucesso' });
-        document.getElementById("register-form").reset();
-        showLoginScreen();
     });
 
     document.getElementById("btn-logout").addEventListener("click", async function () {
@@ -373,7 +407,7 @@ function bindAuthEvents() {
             currentUser = null;
             return;
         }
-        if (event === 'INITIAL_SESSION' && session) {
+        if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session) {
             await enterApp(session.user.id);
         }
     });

@@ -3,6 +3,11 @@ function showRegisterScreen() {
     const register = document.getElementById("register-screen");
     register.classList.remove("hidden");
     register.classList.add("flex");
+    const statusEl = document.getElementById("register-status");
+    if (statusEl) {
+        statusEl.textContent = '';
+        statusEl.classList.add('hidden');
+    }
 }
 
 function showLoginScreen() {
@@ -10,6 +15,16 @@ function showLoginScreen() {
     register.classList.add("hidden");
     register.classList.remove("flex");
     document.getElementById("login-screen").classList.remove("hidden");
+    const statusEl = document.getElementById("register-status");
+    if (statusEl) {
+        statusEl.textContent = '';
+        statusEl.classList.add('hidden');
+    }
+    const registerBtn = document.getElementById("btn-register-submit");
+    if (registerBtn) {
+        registerBtn.disabled = false;
+        registerBtn.textContent = 'Criar Usuário';
+    }
 }
 
 function initAppEvents() {
