@@ -1,12 +1,43 @@
-const SUPABASE_URL = "https://phpcrboxtduethlqvkot.supabase.co";
-const SUPABASE_KEY = "sb_publishable_x1-G_DEEt_PxLwRou-J3dg_KKuFwEj-";
+function resolveFormighieriAppEnv() {
+    const params = new URLSearchParams(window.location.search);
+    const forced = params.get('env') || localStorage.getItem('formighieri-env');
+    if (forced === 'dev' || forced === 'prod') {
+        return forced;
+    }
+
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+        return 'dev';
+    }
+
+    return 'prod';
+}
+
+function getFormighieriEnvConfig(env = resolveFormighieriAppEnv()) {
+    return env === 'prod'
+        ? (window.FORMIGHIERI_CONFIG_PROD || {})
+        : (window.FORMIGHIERI_CONFIG_DEV || {});
+}
+
+const FORMIGHIERI_APP_ENV = resolveFormighieriAppEnv();
+const FORMIGHIERI_ENV_CONFIG = getFormighieriEnvConfig(FORMIGHIERI_APP_ENV);
+
+const SUPABASE_URL = FORMIGHIERI_ENV_CONFIG.SUPABASE_URL || '';
+const SUPABASE_KEY = FORMIGHIERI_ENV_CONFIG.SUPABASE_KEY || '';
+
+if (!SUPABASE_URL || !SUPABASE_KEY || SUPABASE_URL.includes('SUBSTITUA')) {
+    console.error(
+        `[Formighieri] Configuração Supabase incompleta para o ambiente "${FORMIGHIERI_APP_ENV}". ` +
+        `Atualize js/core/config.${FORMIGHIERI_APP_ENV}.js`
+    );
+}
 
 const { createClient } = window.supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const NOTIFICATIONS_ENABLED = true;
-const NOTIFICATION_TEST_MODE = true;
-const NOTIFICATION_TEST_EMAIL = 'dexterjl@gmail.com';
+const NOTIFICATION_TEST_MODE = FORMIGHIERI_ENV_CONFIG.NOTIFICATION_TEST_MODE !== false;
+const NOTIFICATION_TEST_EMAIL = FORMIGHIERI_ENV_CONFIG.NOTIFICATION_TEST_EMAIL || '';
 const NOTIFICATION_FROM_EMAIL = 'formighieri.notificacoes@gmail.com';
 const NOTIFICATION_FROM_NAME = 'FGP - Formighieri';
 
@@ -36,3 +67,5 @@ let revisionModalViewOnly = false;
 let requestActivityRowCounter = 0;
 let systemSettingsCache = null;
 let enterAppInProgress = null;
+
+window.FORMIGHIERI_APP_ENV = FORMIGHIERI_APP_ENV;

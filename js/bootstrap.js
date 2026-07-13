@@ -6,6 +6,8 @@ const PARTIALS = [
 ];
 
 const SCRIPTS = [
+    'js/core/config.dev.js',
+    'js/core/config.prod.js',
     'js/core/config.js',
     'js/core/utils.js',
     'js/core/dialog.js',
@@ -93,7 +95,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260974`);
+            await loadScript(`${src}?v=20260975`);
         }
 
         initAppEvents();
