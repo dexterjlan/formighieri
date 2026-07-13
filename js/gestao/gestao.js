@@ -552,6 +552,7 @@ function bindGestaoProjectRelationToggles(project = {}) {
         'gestao-project-environment',
         'gestao-project-sale-value',
         'gestao-project-delivery',
+        'gestao-project-phase',
         'gestao-project-caminho-rede-aprovacao'
     ];
 
@@ -565,6 +566,10 @@ function bindGestaoProjectRelationToggles(project = {}) {
     }
 
     document.getElementById('gestao-project-form-submit')?.removeAttribute('disabled');
+    const phaseSelect = document.getElementById('gestao-project-phase');
+    if (phaseSelect && !isSubstituidoOrderProject(project)) {
+        phaseSelect.disabled = false;
+    }
     bindGestaoComplementarToggle();
     bindGestaoSubstituidoToggle();
 }
@@ -600,6 +605,7 @@ function resetGestaoProjectForm() {
     document.getElementById('btn-gestao-remove-project')?.classList.add('hidden');
     syncGestaoProjectTechnicalDeliveryConstraints();
     applyGestaoProjectStatusReadonly();
+    syncGestaoProjectPhaseFieldVisibility();
 }
 
 function fillGestaoProjectForm(project = {}) {
@@ -618,8 +624,10 @@ function fillGestaoProjectForm(project = {}) {
     );
 
     populateGestaoProjectFormSelects(project);
+    populateGestaoProjectPhaseSelect(project.deliveryPhaseId || '');
     syncGestaoProjectTechnicalDeliveryConstraints();
     bindGestaoProjectRelationToggles(project);
+    syncGestaoProjectPhaseFieldVisibility();
 }
 
 function collectGestaoProjectFormData() {
@@ -636,6 +644,11 @@ function collectGestaoProjectFormData() {
         environmentTypeId: Number(document.getElementById('gestao-project-environment')?.value) || null,
         saleValue: parseSaleValueInput(document.getElementById('gestao-project-sale-value')?.value),
         deliveryDate: document.getElementById('gestao-project-delivery')?.value || null,
+        deliveryPhaseId: hasGestaoOrderMultiplePhases()
+            ? (typeof resolveGestaoDeliveryPhaseIdFromForm === 'function'
+                ? resolveGestaoDeliveryPhaseIdFromForm(document.getElementById('gestao-project-phase')?.value)
+                : (document.getElementById('gestao-project-phase')?.value || null))
+            : null,
         statusId: Number(document.getElementById('gestao-project-status')?.value) || getDefaultProjectStatusId(),
         designerId: existing?.designerId ?? null,
         previsaoConclusaoProjetoTecnico: existing?.previsaoConclusaoProjetoTecnico ?? null,
@@ -728,14 +741,19 @@ async function openGestaoProjectForm(index = null) {
         if (title) title.textContent = 'Editar Projeto';
         fillGestaoProjectForm(gestaoOrderProjectsDraft[index]);
         removeBtn?.classList.remove('hidden');
+        syncGestaoProjectPhaseFieldVisibility();
     } else {
         if (title) title.textContent = 'Novo Projeto';
         const defaultStatusId = getDefaultProjectStatusId();
         if (defaultStatusId) {
             document.getElementById('gestao-project-status').value = String(defaultStatusId);
         }
+        if (hasGestaoOrderMultiplePhases()) {
+            populateGestaoProjectPhaseSelect(getGestaoFirstOrderPhaseId());
+        }
         syncGestaoProjectTechnicalDeliveryConstraints();
         bindGestaoProjectRelationToggles();
+        syncGestaoProjectPhaseFieldVisibility();
     }
 
     showGestaoProjectFormPanel();
@@ -803,6 +821,11 @@ async function saveGestaoProjectDraftAsync() {
         return;
     }
 
+    if (hasGestaoOrderMultiplePhases() && !project.deliveryPhaseId) {
+        alertAppDialog('Selecione a fase de entrega do projeto.');
+        return;
+    }
+
     const duplicateCodeIndex = gestaoOrderProjectsDraft.findIndex((item, itemIndex) =>
         item.projectCode === project.projectCode && itemIndex !== editingGestaoProjectDraftIndex
     );
@@ -851,6 +874,18 @@ async function saveGestaoProjectDraftAsync() {
         };
     } else {
         gestaoOrderProjectsDraft.push(project);
+    }
+
+    try {
+        if (project.id
+            && editingGestaoOrderId
+            && typeof applyGestaoProjectDeliveryPhaseUpdate === 'function'
+            && hasGestaoOrderMultiplePhases()) {
+            await applyGestaoProjectDeliveryPhaseUpdate(project.id, project.deliveryPhaseId);
+        }
+    } catch (error) {
+        alertAppDialog(`Erro ao salvar fase de entrega: ${error.message}`);
+        return;
     }
 
     editingGestaoProjectDraftIndex = null;
@@ -1146,5 +1181,8 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoDashboardEvents === 'function') {
         bindGestaoDashboardEvents();
+    }
+    if (typeof bindGestaoPhasesEvents === 'function') {
+        bindGestaoPhasesEvents();
     }
 }

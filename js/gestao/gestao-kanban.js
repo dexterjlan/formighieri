@@ -10,6 +10,20 @@ function isGestaoKanbanHiddenProject(project) {
     return isGestaoKanbanComplementarProject(project) || isSubstituidoOrderProject(project);
 }
 
+function projectBelongsToGestaoKanbanPhase(project, phase, phases = []) {
+    if (!phase) return true;
+
+    const phaseId = Number(phase.id);
+    const projectPhaseId = Number(project.deliveryPhaseId);
+    const firstPhaseId = Number(phases[0]?.id);
+
+    if (projectPhaseId) {
+        return projectPhaseId === phaseId;
+    }
+
+    return phaseId === firstPhaseId;
+}
+
 function buildGestaoKanbanCardsForStatus(statusId, orders) {
     const normalizedStatusId = Number(statusId);
     const complementarByParentId = {};
@@ -32,30 +46,41 @@ function buildGestaoKanbanCardsForStatus(statusId, orders) {
     const cards = [];
 
     orders.forEach(order => {
-        const parentProjects = (order.projects || []).filter(project =>
-            getProjectStatusId(project) === normalizedStatusId
-            && !isGestaoKanbanHiddenProject(project)
-        );
+        const phases = typeof orderHasGestaoDeliveryPhases === 'function' && orderHasGestaoDeliveryPhases(order)
+            ? order.deliveryPhases
+            : [null];
 
-        if (!parentProjects.length) return;
+        phases.forEach(phase => {
+            const parentProjects = (order.projects || []).filter(project =>
+                getProjectStatusId(project) === normalizedStatusId
+                && !isGestaoKanbanHiddenProject(project)
+                && projectBelongsToGestaoKanbanPhase(project, phase, phases)
+            );
 
-        const projectTree = parentProjects
-            .map(project => ({
-                project,
-                children: (complementarByParentId[Number(project.id)] || [])
-                    .slice()
-                    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
-            }))
-            .sort((a, b) => String(a.project.name || '').localeCompare(String(b.project.name || ''), 'pt-BR'));
+            if (!parentProjects.length) return;
 
-        cards.push({ order, projectTree });
+            const projectTree = parentProjects
+                .map(project => ({
+                    project,
+                    children: (complementarByParentId[Number(project.id)] || [])
+                        .slice()
+                        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
+                }))
+                .sort((a, b) => String(a.project.name || '').localeCompare(String(b.project.name || ''), 'pt-BR'));
+
+            cards.push({ order, phase, projectTree });
+        });
     });
 
-    cards.sort((a, b) => String(a.order.orderCode || '').localeCompare(
-        String(b.order.orderCode || ''),
-        'pt-BR',
-        { numeric: true }
-    ));
+    cards.sort((a, b) => {
+        const codeCompare = String(a.order.orderCode || '').localeCompare(
+            String(b.order.orderCode || ''),
+            'pt-BR',
+            { numeric: true }
+        );
+        if (codeCompare !== 0) return codeCompare;
+        return (a.phase?.sortOrder || 0) - (b.phase?.sortOrder || 0);
+    });
 
     return cards;
 }
@@ -76,7 +101,7 @@ function renderGestaoKanbanProjectRow(project, options = {}) {
     `;
 }
 
-function renderGestaoKanbanCard(order, projectTree) {
+function renderGestaoKanbanCard(order, projectTree, phase = null) {
     const card = document.createElement('div');
     card.className = 'bg-white border border-indigo-100 rounded-lg shadow-sm p-3 space-y-2';
 
@@ -93,10 +118,17 @@ function renderGestaoKanbanCard(order, projectTree) {
         `;
     }).join('');
 
+    const orderCodeLabel = phase
+        ? `${order.orderCode || '—'} - ${phase.name || 'Fase'}`
+        : (order.orderCode || '—');
+
     card.innerHTML = `
         <div class="space-y-0.5">
-            <div class="font-mono text-xs font-bold text-indigo-800">${escapeHtml(order.orderCode || '—')}</div>
+            <div class="font-mono text-xs font-bold text-indigo-800">${escapeHtml(orderCodeLabel)}</div>
             <div class="text-xs font-semibold text-slate-800">${escapeHtml(order.clientName || '—')}</div>
+            ${phase?.deliveryDate
+                ? `<div class="text-[10px] text-slate-500">Entrega: ${escapeHtml(formatGestaoDate(phase.deliveryDate))}</div>`
+                : ''}
         </div>
         <ul class="space-y-2 m-0 p-0 list-none">${projectsHtml}</ul>
     `;
@@ -605,8 +637,8 @@ function renderGestaoKanbanColumn(status, orders) {
         return column;
     }
 
-    cards.forEach(({ order, projectTree }) => {
-        body.appendChild(renderGestaoKanbanCard(order, projectTree));
+    cards.forEach(({ order, phase, projectTree }) => {
+        body.appendChild(renderGestaoKanbanCard(order, projectTree, phase));
     });
 
     return column;
@@ -642,6 +674,14 @@ async function loadGestaoKanban() {
         orders = orders.map(order => ({
             ...order,
             projects: projectsByOrderId[order.id] || order.projects || []
+        }));
+    }
+
+    if (typeof fetchGestaoOrderPhasesByOrderIds === 'function' && orders.length) {
+        const phasesByOrderId = await fetchGestaoOrderPhasesByOrderIds(orders.map(order => order.id));
+        orders = orders.map(order => ({
+            ...order,
+            deliveryPhases: phasesByOrderId[order.id] || []
         }));
     }
 

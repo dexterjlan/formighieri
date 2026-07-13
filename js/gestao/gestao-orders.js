@@ -10,6 +10,8 @@ async function openGestaoCreateOrderForm() {
     await loadGestaoFormOptions();
     await loadGestaoConsultants();
     clearGestaoOrderProjectsDraft();
+    clearGestaoOrderPhasesDraft();
+    syncGestaoOrderClientDeliveryField();
     showGestaoPedidoFormPanel();
 }
 
@@ -31,6 +33,11 @@ async function openGestaoEditOrderForm(orderId) {
     await loadGestaoConsultants(order.consultantName || '');
 
     setGestaoOrderProjectsDraft(order.projects || []);
+    await loadGestaoOrderPhasesForOrder(orderId);
+    if (typeof ensureGestaoProjectsHavePhaseDefaults === 'function') {
+        ensureGestaoProjectsHavePhaseDefaults();
+    }
+    syncGestaoOrderClientDeliveryField();
     showGestaoPedidoFormPanel();
 }
 
@@ -309,8 +316,8 @@ async function fetchGestaoProjectsByOrderIds(orderIds) {
     if (!normalizedIds.length) return {};
 
     const selectVariants = [
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name)',
@@ -363,8 +370,8 @@ async function enrichGestaoOrdersWithProjectStatuses(orders) {
 
 async function fetchGestaoOrders() {
     const orderSelectVariants = [
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
+        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
@@ -455,6 +462,9 @@ async function loadGestaoOrdersList() {
 
 async function insertGestaoProject(orderId, project, now) {
     const statusId = project.statusId || getDefaultProjectStatusId();
+    const deliveryPhaseId = typeof resolveGestaoDeliveryPhaseIdForPersist === 'function'
+        ? resolveGestaoDeliveryPhaseIdForPersist(project.deliveryPhaseId)
+        : (project.deliveryPhaseId || null);
     const complementarFields = {
         isComplementar: Boolean(project.isComplementar),
         parentProjectId: project.parentProjectId || null
@@ -473,6 +483,7 @@ async function insertGestaoProject(orderId, project, now) {
             environmentTypeId: project.environmentTypeId,
             saleValue: project.saleValue,
             deliveryDate: project.deliveryDate,
+            deliveryPhaseId,
             previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
             statusId,
             designerId: project.designerId,
@@ -489,6 +500,7 @@ async function insertGestaoProject(orderId, project, now) {
             name: project.name,
             environmentTypeId: project.environmentTypeId,
             deliveryDate: project.deliveryDate,
+            deliveryPhaseId,
             previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
             statusId,
             designerId: project.designerId,
@@ -521,6 +533,17 @@ async function insertGestaoProject(orderId, project, now) {
     let lastError = null;
     const seen = new Set();
 
+    async function finishGestaoProjectInsert(insertedId) {
+        if (insertedId
+            && typeof applyGestaoProjectDeliveryPhaseUpdate === 'function'
+            && typeof hasGestaoOrderMultiplePhases === 'function'
+            && hasGestaoOrderMultiplePhases()
+            && project.deliveryPhaseId) {
+            await applyGestaoProjectDeliveryPhaseUpdate(insertedId, project.deliveryPhaseId, now);
+        }
+        return insertedId;
+    }
+
     for (const payload of payloadVariants) {
         const cleanPayload = Object.fromEntries(
             Object.entries(payload).filter(([, value]) => value !== undefined && value !== '')
@@ -530,13 +553,15 @@ async function insertGestaoProject(orderId, project, now) {
         seen.add(key);
 
         const insertResult = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
-        if (!insertResult.error) return insertResult.data?.id || null;
+        if (!insertResult.error) {
+            return finishGestaoProjectInsert(insertResult.data?.id || null);
+        }
 
         if (insertResult.error.message?.includes('isComplementar') || insertResult.error.message?.includes('parentProjectId')) {
             delete cleanPayload.isComplementar;
             delete cleanPayload.parentProjectId;
             const retry = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
-            if (!retry.error) return retry.data?.id || null;
+            if (!retry.error) return finishGestaoProjectInsert(retry.data?.id || null);
             lastError = retry.error;
             continue;
         }
@@ -550,9 +575,21 @@ async function insertGestaoProject(orderId, project, now) {
             delete cleanPayload.isSubstituicao;
             delete cleanPayload.substituiProjectId;
             const retry = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
-            if (!retry.error) return retry.data?.id || null;
+            if (!retry.error) return finishGestaoProjectInsert(retry.data?.id || null);
             lastError = retry.error;
             continue;
+        }
+
+        if (insertResult.error.message?.includes('deliveryPhaseId')) {
+            if (insertResult.error.message?.includes('column')
+                || insertResult.error.message?.includes('schema cache')) {
+                delete cleanPayload.deliveryPhaseId;
+                const retry = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
+                if (!retry.error) return finishGestaoProjectInsert(retry.data?.id || null);
+                lastError = retry.error;
+                continue;
+            }
+            throw new Error('Não foi possível salvar a fase de entrega do projeto. Salve as fases do pedido e tente novamente.');
         }
 
         lastError = insertResult.error;
@@ -563,6 +600,9 @@ async function insertGestaoProject(orderId, project, now) {
 
 async function updateGestaoProject(project, now) {
     const statusId = project.statusId || getDefaultProjectStatusId();
+    const deliveryPhaseId = typeof resolveGestaoDeliveryPhaseIdForPersist === 'function'
+        ? resolveGestaoDeliveryPhaseIdForPersist(project.deliveryPhaseId)
+        : (project.deliveryPhaseId || null);
     const complementarFields = {
         isComplementar: Boolean(project.isComplementar),
         parentProjectId: project.isComplementar ? (project.parentProjectId || null) : null
@@ -580,6 +620,7 @@ async function updateGestaoProject(project, now) {
             environmentTypeId: project.environmentTypeId,
             saleValue: project.saleValue,
             deliveryDate: project.deliveryDate,
+            deliveryPhaseId,
             previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
             statusId,
             designerId: project.designerId,
@@ -594,6 +635,7 @@ async function updateGestaoProject(project, now) {
             name: project.name,
             environmentTypeId: project.environmentTypeId,
             deliveryDate: project.deliveryDate,
+            deliveryPhaseId,
             previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
             statusId,
             designerId: project.designerId,
@@ -620,6 +662,7 @@ async function updateGestaoProject(project, now) {
 
     let lastError = null;
     const seen = new Set();
+    let updated = false;
 
     for (const payload of payloadVariants) {
         const cleanPayload = Object.fromEntries(
@@ -634,7 +677,10 @@ async function updateGestaoProject(project, now) {
             .update(cleanPayload)
             .eq('id', project.id);
 
-        if (!error) return;
+        if (!error) {
+            updated = true;
+            break;
+        }
 
         if (error.message?.includes('isComplementar') || error.message?.includes('parentProjectId')) {
             delete cleanPayload.isComplementar;
@@ -643,7 +689,10 @@ async function updateGestaoProject(project, now) {
                 .from('OrderProject')
                 .update(cleanPayload)
                 .eq('id', project.id);
-            if (!retry.error) return;
+            if (!retry.error) {
+                updated = true;
+                break;
+            }
             lastError = retry.error;
             continue;
         }
@@ -660,15 +709,44 @@ async function updateGestaoProject(project, now) {
                 .from('OrderProject')
                 .update(cleanPayload)
                 .eq('id', project.id);
-            if (!retry.error) return;
+            if (!retry.error) {
+                updated = true;
+                break;
+            }
             lastError = retry.error;
             continue;
+        }
+
+        if (error.message?.includes('deliveryPhaseId')) {
+            if (error.message?.includes('column')
+                || error.message?.includes('schema cache')) {
+                delete cleanPayload.deliveryPhaseId;
+                const retry = await supabaseClient
+                    .from('OrderProject')
+                    .update(cleanPayload)
+                    .eq('id', project.id);
+                if (!retry.error) {
+                    updated = true;
+                    break;
+                }
+                lastError = retry.error;
+                continue;
+            }
+            throw new Error('Não foi possível salvar a fase de entrega do projeto. Salve as fases do pedido e tente novamente.');
         }
 
         lastError = error;
     }
 
-    throw lastError;
+    if (!updated) {
+        throw lastError;
+    }
+
+    if (typeof applyGestaoProjectDeliveryPhaseUpdate === 'function'
+        && typeof hasGestaoOrderMultiplePhases === 'function'
+        && hasGestaoOrderMultiplePhases()) {
+        await applyGestaoProjectDeliveryPhaseUpdate(project.id, project.deliveryPhaseId, now);
+    }
 }
 
 async function persistGestaoProjects(orderId, projects) {
@@ -793,6 +871,10 @@ async function saveGestaoOrder(event) {
             alertAppDialog(`Projeto "${project.name}": a data de entrega do projeto técnico deve ser anterior à data de entrega do pedido.`, { variant: 'warning', title: 'Aviso' });
             return;
         }
+        if (hasGestaoOrderMultiplePhases() && !project.deliveryPhaseId) {
+            alertAppDialog(`Projeto "${project.name}": selecione a fase de entrega.`);
+            return;
+        }
     }
 
     const now = new Date().toISOString();
@@ -865,7 +947,27 @@ async function saveGestaoOrder(event) {
             orderId = created.id;
         }
 
-        await persistGestaoProjects(orderId, projects);
+        const previousPhases = editingGestaoOrderId
+            ? await fetchGestaoOrderPhases(orderId)
+            : [...getGestaoOrderPhasesDraft()];
+
+        let persistedPhases = [];
+        if (typeof persistGestaoOrderPhases === 'function') {
+            persistedPhases = await persistGestaoOrderPhases(orderId, orderCode, gestaoOrderPhasesDraft);
+        }
+
+        let projectsToPersist = typeof mapGestaoProjectPhaseIds === 'function'
+            ? mapGestaoProjectPhaseIds(projects, persistedPhases, previousPhases)
+            : projects;
+
+        if (!hasGestaoOrderMultiplePhases(persistedPhases)) {
+            projectsToPersist = projectsToPersist.map(project => ({
+                ...project,
+                deliveryPhaseId: null
+            }));
+        }
+
+        await persistGestaoProjects(orderId, projectsToPersist);
 
         editingGestaoOrderId = null;
         showGestaoPedidoListPanel();
@@ -885,7 +987,9 @@ async function saveGestaoOrder(event) {
             || error.message?.includes('saleValue')
             || error.message?.includes('isComplementar')
             || error.message?.includes('parentProjectId')
-            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql, supabase/create-order-project-status.sql, supabase/create-order-project-complementar.sql e supabase/create-order-project-substituido.sql no Supabase.'
+            || error.message?.includes('OrderDeliveryPhase')
+            || error.message?.includes('deliveryPhaseId')
+            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql, supabase/create-order-project-status.sql, supabase/create-order-project-complementar.sql, supabase/create-order-project-substituido.sql e supabase/create-order-delivery-phases.sql no Supabase.'
             : '';
         alertAppDialog('Erro ao salvar pedido: ' + error.message + sqlHint);
     }

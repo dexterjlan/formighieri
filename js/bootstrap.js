@@ -14,6 +14,7 @@ const SCRIPTS = [
     'js/conversations/conversations-query.js',
     'js/admin/users-admin.js',
     'js/gestao/gestao.js',
+    'js/gestao/gestao-phases.js',
     'js/gestao/gestao-orders.js',
     'js/gestao/gestao-import.js',
     'js/gestao/gestao-kanban.js',
@@ -92,7 +93,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260968`);
+            await loadScript(`${src}?v=20260974`);
         }
 
         initAppEvents();

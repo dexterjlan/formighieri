@@ -1,5 +1,63 @@
 let ordersCache = [];
 let orderSummaryCounts = {};
+let orderPhasesByOrderId = {};
+
+function getOrderPhasesForOrder(orderId) {
+    return orderPhasesByOrderId[Number(orderId)] || [];
+}
+
+function orderHasDeliveryPhases(orderId) {
+    return getOrderPhasesForOrder(orderId).length >= 2;
+}
+
+function formatOrderDeliverySummary(orderId, clientDeliveryDate, options = {}) {
+    if (orderHasDeliveryPhases(orderId)) {
+        return 'Entrega em fases';
+    }
+
+    const prefix = options.prefix || 'Entrega pedido';
+    const dateLabel = typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(clientDeliveryDate)
+        : (clientDeliveryDate || '—');
+    return `${prefix}: ${dateLabel}`;
+}
+
+async function loadOrderPhasesForOrders(orders = ordersCache) {
+    const orderIds = [...new Set((orders || []).map(order => Number(order.id)).filter(Boolean))];
+    if (!orderIds.length || typeof fetchGestaoOrderPhasesByOrderIds !== 'function') {
+        orderPhasesByOrderId = {};
+        return orderPhasesByOrderId;
+    }
+
+    const fetched = await fetchGestaoOrderPhasesByOrderIds(orderIds);
+    orderPhasesByOrderId = { ...orderPhasesByOrderId, ...fetched };
+    return orderPhasesByOrderId;
+}
+
+function getOrderProjectPhaseDisplay(project, orderId = project?.orderId) {
+    const phases = getOrderPhasesForOrder(orderId);
+    if (phases.length < 2) return null;
+
+    const phaseId = Number(project?.deliveryPhaseId);
+    const phase = phaseId
+        ? phases.find(item => Number(item.id) === phaseId)
+        : phases[0];
+    if (!phase) return null;
+
+    const dateLabel = typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(phase.deliveryDate)
+        : (phase.deliveryDate || '—');
+
+    return {
+        name: phase.name || 'Fase',
+        dateLabel
+    };
+}
+
+window.getOrderPhasesForOrder = getOrderPhasesForOrder;
+window.orderHasDeliveryPhases = orderHasDeliveryPhases;
+window.getOrderProjectPhaseDisplay = getOrderProjectPhaseDisplay;
+window.loadOrderPhasesForOrders = loadOrderPhasesForOrders;
 
 async function fetchOrderSummaryApprovals() {
     const columnSets = ['orderId, status, approved', 'orderId, approved'];
@@ -184,6 +242,7 @@ async function loadOrders() {
         ordersCache = orders;
     }
 
+    await loadOrderPhasesForOrders(ordersCache);
     await loadOrderSummaryCounts();
     renderOrdersList();
 }
@@ -226,6 +285,7 @@ function renderOrdersList() {
             <div class="min-w-0">
                 <div class="text-sm font-bold text-slate-900 leading-snug">${o.clientName}</div>
                 <div class="text-[11px] text-slate-500 mt-1">📋 Consultor: ${o.consultantName}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">📅 ${escapeHtml(formatOrderDeliverySummary(o.id, o.clientDeliveryDate, { prefix: 'Entrega' }))}</div>
                 ${renderOrderSummaryBadges(o.id)}
             </div>
         `;
@@ -489,11 +549,9 @@ async function selectOrder(id) {
     document.getElementById("det-client").innerText = order.clientName;
     document.getElementById("det-info").innerText =
         `📋 Consultor: ${order.consultantName} | Criado por: ${order.creator?.name || 'Sistema'}`;
-    const orderDeliveryDate = typeof formatGestaoDate === 'function'
-        ? formatGestaoDate(order.clientDeliveryDate)
-        : (order.clientDeliveryDate || '—');
-    document.getElementById("det-delivery").innerText = `Entrega pedido: ${orderDeliveryDate}`;
+    document.getElementById("det-delivery").innerText = formatOrderDeliverySummary(order.id, order.clientDeliveryDate);
 
+    await loadOrderPhasesForOrders(ordersCache.length ? ordersCache : [order]);
     loadOrders();
     loadOrderProjects(id);
     loadConversations(id);

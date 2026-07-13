@@ -4,7 +4,7 @@ const GESTAO_DASHBOARD_STATUS_FABRICA_END = 'Montagem Interna';
 
 const GESTAO_DASHBOARD_PROJECT_SELECT = `
     id, orderId, projectCode, name, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico,
-    fimMontagemInterna, statusId, designerId, marceneiroId,
+    fimMontagemInterna, statusId, designerId, marceneiroId, deliveryPhaseId,
     isComplementar, parentProjectId, isSubstituido,
     order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
@@ -13,7 +13,7 @@ const GESTAO_DASHBOARD_PROJECT_SELECT = `
 `;
 
 const GESTAO_DASHBOARD_PROJECT_SELECT_FALLBACK = `
-    id, orderId, projectCode, name, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId,
+    id, orderId, projectCode, name, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId,
     isComplementar, parentProjectId, isSubstituido,
     order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
@@ -114,8 +114,46 @@ let gestaoDashboardActiveTab = 'projetos';
 let gestaoDashboardFullscreen = false;
 let gestaoDashboardCache = {
     projects: [],
-    statuses: []
+    statuses: [],
+    phasesByOrderId: {}
 };
+
+function getGestaoDashboardOrderPhases(orderId, phasesByOrderId = gestaoDashboardCache.phasesByOrderId) {
+    return phasesByOrderId[Number(orderId)] || [];
+}
+
+function orderHasGestaoDashboardDeliveryPhases(orderId, phasesByOrderId = gestaoDashboardCache.phasesByOrderId) {
+    return getGestaoDashboardOrderPhases(orderId, phasesByOrderId).length >= 2;
+}
+
+function projectBelongsToGestaoDashboardPhase(project, phase, phases = []) {
+    if (!phase) return true;
+
+    const phaseId = Number(phase.id);
+    const projectPhaseId = Number(project.deliveryPhaseId);
+    const firstPhaseId = Number(phases[0]?.id);
+
+    if (projectPhaseId) {
+        return projectPhaseId === phaseId;
+    }
+
+    return phaseId === firstPhaseId;
+}
+
+function getGestaoDashboardFabricaDeliveryDate(project, phasesByOrderId = gestaoDashboardCache.phasesByOrderId) {
+    const orderId = Number(project.orderId);
+    const phases = getGestaoDashboardOrderPhases(orderId, phasesByOrderId);
+
+    if (phases.length >= 2) {
+        const projectPhaseId = Number(project.deliveryPhaseId);
+        const phase = projectPhaseId
+            ? phases.find(item => Number(item.id) === projectPhaseId)
+            : phases[0];
+        if (phase?.deliveryDate) return phase.deliveryDate;
+    }
+
+    return project.order?.clientDeliveryDate || '';
+}
 
 function getGestaoDashboardCurrentMonthBounds(referenceDate = new Date()) {
     const year = referenceDate.getFullYear();
@@ -196,7 +234,7 @@ function filterGestaoDashboardProjetosTab(projects, statuses, monthBounds) {
     });
 }
 
-function filterGestaoDashboardFabricaTab(projects, statuses, monthBounds) {
+function filterGestaoDashboardFabricaTab(projects, statuses, monthBounds, phasesByOrderId = {}) {
     const { minSort, maxSort } = getGestaoDashboardRangeBounds(statuses, GESTAO_DASHBOARD_STATUS_FABRICA_END);
     const statusById = Object.fromEntries(statuses.map(status => [status.id, status]));
 
@@ -213,7 +251,7 @@ function filterGestaoDashboardFabricaTab(projects, statuses, monthBounds) {
         const withoutFinishDate = !project.fimMontagemInterna;
         const inStatusRange = isGestaoDashboardStatusInRange(project, minSort, maxSort, statusById);
         const orderDeliveryUntilMonth = isGestaoDashboardDateOnOrBefore(
-            project.order?.clientDeliveryDate,
+            getGestaoDashboardFabricaDeliveryDate(project, phasesByOrderId),
             monthBounds.end
         );
 
@@ -221,9 +259,9 @@ function filterGestaoDashboardFabricaTab(projects, statuses, monthBounds) {
     });
 }
 
-function getGestaoDashboardDeliveryDate(project, tabId) {
+function getGestaoDashboardDeliveryDate(project, tabId, phasesByOrderId = gestaoDashboardCache.phasesByOrderId) {
     if (tabId === 'fabrica') {
-        return project.order?.clientDeliveryDate || '';
+        return getGestaoDashboardFabricaDeliveryDate(project, phasesByOrderId);
     }
     return project.deliveryDate || '';
 }
@@ -235,38 +273,73 @@ function getGestaoDashboardResponsibleName(project, tabId) {
     return project.designer?.name || '—';
 }
 
-function getGestaoDashboardProjectSortDate(project, tabId) {
-    return normalizeGestaoDashboardDate(getGestaoDashboardDeliveryDate(project, tabId)) || '9999-12-31';
+function getGestaoDashboardProjectSortDate(project, tabId, phasesByOrderId = gestaoDashboardCache.phasesByOrderId) {
+    return normalizeGestaoDashboardDate(getGestaoDashboardDeliveryDate(project, tabId, phasesByOrderId)) || '9999-12-31';
 }
 
-function groupGestaoDashboardByClient(projects, tabId) {
+function groupGestaoDashboardByClient(projects, tabId, phasesByOrderId = {}) {
     const groups = new Map();
 
     (projects || []).forEach(project => {
-        const clientName = project.order?.clientName?.trim() || 'Sem cliente';
-        if (!groups.has(clientName)) {
-            groups.set(clientName, []);
+        const baseClientName = project.order?.clientName?.trim() || 'Sem cliente';
+        const orderId = Number(project.orderId);
+        const phases = getGestaoDashboardOrderPhases(orderId, phasesByOrderId);
+
+        if (tabId === 'fabrica' && phases.length >= 2) {
+            const phase = phases.find(item => projectBelongsToGestaoDashboardPhase(project, item, phases));
+            if (!phase) return;
+
+            const groupKey = `${baseClientName}||${phase.id}`;
+            if (!groups.has(groupKey)) {
+                groups.set(groupKey, {
+                    clientName: `${baseClientName} - ${phase.name || 'Fase'}`,
+                    sortClientName: baseClientName,
+                    phase,
+                    projects: []
+                });
+            }
+            groups.get(groupKey).projects.push(project);
+            return;
         }
-        groups.get(clientName).push(project);
+
+        if (!groups.has(baseClientName)) {
+            groups.set(baseClientName, {
+                clientName: baseClientName,
+                sortClientName: baseClientName,
+                phase: null,
+                projects: []
+            });
+        }
+        groups.get(baseClientName).projects.push(project);
     });
 
-    return [...groups.entries()]
-        .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR', { sensitivity: 'base' }))
-        .map(([clientName, clientProjects]) => ({
-            clientName,
-            projects: clientProjects.sort((a, b) =>
-                getGestaoDashboardProjectSortDate(a, tabId).localeCompare(
-                    getGestaoDashboardProjectSortDate(b, tabId)
+    return [...groups.values()]
+        .sort((a, b) => {
+            const nameCompare = a.sortClientName.localeCompare(b.sortClientName, 'pt-BR', { sensitivity: 'base' });
+            if (nameCompare !== 0) return nameCompare;
+            return (a.phase?.sortOrder || 0) - (b.phase?.sortOrder || 0);
+        })
+        .map(group => ({
+            ...group,
+            projects: group.projects.sort((a, b) =>
+                getGestaoDashboardProjectSortDate(a, tabId, phasesByOrderId).localeCompare(
+                    getGestaoDashboardProjectSortDate(b, tabId, phasesByOrderId)
                 )
             )
         }));
 }
 
-function getGestaoDashboardGroupClientDeliveryDate(group, tabId) {
+function getGestaoDashboardGroupClientDeliveryDate(group, tabId, phasesByOrderId = gestaoDashboardCache.phasesByOrderId) {
     if (tabId !== 'fabrica') return '';
 
+    if (group.phase?.deliveryDate) {
+        return formatGestaoDate(group.phase.deliveryDate);
+    }
+
     const dates = group.projects
-        .map(project => normalizeGestaoDashboardDate(project.order?.clientDeliveryDate))
+        .map(project => normalizeGestaoDashboardDate(
+            getGestaoDashboardFabricaDeliveryDate(project, phasesByOrderId)
+        ))
         .filter(Boolean)
         .sort();
 
@@ -351,7 +424,7 @@ function renderGestaoDashboardClientGroup(group, tabConfig, monthBounds) {
         monthBounds
     );
     const clientDeliveryDate = tabConfig.showClientDeliveryInHeader
-        ? getGestaoDashboardGroupClientDeliveryDate(group, tabConfig.id)
+        ? getGestaoDashboardGroupClientDeliveryDate(group, tabConfig.id, gestaoDashboardCache.phasesByOrderId)
         : '';
 
     return `
@@ -389,12 +462,13 @@ function renderGestaoDashboardContent() {
     const monthBounds = getGestaoDashboardCurrentMonthBounds();
     const statuses = gestaoDashboardCache.statuses || [];
     const allProjects = gestaoDashboardCache.projects || [];
+    const phasesByOrderId = gestaoDashboardCache.phasesByOrderId || {};
 
     const filteredProjects = gestaoDashboardActiveTab === 'fabrica'
-        ? filterGestaoDashboardFabricaTab(allProjects, statuses, monthBounds)
+        ? filterGestaoDashboardFabricaTab(allProjects, statuses, monthBounds, phasesByOrderId)
         : filterGestaoDashboardProjetosTab(allProjects, statuses, monthBounds);
 
-    const groups = groupGestaoDashboardByClient(filteredProjects, gestaoDashboardActiveTab);
+    const groups = groupGestaoDashboardByClient(filteredProjects, gestaoDashboardActiveTab, phasesByOrderId);
 
     const subtitle = document.getElementById('gestao-dashboard-subtitle');
     if (subtitle) {
@@ -440,6 +514,7 @@ async function fetchGestaoDashboardProjects() {
         || result.error?.message?.includes('previsaoConclusaoProjetoTecnico')
         || result.error?.message?.includes('isComplementar')
         || result.error?.message?.includes('isSubstituido')
+        || result.error?.message?.includes('deliveryPhaseId')
         || result.error?.message?.includes('projectStatus')
         || result.error?.message?.includes('designer')) {
         result = await supabaseClient
@@ -485,9 +560,18 @@ async function loadGestaoDashboard() {
         return;
     }
 
+    const projects = projectsResult.data || [];
+    const orderIds = [...new Set(projects.map(project => Number(project.orderId)).filter(Boolean))];
+    let phasesByOrderId = {};
+
+    if (typeof fetchGestaoOrderPhasesByOrderIds === 'function' && orderIds.length) {
+        phasesByOrderId = await fetchGestaoOrderPhasesByOrderIds(orderIds);
+    }
+
     gestaoDashboardCache = {
-        projects: projectsResult.data || [],
-        statuses
+        projects,
+        statuses,
+        phasesByOrderId
     };
 
     renderGestaoDashboardContent();
