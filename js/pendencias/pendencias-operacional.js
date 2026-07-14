@@ -66,13 +66,25 @@ function getPendenciasAguardandoMedicaoGroupProjects(orderId, statusName) {
     ));
 }
 
-function setPendenciasAguardandoMedicaoModalLoading(active, message = 'Processando...') {
+function setPendenciasAguardandoMedicaoModalLoading(active, message = 'Processando...', status = 'loading') {
     const overlay = document.getElementById('pendencias-aguardando-medicao-modal-loading');
     const messageEl = document.getElementById('pendencias-aguardando-medicao-modal-loading-msg');
+    const spinner = document.getElementById('pendencias-aguardando-medicao-modal-loading-spinner');
+    const successIcon = document.getElementById('pendencias-aguardando-medicao-modal-loading-success');
+    const errorIcon = document.getElementById('pendencias-aguardando-medicao-modal-loading-error');
     const show = Boolean(active);
 
     overlay?.classList.toggle('hidden', !show);
-    if (messageEl) messageEl.textContent = message;
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
 
     [
         'btn-pendencias-am-obra',
@@ -269,11 +281,17 @@ async function applyPendenciasAguardandoObraToSelections(selections) {
             if (error) throw error;
         }
 
-        closePendenciasAguardandoMedicaoModal();
+        setPendenciasAguardandoMedicaoModalLoading(true, 'Atualizando telas...');
         await loadPendenciasAguardandoMedicao();
+
+        setPendenciasAguardandoMedicaoModalLoading(true, 'Projetos marcados como Aguardando Obra!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+
+        closePendenciasAguardandoMedicaoModal();
         return true;
     } catch (error) {
-        alertAppDialog('Erro ao alterar status: ' + error.message);
+        setPendenciasAguardandoMedicaoModalLoading(true, `Erro ao alterar status: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
         setPendenciasAguardandoMedicaoModalLoading(false);
         return false;
     }
@@ -332,11 +350,17 @@ async function applyPendenciasAguardandoMedicaoToSelections(selections) {
             });
         }
 
-        closePendenciasAguardandoMedicaoModal();
+        setPendenciasAguardandoMedicaoModalLoading(true, 'Atualizando telas...');
         await loadPendenciasAguardandoMedicao();
+
+        setPendenciasAguardandoMedicaoModalLoading(true, 'Projetos liberados para medição!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+
+        closePendenciasAguardandoMedicaoModal();
         return true;
     } catch (error) {
-        alertAppDialog('Erro ao alterar status: ' + error.message);
+        setPendenciasAguardandoMedicaoModalLoading(true, `Erro ao alterar status: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
         setPendenciasAguardandoMedicaoModalLoading(false);
         return false;
     }

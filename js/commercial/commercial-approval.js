@@ -883,6 +883,7 @@ async function editCommercialApproval(id) {
 }
 
 function closeCommercialApprovalModal() {
+    setCommercialApprovalFormLoading(false);
     editingCommercialApprovalId = null;
     toggleModal('commercial-approval-modal', false);
 }
@@ -915,7 +916,7 @@ async function approveCommercialApproval(id) {
         status: 'Aprovado'
     };
 
-    setApproveButtonLoading(id, true, 'Aprovando...');
+    setCommercialApprovalActionLoading(id, true, 'Registrando aprovação...');
 
     try {
         let { error } = await supabaseClient
@@ -932,16 +933,17 @@ async function approveCommercialApproval(id) {
         }
 
         if (error) {
-            alertAppDialog('Erro ao aprovar solicitação: ' + error.message);
+            setCommercialApprovalActionLoading(id, true, `Erro ao aprovar: ${error.message}`, 'error');
+            await new Promise(resolve => setTimeout(resolve, 2200));
             return;
         }
 
-        setApproveButtonLoading(id, true, 'Atualizando status do projeto...');
+        setCommercialApprovalActionLoading(id, true, 'Atualizando status do projeto...');
         if (typeof applyNomearStatusForCommercialApproval === 'function') {
             await applyNomearStatusForCommercialApproval(approval);
         }
 
-        setApproveButtonLoading(id, true, 'Enviando notificação por e-mail...');
+        setCommercialApprovalActionLoading(id, true, 'Enviando notificação por e-mail...');
         await notifyApprovalEmail('approved', {
             ...approval,
             status: 'Aprovado',
@@ -949,6 +951,7 @@ async function approveCommercialApproval(id) {
             approvedAt: now
         });
 
+        setCommercialApprovalActionLoading(id, true, 'Atualizando telas...');
         if (activeOrderId) {
             loadCommercialApprovals(activeOrderId);
             if (typeof loadOrderProjects === 'function') {
@@ -965,8 +968,14 @@ async function approveCommercialApproval(id) {
             && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
             await loadPendenciasConsultorAguardandoAprovacao();
         }
+
+        setCommercialApprovalActionLoading(id, true, 'Solicitação aprovada!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+    } catch (error) {
+        setCommercialApprovalActionLoading(id, true, `Erro ao aprovar: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
     } finally {
-        setApproveButtonLoading(id, false);
+        setCommercialApprovalActionLoading(id, false);
     }
 }
 
@@ -1199,26 +1208,60 @@ async function loadCommercialApprovals(orderId) {
     }
 }
 
-function setCommercialApprovalFormLoading(isLoading, message = 'Salvando solicitação...') {
+function setCommercialApprovalFormLoading(active, message = 'Processando...', status = 'loading') {
     const overlay = document.getElementById('commercial-approval-loading');
     const messageEl = document.getElementById('commercial-approval-loading-msg');
+    const spinner = document.getElementById('commercial-approval-loading-spinner');
+    const successIcon = document.getElementById('commercial-approval-loading-success');
+    const errorIcon = document.getElementById('commercial-approval-loading-error');
     const submitBtn = document.getElementById('commercial-approval-form-submit');
     const cancelBtn = document.querySelector('#commercial-approval-form button[type="button"]');
     const fields = document.querySelectorAll('#commercial-approval-form input, #commercial-approval-form select');
+    const show = Boolean(active);
 
-    overlay?.classList.toggle('hidden', !isLoading);
-    if (messageEl) messageEl.textContent = message;
-    if (submitBtn) {
-        submitBtn.disabled = isLoading;
-        submitBtn.classList.toggle('opacity-60', isLoading);
-        submitBtn.classList.toggle('cursor-not-allowed', isLoading);
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
     }
-    if (cancelBtn) {
-        cancelBtn.disabled = isLoading;
-        cancelBtn.classList.toggle('opacity-60', isLoading);
-        cancelBtn.classList.toggle('cursor-not-allowed', isLoading);
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
+    [submitBtn, cancelBtn].forEach(btn => {
+        if (!btn) return;
+        btn.disabled = show;
+        btn.classList.toggle('opacity-60', show);
+        btn.classList.toggle('cursor-not-allowed', show);
+    });
+    fields.forEach(field => { field.disabled = show; });
+}
+
+function isCommercialApprovalModalVisible() {
+    const modal = document.getElementById('commercial-approval-modal');
+    return Boolean(modal && !modal.classList.contains('hidden'));
+}
+
+function isPendenciasViewVisibleForApproval() {
+    const view = document.getElementById('pendencias-view');
+    return Boolean(view && !view.classList.contains('hidden'));
+}
+
+function setCommercialApprovalActionLoading(approvalId, active, message = 'Processando...', status = 'loading') {
+    if (isPendenciasViewVisibleForApproval() && typeof setPendenciasActionLoading === 'function') {
+        setPendenciasActionLoading(active, message, status);
+        return;
     }
-    fields.forEach(field => { field.disabled = isLoading; });
+
+    if (isCommercialApprovalModalVisible()) {
+        setCommercialApprovalFormLoading(active, message, status);
+        return;
+    }
+
+    setApproveButtonLoading(approvalId, active, message);
 }
 
 function setApproveButtonLoading(approvalId, isLoading, message = 'Aprovando...') {
@@ -1327,10 +1370,14 @@ function bindCommercialApprovalEvents() {
             const { error, data: insertedApprovals } = await insertCommercialApprovals(payloads);
 
             if (error) {
-                alertAppDialog('Erro ao salvar aprovação comercial: ' + error.message);
+                setCommercialApprovalFormLoading(true, `Erro ao salvar aprovação: ${error.message}`, 'error');
+                await new Promise(resolve => setTimeout(resolve, 2200));
                 return;
             }
 
+            await applyAguardandoAprovacaoStatusToProjects(selectedProjectIds);
+
+            setCommercialApprovalFormLoading(true, 'Atualizando status dos projetos...');
             await applyAguardandoAprovacaoStatusToProjects(selectedProjectIds);
 
             setCommercialApprovalFormLoading(true, 'Enviando notificação por e-mail...');
@@ -1338,14 +1385,20 @@ function bindCommercialApprovalEvents() {
                 await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
             }
 
-            closeCommercialApprovalModal();
-            document.getElementById('commercial-approval-form').reset();
+            setCommercialApprovalFormLoading(true, 'Atualizando telas...');
             loadCommercialApprovals(activeOrderId);
             if (typeof loadOrderProjects === 'function' && activeOrderId) {
                 await loadOrderProjects(activeOrderId);
             }
+
+            setCommercialApprovalFormLoading(true, 'Solicitação enviada com sucesso!', 'success');
+            await new Promise(resolve => setTimeout(resolve, 900));
+
+            closeCommercialApprovalModal();
+            document.getElementById('commercial-approval-form').reset();
         } catch (error) {
-            alertAppDialog('Erro ao salvar solicitação: ' + error.message);
+            setCommercialApprovalFormLoading(true, `Erro ao salvar solicitação: ${error.message}`, 'error');
+            await new Promise(resolve => setTimeout(resolve, 2200));
         } finally {
             setCommercialApprovalFormLoading(false);
         }

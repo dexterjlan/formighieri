@@ -1,6 +1,7 @@
 let anteprojetoConferencesCache = [];
 let anteprojetoObservationsCache = [];
 let editingAnteprojetoConferenceId = null;
+let pendingAnteprojetoReturnConferenceId = null;
 
 function isAdminOrOrderConsultorForOrder(orderId) {
     if (currentUser?.role === 'Admin') return true;
@@ -49,6 +50,10 @@ function canApproveAnteprojetoConference(conference) {
     if (!conference || conference.status !== 'Confirmada') return false;
     if (!isGestorComercial()) return false;
     return true;
+}
+
+function canReturnAnteprojetoConferenceToConsultor(conference) {
+    return canApproveAnteprojetoConference(conference);
 }
 
 function getConferenceModules(conference) {
@@ -950,12 +955,14 @@ function updateAnteprojetoModalConfirmControls(conference) {
 
 function updateAnteprojetoModalApproveControls(conference) {
     const wrap = document.getElementById('anteprojeto-modal-approve-wrap');
-    const btn = document.getElementById('btn-anteprojeto-modal-approve');
-    if (!wrap || !btn) return;
+    const approveBtn = document.getElementById('btn-anteprojeto-modal-approve');
+    const returnBtn = document.getElementById('btn-anteprojeto-modal-return');
+    if (!wrap || !approveBtn || !returnBtn) return;
 
-    const show = Boolean(conference && canApproveAnteprojetoConference(conference));
-    wrap.classList.toggle('hidden', !show);
-    btn.disabled = !show;
+    const canAct = Boolean(conference && canApproveAnteprojetoConference(conference));
+    wrap.classList.toggle('hidden', !canAct);
+    approveBtn.disabled = !canAct;
+    returnBtn.disabled = !canAct;
 }
 
 const ANTEPROJETO_CONFERENCE_SELECT = `
@@ -1127,6 +1134,7 @@ async function openAnteprojetoModal(conferenceId = null) {
     updateAnteprojetoModalConfirmControls(conference);
     updateAnteprojetoModalApproveControls(conference);
     await updateAnteprojetoModalOrderContext(conference?.orderId || activeOrderId);
+    await refreshAnteprojetoModalHistory(conferenceId);
     toggleModal('anteprojeto-modal', true);
 }
 
@@ -1137,6 +1145,7 @@ function closeAnteprojetoModal() {
     editingAnteprojetoConferenceId = null;
     updateAnteprojetoModalConfirmControls(null);
     updateAnteprojetoModalApproveControls(null);
+    refreshAnteprojetoModalHistory(null);
     toggleModal('anteprojeto-modal', false);
 }
 
@@ -1159,7 +1168,85 @@ function isPendenciasViewVisible() {
     return Boolean(view && !view.classList.contains('hidden'));
 }
 
+function isAnteprojetoReturnModalVisible() {
+    const modal = document.getElementById('anteprojeto-return-modal');
+    return Boolean(modal && !modal.classList.contains('hidden'));
+}
+
+function setAnteprojetoReturnModalLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('anteprojeto-return-modal-loading');
+    const messageEl = document.getElementById('anteprojeto-return-modal-loading-msg');
+    const spinner = document.getElementById('anteprojeto-return-modal-loading-spinner');
+    const successIcon = document.getElementById('anteprojeto-return-modal-loading-success');
+    const errorIcon = document.getElementById('anteprojeto-return-modal-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
+    ['btn-anteprojeto-return-modal-submit', 'btn-anteprojeto-return-modal-cancel'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (show) {
+            el.disabled = true;
+        } else {
+            el.disabled = false;
+        }
+    });
+
+    const observationEl = document.getElementById('anteprojeto-return-modal-observation');
+    if (observationEl) {
+        if (show) {
+            observationEl.dataset.returnModalLoadingDisabled = '1';
+            observationEl.disabled = true;
+        } else if (observationEl.dataset.returnModalLoadingDisabled === '1') {
+            delete observationEl.dataset.returnModalLoadingDisabled;
+            observationEl.disabled = false;
+        }
+    }
+}
+
+function isAnteprojetoTabVisible() {
+    const panel = document.getElementById('order-tab-panel-anteprojeto');
+    return Boolean(panel && !panel.classList.contains('hidden'));
+}
+
+function setAnteprojetoTabActionLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('anteprojeto-tab-action-loading');
+    const messageEl = document.getElementById('anteprojeto-tab-action-loading-msg');
+    const spinner = document.getElementById('anteprojeto-tab-action-loading-spinner');
+    const successIcon = document.getElementById('anteprojeto-tab-action-loading-success');
+    const errorIcon = document.getElementById('anteprojeto-tab-action-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+}
+
 function setAnteprojetoConferenceActionLoading(active, message = 'Processando...', status = 'loading') {
+    if (isAnteprojetoReturnModalVisible()) {
+        setAnteprojetoReturnModalLoading(active, message, status);
+        return;
+    }
+
     if (isAnteprojetoModalVisible()) {
         setAnteprojetoModalLoading(active, message, status);
         return;
@@ -1167,6 +1254,11 @@ function setAnteprojetoConferenceActionLoading(active, message = 'Processando...
 
     if (isPendenciasViewVisible() && typeof setPendenciasActionLoading === 'function') {
         setPendenciasActionLoading(active, message, status);
+        return;
+    }
+
+    if (isAnteprojetoTabVisible()) {
+        setAnteprojetoTabActionLoading(active, message, status);
     }
 }
 
@@ -1214,6 +1306,284 @@ async function refreshViewsAfterAnteprojetoApproval() {
     await refreshAnteprojetoRelatedViews();
 }
 
+async function refreshViewsAfterAnteprojetoReturnToConsultor() {
+    if (typeof loadAnteprojetoConferences === 'function' && activeOrderId) {
+        await loadAnteprojetoConferences(activeOrderId);
+    }
+    if (typeof loadOrderProjects === 'function' && activeOrderId) {
+        await loadOrderProjects(activeOrderId);
+    }
+
+    if (!isPendenciasViewVisible()) return;
+
+    if (typeof pendenciasActiveSection !== 'undefined'
+        && typeof pendenciasActiveItem !== 'undefined'
+        && pendenciasActiveSection === 'gestor-comercial'
+        && pendenciasActiveItem === 'aprovar-conferencia'
+        && typeof loadPendenciasAprovarConferencia === 'function') {
+        await loadPendenciasAprovarConferencia();
+        return;
+    }
+
+    if (typeof pendenciasActiveSection !== 'undefined'
+        && typeof pendenciasActiveItem !== 'undefined'
+        && pendenciasActiveSection === 'consultor'
+        && pendenciasActiveItem === 'conferencia'
+        && typeof loadPendenciasConsultorConferencia === 'function') {
+        await loadPendenciasConsultorConferencia();
+        return;
+    }
+
+    await refreshAnteprojetoRelatedViews();
+}
+
+function formatAnteprojetoConferenceHistoryDate(dateStr) {
+    if (!dateStr) return '—';
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return dateStr;
+    return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function renderAnteprojetoConferenceHistoryEntry(entry) {
+    const authorName = entry.createdBy?.name || '—';
+    const createdAt = formatAnteprojetoConferenceHistoryDate(entry.createdAt);
+    return `
+        <div class="border border-amber-100 rounded-lg px-3 py-2 bg-amber-50/60 text-left">
+            <div class="text-[10px] text-amber-800 font-semibold mb-1">${escapeHtml(createdAt)} · ${escapeHtml(authorName)}</div>
+            <div class="text-xs text-slate-700 whitespace-pre-wrap">${escapeHtml(entry.observation || '—')}</div>
+        </div>
+    `;
+}
+
+async function fetchAnteprojetoConferenceHistory(conferenceId) {
+    const normalizedId = Number(conferenceId);
+    if (!normalizedId) return [];
+
+    const { data, error } = await supabaseClient
+        .from('AnteprojetoConferenceHistory')
+        .select('id, conferenceId, action, observation, createdAt, createdById, createdBy:appUsers(id, name)')
+        .eq('conferenceId', normalizedId)
+        .order('createdAt', { ascending: false });
+
+    if (error?.message?.includes('AnteprojetoConferenceHistory')) {
+        return [];
+    }
+
+    if (error) {
+        console.error('fetchAnteprojetoConferenceHistory:', error);
+        return [];
+    }
+
+    return data || [];
+}
+
+async function refreshAnteprojetoModalHistory(conferenceId) {
+    const wrap = document.getElementById('anteprojeto-modal-history-wrap');
+    const list = document.getElementById('anteprojeto-modal-history-list');
+    if (!wrap || !list) return;
+
+    if (!conferenceId) {
+        wrap.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+    }
+
+    const history = await fetchAnteprojetoConferenceHistory(conferenceId);
+    if (!history.length) {
+        wrap.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+    }
+
+    wrap.classList.remove('hidden');
+    list.innerHTML = history.map(renderAnteprojetoConferenceHistoryEntry).join('');
+}
+
+function closeAnteprojetoReturnModal() {
+    setAnteprojetoReturnModalLoading(false);
+    pendingAnteprojetoReturnConferenceId = null;
+    const observationEl = document.getElementById('anteprojeto-return-modal-observation');
+    if (observationEl) observationEl.value = '';
+    toggleModal('anteprojeto-return-modal', false);
+}
+
+async function showAnteprojetoReturnObservationForm(conferenceId) {
+    const normalizedId = Number(conferenceId);
+    if (!normalizedId) return;
+
+    let conference = anteprojetoConferencesCache.find(item => Number(item.id) === normalizedId);
+    if (!conference && typeof fetchAnteprojetoConferenceById === 'function') {
+        conference = await fetchAnteprojetoConferenceById(normalizedId);
+        if (conference) {
+            const cacheIndex = anteprojetoConferencesCache.findIndex(item => Number(item.id) === normalizedId);
+            if (cacheIndex >= 0) {
+                anteprojetoConferencesCache[cacheIndex] = conference;
+            } else {
+                anteprojetoConferencesCache = [...anteprojetoConferencesCache, conference];
+            }
+        }
+    }
+
+    if (!conference) {
+        alertAppDialog('Conferência não encontrada.');
+        return;
+    }
+
+    if (!canReturnAnteprojetoConferenceToConsultor(conference)) {
+        alertAppDialog('Somente o gestor comercial pode devolver conferências confirmadas ao consultor.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    activeOrderId = conference.orderId || activeOrderId;
+    pendingAnteprojetoReturnConferenceId = normalizedId;
+
+    const contextEl = document.getElementById('anteprojeto-return-modal-context');
+    if (contextEl) {
+        let orderCode = '—';
+        let clientName = '—';
+        const cached = typeof ordersCache !== 'undefined'
+            ? ordersCache.find(order => Number(order.id) === Number(conference.orderId))
+            : null;
+
+        if (cached) {
+            orderCode = cached.orderCode || '—';
+            clientName = cached.clientName || '—';
+        } else if (conference.orderId) {
+            const { data } = await supabaseClient
+                .from('salesOrders')
+                .select('orderCode, clientName')
+                .eq('id', conference.orderId)
+                .maybeSingle();
+            if (data) {
+                orderCode = data.orderCode || '—';
+                clientName = data.clientName || '—';
+            }
+        }
+
+        contextEl.textContent = `Pedido ${orderCode} — ${clientName}. Informe as observações para o consultor revisar a conferência.`;
+    }
+
+    const observationEl = document.getElementById('anteprojeto-return-modal-observation');
+    if (observationEl) observationEl.value = '';
+
+    toggleModal('anteprojeto-return-modal', true);
+    observationEl?.focus();
+}
+
+async function returnAnteprojetoConferenceToConsultor(conferenceId, observation) {
+    const normalizedId = Number(conferenceId);
+    const trimmedObservation = String(observation || '').trim();
+    if (!normalizedId) return;
+    if (!trimmedObservation) {
+        alertAppDialog('Informe as observações para devolver a conferência ao consultor.');
+        return;
+    }
+
+    let conference = anteprojetoConferencesCache.find(item => Number(item.id) === normalizedId);
+    if (!conference) {
+        conference = await fetchAnteprojetoConferenceById(normalizedId);
+        if (conference) {
+            anteprojetoConferencesCache = [...anteprojetoConferencesCache, conference];
+        }
+    }
+
+    if (!conference) {
+        alertAppDialog('Conferência não encontrada.');
+        return;
+    }
+
+    if (!canReturnAnteprojetoConferenceToConsultor(conference)) {
+        alertAppDialog('Somente o gestor comercial pode devolver conferências confirmadas ao consultor.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    activeOrderId = conference.orderId || activeOrderId;
+
+    try {
+        setAnteprojetoConferenceActionLoading(true, 'Registrando observações da devolução...');
+
+        const { error: historyError } = await supabaseClient
+            .from('AnteprojetoConferenceHistory')
+            .insert({
+                conferenceId: normalizedId,
+                action: 'voltar_consultor',
+                observation: trimmedObservation,
+                createdById: currentUser.id
+            });
+
+        if (historyError) {
+            if (historyError.message?.includes('AnteprojetoConferenceHistory')) {
+                throw new Error('Tabela de histórico não encontrada. Execute supabase/create-anteprojeto-conference-observation-history.sql no Supabase.');
+            }
+            throw historyError;
+        }
+
+        const now = new Date().toISOString();
+        const { error: conferenceError } = await supabaseClient
+            .from('AnteprojetoConference')
+            .update({
+                status: 'Em andamento',
+                confirmedAt: null,
+                confirmedById: null,
+                updatedAt: now,
+                updatedById: currentUser.id
+            })
+            .eq('id', normalizedId);
+
+        if (conferenceError) throw conferenceError;
+
+        setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
+        await applyConferenciaEnviadaStatusToProjects(getConferenceOrderProjectIds(conference));
+
+        if (typeof notifyConferenciaDevolvidaConsultorEmail === 'function') {
+            setAnteprojetoConferenceActionLoading(true, 'Enviando e-mail de notificação...');
+            await notifyConferenciaDevolvidaConsultorEmail({
+                orderId: conference.orderId,
+                orderProjectIds: getConferenceOrderProjectIds(conference),
+                observation: trimmedObservation
+            });
+        }
+
+        setAnteprojetoConferenceActionLoading(true, 'Atualizando telas...');
+        await refreshViewsAfterAnteprojetoReturnToConsultor();
+
+        setAnteprojetoConferenceActionLoading(true, 'Conferência devolvida ao consultor!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+
+        closeAnteprojetoReturnModal();
+        if (isAnteprojetoModalVisible()) {
+            closeAnteprojetoModal();
+        }
+
+        setAnteprojetoConferenceActionLoading(false);
+    } catch (error) {
+        setAnteprojetoConferenceActionLoading(true, `Erro ao devolver conferência: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        setAnteprojetoConferenceActionLoading(false);
+    }
+}
+
+async function submitAnteprojetoReturnModal() {
+    const conferenceId = pendingAnteprojetoReturnConferenceId;
+    if (!conferenceId) return;
+
+    const observationEl = document.getElementById('anteprojeto-return-modal-observation');
+    const trimmedObservation = String(observationEl?.value || '').trim();
+    if (!trimmedObservation) {
+        alertAppDialog('Informe as observações para devolver a conferência ao consultor.');
+        return;
+    }
+
+    setAnteprojetoReturnModalLoading(true, 'Iniciando devolução ao consultor...');
+    await returnAnteprojetoConferenceToConsultor(conferenceId, trimmedObservation);
+}
+
 function setAnteprojetoModalLoading(active, message = 'Processando...', status = 'loading') {
     const overlay = document.getElementById('anteprojeto-modal-loading');
     const messageEl = document.getElementById('anteprojeto-modal-loading-msg');
@@ -1238,7 +1608,8 @@ function setAnteprojetoModalLoading(active, message = 'Processando...', status =
         'anteprojeto-form-submit',
         'btn-add-anteprojeto-project',
         'btn-anteprojeto-modal-confirm',
-        'btn-anteprojeto-modal-approve'
+        'btn-anteprojeto-modal-approve',
+        'btn-anteprojeto-modal-return'
     ].forEach(id => {
         const el = document.getElementById(id);
         if (el && show) el.disabled = true;
@@ -1934,6 +2305,10 @@ async function approveAnteprojetoConference(conferenceId) {
 
 window.approveAnteprojetoConference = approveAnteprojetoConference;
 window.approveAnteprojetoConferenceFromPendencias = approveAnteprojetoConferenceFromPendencias;
+window.canReturnAnteprojetoConferenceToConsultor = canReturnAnteprojetoConferenceToConsultor;
+window.showAnteprojetoReturnObservationForm = showAnteprojetoReturnObservationForm;
+window.returnAnteprojetoConferenceToConsultor = returnAnteprojetoConferenceToConsultor;
+window.closeAnteprojetoReturnModal = closeAnteprojetoReturnModal;
 
 function bindAnteprojetoTreeToggles(root) {
     root.querySelectorAll('.anteprojeto-tree-node').forEach(node => {
@@ -1982,6 +2357,7 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const canEdit = canEditAnteprojetoConference(conference) || canEditAnteprojetoConsultorFields(conference);
     const canConfirm = canConfirmAnteprojetoConference(conference);
     const canApprove = canApproveAnteprojetoConference(conference);
+    const canReturn = canReturnAnteprojetoConferenceToConsultor(conference);
     const canOpen = confirmed || canEdit;
     const allChecked = moduleObservations.length > 0
         && moduleObservations.every(obs => obs.consultorChecked);
@@ -2106,7 +2482,7 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
 
     body.appendChild(projectsWrap);
 
-    if (canConfirm || canApprove) {
+    if (canConfirm || canApprove || canReturn) {
         const confirmWrap = document.createElement('div');
         confirmWrap.className = 'flex justify-end gap-2 pt-2 border-t border-slate-100';
         if (canConfirm) {
@@ -2115,6 +2491,14 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
                     class="text-xs px-3 py-1.5 rounded-lg font-medium ${allChecked ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
                     ${allChecked ? '' : 'disabled'}>
                     Confirmar Conferência
+                </button>
+            `;
+        }
+        if (canReturn) {
+            confirmWrap.innerHTML += `
+                <button type="button" onclick="showAnteprojetoReturnObservationForm(${conference.id})"
+                    class="text-xs px-3 py-1.5 rounded-lg font-medium bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-200">
+                    Voltar para Consultor
                 </button>
             `;
         }
@@ -2293,6 +2677,12 @@ function bindAnteprojetoEvents() {
         if (!editingAnteprojetoConferenceId) return;
         approveAnteprojetoConference(editingAnteprojetoConferenceId);
     });
+    document.getElementById('btn-anteprojeto-modal-return')?.addEventListener('click', () => {
+        if (!editingAnteprojetoConferenceId) return;
+        showAnteprojetoReturnObservationForm(editingAnteprojetoConferenceId);
+    });
+    document.getElementById('btn-anteprojeto-return-modal-cancel')?.addEventListener('click', closeAnteprojetoReturnModal);
+    document.getElementById('btn-anteprojeto-return-modal-submit')?.addEventListener('click', submitAnteprojetoReturnModal);
     document.getElementById('anteprojeto-projects-structure')?.addEventListener('change', event => {
         if (event.target?.classList?.contains('anteprojeto-observation-checked')) {
             refreshAnteprojetoModalConfirmButton();

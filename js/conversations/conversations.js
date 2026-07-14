@@ -244,6 +244,7 @@ async function openConvModal() {
 }
 
 function closeConvModal() {
+    setConvFormLoading(false);
     editingConversationId = null;
     toggleModal('conv-modal', false);
 }
@@ -702,40 +703,40 @@ function setRequestReplyLoading(id, role, isLoading, message = 'Respondendo...')
     }
 }
 
-function setConvFormLoading(isLoading, message = 'Salvando requisição...') {
+function setConvFormLoading(active, message = 'Processando...', status = 'loading') {
     const overlay = document.getElementById('conv-form-loading');
     const messageEl = document.getElementById('conv-form-loading-msg');
+    const spinner = document.getElementById('conv-form-loading-spinner');
+    const successIcon = document.getElementById('conv-form-loading-success');
+    const errorIcon = document.getElementById('conv-form-loading-error');
     const submitBtn = document.getElementById('conv-form-submit');
     const cancelBtn = document.querySelector('#conv-form button[type="button"]');
     const addActivityBtn = document.getElementById('btn-add-request-activity');
     const saveActivitiesBtn = document.getElementById('btn-save-conv-activities');
     const fields = document.querySelectorAll('#conv-form input, #conv-form select, #conv-form textarea');
+    const show = Boolean(active);
 
-    overlay?.classList.toggle('hidden', !isLoading);
-    if (messageEl) messageEl.textContent = message;
-    if (submitBtn) {
-        submitBtn.disabled = isLoading;
-        submitBtn.classList.toggle('opacity-60', isLoading);
-        submitBtn.classList.toggle('cursor-not-allowed', isLoading);
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
     }
-    if (cancelBtn) {
-        cancelBtn.disabled = isLoading;
-        cancelBtn.classList.toggle('opacity-60', isLoading);
-        cancelBtn.classList.toggle('cursor-not-allowed', isLoading);
-    }
-    if (addActivityBtn) {
-        addActivityBtn.disabled = isLoading;
-        addActivityBtn.classList.toggle('opacity-60', isLoading);
-        addActivityBtn.classList.toggle('cursor-not-allowed', isLoading);
-    }
-    if (saveActivitiesBtn) {
-        saveActivitiesBtn.disabled = isLoading;
-        saveActivitiesBtn.classList.toggle('opacity-60', isLoading);
-        saveActivitiesBtn.classList.toggle('cursor-not-allowed', isLoading);
-    }
-    fields.forEach(field => { field.disabled = isLoading; });
 
-    if (!isLoading && editingConversationId) {
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
+    [submitBtn, cancelBtn, addActivityBtn, saveActivitiesBtn].forEach(btn => {
+        if (!btn) return;
+        btn.disabled = show;
+        btn.classList.toggle('opacity-60', show);
+        btn.classList.toggle('cursor-not-allowed', show);
+    });
+    fields.forEach(field => { field.disabled = show; });
+
+    if (!show && editingConversationId) {
         const conv = conversationsCache.find(c => c.id === editingConversationId);
         setupConvModalFieldLocks(conv);
     }
@@ -899,8 +900,7 @@ function bindConversationEvents() {
                 }
             }
 
-            closeConvModal();
-            document.getElementById("conv-form").reset();
+            setConvFormLoading(true, 'Atualizando telas...');
             if (!document.getElementById("conversations-query-view").classList.contains("hidden")) {
                 searchConversations();
             } else if (activeOrderId) {
@@ -910,6 +910,15 @@ function bindConversationEvents() {
                 && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
                 await loadPendenciasConsultorRequisicoes();
             }
+
+            setConvFormLoading(true, editingConversationId ? 'Requisição salva com sucesso!' : 'Requisição criada com sucesso!', 'success');
+            await new Promise(resolve => setTimeout(resolve, 900));
+
+            closeConvModal();
+            document.getElementById("conv-form").reset();
+        } catch (error) {
+            setConvFormLoading(true, `Erro ao salvar requisição: ${error.message}`, 'error');
+            await new Promise(resolve => setTimeout(resolve, 2200));
         } finally {
             setConvFormLoading(false);
         }

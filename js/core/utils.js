@@ -378,6 +378,16 @@ function canAccessGestao(user = currentUser) {
         || isGestorFabrica(user);
 }
 
+function canAccessGoogleCalendar(user = currentUser) {
+    if (!user) return false;
+    return isAdmin(user)
+        || user.role === 'Consultor'
+        || isConferente(user)
+        || isGestorComercial(user)
+        || isGestorProjetos(user)
+        || isGestorFabrica(user);
+}
+
 function canSeeOrderMedicaoTab(user = currentUser) {
     if (!user) return false;
     return user.role === 'Admin' || isConferente(user) || isGestorComercial(user);

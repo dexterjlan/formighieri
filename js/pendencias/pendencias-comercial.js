@@ -140,11 +140,18 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId,
         const canApprove = fullConference
             && typeof canApproveAnteprojetoConference === 'function'
             && canApproveAnteprojetoConference(fullConference);
+        const canReturn = fullConference
+            && typeof canReturnAnteprojetoConferenceToConsultor === 'function'
+            && canReturnAnteprojetoConferenceToConsultor(fullConference);
         const actionButtons = [];
 
         if (canView) {
             actionButtons.push(`<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
                 class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`);
+        }
+        if (canReturn) {
+            actionButtons.push(`<button type="button" onclick="showAnteprojetoReturnObservationForm(${conference.id})"
+                class="text-xs bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-200 px-2.5 py-1 rounded-lg font-medium">Voltar p/ Consultor</button>`);
         }
         if (canApprove) {
             actionButtons.push(`<button type="button" onclick="approveAnteprojetoConferenceFromPendencias(${conference.id})"
@@ -187,7 +194,7 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId,
                                 <th class="text-left p-3 font-semibold">Cliente</th>
                                 <th class="text-left p-3 font-semibold">Projetos</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-56">Ações</th>
+                                <th class="text-right p-3 font-semibold w-72">Ações</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>

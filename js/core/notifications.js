@@ -727,6 +727,7 @@ const PROCESS_EMAIL_TITLE = {
     conferencia_enviada: 'Conferência Enviada',
     conferencia_confirmada: 'Conferência Confirmada',
     conferencia_aprovada: 'Conferência Aprovada',
+    conferencia_devolvida: 'Conferência Devolvida ao Consultor',
     liberacao_medicao: 'Liberação para Medição'
 };
 
@@ -1115,6 +1116,12 @@ async function sendProcessNotificationEmail(eventType, options = {}) {
             toEmail = consultorEmail;
             ccEmail = uniqueEmails(gestores.filter(email => email !== consultorEmail)).join(', ');
         }
+    } else if (options.recipientMode === 'consultor') {
+        if (NOTIFICATION_TEST_MODE) {
+            toEmail = NOTIFICATION_TEST_EMAIL;
+        } else {
+            toEmail = await fetchConsultorEmailForOrder(options.orderId);
+        }
     } else if (options.recipientEmails?.length) {
         toEmail = uniqueEmails(options.recipientEmails).join(', ');
     }
@@ -1263,6 +1270,32 @@ async function notifyConferenciaAprovadaEmail(options = {}) {
 }
 
 window.notifyConferenciaAprovadaEmail = notifyConferenciaAprovadaEmail;
+
+async function notifyConferenciaDevolvidaConsultorEmail(options = {}) {
+    const { orderId, orderProjectIds = [], observation = null } = options;
+    if (!orderId || !orderProjectIds.length) return;
+
+    try {
+        const extraFields = [];
+        if (observation) {
+            extraFields.push({ label: 'Observações do gestor comercial', value: observation });
+        }
+
+        await sendProcessNotificationEmail('conferencia_devolvida', {
+            orderId,
+            orderProjectIds,
+            recipientMode: 'consultor',
+            showProjectDetails: false,
+            projectSectionTitle: 'Projetos da conferência devolvida',
+            accentColor: '#d97706',
+            extraFields
+        });
+    } catch (err) {
+        console.warn('notifyConferenciaDevolvidaConsultorEmail:', err);
+    }
+}
+
+window.notifyConferenciaDevolvidaConsultorEmail = notifyConferenciaDevolvidaConsultorEmail;
 
 async function notifyLiberacaoMedicaoEmail(options = {}) {
     const { orderId, projects = [] } = options;

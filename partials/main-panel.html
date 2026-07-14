@@ -20,6 +20,8 @@
                     class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Requisições</button>
                 <button type="button" id="btn-approvals-query"
                     class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Aprovações</button>
+                <button type="button" id="btn-calendario"
+                    class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Calendário</button>
                 <button type="button" id="btn-pendencias"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Pendências</button>
                 <button type="button" id="btn-gestao"
@@ -236,7 +238,17 @@
                             </div>
                             <div class="space-y-4" id="conversations-list"></div>
                         </div>
-                        <div id="order-tab-panel-anteprojeto" class="order-detail-tab-panel hidden p-4 md:p-5">
+                        <div id="order-tab-panel-anteprojeto" class="order-detail-tab-panel hidden p-4 md:p-5 relative">
+                            <div id="anteprojeto-tab-action-loading"
+                                class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                                <div id="anteprojeto-tab-action-loading-spinner"
+                                    class="h-8 w-8 border-2 border-slate-300 border-t-sky-700 rounded-full animate-spin"></div>
+                                <div id="anteprojeto-tab-action-loading-success"
+                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                                <div id="anteprojeto-tab-action-loading-error"
+                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                                <p id="anteprojeto-tab-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                            </div>
                             <div class="flex justify-start mb-3">
                                 <button type="button" id="btn-new-anteprojeto"
                                     class="hidden bg-sky-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800">+
@@ -1043,6 +1055,31 @@
                             <p class="text-xs text-slate-400 text-center py-8">Carregando histórico...</p>
                         </div>
                     </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- TELA: CALENDÁRIO GOOGLE -->
+        <main id="calendar-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6 flex flex-col min-h-0">
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[calc(100vh-140px)]">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                    <div>
+                        <h2 class="font-bold text-sm text-slate-900">Calendário</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Agenda compartilhada Formighieri.</p>
+                    </div>
+                    <a id="calendar-open-external-link" href="#" target="_blank" rel="noopener noreferrer"
+                        class="hidden text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium">
+                        Abrir no Google Calendar
+                    </a>
+                </div>
+                <div id="calendar-view-empty" class="hidden flex-1 flex items-center justify-center p-8">
+                    <p class="text-sm text-slate-400 text-center">Calendário não configurado.</p>
+                </div>
+                <div id="calendar-view-frame-wrap" class="flex-1 min-h-0">
+                    <iframe id="google-calendar-iframe" title="Calendário Formighieri"
+                        class="w-full h-full min-h-[640px] border-0"
+                        loading="lazy"
+                        referrerpolicy="no-referrer-when-downgrade"></iframe>
                 </div>
             </div>
         </main>

@@ -18,6 +18,7 @@ function updateAdminNav() {
     document.getElementById("btn-gestao").classList.toggle("hidden", !canAccessGestao());
     document.getElementById("btn-conversations-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-approvals-query").classList.toggle("hidden", !canSeeQueryNav());
+    document.getElementById("btn-calendario").classList.toggle("hidden", !canAccessGoogleCalendar());
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
@@ -32,6 +33,7 @@ function updateMainNavActive(activeView) {
         dashboard: document.getElementById('btn-back-dashboard'),
         requests: document.getElementById('btn-conversations-query'),
         approvals: document.getElementById('btn-approvals-query'),
+        calendar: document.getElementById('btn-calendario'),
         gestao: document.getElementById('btn-gestao'),
         pendencias: document.getElementById('btn-pendencias'),
         settings: document.getElementById('btn-system-settings')
@@ -49,6 +51,7 @@ function hideSubViews() {
     document.getElementById("system-settings-view").classList.add("hidden");
     document.getElementById("conversations-query-view").classList.add("hidden");
     document.getElementById("approvals-query-view").classList.add("hidden");
+    document.getElementById("calendar-view").classList.add("hidden");
     document.getElementById("gestao-view").classList.add("hidden");
     document.getElementById("pendencias-view").classList.add("hidden");
 }

@@ -406,6 +406,31 @@ function setCompraFormDisabled(disabled) {
     });
 }
 
+function setCompraModalLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('compra-modal-loading');
+    const messageEl = document.getElementById('compra-modal-loading-msg');
+    const spinner = document.getElementById('compra-modal-loading-spinner');
+    const successIcon = document.getElementById('compra-modal-loading-success');
+    const errorIcon = document.getElementById('compra-modal-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
+    setCompraFormDisabled(show);
+    const closeBtn = document.querySelector('#compra-modal button[onclick="closeCompraModal()"]');
+    if (closeBtn) closeBtn.disabled = show;
+}
+
 function populateCompraForm(record) {
     const tipoLabel = formatCompraTipoLabel(record?.tipoCompra);
     document.getElementById('compra-modal-order-code').textContent = record?.orderCode || '—';
@@ -450,6 +475,7 @@ async function openCompraModal(compraId) {
 }
 
 function closeCompraModal() {
+    setCompraModalLoading(false);
     toggleModal('compra-modal', false);
     activeCompraRecord = null;
 }
@@ -459,10 +485,9 @@ window.openCompraModal = openCompraModal;
 async function handleCompraSalvar() {
     if (!activeCompraRecord?.id || !canActCompraModal()) return;
 
-    const btn = document.getElementById('btn-compra-salvar');
-    if (btn) btn.disabled = true;
-
     try {
+        setCompraModalLoading(true, 'Salvando compra...');
+
         const formValues = readCompraFormValues();
         const now = new Date().toISOString();
         const { data, error } = await supabaseClient
@@ -489,6 +514,7 @@ async function handleCompraSalvar() {
         };
         populateCompraForm(activeCompraRecord);
 
+        setCompraModalLoading(true, 'Atualizando telas...');
         if (typeof loadPendenciasEnviadosCompras === 'function'
             && !document.getElementById('pendencias-view')?.classList.contains('hidden')
             && pendenciasActiveSection === 'compras'
@@ -498,10 +524,14 @@ async function handleCompraSalvar() {
 
         await refreshActiveOrderComprasTab();
 
-        alertAppDialog('Compra salva.', { variant: 'success', title: 'Sucesso' });
+        setCompraModalLoading(true, 'Compra salva com sucesso!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+
+        closeCompraModal();
     } catch (error) {
-        alertAppDialog('Erro ao salvar compra: ' + error.message);
-    } finally {
+        setCompraModalLoading(true, `Erro ao salvar compra: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        setCompraModalLoading(false);
         setCompraFormDisabled(!canActCompraModal());
     }
 }

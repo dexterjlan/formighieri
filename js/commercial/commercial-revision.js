@@ -360,6 +360,7 @@ async function openCommercialRevisionForRevision(approvalId, revisionId) {
 window.openCommercialRevisionForRevision = openCommercialRevisionForRevision;
 
 function closeCommercialRevisionModal() {
+    setCommercialRevisionModalLoading(false);
     revisionModalViewOnly = false;
     editingRevisionId = null;
     currentRevisionApprovalId = null;
@@ -472,24 +473,38 @@ function refreshCommercialApprovalViews() {
     }
 }
 
-function setCommercialRevisionModalLoading(isLoading, message = 'Salvando revisão...') {
+function setCommercialRevisionModalLoading(active, message = 'Processando...', status = 'loading') {
     const overlay = document.getElementById('commercial-revision-loading');
     const messageEl = document.getElementById('commercial-revision-loading-msg');
+    const spinner = document.getElementById('commercial-revision-loading-spinner');
+    const successIcon = document.getElementById('commercial-revision-loading-success');
+    const errorIcon = document.getElementById('commercial-revision-loading-error');
     const saveBtn = document.getElementById('btn-save-revision');
     const sendBackBtn = document.getElementById('btn-send-back-approval');
     const addBtn = document.getElementById('btn-add-revision-activity');
     const cancelBtn = document.querySelector('#commercial-revision-modal button[onclick="closeCommercialRevisionModal()"]');
     const fields = document.querySelectorAll('#commercial-revision-modal textarea, #commercial-revision-modal input');
+    const show = Boolean(active);
 
-    overlay?.classList.toggle('hidden', !isLoading);
-    if (messageEl) messageEl.textContent = message;
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
     [saveBtn, sendBackBtn, addBtn, cancelBtn].forEach(btn => {
         if (!btn) return;
-        btn.disabled = isLoading;
-        btn.classList.toggle('opacity-60', isLoading);
-        btn.classList.toggle('cursor-not-allowed', isLoading);
+        btn.disabled = show;
+        btn.classList.toggle('opacity-60', show);
+        btn.classList.toggle('cursor-not-allowed', show);
     });
-    fields.forEach(field => { field.disabled = isLoading; });
+    fields.forEach(field => { field.disabled = show; });
 }
 
 async function saveCommercialRevision() {
@@ -508,11 +523,19 @@ async function saveCommercialRevision() {
             }, { activities: result.activities });
         }
 
-        closeCommercialRevisionModal();
+        setCommercialRevisionModalLoading(true, 'Atualizando telas...');
         refreshCommercialApprovalViews();
         if (result.createdRevision && typeof loadOrderProjects === 'function' && activeOrderId) {
             await loadOrderProjects(activeOrderId);
         }
+
+        setCommercialRevisionModalLoading(true, 'Revisão salva com sucesso!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+
+        closeCommercialRevisionModal();
+    } catch (error) {
+        setCommercialRevisionModalLoading(true, `Erro ao salvar revisão: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
     } finally {
         setCommercialRevisionModalLoading(false);
     }
@@ -561,11 +584,13 @@ async function sendRevisionBackToApproval() {
         }
 
         if (error) {
-            alertAppDialog('Erro ao enviar para aprovação: ' + error.message);
+            setCommercialRevisionModalLoading(true, `Erro ao enviar para aprovação: ${error.message}`, 'error');
+            await new Promise(resolve => setTimeout(resolve, 2200));
             return;
         }
 
         if (typeof applyAguardandoAprovacaoStatusForCommercialApproval === 'function') {
+            setCommercialRevisionModalLoading(true, 'Atualizando status do projeto...');
             await applyAguardandoAprovacaoStatusForCommercialApproval(approval);
         }
 
@@ -577,11 +602,19 @@ async function sendRevisionBackToApproval() {
             approvedAt: null
         }, { activities: result.activities });
 
-        closeCommercialRevisionModal();
+        setCommercialRevisionModalLoading(true, 'Atualizando telas...');
         refreshCommercialApprovalViews();
         if (typeof loadOrderProjects === 'function' && activeOrderId) {
             await loadOrderProjects(activeOrderId);
         }
+
+        setCommercialRevisionModalLoading(true, 'Reenviado para aprovação com sucesso!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 900));
+
+        closeCommercialRevisionModal();
+    } catch (error) {
+        setCommercialRevisionModalLoading(true, `Erro ao reenviar para aprovação: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
     } finally {
         setCommercialRevisionModalLoading(false);
     }
