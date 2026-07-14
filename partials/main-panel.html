@@ -1065,27 +1065,66 @@
             </div>
         </main>
 
-        <!-- TELA: CALENDÁRIO GOOGLE -->
+        <!-- TELA: CALENDÁRIO -->
         <main id="calendar-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6 flex flex-col min-h-0">
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[calc(100vh-140px)]">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+            <div class="calendar-panel bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[calc(100vh-140px)]">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
                     <div>
                         <h2 class="font-bold text-sm text-slate-900">Calendário</h2>
-                        <p class="text-xs text-slate-400 mt-0.5">Agenda compartilhada Formighieri.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Agenda de medições e atendimentos.</p>
                     </div>
-                    <a id="calendar-open-external-link" href="#" target="_blank" rel="noopener noreferrer"
-                        class="hidden text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium">
-                        Abrir no Google Calendar
-                    </a>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="calendar-zoom-toggle" role="group" aria-label="Visualização do calendário">
+                            <button type="button" id="btn-calendar-view-month"
+                                class="calendar-zoom-btn is-active">Mês</button>
+                            <button type="button" id="btn-calendar-view-week"
+                                class="calendar-zoom-btn">Semana</button>
+                        </div>
+                        <button type="button" id="btn-calendar-prev"
+                            class="text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1.5 rounded-lg font-medium"
+                            aria-label="Mês anterior">◀</button>
+                        <span id="calendar-month-label" class="text-sm font-semibold text-slate-800 min-w-[9rem] text-center"></span>
+                        <button type="button" id="btn-calendar-next"
+                            class="text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1.5 rounded-lg font-medium"
+                            aria-label="Próximo mês">▶</button>
+                        <button type="button" id="btn-calendar-today"
+                            class="text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium">Hoje</button>
+                        <button type="button" id="btn-calendar-new"
+                            class="text-xs bg-amber-600 text-white hover:bg-amber-700 px-3 py-1.5 rounded-lg font-medium">Novo evento</button>
+                    </div>
                 </div>
-                <div id="calendar-view-empty" class="hidden flex-1 flex items-center justify-center p-8">
-                    <p class="text-sm text-slate-400 text-center">Calendário não configurado.</p>
+                <div class="calendar-filters px-4 py-2.5 border-b border-slate-100 bg-white flex flex-wrap items-center justify-end gap-2">
+                    <label class="flex items-center gap-2 text-xs text-slate-600">
+                        <span class="font-semibold text-slate-500">Tipo</span>
+                        <select id="calendar-filter-type"
+                            class="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600 min-w-[9rem]">
+                            <option value="">Todos</option>
+                            <option value="Medição">Medição</option>
+                            <option value="Atendimento">Atendimento</option>
+                        </select>
+                    </label>
+                    <label class="flex items-center gap-2 text-xs text-slate-600">
+                        <span class="font-semibold text-slate-500">Responsável</span>
+                        <select id="calendar-filter-responsible"
+                            class="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600 min-w-[12rem]">
+                            <option value="">Todos</option>
+                        </select>
+                    </label>
                 </div>
-                <div id="calendar-view-frame-wrap" class="flex-1 min-h-0">
-                    <iframe id="google-calendar-iframe" title="Calendário Formighieri"
-                        class="w-full h-full min-h-[640px] border-0"
-                        loading="lazy"
-                        referrerpolicy="no-referrer-when-downgrade"></iframe>
+                <div class="calendar-layout flex-1 min-h-0 overflow-hidden">
+                    <div class="calendar-month-wrap flex-1 min-h-0 overflow-auto p-3 md:p-4">
+                        <div id="calendar-weekdays" class="calendar-weekdays" aria-hidden="true"></div>
+                        <div id="calendar-month-grid" class="calendar-month-grid" role="grid" aria-label="Calendário mensal"></div>
+                    </div>
+                    <aside class="calendar-day-panel border-t md:border-t-0 md:border-l border-slate-100 flex flex-col min-h-0 shrink-0">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/30">
+                            <h3 id="calendar-selected-day-label" class="text-sm font-bold text-slate-900">Selecione um dia</h3>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Eventos do dia selecionado</p>
+                        </div>
+                        <div id="calendar-day-events-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+                            <p class="text-xs text-slate-400 text-center py-6">Nenhum dia selecionado.</p>
+                        </div>
+                    </aside>
                 </div>
             </div>
         </main>

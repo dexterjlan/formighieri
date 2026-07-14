@@ -62,11 +62,6 @@ const APP_PUBLIC_URL = getAppPublicUrl();
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP1IkfR8OfsYRQEq3IGB_VF_XSGnTQkN5WAjngfTCNGHohp4IcEd4fzaxb3a_o72A/exec';
 const NOTIFICATION_SCRIPT_SECRET = 'Hanna@2020';
 
-// Calendário Google (embed) — Admin, Consultor, Conferente e Gestores
-const GOOGLE_CALENDAR_ID = 'u7ghp641ktbmlst14h0esd8ljc@group.calendar.google.com';
-const GOOGLE_CALENDAR_EMBED_URL = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(GOOGLE_CALENDAR_ID)}&ctz=America%2FSao_Paulo&mode=MONTH&showTitle=1&showNav=1&showDate=1&showTabs=1`;
-const GOOGLE_CALENDAR_PUBLIC_URL = 'https://calendar.google.com/calendar/u/0/r?cid=dTdnaHA2NDFrdGJtbHN0MTRoMGVzZDhsamNAZ3JvdXAuY2FsZW5kYXIuZ29vZ2xlLmNvbQ';
-
 const SYSTEM_SETTINGS_DEFAULTS = {
     approvalOverdueDays: 5,
     requestOverdueDays: 5

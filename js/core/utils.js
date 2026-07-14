@@ -378,7 +378,7 @@ function canAccessGestao(user = currentUser) {
         || isGestorFabrica(user);
 }
 
-function canAccessGoogleCalendar(user = currentUser) {
+function canAccessCalendar(user = currentUser) {
     if (!user) return false;
     return isAdmin(user)
         || user.role === 'Consultor'
@@ -386,6 +386,10 @@ function canAccessGoogleCalendar(user = currentUser) {
         || isGestorComercial(user)
         || isGestorProjetos(user)
         || isGestorFabrica(user);
+}
+
+function canAccessGoogleCalendar(user = currentUser) {
+    return canAccessCalendar(user);
 }
 
 function canSeeOrderMedicaoTab(user = currentUser) {

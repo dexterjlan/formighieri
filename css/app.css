@@ -1505,8 +1505,13 @@ body.gestao-dashboard-fullscreen-active {
         min-height: auto;
     }
 
-    #google-calendar-iframe {
-        min-height: 70vh;
+    .calendar-layout {
+        flex-direction: column;
+    }
+
+    .calendar-day-panel {
+        width: 100%;
+        max-height: 40vh;
     }
 
     #conversations-query-results-panel,
@@ -1567,4 +1572,330 @@ body.gestao-dashboard-fullscreen-active {
         flex: 1 1 auto;
         justify-content: flex-end;
     }
+}
+
+/* ── Calendário local ───────────────────────────────────────────────────── */
+
+.calendar-layout {
+    display: flex;
+    min-height: 0;
+}
+
+.calendar-month-wrap {
+    flex: 1.4;
+}
+
+.calendar-day-panel {
+    width: 18rem;
+}
+
+.calendar-weekdays,
+.calendar-month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.375rem;
+}
+
+.calendar-weekdays {
+    margin-bottom: 0.375rem;
+}
+
+.calendar-weekday {
+    text-align: center;
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(100 116 139);
+    padding: 0.25rem 0;
+}
+
+.calendar-day-cell {
+    min-height: 5.5rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    background: rgb(255 255 255);
+    padding: 0.375rem;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.calendar-day-cell:hover {
+    border-color: rgb(251 191 36);
+    background: rgb(255 251 235 / 0.35);
+}
+
+.calendar-day-cell--empty {
+    border-color: transparent;
+    background: transparent;
+    cursor: default;
+    min-height: 0;
+    padding: 0;
+}
+
+.calendar-day-cell--today .calendar-day-cell__number {
+    background: rgb(15 23 42);
+    color: rgb(251 191 36);
+}
+
+.calendar-day-cell.is-selected {
+    border-color: rgb(217 119 6);
+    box-shadow: 0 0 0 1px rgb(217 119 6 / 0.35);
+    background: rgb(255 251 235 / 0.55);
+}
+
+.calendar-day-cell__number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(51 65 85);
+}
+
+.calendar-day-cell__events {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.calendar-day-cell__more {
+    font-size: 0.5625rem;
+    color: rgb(100 116 139);
+    padding-left: 0.125rem;
+}
+
+.calendar-event-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    width: 100%;
+    min-width: 0;
+    border-radius: 0.25rem;
+    border: 1px solid transparent;
+    padding: 0.125rem 0.25rem;
+    font-size: 0.5625rem;
+    line-height: 1.2;
+    cursor: pointer;
+    text-align: left;
+}
+
+.calendar-event-chip__time {
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.calendar-event-chip__summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+    opacity: 0.92;
+}
+
+.calendar-event-chip--medicao {
+    background: rgb(204 251 241);
+    color: rgb(15 118 110);
+    border-color: rgb(153 246 228);
+}
+
+.calendar-event-chip--atendimento {
+    background: rgb(254 243 199);
+    color: rgb(146 64 14);
+    border-color: rgb(253 230 138);
+}
+
+.calendar-event-floating-tooltip {
+    position: fixed;
+    z-index: 80;
+    pointer-events: none;
+    max-width: min(18rem, calc(100vw - 1.5rem));
+}
+
+.calendar-event-floating-tooltip.hidden {
+    display: none;
+}
+
+.calendar-event-tooltip {
+    border-radius: 0.625rem;
+    background: rgb(15 23 42);
+    color: rgb(248 250 252);
+    box-shadow: 0 10px 28px rgb(15 23 42 / 0.22);
+    overflow: hidden;
+    border: 1px solid rgb(51 65 85);
+}
+
+.calendar-event-tooltip__badge {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgb(51 65 85);
+}
+
+.calendar-event-tooltip--medicao .calendar-event-tooltip__badge {
+    background: rgb(19 78 74);
+    color: rgb(153 246 228);
+}
+
+.calendar-event-tooltip--atendimento .calendar-event-tooltip__badge {
+    background: rgb(120 53 15);
+    color: rgb(253 230 138);
+}
+
+.calendar-event-tooltip__rows {
+    margin: 0;
+    padding: 0.5rem 0.75rem 0.625rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.calendar-event-tooltip__row {
+    display: grid;
+    grid-template-columns: 5.25rem minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: start;
+}
+
+.calendar-event-tooltip__row dt {
+    margin: 0;
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(148 163 184);
+}
+
+.calendar-event-tooltip__row dd {
+    margin: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.4;
+    color: rgb(248 250 252);
+    word-break: break-word;
+}
+
+.calendar-day-event-card {
+    width: 100%;
+    text-align: left;
+    border-radius: 0.625rem;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(255 255 255);
+    padding: 0.75rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.calendar-day-event-card:hover {
+    border-color: rgb(203 213 225);
+    box-shadow: 0 1px 3px rgb(15 23 42 / 0.06);
+}
+
+.calendar-day-event-card--medicao {
+    border-left: 3px solid rgb(20 184 166);
+}
+
+.calendar-day-event-card--atendimento {
+    border-left: 3px solid rgb(245 158 11);
+}
+
+.calendar-day-event-card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.375rem;
+}
+
+.calendar-day-event-card__time {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(30 41 59);
+}
+
+.calendar-day-event-card__responsible {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgb(30 41 59);
+    line-height: 1.35;
+    margin-bottom: 0.25rem;
+}
+
+.calendar-day-event-card__type {
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgb(100 116 139);
+}
+
+.calendar-day-event-card__description {
+    font-size: 0.75rem;
+    color: rgb(51 65 85);
+    line-height: 1.4;
+    margin-bottom: 0.375rem;
+}
+
+.calendar-day-event-card__meta,
+.calendar-day-event-card__order,
+.calendar-day-event-card__client {
+    font-size: 0.625rem;
+    color: rgb(100 116 139);
+    line-height: 1.35;
+}
+
+.calendar-zoom-toggle {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: rgb(255 255 255);
+}
+
+.calendar-zoom-btn {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: rgb(100 116 139);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.calendar-zoom-btn:hover {
+    color: rgb(51 65 85);
+    background: rgb(248 250 252);
+}
+
+.calendar-zoom-btn.is-active {
+    color: rgb(146 64 14);
+    background: rgb(255 251 235);
+}
+
+.calendar-month-grid--week .calendar-day-cell {
+    min-height: 9rem;
+}
+
+.calendar-month-grid--week .calendar-day-cell__number {
+    font-size: 0.8125rem;
+}
+
+.calendar-month-grid--week .calendar-day-cell__date {
+    display: block;
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: rgb(100 116 139);
+    margin-top: 0.125rem;
 }
