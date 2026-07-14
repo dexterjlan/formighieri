@@ -23,9 +23,9 @@
                 <button type="button" id="btn-back-dashboard"
                     class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Pedidos</button>
                 <button type="button" id="btn-conversations-query"
-                    class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Requisições</button>
+                    class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Requisições</button>
                 <button type="button" id="btn-approvals-query"
-                    class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Aprovações</button>
+                    class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Aprovações</button>
                 <button type="button" id="btn-calendario"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Calendário</button>
                 <button type="button" id="btn-pendencias"
@@ -230,17 +230,22 @@
                             </div>
                             <p id="order-tab-readonly-notice" class="hidden order-tab-readonly-notice" role="status"></p>
                         <div id="order-tab-panel-approvals" class="order-detail-tab-panel p-4 md:p-5">
-                            <div class="flex justify-start mb-3">
+                            <div class="order-tab-actions mb-3">
                                 <button type="button" id="btn-commercial-approval" onclick="openCommercialApprovalModal()"
-                                    class="hidden bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-800">Solicitar Aprovação Comercial</button>
+                                    class="order-tab-action-btn hidden bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-800">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5A1.5 1.5 0 0 1 5.5 1h2.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 1 .44 1.06V12.5A1.5 1.5 0 0 1 10.5 14h-6A1.5 1.5 0 0 1 3 12.5v-10zM5.5 2a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5V5.621a.5.5 0 0 0-.146-.353L8.732 3.146A.5.5 0 0 0 8.379 3H5.5zm2.25 6.75a.75.75 0 0 1 1.06 0l1.5 1.5a.75.75 0 1 1-1.06 1.06L9.25 10.31l-.72.72a.75.75 0 1 1-1.06-1.06l.72-.72-.72-.72a.75.75 0 0 1 0-1.06z"/></svg>
+                                    <span>Solicitar Aprovação Comercial</span>
+                                </button>
                             </div>
                             <div class="space-y-4" id="commercial-approvals-list"></div>
                         </div>
                         <div id="order-tab-panel-requests" class="order-detail-tab-panel hidden p-4 md:p-5">
-                            <div class="flex justify-start mb-3">
+                            <div class="order-tab-actions mb-3">
                                 <button type="button" id="btn-new-request" onclick="openConvModal()"
-                                    class="hidden bg-slate-900 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">+
-                                    Abrir Nova Requisição</button>
+                                    class="order-tab-action-btn hidden bg-slate-900 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5a.5.5 0 0 1 .5.5v4.5H13a.5.5 0 0 1 0 1H8.5V13a.5.5 0 0 1-1 0V8.5H3a.5.5 0 0 1 0-1h4.5V3a.5.5 0 0 1 .5-.5z"/></svg>
+                                    <span>Abrir Nova Requisição</span>
+                                </button>
                             </div>
                             <div class="space-y-4" id="conversations-list"></div>
                         </div>
@@ -255,18 +260,22 @@
                                     class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
                                 <p id="anteprojeto-tab-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
                             </div>
-                            <div class="flex justify-start mb-3">
+                            <div class="order-tab-actions mb-3">
                                 <button type="button" id="btn-new-anteprojeto"
-                                    class="hidden bg-sky-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800">+
-                                    Nova Conferência</button>
+                                    class="order-tab-action-btn hidden bg-sky-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5a.5.5 0 0 1 .5.5v4.5H13a.5.5 0 0 1 0 1H8.5V13a.5.5 0 0 1-1 0V8.5H3a.5.5 0 0 1 0-1h4.5V3a.5.5 0 0 1 .5-.5z"/></svg>
+                                    <span>Nova Conferência</span>
+                                </button>
                             </div>
                             <div class="space-y-4" id="anteprojeto-list"></div>
                         </div>
                         <div id="order-tab-panel-medicao" class="order-detail-tab-panel hidden p-4 md:p-5">
-                            <div class="flex justify-start mb-3">
+                            <div class="order-tab-actions mb-3">
                                 <button type="button" id="btn-new-medicao"
-                                    class="hidden bg-teal-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-teal-800">+
-                                    Nova Medição</button>
+                                    class="order-tab-action-btn hidden bg-teal-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-teal-800">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5a.5.5 0 0 1 .5.5v4.5H13a.5.5 0 0 1 0 1H8.5V13a.5.5 0 0 1-1 0V8.5H3a.5.5 0 0 1 0-1h4.5V3a.5.5 0 0 1 .5-.5z"/></svg>
+                                    <span>Nova Medição</span>
+                                </button>
                             </div>
                             <div class="space-y-4" id="medicao-list"></div>
                         </div>
@@ -281,10 +290,11 @@
                         <div id="order-tab-panel-fabrica" class="order-detail-tab-panel hidden p-4 md:p-5">
                             <p class="text-xs text-slate-500 mb-3">Projetos deste pedido em produção ou montagem interna — selecione e registre a montagem.</p>
                             <div class="space-y-4" id="fabrica-projects-list"></div>
-                            <div id="fabrica-save-footer" class="hidden pt-4 mt-4 border-t border-slate-100 flex justify-end">
+                            <div id="fabrica-save-footer" class="hidden pt-4 mt-4 border-t border-slate-100 order-tab-actions">
                                 <button type="button" id="btn-fabrica-save"
-                                    class="bg-orange-700 text-white text-xs px-5 py-2 rounded-lg font-semibold hover:bg-orange-800">
-                                    Salvar
+                                    class="order-tab-action-btn bg-orange-700 text-white text-xs px-5 py-2 rounded-lg font-semibold hover:bg-orange-800">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M10.97 2.97a.75.75 0 0 1 1.06 0l2.5 2.5a.75.75 0 0 1 0 1.06l-6.22 6.22a.75.75 0 0 1-.397.207l-2.873.72a.75.75 0 0 1-.91-.91l.72-2.873a.75.75 0 0 1 .207-.397l6.22-6.22zM11.5 4.56 12.44 5.5 11.03 6.91 10.09 5.97 11.5 4.56zM4.75 9.25l-1.06 4.24 4.24-1.06L11.44 9.5 8.5 6.56 4.75 9.25z"/></svg>
+                                    <span>Salvar</span>
                                 </button>
                             </div>
                         </div>
@@ -931,15 +941,18 @@
                                 <h3 class="font-bold text-sm text-slate-900">Dashboard</h3>
                                 <p id="gestao-dashboard-subtitle" class="text-xs text-slate-400 mt-0.5">Visão por cliente do mês corrente.</p>
                             </div>
-                            <div class="flex items-center gap-2 shrink-0">
+                            <div class="order-tab-actions ml-auto shrink-0">
                                 <button type="button" id="btn-gestao-dashboard-fullscreen"
-                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50"
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50"
                                     aria-pressed="false">
-                                    Tela cheia
+                                    <svg class="order-tab-action-btn__icon" data-fullscreen-icon="enter" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0V2A1.5 1.5 0 0 1 1.5.5h4a.5.5 0 0 1 0 1H1.5zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0V1.5a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zM.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1H1.5A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5z"/></svg>
+                                    <svg class="order-tab-action-btn__icon hidden" data-fullscreen-icon="exit" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 0a.5.5 0 0 0 0 1h4A1.5 1.5 0 0 1 11 2.5v4a.5.5 0 0 0 1 0v-4A2.5 2.5 0 0 0 9.5 0h-4zM1 5.5a.5.5 0 0 0-1 0v4A2.5 2.5 0 0 0 2.5 12h4a.5.5 0 0 0 0-1h-4A1.5 1.5 0 0 1 1 9.5v-4zM14.5 11a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 1 0v-4a1.5 1.5 0 0 0-1.5-1.5h-4a.5.5 0 0 0 0 1h4a.5.5 0 0 0 .5-.5zM10 1.5a.5.5 0 0 0-1 0v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 0 0 1h4A2.5 2.5 0 0 0 10 6.5v-4z"/></svg>
+                                    <span data-gestao-dashboard-fullscreen-label>Tela cheia</span>
                                 </button>
                                 <button type="button" id="btn-gestao-dashboard-refresh"
-                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
-                                    Atualizar
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                    <span>Atualizar</span>
                                 </button>
                             </div>
                         </div>
@@ -969,8 +982,9 @@
                                 <p class="text-xs text-slate-400 mt-0.5">Projetos por status — código do pedido, cliente e projetos em cada coluna.</p>
                             </div>
                             <button type="button" id="btn-gestao-kanban-refresh"
-                                class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
-                                Atualizar
+                                class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                <span>Atualizar</span>
                             </button>
                         </div>
                         <div id="gestao-kanban-board" class="flex-1 overflow-auto p-4 bg-slate-50/30">
@@ -993,8 +1007,9 @@
                                     </select>
                                 </div>
                                 <button type="button" id="btn-gestao-gantt-refresh"
-                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
-                                    Atualizar
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                    <span>Atualizar</span>
                                 </button>
                             </div>
                         </div>
@@ -1010,8 +1025,9 @@
                                 <p class="text-xs text-slate-400 mt-0.5">Visão gerencial dos projetos por status, faixa comercial e fechamento de produção.</p>
                             </div>
                             <button type="button" id="btn-gestao-relatorios-refresh"
-                                class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
-                                Atualizar
+                                class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                <span>Atualizar</span>
                             </button>
                         </div>
                         <div id="gestao-relatorios-content" class="flex-1 overflow-auto p-4 space-y-4 bg-slate-50/30">
@@ -1036,8 +1052,9 @@
                                     Aplicar
                                 </button>
                                 <button type="button" id="btn-gestao-performance-refresh"
-                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
-                                    Atualizar
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                    <span>Atualizar</span>
                                 </button>
                             </form>
                         </div>

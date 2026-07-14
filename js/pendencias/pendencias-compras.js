@@ -123,8 +123,8 @@ function renderPendenciasEnviadosComprasList(items) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-enviados-compras"
-                    class="text-xs bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg font-medium hover:bg-amber-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg font-medium hover:bg-amber-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${items.length

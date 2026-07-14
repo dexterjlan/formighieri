@@ -102,6 +102,8 @@ function selectPendenciasSection(sectionId, options = {}) {
         pendenciasCollapsedSections.delete(sectionId);
     }
 
+    persistPendenciasNavState();
+
     return isSameSection;
 }
 
@@ -364,6 +366,7 @@ function renderPendenciasSidebar() {
         button.addEventListener('click', async () => {
             pendenciasActiveItem = null;
             renderPendenciasSidebar();
+            persistPendenciasNavState();
             loadPendenciasContent();
         });
     });
@@ -372,6 +375,7 @@ function renderPendenciasSidebar() {
         button.addEventListener('click', async () => {
             pendenciasActiveItem = button.dataset.pendenciasItem;
             renderPendenciasSidebar();
+            persistPendenciasNavState();
             loadPendenciasContent();
         });
     });
@@ -664,6 +668,16 @@ function showPendencias() {
     updatePendenciasNav();
     renderPendenciasSidebar();
     loadPendenciasContent();
+    persistPendenciasNavState();
+}
+
+function persistPendenciasNavState() {
+    if (typeof saveAppNavState !== 'function') return;
+    saveAppNavState({
+        view: 'pendencias',
+        pendenciasSection: pendenciasActiveSection,
+        pendenciasItem: pendenciasActiveItem
+    });
 }
 
 function updatePendenciasNav() {

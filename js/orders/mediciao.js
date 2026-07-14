@@ -5,7 +5,8 @@ const MEDICAO_ELIGIBLE_STATUS_NAMES = new Set([
     'Vendido',
     'Aguardando Obra',
     'Aguardando Medição',
-    'Medição Realizada'
+    'Medição Realizada',
+    'Planta Levantada'
 ]);
 
 function getProjectStatusName(project) {
@@ -160,6 +161,48 @@ async function applyPlantaLevantadaStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (error) throw error;
+}
+
+async function syncPlantaLevantadaToOtherMedicoes(projects, currentMedicaoId) {
+    const plantaByProjectId = new Map(
+        projects
+            .filter(project => project.plantaLevantada)
+            .map(project => [Number(project.orderProjectId), project])
+    );
+
+    const orderProjectIds = [...plantaByProjectId.keys()];
+    if (!orderProjectIds.length) return;
+
+    const { data: siblings, error } = await supabaseClient
+        .from('MedicaoProject')
+        .select('id, orderProjectId, medicaoId, plantaLevantada')
+        .in('orderProjectId', orderProjectIds)
+        .eq('plantaLevantada', false);
+
+    if (error?.message?.includes('plantaLevantada')) return;
+    if (error) throw error;
+
+    const rowsToUpdate = (siblings || []).filter(row =>
+        Number(row.medicaoId) !== Number(currentMedicaoId)
+    );
+
+    for (const row of rowsToUpdate) {
+        const source = plantaByProjectId.get(Number(row.orderProjectId));
+        if (!source) continue;
+
+        const payload = {
+            plantaLevantada: true,
+            plantaLevantadaDate: source.plantaLevantadaDate || null
+        };
+
+        let { error: updateError } = await supabaseClient
+            .from('MedicaoProject')
+            .update(payload)
+            .eq('id', row.id);
+
+        if (updateError?.message?.includes('plantaLevantada')) continue;
+        if (updateError) throw updateError;
+    }
 }
 
 function isMedicaoPlantaLevantadaChecked(row) {
@@ -469,7 +512,7 @@ async function populateMedicaoProjectsPicker(medicao = null) {
     if (!projects.length) {
         emptyMsg?.classList.remove('hidden');
         if (emptyMsg) {
-            emptyMsg.textContent = 'Nenhum projeto elegível para medição neste pedido (status: Vendido, Aguardando Obra, Aguardando Medição ou Medição Realizada).';
+            emptyMsg.textContent = 'Nenhum projeto elegível para medição neste pedido (status: Vendido, Aguardando Obra, Aguardando Medição, Medição Realizada ou Planta Levantada).';
         }
         return;
     }
@@ -836,9 +879,12 @@ async function saveMedicao() {
                 });
             }
         } else {
-            const plantaProjectIds = projects
-                .filter(project => project.plantaLevantada)
-                .map(project => project.orderProjectId);
+            const plantaProjects = projects.filter(project => project.plantaLevantada);
+            if (plantaProjects.length) {
+                setMedicaoModalLoading(true, 'Sincronizando planta levantada...');
+                await syncPlantaLevantadaToOtherMedicoes(plantaProjects, medicaoId);
+            }
+            const plantaProjectIds = plantaProjects.map(project => project.orderProjectId);
             if (plantaProjectIds.length) {
                 setMedicaoModalLoading(true, 'Atualizando status dos projetos...');
                 await applyPlantaLevantadaStatusToProjects(plantaProjectIds);

@@ -233,8 +233,10 @@ async function openConvModal() {
     document.getElementById("conv-form").reset();
     resetConvResponseFields();
     resetConvActivities();
+    resetConvAttachments();
     setupConvProfileFields(false);
     updateRequestActivityModalControls(null);
+    updateConvAttachmentModalControls(null);
     await Promise.all([
         loadProjetistas(),
         loadConvOrderProjects()
@@ -341,11 +343,13 @@ async function editConversation(id) {
     await Promise.all([
         loadProjetistas(),
         loadConvOrderProjects(conv.orderProjectId),
-        loadRequestActivitiesForModal(id)
+        loadRequestActivitiesForModal(id),
+        loadOrderRequestAttachmentsForModal(id)
     ]);
     document.getElementById("conv-designer").value = String(conv.designerId);
     document.getElementById("conv-request").value = conv.designerRequest;
     updateRequestActivityModalControls(conv);
+    updateConvAttachmentModalControls(conv);
     updateConvModalActivitiesHint();
     setupConvModalFieldLocks(conv);
     toggleModal('conv-modal', true);
@@ -498,7 +502,10 @@ async function loadConversations(orderId) {
         }
 
         const requestIds = convs.map(c => c.id);
-        const activitiesByRequest = await fetchRequestActivitiesByRequestIds(requestIds);
+        const [activitiesByRequest, attachmentsByRequest] = await Promise.all([
+            fetchRequestActivitiesByRequestIds(requestIds),
+            fetchOrderRequestAttachmentsByRequestIds(requestIds)
+        ]);
 
         list.innerHTML = "";
 
@@ -545,6 +552,7 @@ async function loadConversations(orderId) {
 
             const body = div.querySelector('.collapsible-list-body');
             appendRequestActivitiesToCard(body, c, activitiesByRequest[c.id] || []);
+            appendOrderRequestAttachmentsToCard(body, c.id, attachmentsByRequest[c.id] || []);
             body.insertAdjacentHTML('beforeend', buildRequestResponseSection(c, activitiesByRequest[c.id] || []));
             list.appendChild(div);
         });
@@ -713,6 +721,7 @@ function setConvFormLoading(active, message = 'Processando...', status = 'loadin
     const cancelBtn = document.querySelector('#conv-form button[type="button"]');
     const addActivityBtn = document.getElementById('btn-add-request-activity');
     const saveActivitiesBtn = document.getElementById('btn-save-conv-activities');
+    const addAttachmentBtn = document.getElementById('btn-add-conv-attachment');
     const fields = document.querySelectorAll('#conv-form input, #conv-form select, #conv-form textarea');
     const show = Boolean(active);
 
@@ -728,7 +737,7 @@ function setConvFormLoading(active, message = 'Processando...', status = 'loadin
     successIcon?.classList.toggle('hidden', status !== 'success');
     errorIcon?.classList.toggle('hidden', status !== 'error');
 
-    [submitBtn, cancelBtn, addActivityBtn, saveActivitiesBtn].forEach(btn => {
+    [submitBtn, cancelBtn, addActivityBtn, saveActivitiesBtn, addAttachmentBtn].forEach(btn => {
         if (!btn) return;
         btn.disabled = show;
         btn.classList.toggle('opacity-60', show);
@@ -739,10 +748,13 @@ function setConvFormLoading(active, message = 'Processando...', status = 'loadin
     if (!show && editingConversationId) {
         const conv = conversationsCache.find(c => c.id === editingConversationId);
         setupConvModalFieldLocks(conv);
+        updateConvAttachmentModalControls(conv);
     }
 }
 
 function bindConversationEvents() {
+    bindConvAttachmentEvents();
+
     document.getElementById('conv-order-project')?.addEventListener('change', async () => {
         applyConvDesignerFromSelectedProject();
     });
@@ -834,6 +846,14 @@ function bindConversationEvents() {
 
                 await persistRequestActivities(editingConversationId, requestActivities);
 
+                if (!respondOnly) {
+                    setConvFormLoading(true, 'Salvando imagens...');
+                    await persistOrderRequestAttachments(
+                        editingConversationId,
+                        existing.orderId || activeOrderId
+                    );
+                }
+
                 if (existing && updatePayload.status === 'Encerrado') {
                     setConvFormLoading(true, 'Enviando notificação por e-mail...');
                     await notifyOrderRequestEmail('answered', {
@@ -892,6 +912,10 @@ function bindConversationEvents() {
 
                 if (createdRequest) {
                     await persistRequestActivities(createdRequest.id, requestActivities);
+                    if (convAttachmentDraftFiles.length) {
+                        setConvFormLoading(true, 'Enviando imagens...');
+                        await persistOrderRequestAttachments(createdRequest.id, activeOrderId);
+                    }
                     setConvFormLoading(true, 'Enviando notificação por e-mail...');
                     await notifyOrderRequestEmail('created', {
                         ...createdRequest,
@@ -916,6 +940,7 @@ function bindConversationEvents() {
 
             closeConvModal();
             document.getElementById("conv-form").reset();
+            resetConvAttachments();
         } catch (error) {
             setConvFormLoading(true, `Erro ao salvar requisição: ${error.message}`, 'error');
             await new Promise(resolve => setTimeout(resolve, 2200));

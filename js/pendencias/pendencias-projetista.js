@@ -167,8 +167,8 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
                     <p class="text-xs text-slate-400 mt-0.5">${rows.length} projeto${rows.length === 1 ? '' : 's'}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-aguardando-pt"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${rows.length
@@ -512,8 +512,8 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
                         <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão, Aguardando Aprovação e Aguardando PPCP.</p>
                     </div>
                     <button type="button" id="btn-pendencias-refresh-sem-projetistas"
-                        class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                        Atualizar
+                        class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                        ${renderRefreshButtonInnerHtml()}
                     </button>
                 </div>
                 ${workload.length
@@ -1076,8 +1076,8 @@ function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, appro
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-em-revisao"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${projects.length
@@ -1252,8 +1252,8 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-projeto-tecnico"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${projects.length
@@ -1438,8 +1438,8 @@ function renderPendenciasRequisicaoList(requests, overviewMode) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-requisicao"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${requests.length
@@ -1651,8 +1651,8 @@ function renderPendenciasProjetistaOrdersList(config) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="${refreshButtonId}"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${orders.length
@@ -1857,8 +1857,8 @@ function renderPendenciasAguardandoPlantaList(medicoes) {
                     <p class="text-xs text-slate-400 mt-0.5">Medições em aberto com projetos aguardando planta levantada.</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-projetista-aguardando-planta"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${medicoes.length

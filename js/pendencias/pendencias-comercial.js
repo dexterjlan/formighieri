@@ -181,8 +181,8 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId,
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-aprovar-conferencia"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${conferenceGroups.length
@@ -411,8 +411,8 @@ function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectI
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-consultor-conferencia"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${conferenceGroups.length
@@ -578,8 +578,8 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-consultor-aprovacao"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${projects.length
@@ -808,8 +808,8 @@ function renderPendenciasConsultorRequisicaoList(requests, overviewMode) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-consultor-requisicoes"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${requests.length

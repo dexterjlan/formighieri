@@ -586,7 +586,10 @@ function setGestaoDashboardFullscreen(enabled) {
     document.body.classList.toggle('gestao-dashboard-fullscreen-active', gestaoDashboardFullscreen);
 
     if (button) {
-        button.textContent = gestaoDashboardFullscreen ? 'Sair da tela cheia' : 'Tela cheia';
+        const label = button.querySelector('[data-gestao-dashboard-fullscreen-label]');
+        if (label) label.textContent = gestaoDashboardFullscreen ? 'Sair da tela cheia' : 'Tela cheia';
+        button.querySelector('[data-fullscreen-icon="enter"]')?.classList.toggle('hidden', gestaoDashboardFullscreen);
+        button.querySelector('[data-fullscreen-icon="exit"]')?.classList.toggle('hidden', !gestaoDashboardFullscreen);
         button.setAttribute('aria-pressed', gestaoDashboardFullscreen ? 'true' : 'false');
     }
 }

@@ -82,6 +82,13 @@ function showWelcome() {
     updateWelcomeActions();
     renderWelcomeFlowLegend();
     renderWelcomeFlowchart();
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({
+            view: 'home',
+            activeOrderId: null,
+            orderDetailTab: null
+        });
+    }
 }
 
 function updateWelcomeActions() {

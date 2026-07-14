@@ -46,6 +46,7 @@ const SCRIPTS = [
     'js/orders/ppcp.js',
     'js/core/notifications.js',
     'js/conversations/request-activities.js',
+    'js/conversations/request-attachments.js',
     'js/conversations/conversations.js',
     'js/commercial/commercial-approval.js',
     'js/commercial/commercial-revision.js',
@@ -97,7 +98,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260997`);
+            await loadScript(`${src}?v=20261001`);
         }
 
         initAppEvents();

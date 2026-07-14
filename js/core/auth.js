@@ -398,6 +398,7 @@ function bindAuthEvents() {
     });
 
     document.getElementById("btn-logout").addEventListener("click", async function () {
+        if (typeof clearAppNavState === 'function') clearAppNavState();
         await supabaseClient.auth.signOut();
         location.reload();
     });
@@ -405,9 +406,14 @@ function bindAuthEvents() {
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
         if (event === 'SIGNED_OUT') {
             currentUser = null;
+            appShellReady = false;
+            if (typeof clearAppNavState === 'function') clearAppNavState();
             return;
         }
-        if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session) {
+        if (!session) return;
+        if (event === 'TOKEN_REFRESHED') return;
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+            if (appShellReady) return;
             await enterApp(session.user.id);
         }
     });

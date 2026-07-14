@@ -520,6 +520,14 @@ function switchOrderDetailTab(tab) {
 
     updateOrderDetailActionButtons();
     updateOrderTabReadonlyNotice(tab);
+
+    if (typeof saveAppNavState === 'function' && activeOrderId) {
+        saveAppNavState({
+            view: 'dashboard',
+            activeOrderId,
+            orderDetailTab: tab
+        });
+    }
 }
 
 async function openOrderModal() {
@@ -578,6 +586,14 @@ async function selectOrder(id) {
 
     updateOrderDetailTabsVisibility();
     switchOrderDetailTab(getFirstVisibleOrderDetailTab());
+
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({
+            view: 'dashboard',
+            activeOrderId: id,
+            orderDetailTab: getFirstVisibleOrderDetailTab()
+        });
+    }
 }
 
 function bindOrderEvents() {

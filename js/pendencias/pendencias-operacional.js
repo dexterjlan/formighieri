@@ -443,8 +443,8 @@ function renderPendenciasAguardandoMedicaoList(projects) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-aguardando-medicao"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${groups.length
@@ -562,8 +562,8 @@ function renderPendenciasPpcpProjectList(config) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="${refreshButtonId}"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${projects.length
@@ -769,8 +769,8 @@ function renderPendenciasNomearList(projects) {
                     <p class="text-xs text-slate-400 mt-0.5">Projetos aguardando nomeação pelo projetista responsável.</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-nomear"
-                    class="text-xs bg-white border border-purple-200 text-purple-800 px-3 py-1.5 rounded-lg font-medium hover:bg-purple-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-purple-200 text-purple-800 px-3 py-1.5 rounded-lg font-medium hover:bg-purple-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${projects.length
@@ -1023,8 +1023,8 @@ function renderPendenciasImplantacaoList(projects) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-implantacao"
-                    class="text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${projects.length
@@ -1215,8 +1215,8 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-aguardando-montagem-interna"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${projects.length
@@ -1301,8 +1301,8 @@ function renderPendenciasEmMontagemList(projects) {
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-em-montagem"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             ${projects.length

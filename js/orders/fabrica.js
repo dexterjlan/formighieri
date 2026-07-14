@@ -407,11 +407,16 @@ function setFabricaSaveButtonLoading(isLoading, message = 'Salvando...') {
     const button = document.getElementById('btn-fabrica-save');
     if (!button) return;
 
+    const label = button.querySelector('.order-tab-action-btn__icon + span, span');
     if (!button.dataset.originalText) {
-        button.dataset.originalText = button.textContent.trim();
+        button.dataset.originalText = (label?.textContent || button.textContent).trim();
     }
     button.disabled = isLoading;
-    button.textContent = isLoading ? message : button.dataset.originalText;
+    if (label) {
+        label.textContent = isLoading ? message : button.dataset.originalText;
+    } else {
+        button.textContent = isLoading ? message : button.dataset.originalText;
+    }
     button.classList.toggle('opacity-60', isLoading);
     button.classList.toggle('cursor-not-allowed', isLoading);
 }

@@ -67,6 +67,10 @@ function setGestaoNavActive(navKey) {
         button.className = key === navKey ? activeClass : inactiveClass;
     });
 
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({ view: 'gestao', gestaoNav: navKey });
+    }
+
     const cadastrosActive = GESTAO_CADASTRO_NAV_KEYS.includes(navKey);
     const cadastrosToggle = document.getElementById('gestao-nav-cadastros-toggle');
 

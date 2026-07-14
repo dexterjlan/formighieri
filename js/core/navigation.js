@@ -1,16 +1,186 @@
-function showMainPanel() {
+const APP_NAV_STATE_KEY = 'formighieri-app-nav';
+let appShellReady = false;
+let suppressAppNavPersist = false;
+
+function readAppNavState() {
+    try {
+        const raw = sessionStorage.getItem(APP_NAV_STATE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+        console.warn('readAppNavState:', error);
+        return null;
+    }
+}
+
+function saveAppNavState(patch = {}) {
+    if (suppressAppNavPersist) return;
+
+    const next = {
+        ...readAppNavState(),
+        ...patch
+    };
+
+    try {
+        sessionStorage.setItem(APP_NAV_STATE_KEY, JSON.stringify(next));
+    } catch (error) {
+        console.warn('saveAppNavState:', error);
+    }
+}
+
+function clearAppNavState() {
+    try {
+        sessionStorage.removeItem(APP_NAV_STATE_KEY);
+    } catch (error) {
+        console.warn('clearAppNavState:', error);
+    }
+}
+
+function revealAuthenticatedShell() {
     if (!currentUser) return;
-    document.getElementById("login-screen").classList.add("hidden");
-    document.getElementById("register-screen").classList.add("hidden");
-    document.getElementById("register-screen").classList.remove("flex");
-    document.getElementById("main-panel").classList.remove("hidden");
-    const roleLabel = currentUser.role || "Sem perfil";
-    document.getElementById("user-display").innerText =
+
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('register-screen').classList.add('hidden');
+    document.getElementById('register-screen').classList.remove('flex');
+    document.getElementById('main-panel').classList.remove('hidden');
+
+    const roleLabel = currentUser.role || 'Sem perfil';
+    document.getElementById('user-display').innerText =
         `Logado como: ${currentUser.name} (${roleLabel})`;
+
     updateAdminNav();
-    updateCommercialApprovalButtonVisibility();
-    showWelcome();
-    initApp();
+    if (typeof updateCommercialApprovalButtonVisibility === 'function') {
+        updateCommercialApprovalButtonVisibility();
+    }
+}
+
+async function restoreGestaoView(state) {
+    if (!canAccessGestao()) {
+        showWelcome();
+        return;
+    }
+
+    hideSubViews();
+    document.getElementById('gestao-view')?.classList.remove('hidden');
+    updateMainNavActive('gestao');
+    updateAdminNav();
+    if (typeof updateGestaoCadastrosNavVisibility === 'function') {
+        updateGestaoCadastrosNavVisibility();
+    }
+
+    const gestaoNav = state.gestaoNav || 'pedido';
+    const openGestaoPanel = {
+        pedido: () => {
+            if (typeof showGestaoPedidoListPanel === 'function') showGestaoPedidoListPanel();
+            if (typeof loadGestaoOrdersList === 'function') loadGestaoOrdersList();
+        },
+        'project-status': () => {
+            if (typeof showGestaoProjectStatusPanel === 'function') showGestaoProjectStatusPanel();
+        },
+        marceneiros: () => {
+            if (typeof showGestaoMarceneirosPanel === 'function') showGestaoMarceneirosPanel();
+        },
+        usuarios: () => {
+            if (typeof showGestaoUsuariosPanel === 'function') showGestaoUsuariosPanel();
+        },
+        dashboard: () => {
+            if (typeof showGestaoDashboardPanel === 'function') showGestaoDashboardPanel();
+        },
+        kanban: () => {
+            if (typeof showGestaoKanbanPanel === 'function') showGestaoKanbanPanel();
+        },
+        gantt: () => {
+            if (typeof showGestaoGanttPanel === 'function') showGestaoGanttPanel();
+        },
+        relatorios: () => {
+            if (typeof showGestaoRelatoriosPanel === 'function') showGestaoRelatoriosPanel();
+        },
+        performance: () => {
+            if (typeof showGestaoPerformancePanel === 'function') showGestaoPerformancePanel();
+        }
+    };
+
+    (openGestaoPanel[gestaoNav] || openGestaoPanel.pedido)();
+}
+
+async function restorePendenciasView(state) {
+    if (!canAccessPendencias()) {
+        showWelcome();
+        return;
+    }
+
+    hideSubViews();
+    document.getElementById('pendencias-view')?.classList.remove('hidden');
+    updateMainNavActive('pendencias');
+    updateAdminNav();
+    if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
+
+    if (typeof getDefaultPendenciasSection === 'function') {
+        pendenciasActiveSection = state.pendenciasSection || getDefaultPendenciasSection();
+    } else {
+        pendenciasActiveSection = state.pendenciasSection || null;
+    }
+    pendenciasActiveItem = state.pendenciasItem || null;
+
+    if (typeof renderPendenciasSidebar === 'function') renderPendenciasSidebar();
+    if (typeof loadPendenciasContent === 'function') await loadPendenciasContent();
+}
+
+async function restoreAppNavState() {
+    const state = readAppNavState();
+    if (!state?.view) return false;
+
+    suppressAppNavPersist = true;
+
+    try {
+        switch (state.view) {
+            case 'home':
+                showWelcome();
+                return true;
+            case 'dashboard':
+                showDashboard();
+                if (state.activeOrderId && typeof selectOrder === 'function') {
+                    await selectOrder(state.activeOrderId);
+                    if (state.orderDetailTab && typeof switchOrderDetailTab === 'function') {
+                        switchOrderDetailTab(state.orderDetailTab);
+                    }
+                }
+                return true;
+            case 'gestao':
+                await restoreGestaoView(state);
+                return true;
+            case 'pendencias':
+                await restorePendenciasView(state);
+                return true;
+            case 'calendar':
+                if (typeof showCalendar === 'function') showCalendar();
+                return true;
+            case 'requests':
+                showConversationsQuery();
+                return true;
+            case 'approvals':
+                showApprovalsQuery();
+                return true;
+            case 'settings':
+                if (typeof showSystemSettings === 'function') await showSystemSettings();
+                return true;
+            default:
+                return false;
+        }
+    } finally {
+        suppressAppNavPersist = false;
+    }
+}
+
+async function showMainPanel() {
+    revealAuthenticatedShell();
+
+    if (appShellReady) return;
+
+    const restored = await restoreAppNavState();
+    if (!restored) showWelcome();
+
+    if (typeof initApp === 'function') initApp();
+    appShellReady = true;
 }
 
 function updateAdminNav() {
@@ -68,6 +238,11 @@ function showDashboard() {
     document.getElementById("dashboard-view").classList.remove("hidden");
     updateMainNavActive('dashboard');
     updateAdminNav();
+    saveAppNavState({
+        view: 'dashboard',
+        activeOrderId: null,
+        orderDetailTab: null
+    });
 }
 
 function showUsersAdmin() {
@@ -84,6 +259,7 @@ function showConversationsQuery() {
     document.getElementById("conversations-query-view").classList.remove("hidden");
     updateMainNavActive('requests');
     updateAdminNav();
+    saveAppNavState({ view: 'requests' });
     loadQueryFilterOptions();
     searchConversations();
 }
@@ -94,6 +270,7 @@ function showApprovalsQuery() {
     document.getElementById("approvals-query-view").classList.remove("hidden");
     updateMainNavActive('approvals');
     updateAdminNav();
+    saveAppNavState({ view: 'approvals' });
     loadApprovalQueryFilterOptions();
     searchCommercialApprovalsQuery();
 }

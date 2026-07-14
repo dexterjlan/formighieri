@@ -185,8 +185,8 @@ function renderPendenciasSectionOverview(section, cards) {
                     </p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-overview"
-                    class="text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    Atualizar
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
             <div class="p-4">
@@ -207,6 +207,7 @@ function renderPendenciasSectionOverview(section, cards) {
         button.addEventListener('click', async () => {
             pendenciasActiveItem = button.dataset.pendenciasOverviewItem;
             renderPendenciasSidebar();
+            if (typeof persistPendenciasNavState === 'function') persistPendenciasNavState();
             loadPendenciasContent();
         });
     });

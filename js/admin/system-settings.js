@@ -102,6 +102,7 @@ async function showSystemSettings() {
     document.getElementById('system-settings-view').classList.remove('hidden');
     updateMainNavActive('settings');
     updateAdminNav();
+    if (typeof saveAppNavState === 'function') saveAppNavState({ view: 'settings' });
     await loadSystemSettings();
     fillSystemSettingsForm(systemSettingsCache);
 }

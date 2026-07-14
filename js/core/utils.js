@@ -211,6 +211,12 @@ function escapeHtml(text) {
         .replace(/"/g, '&quot;');
 }
 
+const REFRESH_BUTTON_ICON_HTML = '<svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>';
+
+function renderRefreshButtonInnerHtml() {
+    return `${REFRESH_BUTTON_ICON_HTML}<span>Atualizar</span>`;
+}
+
 function truncateText(text, max = 60) {
     if (!text) return '-';
     return text.length > max ? text.slice(0, max) + '…' : text;
@@ -368,6 +374,7 @@ function canActCompraModal(user = currentUser) {
 }
 
 function canSeeQueryNav(user = currentUser) {
+    if (typeof QUERY_NAV_ENABLED !== 'undefined' && !QUERY_NAV_ENABLED) return false;
     return !isMarceneiro(user) && !isCompras(user);
 }
 

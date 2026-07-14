@@ -762,6 +762,7 @@ function showCalendar() {
     document.getElementById('calendar-view')?.classList.remove('hidden');
     updateMainNavActive('calendar');
     updateAdminNav();
+    if (typeof saveAppNavState === 'function') saveAppNavState({ view: 'calendar' });
     refreshCalendarView();
 }
 
