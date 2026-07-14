@@ -46,6 +46,10 @@ function updateMainNavActive(activeView) {
 }
 
 function hideSubViews() {
+    if (typeof closeMobileMenu === 'function') {
+        closeMobileMenu();
+    }
+
     document.getElementById("welcome-view").classList.add("hidden");
     document.getElementById("dashboard-view").classList.add("hidden");
     document.getElementById("system-settings-view").classList.add("hidden");

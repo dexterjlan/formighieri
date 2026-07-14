@@ -33,6 +33,7 @@ function initAppEvents() {
     bindAppDialogEvents();
     bindAuthEvents();
     bindNavigationEvents();
+    bindResponsiveLayout();
     bindCalendarEvents();
     bindWelcomeEvents();
     bindGestaoEvents();

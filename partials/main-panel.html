@@ -1,17 +1,23 @@
     <!-- PAINEL PRINCIPAL (Oculto antes do login) -->
     <div id="main-panel" class="hidden flex flex-col flex-1">
-        <header class="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md">
-            <div class="min-w-0">
-                <div class="fgp-brand fgp-brand--compact">
-                    <div class="fgp-brand__logo-surface">
-                        <img src="images/fgp_logo.png" alt="FGP - Formighieri Gestão de Processo" class="fgp-brand__logo">
+        <header id="app-header" class="app-header bg-slate-900 text-white shadow-md">
+            <div class="app-header-top">
+                <div class="app-header-brand min-w-0">
+                    <div class="fgp-brand fgp-brand--compact">
+                        <div class="fgp-brand__logo-surface">
+                            <img src="images/fgp_logo.png" alt="FGP - Formighieri Gestão de Processo" class="fgp-brand__logo">
+                        </div>
                     </div>
+                    <p class="fgp-header-meta">
+                        <span id="user-display">Usuário: -</span><span id="app-version" class="fgp-header-meta__version"></span>
+                    </p>
                 </div>
-                <p class="fgp-header-meta">
-                    <span id="user-display">Usuário: -</span><span id="app-version" class="fgp-header-meta__version"></span>
-                </p>
+                <button type="button" id="btn-mobile-menu" class="app-header-menu-btn"
+                    aria-controls="app-header-nav" aria-expanded="false" aria-label="Abrir menu de navegação">
+                    Menu
+                </button>
             </div>
-            <div class="flex items-center gap-2">
+            <nav id="app-header-nav" class="app-header-nav" aria-label="Navegação principal">
                 <button type="button" id="btn-inicio"
                     class="text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg">Início</button>
                 <button type="button" id="btn-back-dashboard"
@@ -30,7 +36,7 @@
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Configurações</button>
                 <button type="button" id="btn-logout"
                     class="text-xs bg-slate-800 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg">Sair</button>
-            </div>
+            </nav>
         </header>
 
         <!-- TELA INICIAL -->
@@ -134,7 +140,7 @@
 
             <!-- 2. TELA / COLUNA DE PEDIDOS -->
             <section
-                class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[calc(100vh-120px)]">
+                class="app-panel-height bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                 <div class="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3">
                     <h2 class="font-bold text-sm text-slate-900">Pedidos de Venda</h2>
                     <input type="text" id="filter-order-client" placeholder="Filtrar por cliente..."
@@ -154,7 +160,7 @@
             </section>
 
             <!-- 3. TELA DE DETALHES E CONVERSAS -->
-            <section class="flex flex-col h-[calc(100vh-120px)] overflow-y-auto min-w-0" id="detail-section">
+            <section class="app-panel-height flex flex-col overflow-y-auto min-w-0" id="detail-section">
                 <div id="empty-state"
                     class="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center h-full text-slate-400">
                     <p class="text-sm font-medium">Selecione um pedido para gerenciar as requisições técnicas.</p>
@@ -184,7 +190,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[28rem]">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-0 md:min-h-[28rem]">
                         <div id="order-detail-tabs-wrap" class="flex flex-col flex-1 min-h-0">
                             <div class="order-detail-tabs-shell">
                                 <div id="order-detail-tabs-bar" class="order-detail-tabs-bar">

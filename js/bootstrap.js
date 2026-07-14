@@ -12,6 +12,7 @@ const SCRIPTS = [
     'js/core/utils.js',
     'js/core/dialog.js',
     'js/core/navigation.js',
+    'js/core/responsive.js',
     'js/core/calendar.js',
     'js/core/welcome.js',
     'js/conversations/conversations-query.js',
@@ -96,7 +97,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20260982`);
+            await loadScript(`${src}?v=20260983`);
         }
 
         initAppEvents();

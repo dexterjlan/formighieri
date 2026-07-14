@@ -1358,3 +1358,213 @@ body.gestao-dashboard-fullscreen-active {
     display: flex;
     justify-content: flex-end;
 }
+
+/* ── Layout responsivo (mobile) ─────────────────────────────────────────── */
+
+.app-panel-height {
+    height: calc(100vh - 7.5rem);
+}
+
+.app-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+}
+
+.app-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+}
+
+.app-header-brand {
+    flex: 1;
+    min-width: 0;
+}
+
+.app-header-menu-btn {
+    display: none;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: rgb(255 255 255);
+    background: rgb(51 65 85);
+    border: 1px solid rgb(71 85 105);
+    border-radius: 0.5rem;
+    cursor: pointer;
+}
+
+.app-header-menu-btn:hover {
+    background: rgb(71 85 105);
+}
+
+.app-header-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0 1rem 0.75rem;
+}
+
+.app-header-nav button {
+    flex-shrink: 0;
+}
+
+@media (max-width: 767px) {
+    body {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    .app-panel-height {
+        height: auto;
+        max-height: none;
+    }
+
+    #orders-list {
+        max-height: 45vh;
+    }
+
+    #detail-section {
+        min-height: 50vh;
+    }
+
+    .app-header-menu-btn {
+        display: inline-flex;
+    }
+
+    .app-header-nav {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        padding: 0 1rem 1rem;
+        border-top: 1px solid rgb(51 65 85);
+    }
+
+    body.is-mobile-menu-open .app-header-nav {
+        display: flex;
+    }
+
+    .app-header-nav button {
+        width: 100%;
+        text-align: left;
+        padding: 0.625rem 0.875rem;
+        font-size: 0.8125rem;
+    }
+
+    .order-detail-tabs-shell {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .order-detail-tabs-bar {
+        flex-wrap: nowrap;
+        width: max-content;
+        min-width: 100%;
+        padding-bottom: 0.125rem;
+    }
+
+    .order-detail-tab {
+        flex-shrink: 0;
+    }
+
+    .order-projects-grid__header {
+        display: none;
+    }
+
+    .order-projects-grid__row {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+        padding: 0.625rem;
+    }
+
+    .order-projects-grid__cell--actions {
+        justify-content: flex-start;
+        padding-top: 0.25rem;
+    }
+
+    #gestao-view > div,
+    #pendencias-view > div,
+    #calendar-view > div {
+        min-height: auto;
+    }
+
+    #gestao-dashboard-panel,
+    #gestao-kanban-panel,
+    #gestao-gantt-panel,
+    #gestao-relatorios-panel,
+    #gestao-performance-panel,
+    #gestao-project-history-panel {
+        min-height: auto;
+    }
+
+    #google-calendar-iframe {
+        min-height: 70vh;
+    }
+
+    #conversations-query-results-panel,
+    #approvals-query-results-panel {
+        max-height: none;
+    }
+
+    #app-root .fixed.inset-0 {
+        align-items: flex-end;
+        padding: 0.5rem;
+    }
+
+    #app-root .fixed.inset-0 > div {
+        padding: 1rem;
+        border-radius: 1rem 1rem 0 0;
+        max-height: 92vh;
+    }
+
+    .revision-activities-table,
+    .revision-history-table {
+        font-size: 0.625rem;
+    }
+
+    .gestao-dashboard-clients-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pendencias-sidebar-nav {
+        max-height: none;
+    }
+
+    #order-content .p-5 {
+        padding: 1rem;
+    }
+
+    #empty-state {
+        padding: 2rem 1rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .app-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 0.5rem 1rem;
+        padding: 0.625rem 1rem 0.75rem;
+    }
+
+    .app-header-top {
+        padding: 0;
+        flex: 0 1 auto;
+    }
+
+    .app-header-nav {
+        padding: 0;
+        flex: 1 1 auto;
+        justify-content: flex-end;
+    }
+}
