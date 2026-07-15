@@ -27,6 +27,7 @@ const SCRIPTS = [
     'js/gestao/gestao-dashboard.js',
     'js/gestao/gestao-relatorios.js',
     'js/gestao/gestao-performance.js',
+    'js/gestao/gestao-montagem-programacao.js',
     'js/orders/nomear.js',
     'js/orders/compras.js',
     'js/orders/implantacao.js',
@@ -40,6 +41,7 @@ const SCRIPTS = [
     'js/core/auth.js',
     'js/orders/orders.js',
     'js/orders/order-projects.js',
+    'js/orders/project-characteristics.js',
     'js/orders/anteprojeto.js',
     'js/orders/mediciao.js',
     'js/orders/fabrica.js',
@@ -98,7 +100,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261001`);
+            await loadScript(`${src}?v=20261020`);
         }
 
         initAppEvents();

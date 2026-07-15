@@ -79,6 +79,10 @@ async function restoreGestaoView(state) {
         marceneiros: () => {
             if (typeof showGestaoMarceneirosPanel === 'function') showGestaoMarceneirosPanel();
         },
+        montadores: () => {
+            if (typeof showGestaoMontadoresPanel === 'function') showGestaoMontadoresPanel();
+            if (typeof loadGestaoMontadoresList === 'function') loadGestaoMontadoresList();
+        },
         usuarios: () => {
             if (typeof showGestaoUsuariosPanel === 'function') showGestaoUsuariosPanel();
         },
@@ -96,6 +100,9 @@ async function restoreGestaoView(state) {
         },
         performance: () => {
             if (typeof showGestaoPerformancePanel === 'function') showGestaoPerformancePanel();
+        },
+        'montagem-programacao': () => {
+            if (typeof showGestaoMontagemProgramacaoPanel === 'function') showGestaoMontagemProgramacaoPanel();
         }
     };
 

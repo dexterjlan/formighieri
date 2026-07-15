@@ -385,6 +385,10 @@ function canAccessGestao(user = currentUser) {
         || isGestorFabrica(user);
 }
 
+function canAccessMontagemProgramacao(user = currentUser) {
+    return isAdmin(user) || isGestorProjetos(user);
+}
+
 function canAccessCalendar(user = currentUser) {
     if (!user) return false;
     return isAdmin(user)

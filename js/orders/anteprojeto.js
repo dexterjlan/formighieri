@@ -2081,7 +2081,7 @@ async function saveAnteprojetoConference() {
     }
 }
 
-async function confirmAnteprojetoConference(conferenceId) {
+async function confirmAnteprojetoConference(conferenceId, options = {}) {
     const conference = anteprojetoConferencesCache.find(c => c.id === conferenceId);
     if (!conference) return;
 
@@ -2097,6 +2097,13 @@ async function confirmAnteprojetoConference(conferenceId) {
     }
     if (!moduleObservations.every(obs => obs.consultorChecked)) {
         alertAppDialog('Marque todas as observações como conferidas antes de confirmar.');
+        return;
+    }
+
+    if (!options.skipCharacteristicsCheck && typeof openProjectCharacteristicsModalForConference === 'function') {
+        await openProjectCharacteristicsModalForConference(conference, () =>
+            confirmAnteprojetoConference(conferenceId, { skipCharacteristicsCheck: true })
+        );
         return;
     }
 

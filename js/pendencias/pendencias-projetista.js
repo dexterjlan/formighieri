@@ -86,10 +86,78 @@ function getPendenciasPrevisaoInputValue(dateStr) {
 function renderPendenciasAssociacaoPrevisaoInput(project) {
     const maxDate = getPendenciasPrevisaoInputMaxDate(project.deliveryDate);
     return `<input type="date"
-        class="pendencias-previsao-input px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+        class="pendencias-previsao-input w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
         data-project-id="${project.id}"
         ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
         title="Previsão de conclusão do projeto técnico">`;
+}
+
+function renderPendenciasSemResponsavelProjectRow(project, characteristicsMap = new Map(), options = {}) {
+    const mode = options.mode === 'projetista' ? 'projetista' : 'gestor';
+    const orderCode = project.order?.orderCode || '—';
+    const clientName = project.order?.clientName || '—';
+    const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
+    const projectLabel = getPendenciasProjectDetailLabel(project);
+    const characteristicRows = characteristicsMap.get(Number(project.id)) || [];
+    const characteristicsCell = typeof renderPendenciasProjectCharacteristicsCell === 'function'
+        ? renderPendenciasProjectCharacteristicsCell(characteristicRows)
+        : 'Nenhuma';
+
+    const designerCell = mode === 'gestor'
+        ? `<td class="p-3 pendencias-sem-projetista-designer">
+                <select class="pendencias-gestor-designer-select w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                    data-project-id="${project.id}">
+                    <option value="">Selecione...</option>
+                    ${getPendenciasProjetistaOptionsHtml()}
+                </select>
+            </td>`
+        : '';
+
+    const actionCell = mode === 'gestor'
+        ? `<button type="button"
+                class="pendencias-gestor-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
+                data-project-id="${project.id}"
+                data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
+                Associar
+            </button>`
+        : `<button type="button"
+                class="pendencias-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
+                data-project-id="${project.id}"
+                data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
+                Associar a mim
+            </button>`;
+
+    return `
+        <tr class="border-b border-slate-100 last:border-0">
+            <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
+            <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+            <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
+            <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
+            <td class="p-3 text-xs text-slate-600 pendencias-sem-projetista-characteristics">${characteristicsCell}</td>
+            <td class="p-3 pendencias-sem-projetista-previsao">
+                ${renderPendenciasAssociacaoPrevisaoInput(project)}
+            </td>
+            ${designerCell}
+            <td class="p-3 text-right pendencias-sem-projetista-action">${actionCell}</td>
+        </tr>
+    `;
+}
+
+function renderPendenciasSemResponsavelTableHead(showDesigner = true) {
+    return `
+        <tr>
+            <th class="text-left p-3 font-semibold">Pedido</th>
+            <th class="text-left p-3 font-semibold">Cliente</th>
+            <th class="text-left p-3 font-semibold">Projeto</th>
+            <th class="text-left p-3 font-semibold">Entrega Proj. Téc.</th>
+            <th class="text-left p-3 font-semibold min-w-[10rem]">Características</th>
+            <th class="text-left p-3 font-semibold min-w-[9.5rem]">Previsão</th>
+            ${showDesigner
+                ? '<th class="text-left p-3 font-semibold min-w-[11rem]">Projetista</th>'
+                : ''}
+            <th class="text-right p-3 font-semibold w-28">Ação</th>
+        </tr>
+    `;
 }
 
 function renderPendenciasWorkloadPrevisaoInput(project) {
@@ -104,9 +172,42 @@ function renderPendenciasWorkloadPrevisaoInput(project) {
         title="Previsão de conclusão do projeto técnico">`;
 }
 
-function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
+function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characteristicsMap = new Map()) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
+
+    const renderUnassignedTable = () => {
+        const rows = unassigned.map(project => renderPendenciasSemResponsavelProjectRow(
+            project,
+            characteristicsMap,
+            { mode: 'projetista' }
+        ));
+
+        return `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-900">Sem responsável</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">${unassigned.length} projeto${unassigned.length === 1 ? '' : 's'}</p>
+                </div>
+                <button type="button" id="btn-pendencias-refresh-aguardando-pt"
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
+                </button>
+            </div>
+            ${unassigned.length
+                ? `<div class="overflow-x-auto">
+                    <table class="pendencias-sem-projetista-table w-full text-sm min-w-[60rem]">
+                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                            ${renderPendenciasSemResponsavelTableHead(false)}
+                        </thead>
+                        <tbody>${rows.join('')}</tbody>
+                    </table>
+                </div>`
+                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto aguardando projeto técnico sem responsável.</p>'}
+        </div>
+    `;
+    };
 
     const renderRow = (project, mode, options = {}) => {
         const orderCode = project.order?.orderCode || '—';
@@ -120,17 +221,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
         const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
 
         let actionCell = '';
-        if (mode === 'unassigned') {
-            actionCell = `<div class="flex flex-wrap items-center justify-end gap-2">
-                ${renderPendenciasAssociacaoPrevisaoInput(project)}
-                <button type="button"
-                    class="pendencias-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium"
-                    data-project-id="${project.id}"
-                    data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
-                    Associar a mim
-                </button>
-            </div>`;
-        } else if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) {
+        if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) {
             actionCell = `<button type="button"
                 class="pendencias-iniciar-projeto-btn text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-1.5 rounded-lg font-medium"
                 data-project-id="${project.id}">
@@ -166,10 +257,6 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
                     <h3 class="font-bold text-sm text-slate-900">${escapeHtml(title)}</h3>
                     <p class="text-xs text-slate-400 mt-0.5">${rows.length} projeto${rows.length === 1 ? '' : 's'}</p>
                 </div>
-                <button type="button" id="btn-pendencias-refresh-aguardando-pt"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
             </div>
             ${rows.length
                 ? `<div class="overflow-x-auto">
@@ -196,12 +283,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine) {
 
     content.innerHTML = `
         <div class="space-y-4">
-            ${renderTable(
-                'Sem responsável',
-                unassigned.map(project => renderRow(project, 'unassigned')),
-                'Nenhum projeto aguardando projeto técnico sem responsável.',
-                { lastColumnLabel: 'Previsão e associar' }
-            )}
+            ${renderUnassignedTable()}
             ${renderTable(
                 'Associados a mim',
                 mine.map(project => renderRow(project, 'mine', { showPrevisaoColumn: true })),
@@ -455,7 +537,7 @@ function renderPendenciasWorkloadStatusSections(projects) {
     }).join('');
 }
 
-function renderPendenciasProjetosSemProjetistas(workload, projects) {
+function renderPendenciasProjetosSemProjetistas(workload, projects, characteristicsMap = new Map()) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
@@ -471,37 +553,11 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
         </article>
     `).join('');
 
-    const projectRows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const projectLabel = getPendenciasProjectLabel(project);
-
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3">
-                    <div class="flex flex-wrap items-center justify-end gap-2">
-                        ${renderPendenciasAssociacaoPrevisaoInput(project)}
-                        <select class="pendencias-gestor-designer-select px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
-                            data-project-id="${project.id}">
-                            <option value="">Selecione...</option>
-                            ${getPendenciasProjetistaOptionsHtml()}
-                        </select>
-                        <button type="button"
-                            class="pendencias-gestor-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
-                            data-project-id="${project.id}"
-                            data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
-                            Associar
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    }).join('');
+    const projectRows = projects.map(project => renderPendenciasSemResponsavelProjectRow(
+        project,
+        characteristicsMap,
+        { mode: 'gestor' }
+    )).join('');
 
     content.innerHTML = `
         <div class="space-y-4">
@@ -528,15 +584,9 @@ function renderPendenciasProjetosSemProjetistas(workload, projects) {
                 </div>
                 ${projects.length
                     ? `<div class="overflow-x-auto">
-                        <table class="w-full text-sm min-w-[920px]">
+                        <table class="pendencias-sem-projetista-table w-full text-sm min-w-[72rem]">
                             <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                                <tr>
-                                    <th class="text-left p-3 font-semibold">Pedido</th>
-                                    <th class="text-left p-3 font-semibold">Cliente</th>
-                                    <th class="text-left p-3 font-semibold">Projeto</th>
-                                    <th class="text-left p-3 font-semibold">Entrega Proj. Téc.</th>
-                                    <th class="text-right p-3 font-semibold min-w-[24rem]">Previsão e associar projetista</th>
-                                </tr>
+                                ${renderPendenciasSemResponsavelTableHead(true)}
                             </thead>
                             <tbody>${projectRows}</tbody>
                         </table>
@@ -615,7 +665,12 @@ async function loadPendenciasProjetosSemProjetistas() {
         return;
     }
 
-    renderPendenciasProjetosSemProjetistas(workloadResult.workload, projectsResult.projects);
+    const projectIds = (projectsResult.projects || []).map(project => Number(project.id)).filter(Boolean);
+    const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
+        ? await fetchOrderProjectCharacteristicsMap(projectIds)
+        : new Map();
+
+    renderPendenciasProjetosSemProjetistas(workloadResult.workload, projectsResult.projects, characteristicsMap);
 }
 
 async function salvarPendenciasWorkloadPrevisaoConclusao(projectId, previsaoDate, deliveryDate = '') {
@@ -810,7 +865,12 @@ async function loadPendenciasAguardandoProjetoTecnico() {
         return;
     }
 
-    renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine);
+    const unassignedIds = (unassigned || []).map(project => Number(project.id)).filter(Boolean);
+    const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
+        ? await fetchOrderProjectCharacteristicsMap(unassignedIds)
+        : new Map();
+
+    renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characteristicsMap);
 }
 
 async function associarPendenciaProjetoAMim(projectId, previsaoDate, deliveryDate = '') {

@@ -42,6 +42,7 @@ function initAppEvents() {
     bindCommercialApprovalQueryEvents();
     bindOrderEvents();
     bindOrderProjectEvents();
+    bindProjectCharacteristicsEvents();
     bindAnteprojetoEvents();
     bindMedicaoEvents();
     bindFabricaEvents();

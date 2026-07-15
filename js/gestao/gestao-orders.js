@@ -780,12 +780,20 @@ async function persistGestaoProjects(orderId, projects) {
         if (project.id) {
             await updateGestaoProject(project, now);
             if (project.projectCode) idByCode[project.projectCode] = project.id;
+            if (Array.isArray(project.characteristicIds) && typeof replaceOrderProjectCharacteristics === 'function') {
+                await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
+            }
             continue;
         }
 
         const insertedId = await insertGestaoProject(orderId, project, now);
         if (project.projectCode && insertedId) {
             idByCode[project.projectCode] = insertedId;
+        }
+        if (insertedId
+            && Array.isArray(project.characteristicIds)
+            && typeof replaceOrderProjectCharacteristics === 'function') {
+            await replaceOrderProjectCharacteristics(insertedId, project.characteristicIds);
         }
     }
 
@@ -806,12 +814,20 @@ async function persistGestaoProjects(orderId, projects) {
             if (item.project.projectCode) {
                 idByCode[item.project.projectCode] = item.project.id;
             }
+            if (Array.isArray(item.project.characteristicIds) && typeof replaceOrderProjectCharacteristics === 'function') {
+                await replaceOrderProjectCharacteristics(item.project.id, item.project.characteristicIds);
+            }
             continue;
         }
 
         const insertedId = await insertGestaoProject(orderId, item.project, now);
         if (item.project.projectCode && insertedId) {
             idByCode[item.project.projectCode] = insertedId;
+        }
+        if (insertedId
+            && Array.isArray(item.project.characteristicIds)
+            && typeof replaceOrderProjectCharacteristics === 'function') {
+            await replaceOrderProjectCharacteristics(insertedId, item.project.characteristicIds);
         }
     }
 

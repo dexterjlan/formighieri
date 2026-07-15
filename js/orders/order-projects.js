@@ -1,6 +1,7 @@
 let environmentTypesCache = [];
 let orderProjectsCache = [];
 let orderProjectsExpanded = false;
+let orderProjectCharacteristicsExpanded = new Set();
 
 async function loadEnvironmentTypes() {
     if (environmentTypesCache.length) return environmentTypesCache;
@@ -324,7 +325,13 @@ async function loadOrderProjects(orderId) {
         && orderHasDeliveryPhases(orderId);
     orderProjectsCache = projects;
     orderProjectsExpanded = false;
+    orderProjectCharacteristicsExpanded = new Set();
     updateOrderTabCounts(undefined, undefined, orderProjectsCache.length);
+
+    const projectIds = orderProjectsCache.map(project => Number(project.id)).filter(Boolean);
+    const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
+        ? await fetchOrderProjectCharacteristicsMap(projectIds)
+        : new Map();
 
     if (!list) return;
 
@@ -371,29 +378,48 @@ async function loadOrderProjects(orderId) {
                 ? `${phaseDisplay.name} · ${phaseDisplay.dateLabel}`
                 : `Entrega do projeto técnico: ${deliveryDate}`;
             const designerName = p.designer?.name || '—';
-            const row = document.createElement('div');
-            row.className = 'order-projects-grid__row';
-            row.innerHTML = `
-                <div class="order-projects-grid__cell order-projects-grid__cell--project min-w-0">
-                    <div class="flex flex-wrap items-center gap-1.5">
-                        <span class="text-xs font-semibold text-slate-800 truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
-                        ${renderComplementarProjectNoticeHtml(p)}
-                        ${renderSubstituidoProjectNoticeHtml(p)}
-                        ${renderSubstituicaoProjectNoticeHtml(p)}
+            const projectId = Number(p.id);
+            const isCharacteristicsExpanded = orderProjectCharacteristicsExpanded.has(projectId);
+            const characteristicRows = characteristicsMap.get(projectId) || [];
+            const item = document.createElement('div');
+            item.className = 'order-projects-grid__item';
+            item.dataset.projectId = String(projectId);
+            item.innerHTML = `
+                <div class="order-projects-grid__row">
+                    <div class="order-projects-grid__cell order-projects-grid__cell--project min-w-0">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <button type="button"
+                                class="order-project-characteristics-toggle"
+                                data-project-id="${projectId}"
+                                aria-expanded="${isCharacteristicsExpanded}"
+                                aria-label="${isCharacteristicsExpanded ? 'Recolher características' : 'Expandir características'}"
+                                title="${isCharacteristicsExpanded ? 'Recolher características' : 'Expandir características'}">
+                                ${isCharacteristicsExpanded ? '▼' : '▶'}
+                            </button>
+                            <span class="text-xs font-semibold text-slate-800 truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                            ${renderComplementarProjectNoticeHtml(p)}
+                            ${renderSubstituidoProjectNoticeHtml(p)}
+                            ${renderSubstituicaoProjectNoticeHtml(p)}
+                        </div>
+                    </div>
+                    <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
+                    <span class="order-projects-grid__cell text-[10px] text-slate-600 whitespace-nowrap" title="${escapeHtml(deliveryTitle)}">${deliveryCell}</span>
+                    <span class="order-projects-grid__cell text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+                    <div class="order-projects-grid__cell order-projects-grid__cell--actions">
+                        <button type="button"
+                            class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
+                            data-project-id="${projectId}">
+                            Detalhes
+                        </button>
                     </div>
                 </div>
-                <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
-                <span class="order-projects-grid__cell text-[10px] text-slate-600 whitespace-nowrap" title="${escapeHtml(deliveryTitle)}">${deliveryCell}</span>
-                <span class="order-projects-grid__cell text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
-                <div class="order-projects-grid__cell order-projects-grid__cell--actions">
-                    <button type="button"
-                        class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
-                        data-project-id="${p.id}">
-                        Detalhes
-                    </button>
+                <div class="order-projects-grid__characteristics ${isCharacteristicsExpanded ? '' : 'hidden'}">
+                    ${typeof renderOrderProjectCharacteristicsContent === 'function'
+                        ? renderOrderProjectCharacteristicsContent(characteristicRows)
+                        : ''}
                 </div>
             `;
-            grid.appendChild(row);
+            grid.appendChild(item);
         });
 
     applyProjectsListCollapse();
@@ -408,6 +434,34 @@ function bindOrderProjectEvents() {
     document.getElementById('btn-toggle-projects-list')?.addEventListener('click', toggleOrderProjectsList);
 
     document.getElementById('order-projects-list')?.addEventListener('click', async (event) => {
+        const toggleBtn = event.target.closest('.order-project-characteristics-toggle');
+        if (toggleBtn) {
+            event.stopPropagation();
+            const projectId = Number(toggleBtn.dataset.projectId);
+            if (!projectId) return;
+
+            const item = toggleBtn.closest('.order-projects-grid__item');
+            const panel = item?.querySelector('.order-projects-grid__characteristics');
+            const isExpanded = orderProjectCharacteristicsExpanded.has(projectId);
+
+            if (isExpanded) {
+                orderProjectCharacteristicsExpanded.delete(projectId);
+                panel?.classList.add('hidden');
+                toggleBtn.textContent = '▶';
+                toggleBtn.setAttribute('aria-expanded', 'false');
+                toggleBtn.setAttribute('aria-label', 'Expandir características');
+                toggleBtn.title = 'Expandir características';
+            } else {
+                orderProjectCharacteristicsExpanded.add(projectId);
+                panel?.classList.remove('hidden');
+                toggleBtn.textContent = '▼';
+                toggleBtn.setAttribute('aria-expanded', 'true');
+                toggleBtn.setAttribute('aria-label', 'Recolher características');
+                toggleBtn.title = 'Recolher características';
+            }
+            return;
+        }
+
         const button = event.target.closest('.order-project-details-btn');
         if (!button) return;
 

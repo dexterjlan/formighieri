@@ -525,6 +525,14 @@
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Marceneiros
                                 </button>
+                                <button type="button" id="gestao-nav-montadores"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Montadores
+                                </button>
+                                <button type="button" id="gestao-nav-characteristics"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Características
+                                </button>
                                 <button type="button" id="gestao-nav-usuarios"
                                     class="hidden gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Usuários
@@ -542,6 +550,10 @@
                         <button type="button" id="gestao-nav-gantt"
                             class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                             Gantt Projetos
+                        </button>
+                        <button type="button" id="gestao-nav-montagem-programacao"
+                            class="hidden gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Programação Montagem
                         </button>
                         <button type="button" id="gestao-nav-relatorios"
                             class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
@@ -807,6 +819,17 @@
                                 </div>
                             </div>
 
+                            <div id="gestao-project-characteristics-wrap" class="border border-slate-200 rounded-xl p-4 bg-slate-50/40 space-y-3">
+                                <div>
+                                    <h4 class="text-xs font-semibold text-slate-700">Características do projeto</h4>
+                                    <p class="text-[10px] text-slate-400 mt-0.5">Selecione as características aplicáveis ou marque Nenhuma.</p>
+                                </div>
+                                <div id="gestao-project-characteristics-options" class="project-characteristics-project__options"></div>
+                                <p id="gestao-project-characteristics-empty" class="hidden text-xs text-slate-400">
+                                    Nenhuma característica cadastrada. Cadastre em Gestão → Cadastros → Características.
+                                </p>
+                            </div>
+
                             <div class="flex flex-wrap gap-2 pt-2">
                                 <button type="button" id="btn-gestao-remove-project"
                                     class="hidden text-xs bg-red-50 text-red-700 border border-red-200 px-4 py-2 rounded-lg font-medium hover:bg-red-100">
@@ -895,6 +918,80 @@
                                         </tr>
                                     </thead>
                                     <tbody id="gestao-marceneiros-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-montadores-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Montadores</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os montadores com identificador e nome.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-montador-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[180px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo montador</label>
+                                    <input type="text" id="gestao-new-montador-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Nome do montador">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-24">ID</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-montadores-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    </div>
+
+                    <div id="gestao-characteristics-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Características</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Flags de projeto usadas pelo consultor após a conferência.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-characteristic-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[180px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Nova característica</label>
+                                    <input type="text" id="gestao-new-characteristic-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Ex.: Lâmina Natural">
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ordem</label>
+                                    <input type="number" id="gestao-new-characteristic-sort" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-characteristics-list" class="divide-y divide-slate-100"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -1060,6 +1157,64 @@
                         </div>
                         <div id="gestao-performance-content" class="flex-1 overflow-auto p-4 space-y-4 bg-slate-50/30">
                             <p class="text-xs text-slate-400 text-center py-8">Carregando performance...</p>
+                        </div>
+                    </div>
+
+                    <div id="gestao-montagem-programacao-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
+                            <div>
+                                <h3 class="font-bold text-sm text-slate-900">Programação Montagem</h3>
+                                <p class="text-xs text-slate-400 mt-0.5">Arraste montadores para a semana. Solte sobre outra barra para formar dupla.</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button type="button" id="btn-montagem-prog-prev-week"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    ← Semana anterior
+                                </button>
+                                <span id="montagem-prog-week-label" class="text-xs font-semibold text-slate-700 min-w-[10rem] text-center"></span>
+                                <button type="button" id="btn-montagem-prog-next-week"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    Próxima semana →
+                                </button>
+                                <button type="button" id="btn-montagem-prog-today"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    Semana atual
+                                </button>
+                                <button type="button" id="btn-montagem-prog-refresh"
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                    <span>Atualizar</span>
+                                </button>
+                                <button type="button" id="btn-montagem-prog-copy-prev-week"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    Copiar semana anterior
+                                </button>
+                                <button type="button" id="btn-montagem-prog-print"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    Imprimir
+                                </button>
+                            </div>
+                        </div>
+                        <div id="montagem-prog-conflicts" class="hidden px-4 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800"></div>
+                        <div id="montagem-prog-print-header" class="montagem-prog-print-header" aria-hidden="true">
+                            <h2>Programação Montagem</h2>
+                            <p id="montagem-prog-print-week-label"></p>
+                        </div>
+                        <div class="montagem-prog-layout flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+                            <aside class="montagem-prog-palette shrink-0 border-b lg:border-b-0 lg:border-r border-slate-100 bg-slate-50/40 p-3 lg:w-48 overflow-y-auto">
+                                <div class="flex items-center justify-between gap-2 mb-2">
+                                    <p class="text-[10px] font-semibold uppercase text-slate-400">Montadores</p>
+                                    <select id="montagem-prog-montador-filter"
+                                        class="montagem-prog-montador-filter text-[10px] border border-slate-200 rounded-md px-1.5 py-0.5 bg-white text-slate-600 max-w-[7rem]"
+                                        title="Filtrar barras por montador">
+                                        <option value="">Todos</option>
+                                    </select>
+                                </div>
+                                <div id="montagem-prog-palette" class="space-y-1.5"></div>
+                            </aside>
+                            <div class="montagem-prog-calendar flex-1 min-w-0 overflow-auto p-3 md:p-4">
+                                <div id="montagem-prog-week-grid" class="montagem-prog-week-grid"></div>
+                            </div>
                         </div>
                     </div>
 

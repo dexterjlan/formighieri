@@ -4,6 +4,8 @@ let gestaoEnvironmentTypesCache = [];
 let gestaoProjetistasCache = [];
 let gestaoProjectStatusesCache = [];
 let gestaoMarceneirosCache = [];
+let gestaoMontadoresCache = [];
+let gestaoProjectCharacteristicsCache = [];
 let editingGestaoOrderId = null;
 let gestaoOrderProjectsDraft = [];
 let editingGestaoProjectDraftIndex = null;
@@ -12,7 +14,7 @@ const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 roun
 const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
 const GESTAO_NAV_SUB_ACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
 const GESTAO_NAV_SUB_INACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'marceneiros', 'usuarios'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'marceneiros', 'montadores', 'characteristics', 'usuarios'];
 const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
 const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
@@ -50,7 +52,10 @@ function setGestaoNavActive(navKey) {
         pedido: document.getElementById('gestao-nav-pedido'),
         'project-status': document.getElementById('gestao-nav-project-status'),
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
+        montadores: document.getElementById('gestao-nav-montadores'),
+        characteristics: document.getElementById('gestao-nav-characteristics'),
         usuarios: document.getElementById('gestao-nav-usuarios'),
+        'montagem-programacao': document.getElementById('gestao-nav-montagem-programacao'),
         dashboard: document.getElementById('gestao-nav-dashboard'),
         kanban: document.getElementById('gestao-nav-kanban'),
         gantt: document.getElementById('gestao-nav-gantt'),
@@ -87,6 +92,9 @@ function setGestaoNavActive(navKey) {
 
 function updateGestaoCadastrosNavVisibility() {
     document.getElementById('gestao-nav-usuarios')?.classList.toggle('hidden', !isAdmin());
+    if (typeof updateMontagemProgramacaoNavVisibility === 'function') {
+        updateMontagemProgramacaoNavVisibility();
+    }
 }
 
 function hideAllGestaoPanels() {
@@ -95,6 +103,9 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-project-form-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
+    document.getElementById('gestao-montadores-panel')?.classList.add('hidden');
+    document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
+    document.getElementById('gestao-montagem-programacao-panel')?.classList.add('hidden');
     document.getElementById('gestao-usuarios-panel')?.classList.add('hidden');
     document.getElementById('gestao-dashboard-panel')?.classList.add('hidden');
     document.getElementById('gestao-kanban-panel')?.classList.add('hidden');
@@ -495,6 +506,9 @@ async function openProjectViewModal(projectOrId) {
         : await fetchComplementarChildrenForProject(project.id);
 
     fillProjectViewModal(project, complementarChildren);
+    if (typeof renderProjectViewCharacteristics === 'function') {
+        await renderProjectViewCharacteristics(project.id);
+    }
     orderProjectViewContext = typeof buildProjectStatusHistoryContext === 'function'
         ? buildProjectStatusHistoryContext(project)
         : null;
@@ -607,6 +621,9 @@ function resetGestaoProjectForm() {
     document.getElementById('gestao-project-substituido-por-code').required = false;
     document.getElementById('gestao-project-substituido').checked = false;
     document.getElementById('btn-gestao-remove-project')?.classList.add('hidden');
+    if (typeof resetGestaoProjectCharacteristicsForm === 'function') {
+        resetGestaoProjectCharacteristicsForm();
+    }
     syncGestaoProjectTechnicalDeliveryConstraints();
     applyGestaoProjectStatusReadonly();
     syncGestaoProjectPhaseFieldVisibility();
@@ -746,6 +763,9 @@ async function openGestaoProjectForm(index = null) {
         fillGestaoProjectForm(gestaoOrderProjectsDraft[index]);
         removeBtn?.classList.remove('hidden');
         syncGestaoProjectPhaseFieldVisibility();
+        if (typeof loadGestaoProjectCharacteristicsForm === 'function') {
+            await loadGestaoProjectCharacteristicsForm(gestaoOrderProjectsDraft[index]);
+        }
     } else {
         if (title) title.textContent = 'Novo Projeto';
         const defaultStatusId = getDefaultProjectStatusId();
@@ -758,6 +778,9 @@ async function openGestaoProjectForm(index = null) {
         syncGestaoProjectTechnicalDeliveryConstraints();
         bindGestaoProjectRelationToggles();
         syncGestaoProjectPhaseFieldVisibility();
+        if (typeof loadGestaoProjectCharacteristicsForm === 'function') {
+            await loadGestaoProjectCharacteristicsForm({});
+        }
     }
 
     showGestaoProjectFormPanel();
@@ -778,6 +801,15 @@ function saveGestaoProjectDraft(event) {
 
 async function saveGestaoProjectDraftAsync() {
     const project = collectGestaoProjectFormData();
+
+    if (typeof collectGestaoProjectCharacteristicsFormSelection === 'function'
+        && typeof validateGestaoProjectCharacteristicsSelection === 'function') {
+        const characteristicsSelection = collectGestaoProjectCharacteristicsFormSelection();
+        if (!validateGestaoProjectCharacteristicsSelection(characteristicsSelection)) return;
+        project.characteristicIds = characteristicsSelection.noneChecked
+            ? []
+            : characteristicsSelection.characteristicIds;
+    }
 
     if (!project.projectCode || !project.name || !project.environmentTypeId || !project.statusId) {
         alertAppDialog('Preencha código, nome, ambiente e status do projeto.');
@@ -887,8 +919,14 @@ async function saveGestaoProjectDraftAsync() {
             && hasGestaoOrderMultiplePhases()) {
             await applyGestaoProjectDeliveryPhaseUpdate(project.id, project.deliveryPhaseId);
         }
+
+        if (project.id
+            && Array.isArray(project.characteristicIds)
+            && typeof replaceOrderProjectCharacteristics === 'function') {
+            await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
+        }
     } catch (error) {
-        alertAppDialog(`Erro ao salvar fase de entrega: ${error.message}`);
+        alertAppDialog(`Erro ao salvar projeto: ${error.message}`);
         return;
     }
 
@@ -983,6 +1021,18 @@ function showGestaoMarceneirosPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-marceneiros-panel')?.classList.remove('hidden');
     setGestaoNavActive('marceneiros');
+}
+
+function showGestaoMontadoresPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-montadores-panel')?.classList.remove('hidden');
+    setGestaoNavActive('montadores');
+}
+
+function showGestaoCharacteristicsPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-characteristics-panel')?.classList.remove('hidden');
+    setGestaoNavActive('characteristics');
 }
 
 function showGestaoUsuariosPanel() {
@@ -1137,6 +1187,17 @@ function bindGestaoEvents() {
         showGestaoMarceneirosPanel();
         loadGestaoMarceneirosList();
     });
+    document.getElementById('gestao-nav-montadores')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoMontadoresPanel();
+        loadGestaoMontadoresList();
+    });
+    document.getElementById('gestao-nav-characteristics')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoCharacteristicsPanel();
+        loadGestaoProjectCharacteristicsList();
+    });
+    document.getElementById('gestao-new-characteristic-form')?.addEventListener('submit', addGestaoProjectCharacteristic);
     document.getElementById('gestao-nav-usuarios')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoUsuariosPanel();
@@ -1171,6 +1232,7 @@ function bindGestaoEvents() {
     });
     document.getElementById('gestao-new-status-form')?.addEventListener('submit', addGestaoProjectStatus);
     document.getElementById('gestao-new-marceneiro-form')?.addEventListener('submit', addGestaoMarceneiro);
+    document.getElementById('gestao-new-montador-form')?.addEventListener('submit', addGestaoMontador);
     if (typeof bindGestaoRelatoriosEvents === 'function') {
         bindGestaoRelatoriosEvents();
     }
@@ -1188,5 +1250,8 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoPhasesEvents === 'function') {
         bindGestaoPhasesEvents();
+    }
+    if (typeof bindMontagemProgramacaoEvents === 'function') {
+        bindMontagemProgramacaoEvents();
     }
 }
