@@ -1233,6 +1233,20 @@ function bindGestaoEvents() {
     document.getElementById('gestao-new-status-form')?.addEventListener('submit', addGestaoProjectStatus);
     document.getElementById('gestao-new-marceneiro-form')?.addEventListener('submit', addGestaoMarceneiro);
     document.getElementById('gestao-new-montador-form')?.addEventListener('submit', addGestaoMontador);
+    document.getElementById('gestao-montadores-list')?.addEventListener('click', (event) => {
+        const saveButton = event.target.closest('.gestao-save-montador');
+        if (saveButton) {
+            event.preventDefault();
+            saveGestaoMontadorRow(saveButton.closest('tr'), saveButton);
+            return;
+        }
+
+        const deleteButton = event.target.closest('.gestao-delete-montador');
+        if (deleteButton) {
+            event.preventDefault();
+            deleteGestaoMontadorRow(deleteButton.closest('tr'));
+        }
+    });
     if (typeof bindGestaoRelatoriosEvents === 'function') {
         bindGestaoRelatoriosEvents();
     }

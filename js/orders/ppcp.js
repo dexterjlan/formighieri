@@ -76,6 +76,7 @@ function renderPpcpProjectCard(project, implantacao) {
     const projectStatusClass = getOrderProjectStatusBadgeClass(statusName);
     const canAct = canActOrderPpcp() && canActOnOrderProject(project);
     const isAguardandoPpcp = statusName === PPCP_AGUARDANDO_STATUS;
+    const isImplantacaoStatus = statusName === PPCP_IMPLANTACAO_STATUS;
     const hasImplantacao = Boolean(implantacao);
 
     let statusBadgeHtml = `
@@ -108,7 +109,7 @@ function renderPpcpProjectCard(project, implantacao) {
         `);
     }
 
-    if (hasImplantacao) {
+    if (hasImplantacao || isImplantacaoStatus) {
         buttons.push(`
             <button type="button"
                 class="ppcp-implantacao-btn bg-teal-700 text-white text-xs px-4 py-2 rounded-lg font-medium hover:bg-teal-800 whitespace-nowrap">
@@ -187,7 +188,11 @@ async function loadPpcpProjects(orderId) {
     }
 
     const items = projects || [];
-    const implantacaoByProjectId = await fetchImplantacoesMapForProjectIds(items.map(project => project.id));
+    let implantacaoByProjectId = await fetchImplantacoesMapForProjectIds(items.map(project => project.id));
+
+    if (typeof syncImplantacaoRecordsMapForProjects === 'function') {
+        implantacaoByProjectId = await syncImplantacaoRecordsMapForProjects(items, implantacaoByProjectId);
+    }
 
     updateOrderTabCounts(
         undefined,

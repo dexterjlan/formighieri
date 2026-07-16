@@ -732,6 +732,7 @@ body {
 .order-detail-tab--amber.is-active { color: rgb(146 64 14); border-top: 2px solid rgb(217 119 6); }
 .order-detail-tab--sky.is-active { color: rgb(3 105 161); border-top: 2px solid rgb(14 165 233); }
 .order-detail-tab--teal.is-active { color: rgb(15 118 110); border-top: 2px solid rgb(20 184 166); }
+.order-detail-tab--indigo.is-active { color: rgb(67 56 202); border-top: 2px solid rgb(99 102 241); }
 .order-detail-tab--purple.is-active { color: rgb(107 33 168); border-top: 2px solid rgb(147 51 234); }
 .order-detail-tab--violet.is-active { color: rgb(91 33 182); border-top: 2px solid rgb(124 58 237); }
 .order-detail-tab--orange.is-active { color: rgb(154 52 18); border-top: 2px solid rgb(234 88 12); }

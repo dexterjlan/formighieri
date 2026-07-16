@@ -202,6 +202,14 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
 
     rememberOrderProjectAsNomeado(projectId);
 
+    if (typeof notifyProjetoNomeadoEmail === 'function') {
+        await notifyProjetoNomeadoEmail({
+            orderId: project.orderId,
+            orderProjectIds: [projectId],
+            designerId: project.designerId
+        });
+    }
+
     if (typeof onSuccess === 'function') {
         await onSuccess();
     }

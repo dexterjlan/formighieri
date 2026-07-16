@@ -209,7 +209,8 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
     const canEnviarProducao = canAct
         && !isEnviadoProducao
         && values.projetoChecked
-        && Boolean(values.projetoPath);
+        && Boolean(values.projetoPath)
+        && Boolean(values.wpsOpCode);
 
     const canEnviarCompras = canAct
         && (
@@ -277,6 +278,79 @@ async function ensureImplantacaoRecord(orderProjectId) {
     const existing = await fetchImplantacaoByOrderProjectId(orderProjectId);
     if (existing) return existing;
     return createImplantacaoRecord(orderProjectId);
+}
+
+async function isOrderProjectInImplantacaoStatus(orderProjectId) {
+    const statusId = await getOrderProjectStatusIdForImplantacao(IMPLANTACAO_PROJECT_STATUS_IMPLANTACAO);
+    if (!statusId) return false;
+
+    const { data, error } = await supabaseClient
+        .from('OrderProject')
+        .select('id, statusId, projectStatus:OrderProjectStatus(name)')
+        .eq('id', orderProjectId)
+        .maybeSingle();
+
+    if (error) throw error;
+
+    return Number(data?.statusId) === Number(statusId)
+        || data?.projectStatus?.name === IMPLANTACAO_PROJECT_STATUS_IMPLANTACAO;
+}
+
+async function fetchOrderProjectsInImplantacaoStatus() {
+    const statusId = await getOrderProjectStatusIdForImplantacao(IMPLANTACAO_PROJECT_STATUS_IMPLANTACAO);
+    if (!statusId) return [];
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('id, name, orderId, statusId, deliveryDate, projectStatus:OrderProjectStatus(id, name)')
+        .eq('statusId', statusId)
+        .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('projectStatus')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, orderId, statusId, deliveryDate')
+            .eq('statusId', statusId)
+            .order('name', { ascending: true });
+    }
+
+    if (result.error) {
+        console.error('fetchOrderProjectsInImplantacaoStatus:', result.error);
+        return [];
+    }
+
+    return result.data || [];
+}
+
+async function ensureImplantacaoRecordsForProjects(projects = []) {
+    const recordsByProjectId = {};
+
+    for (const project of projects) {
+        const projectId = Number(project?.id || project);
+        if (!projectId) continue;
+
+        try {
+            const record = await ensureImplantacaoRecord(projectId);
+            if (record) recordsByProjectId[projectId] = record;
+        } catch (error) {
+            console.warn('ensureImplantacaoRecordsForProjects:', projectId, error);
+        }
+    }
+
+    return recordsByProjectId;
+}
+
+async function syncImplantacaoRecordsMapForProjects(projects = [], implantacaoByProjectId = {}) {
+    const syncedMap = { ...implantacaoByProjectId };
+    const missingProjects = (projects || []).filter(project => {
+        const statusName = project?.projectStatus?.name || '';
+        return statusName === IMPLANTACAO_PROJECT_STATUS_IMPLANTACAO && !syncedMap[project.id];
+    });
+
+    if (!missingProjects.length) return syncedMap;
+
+    const createdMap = await ensureImplantacaoRecordsForProjects(missingProjects);
+    return { ...syncedMap, ...createdMap };
 }
 
 function buildImplantacaoUpdatePayload(formValues, extra = {}) {
@@ -425,8 +499,13 @@ async function openImplantacaoModal(orderProjectId, projectName = '', options = 
         if (requireExisting) {
             activeImplantacaoRecord = await fetchImplantacaoByOrderProjectId(activeImplantacaoOrderProjectId);
             if (!activeImplantacaoRecord) {
-                alertAppDialog('Implantação ainda não iniciada para este projeto.');
-                return;
+                const inImplantacaoStatus = await isOrderProjectInImplantacaoStatus(activeImplantacaoOrderProjectId);
+                if (inImplantacaoStatus && canActImplantacao()) {
+                    activeImplantacaoRecord = await ensureImplantacaoRecord(activeImplantacaoOrderProjectId);
+                } else {
+                    alertAppDialog('Implantação ainda não iniciada para este projeto.');
+                    return;
+                }
             }
         } else {
             activeImplantacaoRecord = await ensureImplantacaoRecord(activeImplantacaoOrderProjectId);
@@ -454,6 +533,9 @@ function closeImplantacaoModal() {
 }
 window.closeImplantacaoModal = closeImplantacaoModal;
 window.openImplantacaoModal = openImplantacaoModal;
+window.ensureImplantacaoRecordsForProjects = ensureImplantacaoRecordsForProjects;
+window.fetchOrderProjectsInImplantacaoStatus = fetchOrderProjectsInImplantacaoStatus;
+window.syncImplantacaoRecordsMapForProjects = syncImplantacaoRecordsMapForProjects;
 
 function setImplantacaoModalLoading(active, message = 'Processando...', status = 'loading') {
     const overlay = document.getElementById('implantacao-modal-loading');
@@ -534,8 +616,8 @@ async function handleImplantacaoEnviarProducao() {
     if (!activeImplantacaoRecord?.id || !activeImplantacaoOrderProjectId) return;
 
     const formValues = readImplantacaoFormValues();
-    if (!formValues.projetoChecked || !formValues.projetoPath) {
-        alertAppDialog('Marque o checklist de Projeto e informe o caminho da pasta.');
+    if (!formValues.projetoChecked || !formValues.projetoPath || !formValues.wpsOpCode) {
+        alertAppDialog('Marque o checklist de Projeto, informe o caminho da pasta e o código da OP no WPS.');
         return;
     }
 
@@ -571,6 +653,28 @@ async function handleImplantacaoEnviarProducao() {
 
         activeImplantacaoRecord = data;
         populateImplantacaoForm(data);
+
+        if (typeof notifyImplantacaoEnviarProducaoEmail === 'function') {
+            let orderId = activeOrderId;
+            let designerId = null;
+
+            const { data: projectMeta } = await supabaseClient
+                .from('OrderProject')
+                .select('orderId, designerId')
+                .eq('id', activeImplantacaoOrderProjectId)
+                .maybeSingle();
+
+            orderId = orderId || projectMeta?.orderId || null;
+            designerId = projectMeta?.designerId || null;
+
+            await notifyImplantacaoEnviarProducaoEmail({
+                orderId,
+                orderProjectId: activeImplantacaoOrderProjectId,
+                designerId,
+                wpsOpCode: formValues.wpsOpCode,
+                projetoPath: formValues.projetoPath
+            });
+        }
 
         setImplantacaoModalLoading(true, 'Atualizando telas...');
         await refreshImplantacaoRelatedViews(activeImplantacaoOrderProjectId);

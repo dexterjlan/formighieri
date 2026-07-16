@@ -882,6 +882,14 @@ async function fetchPendenciasImplantacoesAbertas() {
         ? IMPLANTACAO_STATUS_ENCERRADO
         : 'Encerrado';
 
+    if (typeof fetchOrderProjectsInImplantacaoStatus === 'function'
+        && typeof ensureImplantacaoRecordsForProjects === 'function') {
+        const orphanProjects = await fetchOrderProjectsInImplantacaoStatus();
+        if (orphanProjects.length) {
+            await ensureImplantacaoRecordsForProjects(orphanProjects);
+        }
+    }
+
     const { data: implantacoes, error } = await supabaseClient
         .from('Implantacao')
         .select('id, status, orderProjectId, updatedAt')

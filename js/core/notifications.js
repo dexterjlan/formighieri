@@ -728,7 +728,10 @@ const PROCESS_EMAIL_TITLE = {
     conferencia_confirmada: 'Conferência Confirmada',
     conferencia_aprovada: 'Conferência Aprovada',
     conferencia_devolvida: 'Conferência Devolvida ao Consultor',
-    liberacao_medicao: 'Liberação para Medição'
+    liberacao_medicao: 'Liberação para Medição',
+    projeto_nomeado: 'Projeto Nomeado',
+    projeto_tecnico_iniciado: 'Projeto Técnico Iniciado',
+    implantacao_enviado_producao: 'Projeto Enviado para Produção'
 };
 
 function formatNotificationDate(dateStr) {
@@ -815,6 +818,140 @@ async function fetchActiveGestoresRecipientEmails() {
 
     const unique = uniqueEmails(emails);
     return unique.length ? unique : [NOTIFICATION_TEST_EMAIL];
+}
+
+async function fetchActivePpcpProjetistasRecipientEmails() {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    let { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('email')
+        .eq('role', 'Projetista')
+        .eq('isActive', true)
+        .eq('ppcp', true);
+
+    if (error?.message?.includes('ppcp')) {
+        return [];
+    }
+
+    if (error) throw error;
+
+    const emails = (data || []).map(user => user.email);
+    return uniqueEmails(emails);
+}
+
+async function fetchActiveGestorProjetosRecipientEmails() {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    let { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('email, role, gestorProjetos')
+        .eq('isActive', true);
+
+    if (error?.message?.includes('gestorProjetos')) {
+        return [];
+    }
+
+    if (error) throw error;
+
+    const emails = (data || [])
+        .filter(user => (user.role === 'Admin' || user.role === 'Projetista') && user.gestorProjetos)
+        .map(user => user.email);
+
+    return uniqueEmails(emails);
+}
+
+async function fetchIniciarProjetoTecnicoRecipientEmails(orderId, designerId) {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    const [
+        designerEmail,
+        gestorProjetosEmails,
+        consultorEmail,
+        gestorComercialEmails
+    ] = await Promise.all([
+        fetchDesignerEmailById(designerId),
+        fetchActiveGestorProjetosRecipientEmails(),
+        fetchConsultorEmailForOrder(orderId),
+        fetchActiveGestorComercialRecipientEmails()
+    ]);
+
+    const recipients = uniqueEmails([
+        designerEmail,
+        ...gestorProjetosEmails,
+        consultorEmail,
+        ...gestorComercialEmails
+    ].filter(Boolean));
+
+    return recipients.length ? recipients : [NOTIFICATION_TEST_EMAIL];
+}
+
+async function fetchNomearRecipientEmails() {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    const [ppcpEmails, gestorProjetosEmails] = await Promise.all([
+        fetchActivePpcpProjetistasRecipientEmails(),
+        fetchActiveGestorProjetosRecipientEmails()
+    ]);
+
+    const recipients = uniqueEmails([...ppcpEmails, ...gestorProjetosEmails]);
+    return recipients.length ? recipients : [NOTIFICATION_TEST_EMAIL];
+}
+
+async function fetchDesignerEmailById(designerId) {
+    if (NOTIFICATION_TEST_MODE) {
+        return NOTIFICATION_TEST_EMAIL;
+    }
+
+    if (!designerId) return null;
+
+    const { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('email')
+        .eq('id', designerId)
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data?.email?.trim() || null;
+}
+
+async function fetchImplantacaoEnviarProducaoRecipientEmails(orderId, designerId) {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    const [
+        gestores,
+        consultorEmail,
+        designerEmail,
+        ppcpEmails,
+        comprasEmails
+    ] = await Promise.all([
+        fetchActiveGestoresRecipientEmails(),
+        fetchConsultorEmailForOrder(orderId),
+        fetchDesignerEmailById(designerId),
+        fetchActivePpcpProjetistasRecipientEmails(),
+        fetchActiveComprasRecipientEmails()
+    ]);
+
+    const recipients = uniqueEmails([
+        ...gestores,
+        consultorEmail,
+        designerEmail,
+        ...ppcpEmails,
+        ...comprasEmails
+    ].filter(Boolean));
+
+    return recipients.length ? recipients : [NOTIFICATION_TEST_EMAIL];
 }
 
 async function fetchActiveConferenteRecipientEmails() {
@@ -1296,6 +1433,116 @@ async function notifyConferenciaDevolvidaConsultorEmail(options = {}) {
 }
 
 window.notifyConferenciaDevolvidaConsultorEmail = notifyConferenciaDevolvidaConsultorEmail;
+
+async function notifyProjetoNomeadoEmail(options = {}) {
+    const { orderId, orderProjectIds = [], designerId = null } = options;
+    if (!orderId || !orderProjectIds.length) return;
+
+    try {
+        const recipientEmails = await fetchNomearRecipientEmails();
+
+        await sendProcessNotificationEmail('projeto_nomeado', {
+            orderId,
+            orderProjectIds,
+            designerId,
+            includeProjetista: true,
+            recipientEmails,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto nomeado',
+            accentColor: '#a855f7',
+            extraFields: [
+                { label: 'Novo status', value: 'Aguardando PPCP' }
+            ]
+        });
+    } catch (err) {
+        console.warn('notifyProjetoNomeadoEmail:', err);
+    }
+}
+
+window.notifyProjetoNomeadoEmail = notifyProjetoNomeadoEmail;
+
+async function notifyProjetoTecnicoIniciadoEmail(options = {}) {
+    const {
+        orderId,
+        orderProjectId,
+        designerId = null,
+        previsaoConclusaoProjetoTecnico = null
+    } = options;
+
+    if (!orderId || !orderProjectId) return;
+
+    try {
+        const recipientEmails = await fetchIniciarProjetoTecnicoRecipientEmails(orderId, designerId);
+        const extraFields = [
+            { label: 'Novo status', value: 'Projeto Técnico' }
+        ];
+
+        if (previsaoConclusaoProjetoTecnico) {
+            extraFields.push({
+                label: 'Previsão de conclusão',
+                value: formatNotificationDate(previsaoConclusaoProjetoTecnico)
+            });
+        }
+
+        await sendProcessNotificationEmail('projeto_tecnico_iniciado', {
+            orderId,
+            orderProjectIds: [orderProjectId],
+            designerId,
+            includeProjetista: true,
+            recipientEmails,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto técnico iniciado',
+            accentColor: '#6366f1',
+            extraFields
+        });
+    } catch (err) {
+        console.warn('notifyProjetoTecnicoIniciadoEmail:', err);
+    }
+}
+
+window.notifyProjetoTecnicoIniciadoEmail = notifyProjetoTecnicoIniciadoEmail;
+
+async function notifyImplantacaoEnviarProducaoEmail(options = {}) {
+    const {
+        orderId,
+        orderProjectId,
+        designerId = null,
+        wpsOpCode = '',
+        projetoPath = ''
+    } = options;
+
+    if (!orderId || !orderProjectId) return;
+
+    try {
+        const recipientEmails = await fetchImplantacaoEnviarProducaoRecipientEmails(orderId, designerId);
+        const extraFields = [
+            { label: 'Novo status', value: 'Em Produção' }
+        ];
+
+        if (projetoPath) {
+            extraFields.push({ label: 'Caminho do projeto', value: projetoPath });
+        }
+        if (wpsOpCode) {
+            extraFields.push({ label: 'Código da OP no WPS', value: wpsOpCode });
+        }
+
+        await sendProcessNotificationEmail('implantacao_enviado_producao', {
+            orderId,
+            orderProjectIds: [orderProjectId],
+            designerId,
+            includeProjetista: true,
+            recipientEmails,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto enviado para produção',
+            accentColor: '#7c3aed',
+            extraFields
+        });
+    } catch (err) {
+        console.warn('notifyImplantacaoEnviarProducaoEmail:', err);
+    }
+}
+
+window.notifyImplantacaoEnviarProducaoEmail = notifyImplantacaoEnviarProducaoEmail;
 
 async function notifyLiberacaoMedicaoEmail(options = {}) {
     const { orderId, projects = [] } = options;

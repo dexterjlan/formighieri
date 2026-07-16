@@ -325,12 +325,13 @@ async function loadConsultants() {
     });
 }
 
-function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount, fabricaCount, ppcpCount, nomearCount, comprasCount) {
+function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projectsCount, openAnteprojetoCount, medicoesCount, fabricaCount, ppcpCount, nomearCount, comprasCount, projetoTecnicoCount) {
     const approvalsCountEl = document.getElementById('order-tab-approvals-count');
     const requestsCountEl = document.getElementById('order-tab-requests-count');
     const projectsCountEl = document.getElementById('order-projects-count');
     const anteprojetoCountEl = document.getElementById('order-tab-anteprojeto-count');
     const medicaoCountEl = document.getElementById('order-tab-medicao-count');
+    const projetoTecnicoCountEl = document.getElementById('order-tab-projeto-tecnico-count');
     const fabricaCountEl = document.getElementById('order-tab-fabrica-count');
     const ppcpCountEl = document.getElementById('order-tab-ppcp-count');
     const nomearCountEl = document.getElementById('order-tab-nomear-count');
@@ -350,6 +351,9 @@ function updateOrderTabCounts(pendingApprovalsCount, openRequestsCount, projects
     }
     if (medicaoCountEl && medicoesCount !== undefined) {
         medicaoCountEl.textContent = `(${medicoesCount})`;
+    }
+    if (projetoTecnicoCountEl && projetoTecnicoCount !== undefined) {
+        projetoTecnicoCountEl.textContent = `(${projetoTecnicoCount})`;
     }
     if (fabricaCountEl && fabricaCount !== undefined) {
         fabricaCountEl.textContent = `(${fabricaCount})`;
@@ -436,6 +440,11 @@ const ORDER_DETAIL_TABS = {
         tabId: 'order-tab-medicao',
         panelId: 'order-tab-panel-medicao',
         accent: 'teal'
+    },
+    'projeto-tecnico': {
+        tabId: 'order-tab-projeto-tecnico',
+        panelId: 'order-tab-panel-projeto-tecnico',
+        accent: 'indigo'
     },
     nomear: {
         tabId: 'order-tab-nomear',
@@ -571,6 +580,9 @@ async function selectOrder(id) {
     if (typeof loadMedicoes === 'function') {
         loadMedicoes(id);
     }
+    if (typeof loadOrderProjetoTecnicoProjects === 'function') {
+        loadOrderProjetoTecnicoProjects(id);
+    }
     if (typeof loadNomearProjects === 'function') {
         loadNomearProjects(id);
     }
@@ -608,6 +620,12 @@ function bindOrderEvents() {
     });
     document.getElementById('order-tab-medicao').addEventListener('click', async function () {
         switchOrderDetailTab('medicao');
+    });
+    document.getElementById('order-tab-projeto-tecnico').addEventListener('click', async function () {
+        switchOrderDetailTab('projeto-tecnico');
+        if (activeOrderId && typeof loadOrderProjetoTecnicoProjects === 'function') {
+            loadOrderProjetoTecnicoProjects(activeOrderId);
+        }
     });
     document.getElementById('order-tab-nomear').addEventListener('click', async function () {
         switchOrderDetailTab('nomear');

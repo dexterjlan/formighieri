@@ -132,8 +132,22 @@ function getMontagemProgMontadores(prog) {
 }
 
 function getMontagemProgMontadorName(montadorId) {
-    const montador = (gestaoMontadoresCache || []).find(item => Number(item.id) === Number(montadorId));
-    return montador?.name || 'Montador';
+    const fromCache = (gestaoMontadoresCache || []).find(item => Number(item.id) === Number(montadorId));
+    if (fromCache?.name) return fromCache.name;
+
+    for (const prog of montagemProgCache) {
+        const montador = getMontagemProgMontadores(prog).find(item => Number(item.id) === Number(montadorId));
+        if (montador?.name) return montador.name;
+    }
+
+    return 'Montador';
+}
+
+function getMontagemProgSelectableMontadores() {
+    if (typeof getGestaoActiveMontadores === 'function') {
+        return getGestaoActiveMontadores();
+    }
+    return (gestaoMontadoresCache || []).filter(montador => montador.isActive !== false);
 }
 
 function getMontagemProgMontadorIds(prog) {
@@ -602,7 +616,7 @@ function renderMontagemProgMontadorFilter() {
     const select = document.getElementById('montagem-prog-montador-filter');
     if (!select) return;
 
-    const montadores = gestaoMontadoresCache.length ? gestaoMontadoresCache : [];
+    const montadores = getMontagemProgSelectableMontadores();
     const currentValue = montagemProgMontadorFilterId ? String(montagemProgMontadorFilterId) : '';
 
     select.innerHTML = `
@@ -620,12 +634,10 @@ function renderMontagemProgPalette() {
     const palette = document.getElementById('montagem-prog-palette');
     if (!palette) return;
 
-    const montadores = gestaoMontadoresCache.length
-        ? gestaoMontadoresCache
-        : [];
+    const montadores = getMontagemProgSelectableMontadores();
 
     if (!montadores.length) {
-        palette.innerHTML = '<p class="text-[11px] text-amber-700">Cadastre montadores em Gestão → Montadores.</p>';
+        palette.innerHTML = '<p class="text-[11px] text-amber-700">Cadastre montadores ativos em Gestão → Montadores.</p>';
         return;
     }
 
@@ -1111,11 +1123,31 @@ async function createMontagemProgFromDrop(montadorId, dateKey, targetProgramacao
     }
 }
 
-function populateMontagemProgMontadorSelects(selectedIds = []) {
-    const montadores = gestaoMontadoresCache.length ? gestaoMontadoresCache : [];
-    const options = montadores.map(montador =>
-        `<option value="${montador.id}">${escapeHtml(montador.name)}</option>`
-    ).join('');
+function populateMontagemProgMontadorSelects(selectedIds = [], selectedMontadores = []) {
+    const montadoresById = new Map();
+    getMontagemProgSelectableMontadores().forEach(montador => {
+        montadoresById.set(Number(montador.id), montador);
+    });
+
+    selectedIds.forEach(montadorId => {
+        const normalizedId = Number(montadorId);
+        if (!normalizedId || montadoresById.has(normalizedId)) return;
+
+        const fromProg = selectedMontadores.find(item => Number(item.id) === normalizedId);
+        montadoresById.set(normalizedId, fromProg || {
+            id: normalizedId,
+            name: getMontagemProgMontadorName(normalizedId),
+            isActive: false
+        });
+    });
+
+    const montadores = [...montadoresById.values()]
+        .sort((left, right) => (left.name || '').localeCompare(right.name || '', 'pt-BR', { sensitivity: 'base' }));
+
+    const options = montadores.map(montador => {
+        const inactiveSuffix = montador.isActive === false ? ' (inativo)' : '';
+        return `<option value="${montador.id}">${escapeHtml(`${montador.name || 'Montador'}${inactiveSuffix}`)}</option>`;
+    }).join('');
 
     const select1 = document.getElementById('montagem-prog-montador-1');
     const select2 = document.getElementById('montagem-prog-montador-2');
@@ -1140,7 +1172,7 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetMonta
     hideMontagemProgFloatingTooltip();
 
     if (typeof loadGestaoMontadores === 'function') {
-        await loadGestaoMontadores();
+        await loadGestaoMontadores(true);
     }
 
     editingMontagemProgId = prog?.id || null;
@@ -1155,7 +1187,7 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetMonta
     const montadorIds = prog ? getMontagemProgMontadorIds(prog) : [];
     if (presetMontadorId && !montadorIds.length) montadorIds.push(Number(presetMontadorId));
 
-    populateMontagemProgMontadorSelects(montadorIds);
+    populateMontagemProgMontadorSelects(montadorIds, prog ? getMontagemProgMontadores(prog) : []);
 
     const defaultDate = presetDate || getMontagemProgWeekStartKey();
     document.getElementById('montagem-prog-start-date').value = prog?.startDate || defaultDate;
@@ -1387,7 +1419,7 @@ async function loadMontagemProgramacaoView() {
     }
 
     if (typeof loadGestaoMontadores === 'function') {
-        await loadGestaoMontadores();
+        await loadGestaoMontadores(true);
     }
 
     await loadMontagemProgramacoesForWeek();

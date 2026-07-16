@@ -428,6 +428,7 @@ const ORDER_DETAIL_TAB_RESPONSIBLE_LABELS = {
     requests: 'Consultor, Projetista ou Admin',
     anteprojeto: 'Conferente, Gestor Comercial ou Admin',
     medicao: 'Conferente, Gestor Comercial ou Admin',
+    'projeto-tecnico': 'Projetista responsável pelo projeto',
     nomear: 'Projetista responsável pelo projeto',
     ppcp: 'Projetista PPCP ou Admin',
     fabrica: 'Gestor de Fábrica ou Admin',
@@ -450,6 +451,8 @@ function canActOrderDetailTab(tabKey, user = currentUser) {
         case 'anteprojeto':
         case 'medicao':
             return isConferente(user) || isGestorComercial(user);
+        case 'projeto-tecnico':
+            return user.role === 'Projetista';
         case 'nomear':
             return user.role === 'Projetista';
         case 'ppcp':

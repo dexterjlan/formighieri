@@ -210,6 +210,10 @@
                                 class="order-detail-tab order-detail-tab--teal" data-order-tab="medicao">
                                 Medição <span id="order-tab-medicao-count" class="order-detail-tab-count">(0)</span>
                             </button>
+                            <button type="button" id="order-tab-projeto-tecnico"
+                                class="order-detail-tab order-detail-tab--indigo" data-order-tab="projeto-tecnico">
+                                Projeto Técnico <span id="order-tab-projeto-tecnico-count" class="order-detail-tab-count">(0)</span>
+                            </button>
                             <button type="button" id="order-tab-nomear"
                                 class="order-detail-tab order-detail-tab--purple" data-order-tab="nomear">
                                 Nomear <span id="order-tab-nomear-count" class="order-detail-tab-count">(0)</span>
@@ -278,6 +282,20 @@
                                 </button>
                             </div>
                             <div class="space-y-4" id="medicao-list"></div>
+                        </div>
+                        <div id="order-tab-panel-projeto-tecnico" class="order-detail-tab-panel hidden p-4 md:p-5 relative">
+                            <div id="projeto-tecnico-tab-action-loading"
+                                class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                                <div id="projeto-tecnico-tab-action-loading-spinner"
+                                    class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
+                                <div id="projeto-tecnico-tab-action-loading-success"
+                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                                <div id="projeto-tecnico-tab-action-loading-error"
+                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                                <p id="projeto-tecnico-tab-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                            </div>
+                            <p class="text-xs text-slate-500 mb-3">Todos os projetos do pedido. Ações disponíveis apenas em <strong>Aguardando Projeto Técnico</strong>: associar-se como responsável ou iniciar o trabalho.</p>
+                            <div id="projeto-tecnico-projects-list"></div>
                         </div>
                         <div id="order-tab-panel-nomear" class="order-detail-tab-panel hidden p-4 md:p-5">
                             <p class="text-xs text-slate-500 mb-3">Confirme os projetos como nomeados para enviá-los ao PPCP. Somente o projetista responsável pode confirmar.</p>
@@ -926,7 +944,7 @@
                     <div id="gestao-montadores-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h3 class="font-bold text-sm text-slate-900">Montadores</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os montadores com identificador e nome.</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os montadores. Desative em vez de excluir quando houver programação vinculada.</p>
                         </div>
                         <div class="p-4 md:p-5 space-y-4">
                             <form id="gestao-new-montador-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
@@ -947,6 +965,7 @@
                                         <tr>
                                             <th class="text-left p-3 font-semibold w-24">ID</th>
                                             <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
                                             <th class="text-left p-3 font-semibold w-36">Ações</th>
                                         </tr>
                                     </thead>

@@ -919,46 +919,7 @@ async function openConsultorRequestFromPendencias(requestId) {
 window.openConsultorRequestFromPendencias = openConsultorRequestFromPendencias;
 
 async function iniciarPendenciaProjetoTecnico(projectId) {
-    if (!projectId) return;
-
-    const statusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_PROJETO_TECNICO);
-    if (!statusId) {
-        alertAppDialog(`Status "${PENDENCIAS_STATUS_PROJETO_TECNICO}" não encontrado.`);
-        return;
+    if (typeof iniciarProjetoTecnico === 'function') {
+        await iniciarProjetoTecnico(projectId);
     }
-
-    const { data: project, error: readError } = await supabaseClient
-        .from('OrderProject')
-        .select('id, designerId')
-        .eq('id', projectId)
-        .maybeSingle();
-
-    if (readError || !project) {
-        alertAppDialog('Projeto não encontrado.');
-        return;
-    }
-
-    if (Number(project.designerId) !== Number(currentUser?.id) && !isAdmin()) {
-        alertAppDialog('Somente o responsável do projeto pode iniciá-lo.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
-
-    if (!(await confirmAppDialog('Iniciar projeto técnico deste projeto?'))) return;
-
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('OrderProject')
-        .update({
-            statusId,
-            updatedById: currentUser.id,
-            updatedAt: now
-        })
-        .eq('id', projectId);
-
-    if (error) {
-        alertAppDialog('Erro ao iniciar projeto: ' + error.message);
-        return;
-    }
-
-    await loadPendenciasAguardandoProjetoTecnico();
 }

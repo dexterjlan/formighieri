@@ -874,53 +874,14 @@ async function loadPendenciasAguardandoProjetoTecnico() {
 }
 
 async function associarPendenciaProjetoAMim(projectId, previsaoDate, deliveryDate = '') {
-    if (!projectId || currentUser?.role !== 'Projetista' && !isAdmin()) {
-        alertAppDialog('Somente Projetista pode associar projetos.', { variant: 'warning', title: 'Aviso' });
+    if (typeof associarProjetoTecnicoAMim !== 'function') {
+        alertAppDialog('Módulo de projeto técnico não carregado.');
         return;
     }
-
-    if (!validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate)) {
-        return;
-    }
-
-    if (!(await confirmAppDialog('Associar este projeto a você como responsável?'))) return;
-
-    const now = new Date().toISOString();
-    const payload = {
-        designerId: currentUser.id,
-        previsaoConclusaoProjetoTecnico: previsaoDate,
-        updatedById: currentUser.id,
-        updatedAt: now
-    };
 
     try {
         setPendenciasActionLoading(true, 'Associando projeto...');
-
-        let { error } = await supabaseClient
-            .from('OrderProject')
-            .update(payload)
-            .eq('id', projectId);
-
-        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
-            ({ error } = await supabaseClient
-                .from('OrderProject')
-                .update({
-                    designerId: currentUser.id,
-                    updatedById: currentUser.id,
-                    updatedAt: now
-                })
-                .eq('id', projectId));
-            if (!error) {
-                alertAppDialog('Projeto associado, mas o campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
-            }
-        }
-
-        if (error) {
-            alertAppDialog('Erro ao associar projeto: ' + error.message);
-            return;
-        }
-
-        await loadPendenciasAguardandoProjetoTecnico();
+        await associarProjetoTecnicoAMim(projectId, previsaoDate, deliveryDate);
     } finally {
         setPendenciasActionLoading(false);
     }
