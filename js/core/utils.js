@@ -250,6 +250,65 @@ function setActionOverlayLoading(config, active, message = 'Processando...', sta
     errorIcon?.classList.toggle('hidden', status !== 'error');
 }
 
+function createModalOverlayConfig(prefix, options = {}) {
+    const base = String(prefix).replace(/-loading$/, '');
+    return {
+        overlayId: `${base}-loading`,
+        messageId: `${base}-loading-msg`,
+        spinnerId: `${base}-loading-spinner`,
+        successId: `${base}-loading-success`,
+        errorId: `${base}-loading-error`,
+        disableElementIds: options.disableElementIds || [],
+        reenableElementIdsOnHide: options.reenableElementIdsOnHide || null,
+        closeButtonSelector: options.closeButtonSelector || null,
+        disableFormSelector: options.disableFormSelector || null,
+        disableDatasetKey: options.disableDatasetKey || 'modalLoadingDisabled',
+        onShow: options.onShow || null
+    };
+}
+
+function setModalOverlayLoading(config, active, message = 'Processando...', status = 'loading') {
+    const show = Boolean(active);
+
+    if (show && typeof config.onShow === 'function') {
+        config.onShow();
+    }
+
+    setActionOverlayLoading(config, active, message, status);
+
+    (config.disableElementIds || []).forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (show) el.disabled = true;
+    });
+
+    if (!show) {
+        const reenableIds = config.reenableElementIdsOnHide || config.disableElementIds || [];
+        reenableIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = false;
+        });
+    }
+
+    if (config.closeButtonSelector) {
+        const closeBtn = document.querySelector(config.closeButtonSelector);
+        if (closeBtn) closeBtn.disabled = show;
+    }
+
+    if (config.disableFormSelector) {
+        const key = config.disableDatasetKey || 'modalLoadingDisabled';
+        document.querySelectorAll(config.disableFormSelector).forEach(el => {
+            if (show) {
+                el.dataset[key] = '1';
+                el.disabled = true;
+            } else if (el.dataset[key] === '1') {
+                delete el.dataset[key];
+                el.disabled = false;
+            }
+        });
+    }
+}
+
 const ORDER_PROJECTS_ACTION_OVERLAY = {
     overlayId: 'order-projects-action-loading',
     messageId: 'order-projects-action-loading-msg',

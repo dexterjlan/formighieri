@@ -728,44 +728,16 @@ function closeMedicaoModal() {
 
 window.closeMedicaoModal = closeMedicaoModal;
 
+const MEDICAO_MODAL_OVERLAY = createModalOverlayConfig('medicao-modal', {
+    disableElementIds: ['medicao-form-submit'],
+    reenableElementIdsOnHide: ['medicao-form-submit'],
+    closeButtonSelector: '#medicao-modal button[onclick="closeMedicaoModal()"]',
+    disableFormSelector: '#medicao-modal input:not([disabled]), #medicao-modal textarea:not([disabled])',
+    disableDatasetKey: 'medicaoLoadingDisabled'
+});
+
 function setMedicaoModalLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('medicao-modal-loading');
-    const messageEl = document.getElementById('medicao-modal-loading-msg');
-    const spinner = document.getElementById('medicao-modal-loading-spinner');
-    const successIcon = document.getElementById('medicao-modal-loading-success');
-    const errorIcon = document.getElementById('medicao-modal-loading-error');
-    const show = Boolean(active);
-
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
-
-    const submitBtn = document.getElementById('medicao-form-submit');
-    if (submitBtn && show) submitBtn.disabled = true;
-
-    const closeBtn = document.querySelector('#medicao-modal button[onclick="closeMedicaoModal()"]');
-    if (closeBtn) closeBtn.disabled = show;
-
-    document.querySelectorAll('#medicao-modal input:not([disabled]), #medicao-modal textarea:not([disabled])')
-        .forEach(el => {
-            if (show) {
-                el.dataset.medicaoLoadingDisabled = '1';
-                el.disabled = true;
-            } else if (el.dataset.medicaoLoadingDisabled === '1') {
-                delete el.dataset.medicaoLoadingDisabled;
-                el.disabled = false;
-            }
-        });
-
-    if (!show && submitBtn) submitBtn.disabled = false;
+    setModalOverlayLoading(MEDICAO_MODAL_OVERLAY, active, message, status);
 }
 
 async function refreshMedicaoRelatedViews() {

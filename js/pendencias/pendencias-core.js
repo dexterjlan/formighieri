@@ -395,25 +395,10 @@ function renderPendenciasPlaceholder(title, message) {
     `;
 }
 
+const PENDENCIAS_ACTION_OVERLAY = createModalOverlayConfig('pendencias-action');
+
 function setPendenciasActionLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('pendencias-action-loading');
-    const messageEl = document.getElementById('pendencias-action-loading-msg');
-    const spinner = document.getElementById('pendencias-action-loading-spinner');
-    const successIcon = document.getElementById('pendencias-action-loading-success');
-    const errorIcon = document.getElementById('pendencias-action-loading-error');
-    const show = Boolean(active);
-
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
+    setModalOverlayLoading(PENDENCIAS_ACTION_OVERLAY, active, message, status);
 }
 
 function waitPendenciasStatus(ms) {

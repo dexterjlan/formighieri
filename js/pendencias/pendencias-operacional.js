@@ -125,46 +125,19 @@ function getPendenciasAguardandoMedicaoGroupProjects(orderId, statusName) {
     ));
 }
 
-function setPendenciasAguardandoMedicaoModalLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('pendencias-aguardando-medicao-modal-loading');
-    const messageEl = document.getElementById('pendencias-aguardando-medicao-modal-loading-msg');
-    const spinner = document.getElementById('pendencias-aguardando-medicao-modal-loading-spinner');
-    const successIcon = document.getElementById('pendencias-aguardando-medicao-modal-loading-success');
-    const errorIcon = document.getElementById('pendencias-aguardando-medicao-modal-loading-error');
-    const show = Boolean(active);
-
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
-
-    [
+const PENDENCIAS_AGUARDANDO_MEDICAO_MODAL_OVERLAY = createModalOverlayConfig('pendencias-aguardando-medicao-modal', {
+    disableElementIds: [
         'btn-pendencias-am-obra',
         'btn-pendencias-am-medicao',
         'btn-pendencias-am-fechar',
         'pendencias-am-select-all-check'
-    ].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = show;
-    });
+    ],
+    disableFormSelector: '#pendencias-am-modal-projects-list input, #pendencias-am-modal-projects-list textarea',
+    disableDatasetKey: 'pendenciasAmLoadingDisabled'
+});
 
-    document.querySelectorAll('#pendencias-am-modal-projects-list input, #pendencias-am-modal-projects-list textarea')
-        .forEach(el => {
-            if (show) {
-                el.dataset.pendenciasAmLoadingDisabled = '1';
-                el.disabled = true;
-            } else if (el.dataset.pendenciasAmLoadingDisabled === '1') {
-                delete el.dataset.pendenciasAmLoadingDisabled;
-                el.disabled = false;
-            }
-        });
+function setPendenciasAguardandoMedicaoModalLoading(active, message = 'Processando...', status = 'loading') {
+    setModalOverlayLoading(PENDENCIAS_AGUARDANDO_MEDICAO_MODAL_OVERLAY, active, message, status);
 }
 
 function closePendenciasAguardandoMedicaoModal() {

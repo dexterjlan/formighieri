@@ -50,13 +50,18 @@ const SCRIPTS = [
     'js/orders/project-characteristics.js',
     'js/orders/anteprojeto.js',
     'js/orders/anteprojeto-structure.js',
-    'js/orders/anteprojeto-modal.js',
+    'js/orders/anteprojeto-modal-core.js',
+    'js/orders/anteprojeto-modal-return.js',
+    'js/orders/anteprojeto-modal-persist.js',
+    'js/orders/anteprojeto-modal-approve.js',
     'js/orders/anteprojeto-tab.js',
     'js/orders/mediciao.js',
     'js/orders/order-project-montagem.js',
     'js/orders/ppcp.js',
     'js/orders/order-project-actions.js',
-    'js/core/notifications.js',
+    'js/core/notifications-templates.js',
+    'js/core/notifications-recipients.js',
+    'js/core/notifications-dispatch.js',
     'js/conversations/request-activities.js',
     'js/conversations/request-attachments.js',
     'js/conversations/conversations.js',
@@ -111,7 +116,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261032`);
+            await loadScript(`${src}?v=20261033`);
         }
 
         initAppEvents();

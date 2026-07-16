@@ -406,29 +406,13 @@ function setCompraFormDisabled(disabled) {
     });
 }
 
+const COMPRA_MODAL_OVERLAY = createModalOverlayConfig('compra-modal', {
+    closeButtonSelector: '#compra-modal button[onclick="closeCompraModal()"]'
+});
+
 function setCompraModalLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('compra-modal-loading');
-    const messageEl = document.getElementById('compra-modal-loading-msg');
-    const spinner = document.getElementById('compra-modal-loading-spinner');
-    const successIcon = document.getElementById('compra-modal-loading-success');
-    const errorIcon = document.getElementById('compra-modal-loading-error');
-    const show = Boolean(active);
-
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
-
-    setCompraFormDisabled(show);
-    const closeBtn = document.querySelector('#compra-modal button[onclick="closeCompraModal()"]');
-    if (closeBtn) closeBtn.disabled = show;
+    setModalOverlayLoading(COMPRA_MODAL_OVERLAY, active, message, status);
+    setCompraFormDisabled(active ? true : !canActCompraModal());
 }
 
 function populateCompraForm(record) {
