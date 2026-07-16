@@ -34,6 +34,36 @@ function canShowOrderProjectVerRevisoesAction(approval) {
     return isOrderConsultorViewerForApproval(approval) || isAssignedProjetistaForApproval(approval);
 }
 
+async function fetchOrderProjectVerRevisoesActionContext(project, orderId) {
+    if (!project?.id) return null;
+
+    let approval = null;
+    if (typeof fetchCommercialApprovalsByProjectIds === 'function') {
+        const approvalsByProject = await fetchCommercialApprovalsByProjectIds([project.id]);
+        approval = approvalsByProject[project.id] || null;
+    }
+
+    if (!approval) return null;
+
+    const approvalCtx = enrichApprovalForOrderProject(approval, orderId, project);
+
+    let revisions = [];
+    if (typeof fetchCommercialRevisionsByApprovalIds === 'function' && approvalCtx.id) {
+        const revisionsByApproval = await fetchCommercialRevisionsByApprovalIds([approvalCtx.id]);
+        revisions = revisionsByApproval[approvalCtx.id] || [];
+    }
+
+    if (!revisions.length || !canShowOrderProjectVerRevisoesAction(approvalCtx)) {
+        return null;
+    }
+
+    return {
+        approvalId: approvalCtx.id,
+        approval: approvalCtx,
+        revisions
+    };
+}
+
 function getOrderProjectActions(project, context = {}) {
     const {
         orderId,

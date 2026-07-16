@@ -1,5 +1,6 @@
 let orderProjectViewContext = null;
 let orderProjectViewImplantacaoContext = null;
+let orderProjectViewRevisionsContext = null;
 
 function formatProjectViewMontagemDate(dateStr) {
     if (typeof formatDisplayDate === 'function') {
@@ -280,8 +281,13 @@ async function openProjectViewModal(projectOrId) {
     orderProjectViewImplantacaoContext = implantacaoRecord
         ? { projectId: project.id, projectName: project.name || 'Projeto' }
         : null;
+    orderProjectViewRevisionsContext = typeof fetchOrderProjectVerRevisoesActionContext === 'function'
+        ? await fetchOrderProjectVerRevisoesActionContext(project, project.orderId)
+        : null;
     document.getElementById('btn-project-view-implantacao')
         ?.classList.toggle('hidden', !orderProjectViewImplantacaoContext);
+    document.getElementById('btn-project-view-revisions')
+        ?.classList.toggle('hidden', !orderProjectViewRevisionsContext);
     toggleModal('order-project-view-modal', true);
 }
 
@@ -290,11 +296,13 @@ function bindGestaoProjectViewEvents() {
         toggleModal('order-project-view-modal', false);
         orderProjectViewContext = null;
         orderProjectViewImplantacaoContext = null;
+        orderProjectViewRevisionsContext = null;
     });
     document.getElementById('btn-close-order-project-view-footer')?.addEventListener('click', () => {
         toggleModal('order-project-view-modal', false);
         orderProjectViewContext = null;
         orderProjectViewImplantacaoContext = null;
+        orderProjectViewRevisionsContext = null;
     });
     document.getElementById('btn-project-view-implantacao')?.addEventListener('click', async () => {
         if (!orderProjectViewImplantacaoContext) return;
@@ -303,6 +311,12 @@ function bindGestaoProjectViewEvents() {
             await openPpcpImplantacaoModal(projectId, projectName);
         } else if (typeof openImplantacaoModal === 'function') {
             await openImplantacaoModal(projectId, projectName, { requireExisting: true });
+        }
+    });
+    document.getElementById('btn-project-view-revisions')?.addEventListener('click', async () => {
+        if (!orderProjectViewRevisionsContext?.approvalId) return;
+        if (typeof openCommercialRevisionsHistoryView === 'function') {
+            await openCommercialRevisionsHistoryView(orderProjectViewRevisionsContext.approvalId);
         }
     });
     document.getElementById('btn-order-project-status-history')?.addEventListener('click', () => {
