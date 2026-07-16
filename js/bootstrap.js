@@ -36,7 +36,9 @@ const SCRIPTS = [
     'js/orders/compras.js',
     'js/orders/implantacao.js',
     'js/pendencias/pendencias-core.js',
-    'js/pendencias/pendencias-projetista.js',
+    'js/pendencias/pendencias-projetista-pt.js',
+    'js/pendencias/pendencias-projetista-flows.js',
+    'js/pendencias/pendencias-projetista-medicao.js',
     'js/pendencias/pendencias-operacional.js',
     'js/pendencias/pendencias-comercial.js',
     'js/pendencias/pendencias-compras.js',
@@ -47,6 +49,8 @@ const SCRIPTS = [
     'js/orders/order-projects.js',
     'js/orders/project-characteristics.js',
     'js/orders/anteprojeto.js',
+    'js/orders/anteprojeto-structure.js',
+    'js/orders/anteprojeto-modal.js',
     'js/orders/anteprojeto-tab.js',
     'js/orders/mediciao.js',
     'js/orders/order-project-montagem.js',
@@ -107,7 +111,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261031`);
+            await loadScript(`${src}?v=20261032`);
         }
 
         initAppEvents();
