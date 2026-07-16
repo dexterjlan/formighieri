@@ -150,26 +150,9 @@ async function addGestaoProjectStatus(event) {
 }
 
 async function loadGestaoMarceneiros(activeOnly = false) {
-    let query = supabaseClient
-        .from('Marceneiro')
-        .select('id, name, sortOrder, isActive')
-        .order('sortOrder', { ascending: true })
-        .order('name', { ascending: true });
-
-    if (activeOnly) {
-        query = query.eq('isActive', true);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-        console.error('loadGestaoMarceneiros:', error);
-        gestaoMarceneirosCache = [];
-        return [];
-    }
-
-    gestaoMarceneirosCache = data || [];
-    return gestaoMarceneirosCache;
+    const data = await loadMarceneiros(activeOnly);
+    gestaoMarceneirosCache = data;
+    return data;
 }
 
 async function loadGestaoMarceneirosList() {

@@ -461,10 +461,6 @@ async function refreshImplantacaoRelatedViews(orderProjectId) {
         await loadPendenciasImplantacao();
     }
 
-    if (activeOrderId && typeof loadFabricaProjects === 'function') {
-        await loadFabricaProjects(activeOrderId);
-    }
-
     if (activeOrderId && typeof loadOrderProjects === 'function') {
         await loadOrderProjects(activeOrderId);
     }

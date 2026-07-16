@@ -203,6 +203,53 @@ function formatDate(dateStr) {
     });
 }
 
+function toInputDate(dateStr) {
+    if (!dateStr) return '';
+    return String(dateStr).split('T')[0];
+}
+
+function formatDisplayDate(dateStr) {
+    const value = toInputDate(dateStr);
+    if (!value) return '—';
+    const [year, month, day] = value.split('-');
+    if (!year || !month || !day) return '—';
+    return `${day}/${month}/${year}`;
+}
+
+function getTodayInputDate() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function isInputDateInFuture(dateStr) {
+    if (!dateStr) return false;
+    return dateStr > getTodayInputDate();
+}
+
+function setActionOverlayLoading(config, active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById(config.overlayId);
+    const messageEl = document.getElementById(config.messageId);
+    const spinner = config.spinnerId ? document.getElementById(config.spinnerId) : null;
+    const successIcon = config.successId ? document.getElementById(config.successId) : null;
+    const errorIcon = config.errorId ? document.getElementById(config.errorId) : null;
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+}
+
 function escapeHtml(text) {
     return String(text ?? '')
         .replace(/&/g, '&amp;')
@@ -411,11 +458,6 @@ function canSeeOrderMedicaoTab(user = currentUser) {
 function canSeeOrderPpcpTab(user = currentUser) {
     if (!user) return false;
     return user.role === 'Admin' || isPpcp(user);
-}
-
-function canSeeOrderFabricaTab(user = currentUser) {
-    if (!user) return false;
-    return user.role === 'Admin' || isGestorFabrica(user);
 }
 
 function canSeeOrderNomearTab(user = currentUser) {

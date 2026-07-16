@@ -152,9 +152,6 @@ function renderPpcpProjectCard(project, implantacao) {
 
 async function refreshPpcpRelatedViews(orderId) {
     await loadPpcpProjects(orderId);
-    if (typeof loadFabricaProjects === 'function') {
-        await loadFabricaProjects(orderId);
-    }
     if (typeof loadOrderProjects === 'function') {
         await loadOrderProjects(orderId);
     }

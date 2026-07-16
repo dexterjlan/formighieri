@@ -10,6 +10,7 @@ const SCRIPTS = [
     'js/core/config.prod.js',
     'js/core/config.js',
     'js/core/utils.js',
+    'js/core/marceneiro.js',
     'js/core/dialog.js',
     'js/core/navigation.js',
     'js/core/responsive.js',
@@ -18,6 +19,7 @@ const SCRIPTS = [
     'js/conversations/conversations-query.js',
     'js/admin/users-admin.js',
     'js/gestao/gestao.js',
+    'js/gestao/gestao-project-view.js',
     'js/gestao/gestao-phases.js',
     'js/gestao/gestao-orders.js',
     'js/gestao/gestao-import.js',
@@ -45,7 +47,7 @@ const SCRIPTS = [
     'js/orders/project-characteristics.js',
     'js/orders/anteprojeto.js',
     'js/orders/mediciao.js',
-    'js/orders/fabrica.js',
+    'js/orders/order-project-montagem.js',
     'js/orders/ppcp.js',
     'js/orders/order-project-actions.js',
     'js/core/notifications.js',
@@ -103,7 +105,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261029`);
+            await loadScript(`${src}?v=20261030`);
         }
 
         initAppEvents();

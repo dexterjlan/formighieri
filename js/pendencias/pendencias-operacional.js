@@ -1224,44 +1224,16 @@ async function fetchPendenciasFabricaProjectsByStatusName(statusName) {
     };
 }
 
-function getPendenciasFabricaTodayInputDate() {
-    if (typeof getTodayInputDate === 'function') {
-        return getTodayInputDate();
-    }
-
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
 function getPendenciasFabricaMarceneiroOptionsHtml(selectedId = null) {
-    if (typeof getFabricaMarceneiroOptionsHtml === 'function') {
-        return getFabricaMarceneiroOptionsHtml(selectedId);
-    }
-
-    return '<option value="">Nenhum marceneiro cadastrado</option>';
+    return getMarceneiroOptionsHtml(selectedId);
 }
 
 function formatPendenciasFabricaDisplayDate(dateStr) {
-    if (typeof formatFabricaDisplayDate === 'function') {
-        return formatFabricaDisplayDate(dateStr);
-    }
-
-    if (!dateStr) return '—';
-    const value = String(dateStr).split('T')[0];
-    const [year, month, day] = value.split('-');
-    if (!year || !month || !day) return '—';
-    return `${day}/${month}/${year}`;
+    return formatDisplayDate(dateStr);
 }
 
 function getPendenciasFabricaMarceneiroName(project) {
-    if (typeof getFabricaMarceneiroName === 'function') {
-        return getFabricaMarceneiroName(project);
-    }
-
-    return project.marceneiro?.name || '—';
+    return getMarceneiroNameFromProject(project);
 }
 
 function getPendenciasFabricaProjectLabel(project) {
@@ -1275,7 +1247,7 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
     if (!content) return;
 
     const canAct = canActPendenciasGestorFabrica();
-    const todayMax = getPendenciasFabricaTodayInputDate();
+    const todayMax = getTodayInputDate();
     const subtitle = canAct
         ? 'Projetos em produção. Registre marceneiro e início da montagem interna.'
         : 'Visualização dos projetos aguardando início da montagem interna.';
@@ -1365,7 +1337,7 @@ function renderPendenciasEmMontagemList(projects) {
     if (!content) return;
 
     const canAct = canActPendenciasGestorFabrica();
-    const todayMax = getPendenciasFabricaTodayInputDate();
+    const todayMax = getTodayInputDate();
     const subtitle = canAct
         ? 'Projetos em montagem interna. Registre a data de fim para enviar à expedição.'
         : 'Visualização dos projetos em montagem interna.';
@@ -1467,7 +1439,7 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
         alertAppDialog(`"${projectLabel}": informe a data de início da montagem interna.`);
         return;
     }
-    if (typeof isFabricaDateInFuture === 'function' && isFabricaDateInFuture(inicioMontagemInterna)) {
+    if (isInputDateInFuture(inicioMontagemInterna)) {
         alertAppDialog(`"${projectLabel}": a data de início não pode ser no futuro.`, { variant: 'warning', title: 'Aviso' });
         return;
     }
@@ -1508,9 +1480,6 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
         }
 
         await reloadActivePendenciasGestorFabricaList();
-        if (activeOrderId && typeof loadFabricaProjects === 'function') {
-            await loadFabricaProjects(activeOrderId);
-        }
     } catch (error) {
         const sqlHint = error.message?.includes('marceneiroId') || error.message?.includes('MontagemInterna')
             ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
@@ -1535,7 +1504,7 @@ async function savePendenciasFabricaFimMontagem(projectId) {
         alertAppDialog(`"${projectLabel}": informe a data de fim da montagem interna.`);
         return;
     }
-    if (typeof isFabricaDateInFuture === 'function' && isFabricaDateInFuture(fimMontagemInterna)) {
+    if (isInputDateInFuture(fimMontagemInterna)) {
         alertAppDialog(`"${projectLabel}": a data de fim não pode ser no futuro.`, { variant: 'warning', title: 'Aviso' });
         return;
     }
@@ -1574,9 +1543,6 @@ async function savePendenciasFabricaFimMontagem(projectId) {
         }
 
         await reloadActivePendenciasGestorFabricaList();
-        if (activeOrderId && typeof loadFabricaProjects === 'function') {
-            await loadFabricaProjects(activeOrderId);
-        }
     } catch (error) {
         const sqlHint = error.message?.includes('fimMontagemInterna')
             ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
@@ -1612,9 +1578,7 @@ async function loadPendenciasAguardandoMontagemInterna() {
         return;
     }
 
-    if (typeof loadFabricaMarceneiros === 'function') {
-        await loadFabricaMarceneiros();
-    }
+    await loadMarceneiros(true);
 
     const { error, projects } = await fetchPendenciasFabricaProjectsByStatusName(PENDENCIAS_STATUS_EM_PRODUCAO);
 
@@ -1637,9 +1601,7 @@ async function loadPendenciasEmMontagem() {
         return;
     }
 
-    if (typeof loadFabricaMarceneiros === 'function') {
-        await loadFabricaMarceneiros();
-    }
+    await loadMarceneiros(true);
 
     const { error, projects } = await fetchPendenciasFabricaProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_INTERNA);
 
