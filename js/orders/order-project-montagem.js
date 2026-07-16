@@ -2,14 +2,6 @@ const MONTAGEM_EM_PRODUCAO_STATUS = 'Em Produção';
 const MONTAGEM_INTERNA_STATUS = 'Montagem Interna';
 const MONTAGEM_EXPEDICAO_STATUS = 'Expedição';
 
-const ORDER_PROJECTS_ACTION_OVERLAY = {
-    overlayId: 'order-projects-action-loading',
-    messageId: 'order-projects-action-loading-msg',
-    spinnerId: 'order-projects-action-loading-spinner',
-    successId: 'order-projects-action-loading-success',
-    errorId: 'order-projects-action-loading-error'
-};
-
 async function getOrderProjectStatusIdByName(statusName) {
     const { data, error } = await supabaseClient
         .from('OrderProjectStatus')
@@ -111,7 +103,7 @@ function setOrderProjectMontagemActionLoading(active, message = 'Processando...'
     }
 
     if (isOrderProjectsPanelVisibleForMontagem()) {
-        setActionOverlayLoading(ORDER_PROJECTS_ACTION_OVERLAY, active, message, status);
+        setOrderProjectsPanelActionLoading(active, message, status);
     }
 }
 

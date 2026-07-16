@@ -250,6 +250,18 @@ function setActionOverlayLoading(config, active, message = 'Processando...', sta
     errorIcon?.classList.toggle('hidden', status !== 'error');
 }
 
+const ORDER_PROJECTS_ACTION_OVERLAY = {
+    overlayId: 'order-projects-action-loading',
+    messageId: 'order-projects-action-loading-msg',
+    spinnerId: 'order-projects-action-loading-spinner',
+    successId: 'order-projects-action-loading-success',
+    errorId: 'order-projects-action-loading-error'
+};
+
+function setOrderProjectsPanelActionLoading(active, message = 'Processando...', status = 'loading') {
+    setActionOverlayLoading(ORDER_PROJECTS_ACTION_OVERLAY, active, message, status);
+}
+
 function escapeHtml(text) {
     return String(text ?? '')
         .replace(/&/g, '&amp;')

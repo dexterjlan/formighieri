@@ -98,13 +98,7 @@ function isOrderProjectsPanelVisible() {
 }
 
 function setOrderProjectsActionLoading(active, message = 'Processando...', status = 'loading') {
-    setActionOverlayLoading({
-        overlayId: 'order-projects-action-loading',
-        messageId: 'order-projects-action-loading-msg',
-        spinnerId: 'order-projects-action-loading-spinner',
-        successId: 'order-projects-action-loading-success',
-        errorId: 'order-projects-action-loading-error'
-    }, active, message, status);
+    setOrderProjectsPanelActionLoading(active, message, status);
 }
 
 function setProjetoTecnicoActionLoading(active, message = 'Processando...', status = 'loading') {

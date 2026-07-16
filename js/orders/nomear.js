@@ -125,24 +125,7 @@ function isOrderProjectsPanelVisibleForNomear() {
 }
 
 function setNomearOrderProjectsActionLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('order-projects-action-loading');
-    const messageEl = document.getElementById('order-projects-action-loading-msg');
-    const spinner = document.getElementById('order-projects-action-loading-spinner');
-    const successIcon = document.getElementById('order-projects-action-loading-success');
-    const errorIcon = document.getElementById('order-projects-action-loading-error');
-    const show = Boolean(active);
-
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
+    setOrderProjectsPanelActionLoading(active, message, status);
 }
 
 function setNomearActionLoading(active, message = 'Processando...', status = 'loading') {

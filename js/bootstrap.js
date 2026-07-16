@@ -11,6 +11,7 @@ const SCRIPTS = [
     'js/core/config.js',
     'js/core/utils.js',
     'js/core/marceneiro.js',
+    'js/core/attachment-lightbox.js',
     'js/core/dialog.js',
     'js/core/navigation.js',
     'js/core/responsive.js',
@@ -46,6 +47,7 @@ const SCRIPTS = [
     'js/orders/order-projects.js',
     'js/orders/project-characteristics.js',
     'js/orders/anteprojeto.js',
+    'js/orders/anteprojeto-tab.js',
     'js/orders/mediciao.js',
     'js/orders/order-project-montagem.js',
     'js/orders/ppcp.js',
@@ -105,7 +107,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261030`);
+            await loadScript(`${src}?v=20261031`);
         }
 
         initAppEvents();

@@ -343,30 +343,15 @@ function canDeleteMedicao(medicao) {
 }
 
 function formatDateOnly(dateStr) {
-    if (!dateStr) return '—';
-    const part = String(dateStr).split('T')[0];
-    const [year, month, day] = part.split('-');
-    if (!year || !month || !day) return '—';
-    return `${day}/${month}/${year}`;
+    return formatDisplayDate(dateStr);
 }
 
 function toInputDateValue(dateStr) {
-    if (!dateStr) return '';
-    return String(dateStr).split('T')[0];
-}
-
-function getTodayInputDate() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return toInputDate(dateStr);
 }
 
 function isFutureInputDate(dateStr) {
-    const value = toInputDateValue(dateStr);
-    if (!value) return false;
-    return value > getTodayInputDate();
+    return isInputDateInFuture(dateStr);
 }
 
 function setMedicaoDateInputMax(input) {
