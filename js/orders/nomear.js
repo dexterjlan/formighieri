@@ -114,9 +114,55 @@ async function queryOrderNomearProjects(orderId) {
     return result;
 }
 
+function isPendenciasViewVisibleForNomear() {
+    const view = document.getElementById('pendencias-view');
+    return Boolean(view && !view.classList.contains('hidden'));
+}
+
+function isOrderProjectsPanelVisibleForNomear() {
+    const content = document.getElementById('order-content');
+    return Boolean(content && !content.classList.contains('hidden'));
+}
+
+function setNomearOrderProjectsActionLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('order-projects-action-loading');
+    const messageEl = document.getElementById('order-projects-action-loading-msg');
+    const spinner = document.getElementById('order-projects-action-loading-spinner');
+    const successIcon = document.getElementById('order-projects-action-loading-success');
+    const errorIcon = document.getElementById('order-projects-action-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+}
+
+function setNomearActionLoading(active, message = 'Processando...', status = 'loading') {
+    if (isPendenciasViewVisibleForNomear() && typeof setPendenciasActionLoading === 'function') {
+        setPendenciasActionLoading(active, message, status);
+        return;
+    }
+
+    if (isOrderProjectsPanelVisibleForNomear()) {
+        setNomearOrderProjectsActionLoading(active, message, status);
+    }
+}
+
+async function waitNomearActionStatus(ms) {
+    await new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function markOrderProjectAsNomeado(projectId, options = {}) {
     const {
-        confirmMessage = 'Confirmar projeto como nomeado e enviar para Aguardando PPCP?',
+        confirmMessage,
         onSuccess
     } = options;
 
@@ -169,52 +215,71 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
         return false;
     }
 
-    if (!(await confirmAppDialog(confirmMessage))) return false;
+    const projectLabel = project.name?.trim() || 'este projeto';
+    const resolvedConfirmMessage = confirmMessage
+        || `Confirmar "${projectLabel}" como nomeado e enviar para Aguardando PPCP?`;
 
-    const now = new Date().toISOString();
-    const updatePayload = {
-        statusId: aguardandoPpcpStatusId,
-        nomeado: true,
-        updatedById: currentUser.id,
-        updatedAt: now
-    };
+    if (!(await confirmAppDialog(resolvedConfirmMessage))) return false;
 
-    const { data: updatedProject, error } = await supabaseClient
-        .from('OrderProject')
-        .update(updatePayload)
-        .eq('id', projectId)
-        .select('id, nomeado, statusId')
-        .maybeSingle();
+    setNomearActionLoading(true, 'Confirmando nomeação...');
 
-    if (error) {
-        if (error.message?.includes('nomeado')) {
-            alertAppDialog('Coluna nomeado não encontrada. Execute supabase/create-gestao-order-fields.sql no Supabase.');
-        } else {
-            alertAppDialog('Erro ao confirmar projeto como nomeado: ' + error.message);
+    try {
+        const now = new Date().toISOString();
+        const updatePayload = {
+            statusId: aguardandoPpcpStatusId,
+            nomeado: true,
+            updatedById: currentUser.id,
+            updatedAt: now
+        };
+
+        const { data: updatedProject, error } = await supabaseClient
+            .from('OrderProject')
+            .update(updatePayload)
+            .eq('id', projectId)
+            .select('id, nomeado, statusId')
+            .maybeSingle();
+
+        if (error) {
+            const message = error.message?.includes('nomeado')
+                ? 'Coluna nomeado não encontrada. Execute supabase/create-gestao-order-fields.sql no Supabase.'
+                : `Erro ao confirmar projeto como nomeado: ${error.message}`;
+            setNomearActionLoading(true, message, 'error');
+            await waitNomearActionStatus(2200);
+            return false;
         }
+
+        if (updatedProject?.nomeado !== true) {
+            setNomearActionLoading(true, 'Não foi possível marcar o projeto como nomeado. Verifique a coluna nomeado no Supabase.', 'error');
+            await waitNomearActionStatus(2200);
+            return false;
+        }
+
+        rememberOrderProjectAsNomeado(projectId);
+
+        if (typeof notifyProjetoNomeadoEmail === 'function') {
+            setNomearActionLoading(true, 'Enviando notificação por e-mail...');
+            await notifyProjetoNomeadoEmail({
+                orderId: project.orderId,
+                orderProjectIds: [projectId],
+                designerId: project.designerId
+            });
+        }
+
+        setNomearActionLoading(true, 'Atualizando telas...');
+        if (typeof onSuccess === 'function') {
+            await onSuccess();
+        }
+
+        setNomearActionLoading(true, 'Projeto nomeado!', 'success');
+        await waitNomearActionStatus(900);
+        return true;
+    } catch (error) {
+        setNomearActionLoading(true, `Erro ao nomear projeto: ${error.message}`, 'error');
+        await waitNomearActionStatus(2200);
         return false;
+    } finally {
+        setNomearActionLoading(false);
     }
-
-    if (updatedProject?.nomeado !== true) {
-        alertAppDialog('Não foi possível marcar o projeto como nomeado. Verifique a coluna nomeado no Supabase.');
-        return false;
-    }
-
-    rememberOrderProjectAsNomeado(projectId);
-
-    if (typeof notifyProjetoNomeadoEmail === 'function') {
-        await notifyProjetoNomeadoEmail({
-            orderId: project.orderId,
-            orderProjectIds: [projectId],
-            designerId: project.designerId
-        });
-    }
-
-    if (typeof onSuccess === 'function') {
-        await onSuccess();
-    }
-
-    return true;
 }
 
 function renderOrderNomearProjectCard(project) {
@@ -290,7 +355,6 @@ async function loadNomearProjects(orderId) {
     if (error) {
         console.error('loadNomearProjects:', error);
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-6">Erro ao carregar projetos: ${escapeHtml(error.message)}</p>`;
-        updateOrderTabCounts(undefined, undefined, undefined, undefined, undefined, undefined, undefined, 0);
         return;
     }
 
@@ -302,8 +366,6 @@ async function loadNomearProjects(orderId) {
             && !isOrderProjectNomeado(project)
         ).length
         : 0;
-
-    updateOrderTabCounts(undefined, undefined, undefined, undefined, undefined, undefined, undefined, nomearCount);
 
     list.innerHTML = '';
 
@@ -325,32 +387,12 @@ async function loadNomearProjects(orderId) {
     });
 }
 
-async function confirmOrderProjectNomeado(projectId, button, projectName) {
+async function confirmOrderProjectNomeado(projectId) {
     if (!activeOrderId || !canActOrderProjectNomear({ id: projectId })) return;
 
-    const label = projectName || 'este projeto';
-    const originalText = button.textContent;
-    button.disabled = true;
-    button.textContent = 'Salvando...';
-    button.classList.add('opacity-60', 'cursor-not-allowed');
-
-    try {
-        const success = await markOrderProjectAsNomeado(projectId, {
-            confirmMessage: `Confirmar "${label}" como nomeado e enviar para Aguardando PPCP?`,
-            onSuccess: () => refreshNomearRelatedViews(activeOrderId)
-        });
-
-        if (!success) {
-            button.disabled = !canShowOrderProjectNomearAction({ id: projectId });
-            button.textContent = originalText;
-            button.classList.remove('opacity-60', 'cursor-not-allowed');
-        }
-    } catch (error) {
-        alertAppDialog('Erro ao confirmar projeto como nomeado: ' + error.message);
-        button.disabled = false;
-        button.textContent = originalText;
-        button.classList.remove('opacity-60', 'cursor-not-allowed');
-    }
+    await markOrderProjectAsNomeado(projectId, {
+        onSuccess: () => refreshNomearRelatedViews(activeOrderId)
+    });
 }
 
 function bindNomearEvents() {
@@ -362,7 +404,6 @@ function bindNomearEvents() {
         const projectId = Number(card?.dataset.projectId);
         if (!projectId) return;
 
-        const projectName = card.querySelector('.text-sm.font-semibold')?.textContent?.trim() || '';
-        confirmOrderProjectNomeado(projectId, button, projectName);
+        confirmOrderProjectNomeado(projectId);
     });
 }

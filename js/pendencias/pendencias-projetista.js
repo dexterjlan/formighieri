@@ -477,7 +477,9 @@ function renderPendenciasWorkloadStatusSections(projects) {
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
         const projectsHtml = statusProjects.length
             ? statusProjects.map(project => {
+                const clientName = project.order?.clientName || '—';
                 const projectName = project.name || 'Projeto';
+                const itemTitle = `${clientName} · ${projectName}`;
 
                 return `
                     <li class="collapsible-list-card border-b border-slate-100 last:border-0" data-project-id="${project.id}">
@@ -486,9 +488,14 @@ function renderPendenciasWorkloadStatusSections(projects) {
                                 <button type="button"
                                     class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                                     aria-label="Expandir">▶</button>
-                                <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(projectName)}">
-                                    ${escapeHtml(projectName)}
-                                </p>
+                                <div class="min-w-0">
+                                    <p class="text-[10px] text-slate-500 truncate" title="${escapeHtml(clientName)}">
+                                        ${escapeHtml(clientName)}
+                                    </p>
+                                    <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
+                                        ${escapeHtml(projectName)}
+                                    </p>
+                                </div>
                             </div>
                         </div>
                         <div class="collapsible-list-body hidden pl-6 pr-1 pb-2">
@@ -1064,8 +1071,8 @@ function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, appro
             && typeof canViewCommercialRevision === 'function'
             && canViewCommercialRevision(approval);
         const actionCell = canViewRevision
-            ? `<button type="button" onclick="openCommercialRevisionView(${approval.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Revisão</button>`
+            ? `<button type="button" onclick="openCommercialRevisionsHistoryView(${approval.id})"
+                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Revisões</button>`
             : '<span class="text-xs text-slate-300">—</span>';
 
         return `
@@ -1962,7 +1969,7 @@ async function loadPendenciasProjetistaAguardandoPlanta() {
 }
 
 async function openPendenciasNovaMedicao(orderId) {
-    if (!canSeePendenciasProjetistaMedicaoConferenciaMenus()) {
+    if (!canCreateAsAdminOrConferente()) {
         alertAppDialog('Sem permissão para criar medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
@@ -1980,7 +1987,7 @@ async function openPendenciasNovaMedicao(orderId) {
 }
 
 async function openPendenciasNovaConferencia(orderId) {
-    if (!canSeePendenciasProjetistaMedicaoConferenciaMenus()) {
+    if (!canCreateAsAdminOrConferente()) {
         alertAppDialog('Sem permissão para criar conferência.', { variant: 'warning', title: 'Aviso' });
         return;
     }

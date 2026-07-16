@@ -2,6 +2,7 @@ let anteprojetoConferencesCache = [];
 let anteprojetoObservationsCache = [];
 let editingAnteprojetoConferenceId = null;
 let pendingAnteprojetoReturnConferenceId = null;
+let pendingAnteprojetoApproveConferenceId = null;
 
 function isAdminOrOrderConsultorForOrder(orderId) {
     if (currentUser?.role === 'Admin') return true;
@@ -341,6 +342,129 @@ function getProjectStatusName(project) {
 
 function isProjectPlantaLevantada(project) {
     return getProjectStatusName(project) === 'Planta Levantada';
+}
+
+function canShowOrderProjectConferenciaAction(project, conferenceContext = null) {
+    if (!canCreateAnteprojetoConference()) return false;
+    if (!canActOnOrderProject(project)) return false;
+    if (!isProjectPlantaLevantada(project)) return false;
+    if (conferenceContext?.alreadyInConference) return false;
+    return true;
+}
+
+function canShowOrderProjectVerConferenciaAction(project, orderId, conferenceContext = null) {
+    if (!conferenceContext?.conferenceId) return false;
+
+    const statusName = getOrderProjectStatusName(project);
+    if (statusName === 'Conferência Enviada') {
+        return isAdminOrOrderConsultorForOrder(orderId);
+    }
+    if (statusName === 'Conferência Realizada') {
+        return currentUser?.role === 'Admin' || isGestorComercial();
+    }
+    return false;
+}
+
+async function fetchAnteprojetoConferenceContextByProjectIds(projectIds, orderId) {
+    const normalizedProjectIds = [...new Set(projectIds.map(id => Number(id)).filter(Boolean))];
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedProjectIds.length || !normalizedOrderId) return {};
+
+    let result = await supabaseClient
+        .from('AnteprojetoConferenceProject')
+        .select('orderProjectId, conference:AnteprojetoConference(id, orderId, createdAt)')
+        .in('orderProjectId', normalizedProjectIds);
+
+    let rows = result.data || [];
+
+    if (result.error?.message?.includes('AnteprojetoConference')) {
+        const fallback = await supabaseClient
+            .from('AnteprojetoConferenceProject')
+            .select('orderProjectId, conferenceId')
+            .in('orderProjectId', normalizedProjectIds);
+
+        if (fallback.error) {
+            console.error('fetchAnteprojetoConferenceContextByProjectIds:', fallback.error);
+            return {};
+        }
+
+        rows = fallback.data || [];
+        const conferenceIds = [...new Set(rows.map(row => Number(row.conferenceId)).filter(Boolean))];
+        const conferenceById = {};
+
+        if (conferenceIds.length) {
+            const { data: conferences, error } = await supabaseClient
+                .from('AnteprojetoConference')
+                .select('id, orderId, createdAt')
+                .in('id', conferenceIds);
+
+            if (error) {
+                console.error('fetchAnteprojetoConferenceContextByProjectIds:', error);
+                return {};
+            }
+
+            (conferences || []).forEach(conference => {
+                conferenceById[Number(conference.id)] = conference;
+            });
+        }
+
+        rows = rows.map(row => ({
+            ...row,
+            conference: conferenceById[Number(row.conferenceId)] || null
+        }));
+    } else if (result.error) {
+        console.error('fetchAnteprojetoConferenceContextByProjectIds:', result.error);
+        return {};
+    }
+
+    const conferenceByProjectId = {};
+
+    rows.forEach(row => {
+        const conference = row.conference;
+        if (!conference || Number(conference.orderId) !== normalizedOrderId) return;
+
+        const projectId = Number(row.orderProjectId);
+        const conferenceId = Number(conference.id);
+        const existing = conferenceByProjectId[projectId];
+        const createdAt = conference.createdAt ? new Date(conference.createdAt).getTime() : 0;
+        const existingCreatedAt = existing?.createdAt ? new Date(existing.createdAt).getTime() : 0;
+
+        if (!existing || createdAt >= existingCreatedAt) {
+            conferenceByProjectId[projectId] = {
+                conferenceId,
+                createdAt: conference.createdAt || null
+            };
+        }
+    });
+
+    return Object.fromEntries(normalizedProjectIds.map(projectId => {
+        const entry = conferenceByProjectId[projectId] || null;
+        return [
+            projectId,
+            {
+                alreadyInConference: Boolean(entry?.conferenceId),
+                conferenceId: entry?.conferenceId || null
+            }
+        ];
+    }));
+}
+
+async function openOrderProjectConferenciaModal(projectId, orderId = activeOrderId) {
+    if (!canCreateAnteprojetoConference()) {
+        alertAppDialog('Sem permissão para criar conferência.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return;
+
+    activeOrderId = normalizedOrderId;
+
+    if (typeof loadAnteprojetoConferences === 'function') {
+        await loadAnteprojetoConferences(normalizedOrderId);
+    }
+
+    await openAnteprojetoModal();
 }
 
 async function enrichAnteprojetoProjectsWithStatus(projects) {
@@ -1584,6 +1708,12 @@ async function submitAnteprojetoReturnModal() {
     await returnAnteprojetoConferenceToConsultor(conferenceId, trimmedObservation);
 }
 
+function scrollAnteprojetoModalToTop() {
+    const scrollContainer = document.getElementById('anteprojeto-modal')?.querySelector(':scope > div');
+    if (!scrollContainer) return;
+    scrollContainer.scrollTop = 0;
+}
+
 function setAnteprojetoModalLoading(active, message = 'Processando...', status = 'loading') {
     const overlay = document.getElementById('anteprojeto-modal-loading');
     const messageEl = document.getElementById('anteprojeto-modal-loading-msg');
@@ -1591,6 +1721,10 @@ function setAnteprojetoModalLoading(active, message = 'Processando...', status =
     const successIcon = document.getElementById('anteprojeto-modal-loading-success');
     const errorIcon = document.getElementById('anteprojeto-modal-loading-error');
     const show = Boolean(active);
+
+    if (show) {
+        scrollAnteprojetoModalToTop();
+    }
 
     overlay?.classList.toggle('hidden', !show);
     if (messageEl) {
@@ -2215,21 +2349,353 @@ async function confirmAnteprojetoConferenceFromPendencias(conferenceId) {
 }
 
 async function approveAnteprojetoConferenceFromPendencias(conferenceId) {
-    const conference = await fetchAnteprojetoConferenceById(conferenceId);
+    await showAnteprojetoApproveDeliveryModal(conferenceId);
+}
+
+function getAnteprojetoMaxProjectDeliveryDate(orderDeliveryDate) {
+    if (!orderDeliveryDate) return '';
+    const [year, month, day] = orderDeliveryDate.split('-').map(Number);
+    if (!year || !month || !day) return '';
+
+    const date = new Date(year, month - 1, day);
+    date.setDate(date.getDate() - 1);
+
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function syncAnteprojetoApproveProjectDeliveryConstraints() {
+    const orderDelivery = document.getElementById('anteprojeto-approve-order-delivery')?.value || '';
+    const maxDate = getAnteprojetoMaxProjectDeliveryDate(orderDelivery);
+
+    document.querySelectorAll('.anteprojeto-approve-project-delivery').forEach(input => {
+        if (maxDate) {
+            input.max = maxDate;
+        } else {
+            input.removeAttribute('max');
+        }
+    });
+}
+
+function setAnteprojetoApproveModalLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('anteprojeto-approve-modal-loading');
+    const messageEl = document.getElementById('anteprojeto-approve-modal-loading-msg');
+    const spinner = document.getElementById('anteprojeto-approve-modal-loading-spinner');
+    const successIcon = document.getElementById('anteprojeto-approve-modal-loading-success');
+    const errorIcon = document.getElementById('anteprojeto-approve-modal-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+
+    const controls = [
+        'btn-anteprojeto-approve-modal-cancel',
+        'btn-anteprojeto-approve-modal-submit',
+        'anteprojeto-approve-order-delivery'
+    ];
+
+    controls.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (show) {
+            el.dataset.approveModalLoadingDisabled = '1';
+            el.disabled = true;
+        } else if (el.dataset.approveModalLoadingDisabled === '1') {
+            delete el.dataset.approveModalLoadingDisabled;
+            el.disabled = false;
+        }
+    });
+
+    document.querySelectorAll('.anteprojeto-approve-project-delivery').forEach(input => {
+        if (show) {
+            input.dataset.approveModalLoadingDisabled = '1';
+            input.disabled = true;
+        } else if (input.dataset.approveModalLoadingDisabled === '1') {
+            delete input.dataset.approveModalLoadingDisabled;
+            input.disabled = false;
+        }
+    });
+}
+
+function closeAnteprojetoApproveDeliveryModal() {
+    setAnteprojetoApproveModalLoading(false);
+    pendingAnteprojetoApproveConferenceId = null;
+    const orderDeliveryEl = document.getElementById('anteprojeto-approve-order-delivery');
+    const projectsWrap = document.getElementById('anteprojeto-approve-projects-wrap');
+    if (orderDeliveryEl) orderDeliveryEl.value = '';
+    if (projectsWrap) projectsWrap.innerHTML = '';
+    toggleModal('anteprojeto-approve-modal', false);
+}
+
+async function fetchAnteprojetoApprovalDeliveryContext(conference) {
+    const projectIds = getConferenceOrderProjectIds(conference);
+    let orderCode = '—';
+    let clientName = '—';
+    let clientDeliveryDate = '';
+
+    const cachedOrder = typeof ordersCache !== 'undefined'
+        ? ordersCache.find(order => Number(order.id) === Number(conference.orderId))
+        : null;
+
+    if (cachedOrder) {
+        orderCode = cachedOrder.orderCode || '—';
+        clientName = cachedOrder.clientName || '—';
+        clientDeliveryDate = cachedOrder.clientDeliveryDate || '';
+    } else if (conference.orderId) {
+        const { data } = await supabaseClient
+            .from('salesOrders')
+            .select('orderCode, clientName, clientDeliveryDate')
+            .eq('id', conference.orderId)
+            .maybeSingle();
+
+        if (data) {
+            orderCode = data.orderCode || '—';
+            clientName = data.clientName || '—';
+            clientDeliveryDate = data.clientDeliveryDate || '';
+        }
+    }
+
+    let projects = (conference.conferenceProjects || [])
+        .map(entry => ({
+            id: Number(entry.orderProjectId),
+            name: entry.orderProject?.name || 'Projeto',
+            deliveryDate: entry.orderProject?.deliveryDate || null
+        }))
+        .filter(project => project.id);
+
+    const missingDeliveryIds = projects
+        .filter(project => !project.deliveryDate)
+        .map(project => project.id);
+
+    if (missingDeliveryIds.length) {
+        const { data: projectRows, error } = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, deliveryDate')
+            .in('id', missingDeliveryIds);
+
+        if (!error && projectRows?.length) {
+            const projectById = Object.fromEntries(projectRows.map(row => [Number(row.id), row]));
+            projects = projects.map(project => ({
+                ...project,
+                name: projectById[project.id]?.name || project.name,
+                deliveryDate: project.deliveryDate || projectById[project.id]?.deliveryDate || null
+            }));
+        }
+    }
+
+    projects.sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
+
+    return {
+        orderCode,
+        clientName,
+        clientDeliveryDate,
+        projects
+    };
+}
+
+function renderAnteprojetoApproveProjectsFields(projects = []) {
+    const wrap = document.getElementById('anteprojeto-approve-projects-wrap');
+    if (!wrap) return;
+
+    if (!projects.length) {
+        wrap.innerHTML = '<p class="text-xs text-slate-400">Nenhum projeto na conferência.</p>';
+        return;
+    }
+
+    wrap.innerHTML = projects.map(project => `
+        <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/40" data-project-id="${project.id}">
+            <div class="text-xs font-semibold text-slate-800 mb-2">${escapeHtml(project.name)}</div>
+            <label class="block text-[11px] font-semibold text-slate-500 mb-1" for="anteprojeto-approve-project-${project.id}">
+                Data de entrega do projeto <span class="text-red-500">*</span>
+            </label>
+            <input type="date" id="anteprojeto-approve-project-${project.id}" required
+                class="anteprojeto-approve-project-delivery w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                data-project-id="${project.id}"
+                value="${escapeHtml(toGestaoInputDate(project.deliveryDate))}">
+        </div>
+    `).join('');
+}
+
+async function showAnteprojetoApproveDeliveryModal(conferenceId) {
+    const normalizedId = Number(conferenceId);
+    if (!normalizedId) return;
+
+    let conference = anteprojetoConferencesCache.find(item => Number(item.id) === normalizedId);
+    if (!conference && typeof fetchAnteprojetoConferenceById === 'function') {
+        conference = await fetchAnteprojetoConferenceById(normalizedId);
+        if (conference) {
+            const cacheIndex = anteprojetoConferencesCache.findIndex(item => Number(item.id) === normalizedId);
+            if (cacheIndex >= 0) {
+                anteprojetoConferencesCache[cacheIndex] = conference;
+            } else {
+                anteprojetoConferencesCache = [...anteprojetoConferencesCache, conference];
+            }
+        }
+    }
+
     if (!conference) {
         alertAppDialog('Conferência não encontrada.');
         return;
     }
 
-    activeOrderId = conference.orderId;
-    const cacheIndex = anteprojetoConferencesCache.findIndex(item => Number(item.id) === Number(conferenceId));
-    if (cacheIndex >= 0) {
-        anteprojetoConferencesCache[cacheIndex] = conference;
-    } else {
-        anteprojetoConferencesCache = [...anteprojetoConferencesCache, conference];
+    if (!canApproveAnteprojetoConference(conference)) {
+        alertAppDialog('Somente o gestor comercial pode aprovar a conferência.', { variant: 'warning', title: 'Aviso' });
+        return;
     }
 
-    await approveAnteprojetoConference(conferenceId);
+    activeOrderId = conference.orderId || activeOrderId;
+    pendingAnteprojetoApproveConferenceId = normalizedId;
+
+    const context = await fetchAnteprojetoApprovalDeliveryContext(conference);
+    const contextEl = document.getElementById('anteprojeto-approve-modal-context');
+    if (contextEl) {
+        contextEl.textContent = `Pedido ${context.orderCode} — ${context.clientName}. Confirme a data de entrega do pedido e dos projetos antes de aprovar.`;
+    }
+
+    const orderDeliveryEl = document.getElementById('anteprojeto-approve-order-delivery');
+    if (orderDeliveryEl) {
+        orderDeliveryEl.value = toGestaoInputDate(context.clientDeliveryDate);
+    }
+
+    renderAnteprojetoApproveProjectsFields(context.projects);
+    syncAnteprojetoApproveProjectDeliveryConstraints();
+
+    toggleModal('anteprojeto-approve-modal', true);
+    orderDeliveryEl?.focus();
+}
+
+function collectAnteprojetoApproveDeliverySelections() {
+    const orderDeliveryDate = document.getElementById('anteprojeto-approve-order-delivery')?.value || '';
+    const projectDeliveries = [...document.querySelectorAll('.anteprojeto-approve-project-delivery')]
+        .map(input => ({
+            projectId: Number(input.dataset.projectId),
+            deliveryDate: input.value || ''
+        }))
+        .filter(item => item.projectId);
+
+    return { orderDeliveryDate, projectDeliveries };
+}
+
+function validateAnteprojetoApproveDeliverySelections(selections) {
+    if (!selections.orderDeliveryDate) {
+        alertAppDialog('Informe a data de entrega do pedido.', { variant: 'warning', title: 'Aviso' });
+        return false;
+    }
+
+    if (!selections.projectDeliveries.length) {
+        alertAppDialog('Nenhum projeto encontrado para aprovar.', { variant: 'warning', title: 'Aviso' });
+        return false;
+    }
+
+    for (const project of selections.projectDeliveries) {
+        if (!project.deliveryDate) {
+            alertAppDialog('Informe a data de entrega de todos os projetos da conferência.', { variant: 'warning', title: 'Aviso' });
+            return false;
+        }
+
+        if (!isProjectTechnicalDeliveryBeforeOrderDelivery(project.deliveryDate, selections.orderDeliveryDate)) {
+            alertAppDialog('A data de entrega do projeto técnico deve ser anterior à data de entrega do pedido.', { variant: 'warning', title: 'Aviso' });
+            return false;
+        }
+    }
+
+    return true;
+}
+
+async function saveAnteprojetoApprovalDeliveryDates(conference, selections) {
+    const now = new Date().toISOString();
+    const orderId = Number(conference.orderId);
+
+    let orderPayload = {
+        clientDeliveryDate: selections.orderDeliveryDate,
+        updatedAt: now,
+        updatedById: currentUser.id
+    };
+
+    let { error: orderError } = await supabaseClient
+        .from('salesOrders')
+        .update(orderPayload)
+        .eq('id', orderId);
+
+    if (orderError?.message?.includes('clientDeliveryDate')) {
+        orderPayload = {
+            clientDeliveryDate: selections.orderDeliveryDate
+        };
+        ({ error: orderError } = await supabaseClient
+            .from('salesOrders')
+            .update(orderPayload)
+            .eq('id', orderId));
+    }
+
+    if (orderError) throw orderError;
+
+    if (typeof ordersCache !== 'undefined') {
+        const cacheIndex = ordersCache.findIndex(order => Number(order.id) === orderId);
+        if (cacheIndex >= 0) {
+            ordersCache[cacheIndex] = {
+                ...ordersCache[cacheIndex],
+                clientDeliveryDate: selections.orderDeliveryDate
+            };
+        }
+    }
+
+    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === orderId) {
+        const detDelivery = document.getElementById('det-delivery');
+        if (detDelivery && typeof formatOrderDeliverySummary === 'function') {
+            detDelivery.innerText = formatOrderDeliverySummary(orderId, selections.orderDeliveryDate);
+        }
+    }
+
+    await Promise.all(selections.projectDeliveries.map(async project => {
+        const { error } = await supabaseClient
+            .from('OrderProject')
+            .update({
+                deliveryDate: project.deliveryDate,
+                updatedAt: now,
+                updatedById: currentUser.id
+            })
+            .eq('id', project.projectId);
+
+        if (error) throw error;
+    }));
+}
+
+async function submitAnteprojetoApproveDeliveryModal() {
+    const conferenceId = pendingAnteprojetoApproveConferenceId;
+    if (!conferenceId) return;
+
+    const conference = anteprojetoConferencesCache.find(item => Number(item.id) === Number(conferenceId));
+    if (!conference) {
+        alertAppDialog('Conferência não encontrada.');
+        closeAnteprojetoApproveDeliveryModal();
+        return;
+    }
+
+    const selections = collectAnteprojetoApproveDeliverySelections();
+    if (!validateAnteprojetoApproveDeliverySelections(selections)) return;
+
+    try {
+        setAnteprojetoApproveModalLoading(true, 'Salvando datas de entrega...');
+        await saveAnteprojetoApprovalDeliveryDates(conference, selections);
+
+        closeAnteprojetoApproveDeliveryModal();
+        await approveAnteprojetoConference(conferenceId);
+    } catch (error) {
+        setAnteprojetoApproveModalLoading(true, `Erro ao salvar datas: ${error.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2200));
+        setAnteprojetoApproveModalLoading(false);
+    }
 }
 
 window.confirmAnteprojetoConference = confirmAnteprojetoConference;
@@ -2243,10 +2709,6 @@ async function approveAnteprojetoConference(conferenceId) {
 
     if (!canApproveAnteprojetoConference(conference)) {
         alertAppDialog('Somente Admin com flag Gestor comercial pode aprovar a conferência.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
-
-    if (!(await confirmAppDialog('Aprovar esta conferência e alterar os projetos para Aguardando Projeto Técnico?'))) {
         return;
     }
 
@@ -2312,6 +2774,8 @@ async function approveAnteprojetoConference(conferenceId) {
 
 window.approveAnteprojetoConference = approveAnteprojetoConference;
 window.approveAnteprojetoConferenceFromPendencias = approveAnteprojetoConferenceFromPendencias;
+window.showAnteprojetoApproveDeliveryModal = showAnteprojetoApproveDeliveryModal;
+window.closeAnteprojetoApproveDeliveryModal = closeAnteprojetoApproveDeliveryModal;
 window.canReturnAnteprojetoConferenceToConsultor = canReturnAnteprojetoConferenceToConsultor;
 window.showAnteprojetoReturnObservationForm = showAnteprojetoReturnObservationForm;
 window.returnAnteprojetoConferenceToConsultor = returnAnteprojetoConferenceToConsultor;
@@ -2363,8 +2827,6 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const checkedCount = moduleObservations.filter(obs => obs.consultorChecked).length;
     const canEdit = canEditAnteprojetoConference(conference) || canEditAnteprojetoConsultorFields(conference);
     const canConfirm = canConfirmAnteprojetoConference(conference);
-    const canApprove = canApproveAnteprojetoConference(conference);
-    const canReturn = canReturnAnteprojetoConferenceToConsultor(conference);
     const canOpen = confirmed || canEdit;
     const allChecked = moduleObservations.length > 0
         && moduleObservations.every(obs => obs.consultorChecked);
@@ -2489,34 +2951,16 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
 
     body.appendChild(projectsWrap);
 
-    if (canConfirm || canApprove || canReturn) {
+    if (canConfirm) {
         const confirmWrap = document.createElement('div');
         confirmWrap.className = 'flex justify-end gap-2 pt-2 border-t border-slate-100';
-        if (canConfirm) {
-            confirmWrap.innerHTML += `
-                <button type="button" onclick="confirmAnteprojetoConference(${conference.id})"
-                    class="text-xs px-3 py-1.5 rounded-lg font-medium ${allChecked ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
-                    ${allChecked ? '' : 'disabled'}>
-                    Confirmar Conferência
-                </button>
-            `;
-        }
-        if (canReturn) {
-            confirmWrap.innerHTML += `
-                <button type="button" onclick="showAnteprojetoReturnObservationForm(${conference.id})"
-                    class="text-xs px-3 py-1.5 rounded-lg font-medium bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-200">
-                    Voltar para Consultor
-                </button>
-            `;
-        }
-        if (canApprove) {
-            confirmWrap.innerHTML += `
-                <button type="button" onclick="approveAnteprojetoConference(${conference.id})"
-                    class="text-xs px-3 py-1.5 rounded-lg font-medium bg-indigo-700 text-white hover:bg-indigo-800">
-                    Aprovar
-                </button>
-            `;
-        }
+        confirmWrap.innerHTML = `
+            <button type="button" onclick="confirmAnteprojetoConference(${conference.id})"
+                class="text-xs px-3 py-1.5 rounded-lg font-medium ${allChecked ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
+                ${allChecked ? '' : 'disabled'}>
+                Confirmar Conferência
+            </button>
+        `;
         body.appendChild(confirmWrap);
     }
 
@@ -2624,7 +3068,7 @@ async function loadAnteprojetoConferences(orderId) {
 
     if (result.error?.message?.includes('Anteprojeto')) {
         list.innerHTML = '<p class="text-xs text-amber-700 text-center py-6 bg-amber-50 rounded-xl border border-amber-100">Execute o SQL <code>supabase/create-anteprojeto.sql</code> no Supabase.</p>';
-        updateOrderTabCounts(undefined, undefined, undefined, 0);
+        updateOrderTabCounts(undefined, 0);
         return;
     }
 
@@ -2640,7 +3084,7 @@ async function loadAnteprojetoConferences(orderId) {
     anteprojetoConferencesCache = conferences;
 
     const openCount = conferences.filter(conference => conference.status === 'Em andamento').length;
-    updateOrderTabCounts(undefined, undefined, undefined, openCount);
+    updateOrderTabCounts(undefined, openCount);
 
     const designerIds = [...new Set(conferences.map(conference => conference.designerId).filter(Boolean))];
     const projetistaNames = {};
@@ -2671,7 +3115,7 @@ function updateAnteprojetoActionButtons() {
     const onTab = panel && !panel.classList.contains('hidden');
     const newBtn = document.getElementById('btn-new-anteprojeto');
     if (newBtn) {
-        newBtn.classList.toggle('hidden', !onTab || !canActOrderDetailTab('anteprojeto'));
+        newBtn.classList.toggle('hidden', !onTab || !canCreateAnteprojetoConference());
     }
 }
 
@@ -2682,7 +3126,7 @@ function bindAnteprojetoEvents() {
     });
     document.getElementById('btn-anteprojeto-modal-approve')?.addEventListener('click', async () => {
         if (!editingAnteprojetoConferenceId) return;
-        approveAnteprojetoConference(editingAnteprojetoConferenceId);
+        await showAnteprojetoApproveDeliveryModal(editingAnteprojetoConferenceId);
     });
     document.getElementById('btn-anteprojeto-modal-return')?.addEventListener('click', () => {
         if (!editingAnteprojetoConferenceId) return;
@@ -2690,6 +3134,10 @@ function bindAnteprojetoEvents() {
     });
     document.getElementById('btn-anteprojeto-return-modal-cancel')?.addEventListener('click', closeAnteprojetoReturnModal);
     document.getElementById('btn-anteprojeto-return-modal-submit')?.addEventListener('click', submitAnteprojetoReturnModal);
+    document.getElementById('btn-anteprojeto-approve-modal-cancel')?.addEventListener('click', closeAnteprojetoApproveDeliveryModal);
+    document.getElementById('btn-anteprojeto-approve-modal-submit')?.addEventListener('click', submitAnteprojetoApproveDeliveryModal);
+    document.getElementById('anteprojeto-approve-order-delivery')?.addEventListener('change', syncAnteprojetoApproveProjectDeliveryConstraints);
+    document.getElementById('anteprojeto-approve-order-delivery')?.addEventListener('input', syncAnteprojetoApproveProjectDeliveryConstraints);
     document.getElementById('anteprojeto-projects-structure')?.addEventListener('change', event => {
         if (event.target?.classList?.contains('anteprojeto-observation-checked')) {
             refreshAnteprojetoModalConfirmButton();

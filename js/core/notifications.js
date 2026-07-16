@@ -12,19 +12,16 @@ function buildEmailNoReplyFooterHtml() {
     return `<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;text-align:center;">${escapeHtml(EMAIL_NO_REPLY_FOOTER_TEXT)}</p>`;
 }
 
-function getAppPublicUrl() {
-    if (typeof APP_PUBLIC_URL === 'string' && APP_PUBLIC_URL.trim()) {
-        return APP_PUBLIC_URL.trim().replace(/\/$/, '');
+function getFgpEmailProdPublicUrl() {
+    const prodUrl = window.FORMIGHIERI_CONFIG_PROD?.APP_PUBLIC_URL;
+    if (prodUrl) {
+        return String(prodUrl).replace(/\/$/, '');
     }
-    if (typeof window !== 'undefined' && window.location?.origin) {
-        return window.location.origin.replace(/\/$/, '');
-    }
-    return '';
+    return 'https://dexterjlan.github.io/formighieri';
 }
 
 function getFgpLogoEmailUrl() {
-    const base = getAppPublicUrl();
-    return base ? `${base}/images/fgp_logo.png` : '';
+    return `${getFgpEmailProdPublicUrl()}/images/fgp_logo.png`;
 }
 
 function buildEmailBrandHeaderHtml(eventTitle, accentColor = '#f59e0b') {

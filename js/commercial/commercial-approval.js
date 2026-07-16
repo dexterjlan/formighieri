@@ -609,6 +609,7 @@ async function insertCommercialApprovals(payloads) {
 }
 
 let aprovacaoCaminhoModalResolver = null;
+let pendingCommercialApprovalOrderDeliveryApprovalId = null;
 
 function openAprovacaoCaminhoModal(options = {}) {
     const { projectName = '—', currentPath = '' } = options;
@@ -756,7 +757,7 @@ async function submitCommercialApprovalFromPendencias(projectId) {
     }
 
     const confirmed = await confirmAppDialog(
-        'O projeto será enviado para análise do gestor comercial.',
+        'O projeto será enviado para análise do consultor do pedido.',
         {
             title: `Enviar "${enrichedProject.name}" para aprovação?`,
             confirmLabel: 'Enviar para aprovação'
@@ -783,7 +784,7 @@ async function submitCommercialApprovalFromPendencias(projectId) {
     }
 
     try {
-        setPendenciasActionLoading(true, 'Registrando solicitação de aprovação...');
+        setCommercialApprovalSubmitLoading(true, 'Registrando solicitação de aprovação...');
         const payload = {
             orderId: enrichedProject.orderId,
             orderProjectId: normalizedId,
@@ -797,17 +798,17 @@ async function submitCommercialApprovalFromPendencias(projectId) {
         const { error, data: insertedApprovals } = await insertCommercialApprovals([payload]);
         if (error) throw error;
 
-        setPendenciasActionLoading(true, 'Atualizando status do projeto...');
+        setCommercialApprovalSubmitLoading(true, 'Atualizando status do projeto...');
         await applyAguardandoAprovacaoStatusToProjects([normalizedId]);
 
         if (insertedApprovals?.length) {
-            setPendenciasActionLoading(true, 'Enviando e-mail de notificação...');
+            setCommercialApprovalSubmitLoading(true, 'Enviando e-mail de notificação...');
             for (const inserted of insertedApprovals) {
                 await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
             }
         }
 
-        setPendenciasActionLoading(true, 'Atualizando telas...');
+        setCommercialApprovalSubmitLoading(true, 'Atualizando telas...');
         if (typeof loadPendenciasProjetoTecnico === 'function'
             && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
             await loadPendenciasProjetoTecnico();
@@ -821,13 +822,13 @@ async function submitCommercialApprovalFromPendencias(projectId) {
             }
         }
 
-        setPendenciasActionLoading(true, 'Envio para aprovação concluído!', 'success');
-        await waitPendenciasStatus(1800);
-        setPendenciasActionLoading(false);
+        setCommercialApprovalSubmitLoading(true, 'Envio para aprovação concluído!', 'success');
+        await waitCommercialApprovalSubmitStatus(1800);
+        setCommercialApprovalSubmitLoading(false);
     } catch (error) {
-        setPendenciasActionLoading(true, `Erro ao enviar: ${error.message}`, 'error');
-        await waitPendenciasStatus(2500);
-        setPendenciasActionLoading(false);
+        setCommercialApprovalSubmitLoading(true, `Erro ao enviar: ${error.message}`, 'error');
+        await waitCommercialApprovalSubmitStatus(2500);
+        setCommercialApprovalSubmitLoading(false);
     }
 }
 
@@ -892,12 +893,173 @@ window.openCommercialApprovalModal = openCommercialApprovalModal;
 window.closeCommercialApprovalModal = closeCommercialApprovalModal;
 window.editCommercialApproval = editCommercialApproval;
 
+async function isFirstCommercialApprovalForOrder(approval) {
+    const orderId = Number(approval?.orderId);
+    const approvalId = Number(approval?.id);
+    if (!orderId || !approvalId) return false;
+
+    const { data, error } = await supabaseClient
+        .from('CommercialApproval')
+        .select('id, approved, status')
+        .eq('orderId', orderId);
+
+    if (error) {
+        console.error('isFirstCommercialApprovalForOrder:', error);
+        return true;
+    }
+
+    const hasOtherApproved = (data || []).some(record => {
+        if (Number(record.id) === approvalId) return false;
+        const status = record.status || (record.approved ? 'Aprovado' : '');
+        return status === 'Aprovado' || record.approved === true;
+    });
+
+    return !hasOtherApproved;
+}
+
+async function fetchCommercialApprovalOrderDeliveryContext(orderId) {
+    let orderCode = '—';
+    let clientName = '—';
+    let clientDeliveryDate = '';
+
+    const cachedOrder = typeof ordersCache !== 'undefined'
+        ? ordersCache.find(order => Number(order.id) === Number(orderId))
+        : null;
+
+    if (cachedOrder) {
+        orderCode = cachedOrder.orderCode || '—';
+        clientName = cachedOrder.clientName || '—';
+        clientDeliveryDate = cachedOrder.clientDeliveryDate || '';
+    } else if (orderId) {
+        const { data } = await supabaseClient
+            .from('salesOrders')
+            .select('orderCode, clientName, clientDeliveryDate')
+            .eq('id', orderId)
+            .maybeSingle();
+
+        if (data) {
+            orderCode = data.orderCode || '—';
+            clientName = data.clientName || '—';
+            clientDeliveryDate = data.clientDeliveryDate || '';
+        }
+    }
+
+    return { orderCode, clientName, clientDeliveryDate };
+}
+
+function closeCommercialApprovalOrderDeliveryModal() {
+    pendingCommercialApprovalOrderDeliveryApprovalId = null;
+    const input = document.getElementById('commercial-approval-order-delivery-input');
+    if (input) input.value = '';
+    toggleModal('commercial-approval-order-delivery-modal', false);
+}
+
+async function showCommercialApprovalOrderDeliveryModal(approval) {
+    if (!approval?.id || !approval?.orderId) return;
+
+    pendingCommercialApprovalOrderDeliveryApprovalId = Number(approval.id);
+    const context = await fetchCommercialApprovalOrderDeliveryContext(approval.orderId);
+    const contextEl = document.getElementById('commercial-approval-order-delivery-context');
+    const input = document.getElementById('commercial-approval-order-delivery-input');
+
+    if (contextEl) {
+        contextEl.textContent = `Pedido ${context.orderCode} — ${context.clientName}. Este é o primeiro projeto aprovado do pedido. Confirme a data de entrega no cliente.`;
+    }
+
+    if (input) {
+        input.value = typeof toGestaoInputDate === 'function'
+            ? toGestaoInputDate(context.clientDeliveryDate)
+            : String(context.clientDeliveryDate || '').slice(0, 10);
+    }
+
+    toggleModal('commercial-approval-order-delivery-modal', true);
+    input?.focus();
+}
+
+async function saveCommercialApprovalOrderDeliveryDate(orderId, clientDeliveryDate) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId || !clientDeliveryDate) {
+        throw new Error('Informe a data de entrega do pedido.');
+    }
+
+    const now = new Date().toISOString();
+    let orderPayload = {
+        clientDeliveryDate,
+        updatedAt: now,
+        updatedById: currentUser.id
+    };
+
+    let { error: orderError } = await supabaseClient
+        .from('salesOrders')
+        .update(orderPayload)
+        .eq('id', normalizedOrderId);
+
+    if (orderError?.message?.includes('clientDeliveryDate')) {
+        orderPayload = { clientDeliveryDate };
+        ({ error: orderError } = await supabaseClient
+            .from('salesOrders')
+            .update(orderPayload)
+            .eq('id', normalizedOrderId));
+    }
+
+    if (orderError) throw orderError;
+
+    if (typeof ordersCache !== 'undefined') {
+        const cacheIndex = ordersCache.findIndex(order => Number(order.id) === normalizedOrderId);
+        if (cacheIndex >= 0) {
+            ordersCache[cacheIndex] = {
+                ...ordersCache[cacheIndex],
+                clientDeliveryDate
+            };
+        }
+    }
+
+    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === normalizedOrderId) {
+        const detDelivery = document.getElementById('det-delivery');
+        if (detDelivery && typeof formatOrderDeliverySummary === 'function') {
+            detDelivery.innerText = formatOrderDeliverySummary(normalizedOrderId, clientDeliveryDate);
+        }
+    }
+}
+
+async function submitCommercialApprovalOrderDeliveryModal() {
+    const approvalId = pendingCommercialApprovalOrderDeliveryApprovalId;
+    if (!approvalId) return;
+
+    const approval = commercialApprovalsCache.find(item => Number(item.id) === Number(approvalId))
+        || (typeof ensureApprovalInCache === 'function' ? await ensureApprovalInCache(approvalId) : null);
+
+    if (!approval || !canApproveCommercialApproval(approval)) {
+        closeCommercialApprovalOrderDeliveryModal();
+        return;
+    }
+
+    const clientDeliveryDate = document.getElementById('commercial-approval-order-delivery-input')?.value || '';
+    if (!clientDeliveryDate) {
+        alertAppDialog('Informe a data de entrega do pedido.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    try {
+        await saveCommercialApprovalOrderDeliveryDate(approval.orderId, clientDeliveryDate);
+        closeCommercialApprovalOrderDeliveryModal();
+        await executeCommercialApproval(approvalId);
+    } catch (error) {
+        alertAppDialog(`Erro ao salvar data de entrega: ${error.message}`);
+    }
+}
+
 async function approveCommercialApproval(id) {
     let approval = commercialApprovalsCache.find(a => a.id === id);
     if (!approval && typeof ensureApprovalInCache === 'function') {
         approval = await ensureApprovalInCache(id);
     }
     if (!approval || !canApproveCommercialApproval(approval)) return;
+
+    if (await isFirstCommercialApprovalForOrder(approval)) {
+        await showCommercialApprovalOrderDeliveryModal(approval);
+        return;
+    }
 
     const confirmed = await confirmAppDialog(
         'A solicitação será marcada como aprovada.',
@@ -908,6 +1070,16 @@ async function approveCommercialApproval(id) {
         }
     );
     if (!confirmed) return;
+
+    await executeCommercialApproval(id);
+}
+
+async function executeCommercialApproval(id) {
+    let approval = commercialApprovalsCache.find(a => a.id === id);
+    if (!approval && typeof ensureApprovalInCache === 'function') {
+        approval = await ensureApprovalInCache(id);
+    }
+    if (!approval || !canApproveCommercialApproval(approval)) return;
 
     const now = new Date().toISOString();
     let payload = {
@@ -1137,19 +1309,16 @@ async function loadCommercialApprovals(orderId) {
         if (error) {
             console.error('loadCommercialApprovals:', error);
             list.innerHTML = `<p class="text-xs text-red-500 text-center py-4 bg-white rounded-xl border border-red-100">Erro ao carregar aprovações comerciais: ${error.message}</p>`;
-            updateOrderTabCounts(0, undefined);
             return;
         }
 
         if (!approvals || approvals.length === 0) {
             commercialApprovalsCache = [];
             list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-emerald-100">Nenhuma aprovação comercial para este pedido.</p>';
-            updateOrderTabCounts(0, undefined);
             return;
         }
 
         commercialApprovalsCache = approvals.map(a => normalizeCommercialApproval(a));
-        updateOrderTabCounts(countPendingCommercialApprovals(approvals), undefined);
 
         const { data: orderInfo } = await supabaseClient
             .from('salesOrders')
@@ -1198,6 +1367,9 @@ async function loadCommercialApprovals(orderId) {
         });
 
         bindCollapsibleListCardToggles(list);
+        if (typeof hydrateRevisionActivityAttachmentPreviews === 'function') {
+            hydrateRevisionActivityAttachmentPreviews(list);
+        }
     } catch (renderError) {
         console.error('loadCommercialApprovals render:', renderError);
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-4 bg-white rounded-xl border border-red-100">Erro ao exibir aprovações comerciais: ${renderError.message}</p>`;
@@ -1250,14 +1422,103 @@ function isPendenciasViewVisibleForApproval() {
     return Boolean(view && !view.classList.contains('hidden'));
 }
 
-function setCommercialApprovalActionLoading(approvalId, active, message = 'Processando...', status = 'loading') {
+function isOrderProjectsPanelVisibleForApproval() {
+    const content = document.getElementById('order-content');
+    return Boolean(content && !content.classList.contains('hidden'));
+}
+
+function isApprovalsQueryViewVisibleForApproval() {
+    const view = document.getElementById('approvals-query-view');
+    return Boolean(view && !view.classList.contains('hidden'));
+}
+
+function setApprovalsQueryActionLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('approvals-query-action-loading');
+    const messageEl = document.getElementById('approvals-query-action-loading-msg');
+    const spinner = document.getElementById('approvals-query-action-loading-spinner');
+    const successIcon = document.getElementById('approvals-query-action-loading-success');
+    const errorIcon = document.getElementById('approvals-query-action-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+}
+
+function applyCommercialApprovalContextLoading(active, message = 'Processando...', status = 'loading') {
     if (isPendenciasViewVisibleForApproval() && typeof setPendenciasActionLoading === 'function') {
         setPendenciasActionLoading(active, message, status);
-        return;
+        return true;
+    }
+
+    if (isApprovalsQueryViewVisibleForApproval()) {
+        setApprovalsQueryActionLoading(active, message, status);
+        return true;
+    }
+
+    if (isOrderProjectsPanelVisibleForApproval()) {
+        setOrderProjectsPanelActionLoading(active, message, status);
+        return true;
     }
 
     if (isCommercialApprovalModalVisible()) {
         setCommercialApprovalFormLoading(active, message, status);
+        return true;
+    }
+
+    return false;
+}
+
+function setOrderProjectsPanelActionLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('order-projects-action-loading');
+    const messageEl = document.getElementById('order-projects-action-loading-msg');
+    const spinner = document.getElementById('order-projects-action-loading-spinner');
+    const successIcon = document.getElementById('order-projects-action-loading-success');
+    const errorIcon = document.getElementById('order-projects-action-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+}
+
+function setCommercialApprovalSubmitLoading(active, message = 'Processando...', status = 'loading') {
+    if (applyCommercialApprovalContextLoading(active, message, status)) {
+        return;
+    }
+
+    if (typeof setPendenciasActionLoading === 'function') {
+        setPendenciasActionLoading(active, message, status);
+    }
+}
+
+async function waitCommercialApprovalSubmitStatus(ms) {
+    if (typeof waitPendenciasStatus === 'function') {
+        await waitPendenciasStatus(ms);
+        return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function setCommercialApprovalActionLoading(approvalId, active, message = 'Processando...', status = 'loading') {
+    if (applyCommercialApprovalContextLoading(active, message, status)) {
         return;
     }
 
@@ -1287,6 +1548,11 @@ function bindCommercialApprovalEvents() {
     document.getElementById('btn-aprovacao-caminho-cancelar')?.addEventListener('click', async () => {
         closeAprovacaoCaminhoModal(null);
     });
+
+    document.getElementById('btn-commercial-approval-order-delivery-cancel')
+        ?.addEventListener('click', closeCommercialApprovalOrderDeliveryModal);
+    document.getElementById('btn-commercial-approval-order-delivery-submit')
+        ?.addEventListener('click', submitCommercialApprovalOrderDeliveryModal);
 
     document.getElementById('commercial-approval-form').addEventListener('submit', async function (e) {
         e.preventDefault();

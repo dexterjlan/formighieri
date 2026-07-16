@@ -266,9 +266,7 @@ function getConferenceProjectsForCharacteristics(conference) {
 
 function getProjectCharacteristicLabel(project) {
     if (!project) return 'Projeto';
-    return project.projectCode
-        ? `${project.projectCode} · ${project.name || 'Projeto'}`
-        : (project.name || `Projeto #${project.id}`);
+    return project.name || `Projeto #${project.id}`;
 }
 
 function renderProjectCharacteristicsModalContent(conference, characteristics, existingByProjectId) {

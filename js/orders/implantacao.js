@@ -256,6 +256,8 @@ async function fetchImplantacaoByOrderProjectId(orderProjectId) {
     return data;
 }
 
+window.fetchImplantacaoByOrderProjectId = fetchImplantacaoByOrderProjectId;
+
 async function createImplantacaoRecord(orderProjectId) {
     const now = new Date().toISOString();
     const { data, error } = await supabaseClient

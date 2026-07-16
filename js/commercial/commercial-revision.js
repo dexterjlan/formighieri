@@ -8,19 +8,25 @@ function canEditRevisionActivitiesConsultor(approval) {
 
 function canEditRevisionActivityProjetista(approval) {
     if (currentUser?.role === 'Admin') return true;
-    if (currentUser?.role === 'Projetista' && approval?.designerId === currentUser.id) return true;
+    if (currentUser?.role === 'Projetista'
+        && approval?.designerId
+        && Number(approval.designerId) === Number(currentUser.id)) return true;
     return false;
 }
 
 function canEditRevisionActivityCompletionFields(approval) {
     if (approval?.status !== 'Em revisão') return false;
     if (currentUser?.role === 'Admin') return true;
-    return currentUser?.role === 'Projetista' && approval?.designerId === currentUser.id;
+    return currentUser?.role === 'Projetista'
+        && approval?.designerId
+        && Number(approval.designerId) === Number(currentUser.id);
 }
 
 function canViewCommercialRevision(approval) {
     if (currentUser?.role === 'Admin') return true;
-    if (currentUser?.role === 'Projetista' && approval?.designerId === currentUser.id) return true;
+    if (currentUser?.role === 'Projetista'
+        && approval?.designerId
+        && Number(approval.designerId) === Number(currentUser.id)) return true;
     return typeof isAdminOrOrderConsultorForApproval === 'function'
         && isAdminOrOrderConsultorForApproval(approval);
 }
@@ -28,7 +34,9 @@ function canViewCommercialRevision(approval) {
 function canOpenRevisionModal(approval) {
     if (approval.status === 'Em revisão') {
         if (currentUser?.role === 'Admin') return true;
-        if (currentUser?.role === 'Projetista' && approval?.designerId === currentUser.id) return true;
+        if (currentUser?.role === 'Projetista'
+            && approval?.designerId
+            && Number(approval.designerId) === Number(currentUser.id)) return true;
         return typeof isAdminOrOrderConsultorForApproval === 'function'
             && isAdminOrOrderConsultorForApproval(approval);
     }
@@ -44,7 +52,9 @@ function canRequestNewRevision(approval) {
 function canSendBackToApproval(approval) {
     if (approval?.status !== 'Em revisão') return false;
     if (currentUser?.role === 'Admin') return true;
-    return currentUser?.role === 'Projetista' && approval?.designerId === currentUser.id;
+    return currentUser?.role === 'Projetista'
+        && approval?.designerId
+        && Number(approval.designerId) === Number(currentUser.id);
 }
 
 function allRevisionActivitiesCompleted() {
@@ -87,8 +97,11 @@ function renderRevisionActivityRow(activity) {
             <textarea rows="2" class="revision-activity-description revision-resizable-input px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600 disabled:bg-slate-50"
                 placeholder="Descreva a atividade..."
                 ${consultorCanEdit ? '' : 'disabled'}>${escapeHtml(activity.description || '')}</textarea>
+            ${typeof renderRevisionActivityAttachmentsHtml === 'function'
+                ? renderRevisionActivityAttachmentsHtml(rowId, approval)
+                : ''}
         </td>
-        <td class="p-3 align-middle text-center">
+        <td class="p-3 align-top text-center">
             <input type="checkbox" class="revision-activity-completed h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                 ${activity.completed ? 'checked' : ''}
                 ${completionCanEdit ? '' : 'disabled'}>
@@ -98,7 +111,7 @@ function renderRevisionActivityRow(activity) {
                 placeholder="Observação do projetista..."
                 ${completionCanEdit ? '' : 'disabled'}>${escapeHtml(activity.observation || '')}</textarea>
         </td>
-        <td class="p-3 align-middle">
+        <td class="p-3 align-top">
             <p class="revision-activity-completed-at px-2 py-1.5 text-xs border border-slate-100 rounded-lg bg-slate-50 text-slate-600 whitespace-nowrap">
                 ${activity.completedAt ? formatDate(activity.completedAt) : '—'}
             </p>
@@ -118,6 +131,10 @@ function renderRevisionActivityRow(activity) {
         }
         updateRevisionModalControls(approval);
     });
+
+    if (typeof hydrateRevisionActivityAttachmentPreviews === 'function') {
+        hydrateRevisionActivityAttachmentPreviews(tr);
+    }
 
     return tr;
 }
@@ -142,6 +159,7 @@ function collectRevisionActivitiesFromDom() {
         const completed = tr.querySelector('.revision-activity-completed')?.checked || false;
 
         return {
+            rowId,
             id: isPersisted ? Number(rowId) : null,
             description: tr.querySelector('.revision-activity-description')?.value.trim() || '',
             completed,
@@ -200,6 +218,9 @@ async function loadRevisionActivities(revisionId) {
     }
 
     activities.forEach(addRevisionActivityRow);
+    if (typeof loadRevisionActivityAttachmentsForActivities === 'function') {
+        await loadRevisionActivityAttachmentsForActivities(activities);
+    }
     updateRevisionModalControls(getCurrentApproval());
 }
 
@@ -276,6 +297,9 @@ async function openCommercialRevisionModal(approvalId) {
     currentRevisionApprovalId = approvalId;
     editingRevisionId = null;
     revisionActivityRowCounter = 0;
+    if (typeof resetRevisionActivityAttachments === 'function') {
+        resetRevisionActivityAttachments();
+    }
 
     document.getElementById('revision-activities-list').innerHTML = '';
     document.getElementById('revision-empty-msg').classList.add('hidden');
@@ -302,9 +326,58 @@ async function openCommercialRevisionModal(approvalId) {
     toggleModal('commercial-revision-modal', true);
 }
 
+function closeCommercialRevisionsHistoryModal() {
+    const content = document.getElementById('commercial-revisions-history-content');
+    if (content) content.innerHTML = '';
+    toggleModal('commercial-revisions-history-modal', false);
+}
+
+async function openCommercialRevisionsHistoryView(approvalId, prefetched = null) {
+    const approval = prefetched?.approval || await ensureApprovalInCache(approvalId);
+    if (!approval || !canViewCommercialRevision(approval)) return;
+
+    let revisions = prefetched?.revisions || null;
+    if (!revisions && typeof fetchCommercialRevisionsByApprovalIds === 'function') {
+        const revisionsByApproval = await fetchCommercialRevisionsByApprovalIds([approvalId]);
+        revisions = revisionsByApproval[approvalId] || [];
+    }
+
+    if (!revisions?.length) {
+        alertAppDialog('Nenhuma revisão encontrada para este projeto.');
+        return;
+    }
+
+    const contextEl = document.getElementById('commercial-revisions-history-context');
+    const contentEl = document.getElementById('commercial-revisions-history-content');
+    if (contextEl) {
+        contextEl.textContent = `Projeto: ${approval.projectName || '—'} · ${revisions.length} revisão${revisions.length === 1 ? '' : 'ões'}`;
+    }
+
+    if (contentEl) {
+        contentEl.innerHTML = renderCommercialRevisionsSection(revisions, approval, { showInHistoryModal: true });
+        if (typeof hydrateRevisionActivityAttachmentPreviews === 'function') {
+            await hydrateRevisionActivityAttachmentPreviews(contentEl);
+        }
+    }
+
+    toggleModal('commercial-revisions-history-modal', true);
+}
+
 async function openCommercialRevisionView(approvalId) {
     const approval = await ensureApprovalInCache(approvalId);
     if (!approval || !canViewCommercialRevision(approval)) return;
+
+    if (approval.status === 'Em revisão' && canOpenRevisionModal(approval)) {
+        return openCommercialRevisionModal(approvalId);
+    }
+
+    if (typeof fetchCommercialRevisionsByApprovalIds === 'function') {
+        const revisionsByApproval = await fetchCommercialRevisionsByApprovalIds([approvalId]);
+        const revisions = revisionsByApproval[approvalId] || [];
+        if (revisions.length > 1) {
+            return openCommercialRevisionsHistoryView(approvalId, { approval, revisions });
+        }
+    }
 
     const revision = await getLatestRevisionForApproval(approvalId);
     if (!revision) {
@@ -312,14 +385,13 @@ async function openCommercialRevisionView(approvalId) {
         return;
     }
 
-    if (approval.status === 'Em revisão' && canOpenRevisionModal(approval)) {
-        return openCommercialRevisionModal(approvalId);
-    }
-
     revisionModalViewOnly = true;
     currentRevisionApprovalId = approvalId;
     editingRevisionId = revision.id;
     revisionActivityRowCounter = 0;
+    if (typeof resetRevisionActivityAttachments === 'function') {
+        resetRevisionActivityAttachments();
+    }
 
     document.getElementById('revision-activities-list').innerHTML = '';
     document.getElementById('revision-empty-msg').classList.add('hidden');
@@ -348,6 +420,9 @@ async function openCommercialRevisionForRevision(approvalId, revisionId) {
     currentRevisionApprovalId = approvalId;
     editingRevisionId = revisionId;
     revisionActivityRowCounter = 0;
+    if (typeof resetRevisionActivityAttachments === 'function') {
+        resetRevisionActivityAttachments();
+    }
 
     document.getElementById('revision-activities-list').innerHTML = '';
     document.getElementById('revision-empty-msg').classList.add('hidden');
@@ -364,6 +439,9 @@ function closeCommercialRevisionModal() {
     revisionModalViewOnly = false;
     editingRevisionId = null;
     currentRevisionApprovalId = null;
+    if (typeof resetRevisionActivityAttachments === 'function') {
+        resetRevisionActivityAttachments();
+    }
     toggleModal('commercial-revision-modal', false);
 }
 
@@ -422,6 +500,8 @@ async function persistCommercialRevision() {
         }
     }
 
+    const activityIdByRowId = {};
+
     for (const activity of activities) {
         const payload = {
             description: activity.description,
@@ -441,14 +521,32 @@ async function persistCommercialRevision() {
                 alertAppDialog('Erro ao salvar atividade: ' + error.message);
                 return { ok: false };
             }
+            activityIdByRowId[activity.rowId] = activity.id;
         } else {
-            const { error } = await supabaseClient
+            const { data: inserted, error } = await supabaseClient
                 .from('CommercialRevisionActivity')
-                .insert([{ ...payload, revisionId }]);
-            if (error) {
-                alertAppDialog('Erro ao salvar atividade: ' + error.message);
+                .insert([{ ...payload, revisionId }])
+                .select('id')
+                .single();
+            if (error || !inserted?.id) {
+                alertAppDialog('Erro ao salvar atividade: ' + (error?.message || 'Erro desconhecido'));
                 return { ok: false };
             }
+
+            if (typeof migrateRevisionActivityAttachmentDrafts === 'function') {
+                migrateRevisionActivityAttachmentDrafts(activity.rowId, inserted.id);
+            }
+
+            activityIdByRowId[activity.rowId] = inserted.id;
+            activityIdByRowId[String(inserted.id)] = inserted.id;
+        }
+    }
+
+    if (typeof persistRevisionActivityAttachments === 'function') {
+        const attachmentsResult = await persistRevisionActivityAttachments(revisionId, activityIdByRowId);
+        if (!attachmentsResult.ok) {
+            alertAppDialog('Erro ao salvar imagens das atividades: ' + (attachmentsResult.error?.message || 'Erro desconhecido'));
+            return { ok: false };
         }
     }
 
@@ -551,7 +649,7 @@ async function sendRevisionBackToApproval() {
     }
 
     const confirmed = await confirmAppDialog(
-        'A solicitação será reenviada para análise do gestor comercial.',
+        'A solicitação será reenviada para análise do consultor do pedido.',
         {
             title: 'Reenviar para aprovação comercial?',
             confirmLabel: 'Reenviar'
@@ -623,6 +721,8 @@ async function sendRevisionBackToApproval() {
 window.openCommercialRevisionModal = openCommercialRevisionModal;
 window.closeCommercialRevisionModal = closeCommercialRevisionModal;
 window.openCommercialRevisionView = openCommercialRevisionView;
+window.openCommercialRevisionsHistoryView = openCommercialRevisionsHistoryView;
+window.closeCommercialRevisionsHistoryModal = closeCommercialRevisionsHistoryModal;
 
 async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
     if (!approvalIds.length) return {};
@@ -653,12 +753,18 @@ async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
         .order('id', { ascending: true });
 
     const activitiesByRevision = {};
+    const activityIds = [];
     activities?.forEach(activity => {
+        activityIds.push(activity.id);
         if (!activitiesByRevision[activity.revisionId]) {
             activitiesByRevision[activity.revisionId] = [];
         }
         activitiesByRevision[activity.revisionId].push(activity);
     });
+
+    const attachmentsByActivity = typeof fetchRevisionActivityAttachmentsByActivityIds === 'function'
+        ? await fetchRevisionActivityAttachmentsByActivityIds(activityIds)
+        : {};
 
     const byApproval = {};
     revisions.forEach(revision => {
@@ -667,31 +773,72 @@ async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
         }
         byApproval[revision.commercialApprovalId].push({
             ...revision,
-            activities: activitiesByRevision[revision.id] || []
+            activities: (activitiesByRevision[revision.id] || []).map(activity => ({
+                ...activity,
+                attachment: attachmentsByActivity[String(activity.id)] || null
+            }))
         });
     });
 
     return byApproval;
 }
 
-function renderCommercialRevisionsSection(revisions, approval) {
-    if (!revisions || revisions.length === 0) return '';
-
-    const canView = approval && canViewCommercialRevision(approval);
-    const sortedRevisions = [...revisions].sort((a, b) => {
+function sortCommercialRevisionsChronologically(revisions) {
+    return [...revisions].sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        if (dateB !== dateA) return dateB - dateA;
-        return (b.id || 0) - (a.id || 0);
+        if (dateA !== dateB) return dateA - dateB;
+        return (a.id || 0) - (b.id || 0);
     });
+}
+
+function getCurrentCommercialRevision(revisions) {
+    const sorted = sortCommercialRevisionsChronologically(revisions);
+    return sorted[sorted.length - 1] || null;
+}
+
+function isCommercialRevisionAwaitingResponse(approval) {
+    return approval?.status === 'Em revisão';
+}
+
+function isProjetistaRevisionResponder(approval) {
+    return currentUser?.role === 'Projetista'
+        && typeof canEditRevisionActivityCompletionFields === 'function'
+        && canEditRevisionActivityCompletionFields(approval);
+}
+
+function getRevisionActionButtonLabel(approval, showInHistoryModal) {
+    if (isProjetistaRevisionResponder(approval)) {
+        return 'Editar';
+    }
+    return showInHistoryModal ? 'Ver detalhes' : 'Ver Revisão';
+}
+
+function shouldShowRevisionActionButton(approval, isCurrentRevision) {
+    if (!approval || !isCurrentRevision) return false;
+    if (!canViewCommercialRevision(approval)) return false;
+    if (!isCommercialRevisionAwaitingResponse(approval)) return false;
+    return canOpenRevisionModal(approval);
+}
+
+function renderCommercialRevisionsSection(revisions, approval, options = {}) {
+    if (!revisions || revisions.length === 0) return '';
+
+    const showInHistoryModal = Boolean(options.showInHistoryModal);
+    const sortedRevisions = sortCommercialRevisionsChronologically(revisions);
+    const currentRevision = getCurrentCommercialRevision(revisions);
 
     const blocks = sortedRevisions.map((revision, index) => {
-        const isOpenRevision = approval?.status === 'Em revisão'
-            && sortedRevisions[0]?.id === revision.id;
+        const isCurrentRevision = currentRevision && revision.id === currentRevision.id;
         const activitiesHtml = revision.activities.length
             ? revision.activities.map(activity => `
                 <tr class="border-t border-slate-100">
-                    <td class="py-2 pr-2 align-top">${renderRevisionResizableText(activity.description)}</td>
+                    <td class="py-2 pr-2 align-top">
+                        ${renderRevisionResizableText(activity.description)}
+                        ${typeof renderRevisionActivityAttachmentsReadonlyHtml === 'function'
+                            ? `<div class="mt-2">${renderRevisionActivityAttachmentsReadonlyHtml(activity.attachment)}</div>`
+                            : ''}
+                    </td>
                     <td class="py-2 px-2 text-center text-xs align-middle">
                         ${activity.completed
                             ? '<span class="text-emerald-700 font-semibold">Sim</span>'
@@ -703,9 +850,9 @@ function renderCommercialRevisionsSection(revisions, approval) {
             `).join('')
             : `<tr><td colspan="4" class="py-2 text-xs text-slate-400">Nenhuma atividade registrada.</td></tr>`;
 
-        const viewButton = canView && isOpenRevision
+        const viewButton = shouldShowRevisionActionButton(approval, isCurrentRevision)
             ? `<button type="button" onclick="openCommercialRevisionForRevision(${approval.id}, ${revision.id})"
-                class="text-xs bg-sky-700 text-white hover:bg-sky-800 px-4 py-2 rounded-lg font-semibold shadow-sm whitespace-nowrap">Ver Revisão</button>`
+                class="text-xs bg-sky-700 text-white hover:bg-sky-800 px-4 py-2 rounded-lg font-semibold shadow-sm whitespace-nowrap">${getRevisionActionButtonLabel(approval, showInHistoryModal)}</button>`
             : '';
 
         return `
@@ -757,4 +904,8 @@ function bindCommercialRevisionEvents() {
 
     document.getElementById('btn-save-revision').addEventListener('click', saveCommercialRevision);
     document.getElementById('btn-send-back-approval').addEventListener('click', sendRevisionBackToApproval);
+
+    if (typeof bindRevisionActivityAttachmentEvents === 'function') {
+        bindRevisionActivityAttachmentEvents();
+    }
 }

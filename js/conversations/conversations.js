@@ -480,12 +480,12 @@ async function loadConversations(orderId) {
         if (error || !convs || convs.length === 0) {
             conversationsCache = [];
             list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-slate-200 shadow-sm">Nenhuma requisição técnica para este pedido.</p>';
-            updateOrderTabCounts(undefined, 0);
+            updateOrderTabCounts(undefined, undefined, undefined, 0);
             return;
         }
 
         conversationsCache = convs;
-        updateOrderTabCounts(undefined, countOpenOrderRequests(convs));
+        updateOrderTabCounts(undefined, undefined, undefined, countOpenOrderRequests(convs));
 
         const designerIds = [...new Set(convs.map(c => c.designerId).filter(Boolean))];
         let projetistaNames = {};

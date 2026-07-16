@@ -387,11 +387,8 @@ async function fetchFabricaProjects(statusIds, orderId = null) {
     return result;
 }
 
-function updateFabricaTabCount(projects, orderIdForCount) {
-    const count = orderIdForCount
-        ? projects.filter(project => Number(project.orderId) === Number(orderIdForCount)).length
-        : projects.length;
-    updateOrderTabCounts(undefined, undefined, undefined, undefined, undefined, count);
+function updateFabricaTabCount() {
+    // Aba Fábrica removida do detalhe do pedido.
 }
 
 function updateFabricaSaveFooterVisibility(projects) {
@@ -658,7 +655,279 @@ function applyFabricaTabReadonlyMode() {
     }
 }
 
+let orderProjectMontagemPending = null;
+
+function isEmProducaoOrderProjectStatus(statusName) {
+    return statusName === FABRICA_EM_PRODUCAO_STATUS || statusName === 'Em produção';
+}
+
+function canShowOrderProjectIniciarMontagemIntAction(project) {
+    if (!project || !canActOnOrderProject(project)) return false;
+    if (typeof canActOrderDetailTab !== 'function' || !canActOrderDetailTab('fabrica')) return false;
+    return isEmProducaoOrderProjectStatus(getOrderProjectStatusName(project));
+}
+
+function canShowOrderProjectFinalizarMontagemIntAction(project) {
+    if (!project || !canActOnOrderProject(project)) return false;
+    if (typeof canActOrderDetailTab !== 'function' || !canActOrderDetailTab('fabrica')) return false;
+    return getOrderProjectStatusName(project) === FABRICA_MONTAGEM_INTERNA_STATUS;
+}
+
+function isOrderProjectsPanelVisibleForFabrica() {
+    const content = document.getElementById('order-content');
+    return Boolean(content && !content.classList.contains('hidden'));
+}
+
+function setFabricaOrderProjectsActionLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('order-projects-action-loading');
+    const messageEl = document.getElementById('order-projects-action-loading-msg');
+    const spinner = document.getElementById('order-projects-action-loading-spinner');
+    const successIcon = document.getElementById('order-projects-action-loading-success');
+    const errorIcon = document.getElementById('order-projects-action-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+}
+
+function setFabricaOrderProjectActionLoading(active, message = 'Processando...', status = 'loading') {
+    if (isPendenciasViewVisibleForFabrica() && typeof setPendenciasActionLoading === 'function') {
+        setPendenciasActionLoading(active, message, status);
+        return;
+    }
+
+    if (isOrderProjectsPanelVisibleForFabrica()) {
+        setFabricaOrderProjectsActionLoading(active, message, status);
+    }
+}
+
+function isPendenciasViewVisibleForFabrica() {
+    const view = document.getElementById('pendencias-view');
+    return Boolean(view && !view.classList.contains('hidden'));
+}
+
+async function waitFabricaOrderProjectActionStatus(ms) {
+    await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function closeOrderProjectMontagemInicioModal() {
+    orderProjectMontagemPending = null;
+    toggleModal('order-project-montagem-inicio-modal', false);
+}
+
+function closeOrderProjectMontagemFimModal() {
+    orderProjectMontagemPending = null;
+    toggleModal('order-project-montagem-fim-modal', false);
+}
+
+async function openOrderProjectMontagemInicioModal(projectId, projectName = '') {
+    if (!canActOrderDetailTab('fabrica')) {
+        alertAppDialog('Somente o Gestor de Fábrica ou Admin pode registrar montagem.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    fabricaMarceneirosCache = [];
+    await loadFabricaMarceneiros();
+
+    const select = document.getElementById('order-project-montagem-inicio-marceneiro');
+    const dateInput = document.getElementById('order-project-montagem-inicio-data');
+    const contextEl = document.getElementById('order-project-montagem-inicio-context');
+
+    if (select) {
+        select.innerHTML = getFabricaMarceneiroOptionsHtml();
+    }
+    if (dateInput) {
+        dateInput.value = getTodayInputDate();
+        dateInput.max = getTodayInputDate();
+    }
+    if (contextEl) {
+        const label = projectName?.trim() || 'este projeto';
+        contextEl.textContent = `Projeto: ${label}`;
+    }
+
+    orderProjectMontagemPending = {
+        mode: 'inicio',
+        projectId: Number(projectId),
+        projectName: projectName?.trim() || ''
+    };
+
+    toggleModal('order-project-montagem-inicio-modal', true);
+}
+
+async function openOrderProjectMontagemFimModal(projectId, projectName = '') {
+    if (!canActOrderDetailTab('fabrica')) {
+        alertAppDialog('Somente o Gestor de Fábrica ou Admin pode registrar montagem.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const dateInput = document.getElementById('order-project-montagem-fim-data');
+    const contextEl = document.getElementById('order-project-montagem-fim-context');
+
+    if (dateInput) {
+        dateInput.value = getTodayInputDate();
+        dateInput.max = getTodayInputDate();
+    }
+    if (contextEl) {
+        const label = projectName?.trim() || 'este projeto';
+        contextEl.textContent = `Projeto: ${label}`;
+    }
+
+    orderProjectMontagemPending = {
+        mode: 'fim',
+        projectId: Number(projectId),
+        projectName: projectName?.trim() || ''
+    };
+
+    toggleModal('order-project-montagem-fim-modal', true);
+}
+
+async function submitOrderProjectMontagemInicioModal() {
+    const pending = orderProjectMontagemPending;
+    if (!pending || pending.mode !== 'inicio' || !pending.projectId) return;
+
+    const marceneiroId = document.getElementById('order-project-montagem-inicio-marceneiro')?.value;
+    const inicioMontagemInterna = document.getElementById('order-project-montagem-inicio-data')?.value;
+    const label = pending.projectName || 'Projeto';
+
+    if (!marceneiroId) {
+        alertAppDialog('Selecione o marceneiro responsável.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+    if (!inicioMontagemInterna) {
+        alertAppDialog('Informe a data de início da montagem interna.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+    if (isFabricaDateInFuture(inicioMontagemInterna)) {
+        alertAppDialog('A data de início não pode ser no futuro.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    closeOrderProjectMontagemInicioModal();
+    setFabricaOrderProjectActionLoading(true, 'Registrando início da montagem...');
+
+    try {
+        const montagemInternaStatusId = await getMontagemInternaProjectStatusId();
+        if (!montagemInternaStatusId) {
+            setFabricaOrderProjectActionLoading(true, `Status "${FABRICA_MONTAGEM_INTERNA_STATUS}" não encontrado.`, 'error');
+            await waitFabricaOrderProjectActionStatus(2200);
+            return;
+        }
+
+        await persistFabricaInicioProject({
+            projectId: pending.projectId,
+            marceneiroId: Number(marceneiroId),
+            inicioMontagemInterna,
+            label
+        }, montagemInternaStatusId);
+
+        setFabricaOrderProjectActionLoading(true, 'Atualizando telas...');
+        if (activeOrderId && typeof loadOrderProjects === 'function') {
+            await loadOrderProjects(activeOrderId);
+        }
+        if (activeOrderId && typeof loadFabricaProjects === 'function') {
+            await loadFabricaProjects(activeOrderId);
+        }
+        if (typeof refreshOrdersListSummary === 'function') {
+            await refreshOrdersListSummary();
+        }
+
+        setFabricaOrderProjectActionLoading(true, 'Montagem interna iniciada!', 'success');
+        await waitFabricaOrderProjectActionStatus(900);
+    } catch (error) {
+        const sqlHint = error.message?.includes('marceneiroId') || error.message?.includes('MontagemInterna')
+            ? ' Execute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
+            : '';
+        setFabricaOrderProjectActionLoading(true, `Erro ao salvar: ${error.message}${sqlHint}`, 'error');
+        await waitFabricaOrderProjectActionStatus(2200);
+    } finally {
+        setFabricaOrderProjectActionLoading(false);
+    }
+}
+
+async function submitOrderProjectMontagemFimModal() {
+    const pending = orderProjectMontagemPending;
+    if (!pending || pending.mode !== 'fim' || !pending.projectId) return;
+
+    const fimMontagemInterna = document.getElementById('order-project-montagem-fim-data')?.value;
+    const label = pending.projectName || 'Projeto';
+
+    if (!fimMontagemInterna) {
+        alertAppDialog('Informe a data de fim da montagem interna.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+    if (isFabricaDateInFuture(fimMontagemInterna)) {
+        alertAppDialog('A data de fim não pode ser no futuro.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    closeOrderProjectMontagemFimModal();
+    setFabricaOrderProjectActionLoading(true, 'Finalizando montagem interna...');
+
+    try {
+        const expedicaoStatusId = await getExpedicaoProjectStatusId();
+        if (!expedicaoStatusId) {
+            setFabricaOrderProjectActionLoading(true, `Status "${FABRICA_EXPEDICAO_STATUS}" não encontrado.`, 'error');
+            await waitFabricaOrderProjectActionStatus(2200);
+            return;
+        }
+
+        await persistFabricaFimProject({
+            projectId: pending.projectId,
+            fimMontagemInterna,
+            label
+        }, expedicaoStatusId);
+
+        setFabricaOrderProjectActionLoading(true, 'Atualizando telas...');
+        if (activeOrderId && typeof loadOrderProjects === 'function') {
+            await loadOrderProjects(activeOrderId);
+        }
+        if (activeOrderId && typeof loadFabricaProjects === 'function') {
+            await loadFabricaProjects(activeOrderId);
+        }
+        if (typeof refreshOrdersListSummary === 'function') {
+            await refreshOrdersListSummary();
+        }
+
+        setFabricaOrderProjectActionLoading(true, 'Montagem interna finalizada!', 'success');
+        await waitFabricaOrderProjectActionStatus(900);
+    } catch (error) {
+        const sqlHint = error.message?.includes('fimMontagemInterna')
+            ? ' Execute supabase/create-gestao-order-fields.sql no Supabase.'
+            : '';
+        setFabricaOrderProjectActionLoading(true, `Erro ao salvar: ${error.message}${sqlHint}`, 'error');
+        await waitFabricaOrderProjectActionStatus(2200);
+    } finally {
+        setFabricaOrderProjectActionLoading(false);
+    }
+}
+
+function bindOrderProjectMontagemModalEvents() {
+    document.getElementById('order-project-montagem-inicio-cancel')
+        ?.addEventListener('click', closeOrderProjectMontagemInicioModal);
+    document.getElementById('order-project-montagem-inicio-submit')
+        ?.addEventListener('click', submitOrderProjectMontagemInicioModal);
+
+    document.getElementById('order-project-montagem-fim-cancel')
+        ?.addEventListener('click', closeOrderProjectMontagemFimModal);
+    document.getElementById('order-project-montagem-fim-submit')
+        ?.addEventListener('click', submitOrderProjectMontagemFimModal);
+}
+
+window.openOrderProjectMontagemInicioModal = openOrderProjectMontagemInicioModal;
+window.openOrderProjectMontagemFimModal = openOrderProjectMontagemFimModal;
+
 function bindFabricaEvents() {
+    bindOrderProjectMontagemModalEvents();
+
     document.getElementById('fabrica-projects-list')?.addEventListener('click', async (event) => {
         const toggleBtn = event.target.closest('.fabrica-order-toggle');
         if (!toggleBtn) return;

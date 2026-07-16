@@ -92,6 +92,32 @@ function setProjetoTecnicoTableButtonsDisabled(disabled) {
     });
 }
 
+function isOrderProjectsPanelVisible() {
+    const content = document.getElementById('order-content');
+    return Boolean(content && !content.classList.contains('hidden'));
+}
+
+function setOrderProjectsActionLoading(active, message = 'Processando...', status = 'loading') {
+    const overlay = document.getElementById('order-projects-action-loading');
+    const messageEl = document.getElementById('order-projects-action-loading-msg');
+    const spinner = document.getElementById('order-projects-action-loading-spinner');
+    const successIcon = document.getElementById('order-projects-action-loading-success');
+    const errorIcon = document.getElementById('order-projects-action-loading-error');
+    const show = Boolean(active);
+
+    overlay?.classList.toggle('hidden', !show);
+    if (messageEl) {
+        messageEl.textContent = message;
+        messageEl.classList.toggle('text-red-600', status === 'error');
+        messageEl.classList.toggle('text-emerald-700', status === 'success');
+        messageEl.classList.toggle('text-slate-700', status === 'loading');
+    }
+
+    spinner?.classList.toggle('hidden', status !== 'loading');
+    successIcon?.classList.toggle('hidden', status !== 'success');
+    errorIcon?.classList.toggle('hidden', status !== 'error');
+}
+
 function setProjetoTecnicoActionLoading(active, message = 'Processando...', status = 'loading') {
     if (isPendenciasViewVisibleForProjetoTecnico() && typeof setPendenciasActionLoading === 'function') {
         setPendenciasActionLoading(active, message, status);
@@ -100,6 +126,11 @@ function setProjetoTecnicoActionLoading(active, message = 'Processando...', stat
 
     if (isProjetoTecnicoOrderTabVisible()) {
         setProjetoTecnicoTabActionLoading(active, message, status);
+        return;
+    }
+
+    if (isOrderProjectsPanelVisible()) {
+        setOrderProjectsActionLoading(active, message, status);
     }
 }
 
@@ -290,6 +321,69 @@ async function refreshOrderProjetoTecnicoRelatedViews(orderId) {
     }
 }
 
+async function fetchDesignerProjetoTecnicoEmExecucao(designerId, excludeProjectId, statusId) {
+    const normalizedDesignerId = Number(designerId);
+    const normalizedExcludeId = Number(excludeProjectId);
+    if (!normalizedDesignerId || !statusId) return [];
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('id, name, projectCode, order:salesOrders(orderCode, clientName)')
+        .eq('designerId', normalizedDesignerId)
+        .eq('statusId', statusId);
+
+    if (result.error?.message?.includes('salesOrders')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, projectCode')
+            .eq('designerId', normalizedDesignerId)
+            .eq('statusId', statusId);
+    }
+
+    if (result.error) {
+        console.error('fetchDesignerProjetoTecnicoEmExecucao:', result.error);
+        return [];
+    }
+
+    return (result.data || []).filter(project => Number(project.id) !== normalizedExcludeId);
+}
+
+function formatProjetoTecnicoEmExecucaoLabel(project) {
+    const clientName = project.order?.clientName || '—';
+    const projectName = project.name || 'Projeto';
+    const orderCode = project.order?.orderCode;
+    const orderSuffix = orderCode ? ` · Pedido ${orderCode}` : '';
+    return `${clientName} — ${projectName}${orderSuffix}`;
+}
+
+function getIniciarProjetoTecnicoConfirmLabel(project) {
+    if (project.projectCode) {
+        return `${project.projectCode} — ${project.name || 'Projeto'}`;
+    }
+    return project.name || 'Projeto';
+}
+
+async function confirmIniciarProjetoTecnico(project, outrosProjetos = []) {
+    const projectLabel = getIniciarProjetoTecnicoConfirmLabel(project);
+
+    if (!outrosProjetos.length) {
+        return confirmAppDialog(`Iniciar projeto técnico de "${projectLabel}"?`);
+    }
+
+    const outrosLabels = outrosProjetos
+        .map(formatProjetoTecnicoEmExecucaoLabel)
+        .join('\n');
+    const message = outrosProjetos.length === 1
+        ? `Já existe outro projeto em execução:\n${outrosLabels}\n\nDeseja realmente iniciar "${projectLabel}" também?`
+        : `Já existem ${outrosProjetos.length} outros projetos em execução:\n${outrosLabels}\n\nDeseja realmente iniciar "${projectLabel}" também?`;
+
+    return confirmAppDialog(message, {
+        title: 'Projeto em execução',
+        confirmLabel: 'Continuar mesmo assim',
+        variant: 'warning'
+    });
+}
+
 async function associarProjetoTecnicoAMim(projectId, previsaoDate, deliveryDate = '') {
     if (!projectId || (currentUser?.role !== 'Projetista' && !isAdmin())) {
         alertAppDialog('Somente Projetista pode associar projetos.', { variant: 'warning', title: 'Aviso' });
@@ -385,7 +479,13 @@ async function iniciarProjetoTecnico(projectId) {
         return false;
     }
 
-    if (!(await confirmAppDialog('Iniciar projeto técnico deste projeto?'))) {
+    const outrosProjetosEmExecucao = await fetchDesignerProjetoTecnicoEmExecucao(
+        project.designerId,
+        project.id,
+        statusId
+    );
+
+    if (!(await confirmIniciarProjetoTecnico(project, outrosProjetosEmExecucao))) {
         return false;
     }
 
@@ -440,7 +540,6 @@ async function loadOrderProjetoTecnicoProjects(orderId) {
     if (error) {
         console.error('loadOrderProjetoTecnicoProjects:', error);
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-6">Erro ao carregar projetos: ${escapeHtml(error.message)}</p>`;
-        updateOrderTabCounts(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, 0);
         return;
     }
 
@@ -448,7 +547,6 @@ async function loadOrderProjetoTecnicoProjects(orderId) {
 
     list.innerHTML = renderOrderProjetoTecnicoProjectsTable(items);
     bindOrderProjetoTecnicoTableEvents(list);
-    updateOrderTabCounts(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, items.length);
 }
 
 window.associarProjetoTecnicoAMim = associarProjetoTecnicoAMim;

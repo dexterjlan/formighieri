@@ -40,6 +40,20 @@ function canActOrderPpcp(user = currentUser) {
     return isAdmin(user) || isPpcp(user);
 }
 
+function hasOpenOrderProjectImplantacao(implantacao) {
+    const statusEncerrado = typeof IMPLANTACAO_STATUS_ENCERRADO === 'string'
+        ? IMPLANTACAO_STATUS_ENCERRADO
+        : 'Encerrado';
+    return Boolean(implantacao && implantacao.status !== statusEncerrado);
+}
+
+function canShowOrderProjectImplantacaoAction(project, implantacao) {
+    if (!project || !canActOnOrderProject(project)) return false;
+    if (typeof isPpcp !== 'function' || !isPpcp()) return false;
+    if (hasOpenOrderProjectImplantacao(implantacao)) return true;
+    return getPpcpProjectStatusName(project) === PPCP_IMPLANTACAO_STATUS;
+}
+
 function getPpcpProjectStatusName(project) {
     return project?.projectStatus?.name || '';
 }
@@ -183,7 +197,6 @@ async function loadPpcpProjects(orderId) {
     if (error) {
         console.error('loadPpcpProjects:', error);
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-6">Erro ao carregar projetos: ${escapeHtml(error.message)}</p>`;
-        updateOrderTabCounts(undefined, undefined, undefined, undefined, undefined, undefined, 0);
         return;
     }
 
@@ -193,16 +206,6 @@ async function loadPpcpProjects(orderId) {
     if (typeof syncImplantacaoRecordsMapForProjects === 'function') {
         implantacaoByProjectId = await syncImplantacaoRecordsMapForProjects(items, implantacaoByProjectId);
     }
-
-    updateOrderTabCounts(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        countPpcpTabProjects(items, implantacaoByProjectId)
-    );
 
     list.innerHTML = '';
 
@@ -268,6 +271,9 @@ async function openPpcpImplantacaoModal(projectId, projectName) {
         await openImplantacaoModal(projectId, projectName, { requireExisting: true });
     }
 }
+
+window.implantarPpcpProject = implantarPpcpProject;
+window.openPpcpImplantacaoModal = openPpcpImplantacaoModal;
 
 function bindPpcpEvents() {
     document.getElementById('ppcp-projects-list')?.addEventListener('click', async (event) => {

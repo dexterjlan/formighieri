@@ -179,8 +179,8 @@ async function searchCommercialApprovalsQuery() {
                 class="text-xs bg-sky-700 text-white hover:bg-sky-800 px-2.5 py-1 rounded-lg font-medium">Solicitar Revisão</button>`);
         }
         if (showViewRevision) {
-            actionButtons.push(`<button type="button" onclick="openCommercialRevisionView(${r.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Revisão</button>`);
+            actionButtons.push(`<button type="button" onclick="openCommercialRevisionsHistoryView(${r.id})"
+                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Revisões</button>`);
         }
 
         const tr = document.createElement('tr');

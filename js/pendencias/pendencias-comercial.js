@@ -129,33 +129,13 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId,
         const orderCode = group.order?.orderCode || '—';
         const clientName = group.order?.clientName || '—';
         const projectSummary = getPendenciasConsultorConferenciaProjectSummary(group.projects);
-        const deliveryDates = group.projects
-            .map(project => project.deliveryDate)
-            .filter(Boolean)
-            .sort();
-        const deliveryDate = formatPendenciasDeliveryDate(deliveryDates[0]);
         const conference = group.conference;
         const canView = Boolean(conference?.id);
-        const fullConference = conference?.id ? conferenceDetailsById?.[conference.id] || null : null;
-        const canApprove = fullConference
-            && typeof canApproveAnteprojetoConference === 'function'
-            && canApproveAnteprojetoConference(fullConference);
-        const canReturn = fullConference
-            && typeof canReturnAnteprojetoConferenceToConsultor === 'function'
-            && canReturnAnteprojetoConferenceToConsultor(fullConference);
         const actionButtons = [];
 
         if (canView) {
             actionButtons.push(`<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
                 class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`);
-        }
-        if (canReturn) {
-            actionButtons.push(`<button type="button" onclick="showAnteprojetoReturnObservationForm(${conference.id})"
-                class="text-xs bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-200 px-2.5 py-1 rounded-lg font-medium">Voltar p/ Consultor</button>`);
-        }
-        if (canApprove) {
-            actionButtons.push(`<button type="button" onclick="approveAnteprojetoConferenceFromPendencias(${conference.id})"
-                class="text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium">Aprovar</button>`);
         }
 
         const actionCell = actionButtons.length
@@ -167,7 +147,6 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId,
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
                 <td class="p-3 text-xs text-slate-500">${escapeHtml(projectSummary)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
             </tr>
         `;
@@ -187,14 +166,13 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId,
             </div>
             ${conferenceGroups.length
                 ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[820px]">
+                    <table class="w-full text-sm min-w-[680px]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
                                 <th class="text-left p-3 font-semibold">Projetos</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-72">Ações</th>
+                                <th class="text-right p-3 font-semibold w-56">Ações</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>

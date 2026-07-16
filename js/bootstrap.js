@@ -47,12 +47,14 @@ const SCRIPTS = [
     'js/orders/mediciao.js',
     'js/orders/fabrica.js',
     'js/orders/ppcp.js',
+    'js/orders/order-project-actions.js',
     'js/core/notifications.js',
     'js/conversations/request-activities.js',
     'js/conversations/request-attachments.js',
     'js/conversations/conversations.js',
     'js/commercial/commercial-approval.js',
     'js/commercial/commercial-revision.js',
+    'js/commercial/revision-activity-attachments.js',
     'js/commercial/commercial-approval-query.js',
     'js/core/main.js'
 ];
@@ -101,7 +103,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261026`);
+            await loadScript(`${src}?v=20261029`);
         }
 
         initAppEvents();

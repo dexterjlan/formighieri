@@ -339,7 +339,7 @@ async function loadOrderCompras(orderId) {
         const items = await fetchOrderComprasItems(orderId);
         renderOrderComprasList(items);
         if (typeof updateOrderTabCounts === 'function') {
-            updateOrderTabCounts(undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, items.length);
+            updateOrderTabCounts(undefined, undefined, undefined, undefined, items.length);
         }
     } catch (error) {
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-8">Erro ao carregar compras: ${escapeHtml(error.message)}</p>`;

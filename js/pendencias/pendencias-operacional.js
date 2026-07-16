@@ -29,6 +29,57 @@ async function fetchPendenciasAguardandoMedicaoProjects() {
 
 let pendenciasAguardandoMedicaoProjectsCache = [];
 let pendenciasAguardandoMedicaoEditGroup = null;
+let pendenciasAguardandoMedicaoRefreshContext = null;
+
+function canShowOrderProjectAlterarStatusAction(project) {
+    if (!canEditPendenciasAguardandoMedicaoStatus()) return false;
+    if (!canActOnOrderProject(project)) return false;
+
+    const statusName = getOrderProjectStatusName(project);
+    return PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES.includes(statusName);
+}
+
+function enrichOrderProjectsForAguardandoMedicaoModal(orderId, projects) {
+    const order = typeof ordersCache !== 'undefined'
+        ? ordersCache.find(item => Number(item.id) === Number(orderId))
+        : null;
+
+    return (projects || []).map(project => ({
+        ...project,
+        order: {
+            id: Number(orderId),
+            orderCode: order?.orderCode || '—',
+            clientName: order?.clientName || '—',
+            consultantName: order?.consultantName || '—'
+        },
+        projectStatus: project.projectStatus || {
+            id: project.statusId,
+            name: getOrderProjectStatusName(project)
+        }
+    }));
+}
+
+async function refreshAfterPendenciasAguardandoMedicaoChange() {
+    const context = pendenciasAguardandoMedicaoRefreshContext;
+    pendenciasAguardandoMedicaoRefreshContext = null;
+
+    if (context?.source === 'order' && context.orderId) {
+        if (typeof loadOrderProjects === 'function') {
+            await loadOrderProjects(context.orderId);
+        } else if (typeof refreshOrderProjectListAfterAction === 'function') {
+            await refreshOrderProjectListAfterAction(context.orderId);
+        }
+
+        if (typeof refreshOrdersListSummary === 'function') {
+            await refreshOrdersListSummary();
+        }
+        return;
+    }
+
+    if (typeof loadPendenciasAguardandoMedicao === 'function') {
+        await loadPendenciasAguardandoMedicao();
+    }
+}
 
 function groupPendenciasAguardandoMedicaoProjects(projects) {
     const groups = new Map();
@@ -60,9 +111,17 @@ function groupPendenciasAguardandoMedicaoProjects(projects) {
 }
 
 function getPendenciasAguardandoMedicaoGroupProjects(orderId, statusName) {
-    return pendenciasAguardandoMedicaoProjectsCache.filter(project => (
+    const projects = pendenciasAguardandoMedicaoProjectsCache.filter(project => (
         Number(project.orderId) === Number(orderId)
         && getPendenciasProjectStatusName(project) === statusName
+    ));
+
+    return [...projects].sort((a, b) => (
+        getPendenciasAguardandoMedicaoProjectLabel(a).localeCompare(
+            getPendenciasAguardandoMedicaoProjectLabel(b),
+            'pt-BR',
+            { sensitivity: 'base' }
+        )
     ));
 }
 
@@ -111,6 +170,7 @@ function setPendenciasAguardandoMedicaoModalLoading(active, message = 'Processan
 function closePendenciasAguardandoMedicaoModal() {
     setPendenciasAguardandoMedicaoModalLoading(false);
     pendenciasAguardandoMedicaoEditGroup = null;
+    pendenciasAguardandoMedicaoRefreshContext = null;
     toggleModal('pendencias-aguardando-medicao-modal', false);
 }
 
@@ -146,6 +206,10 @@ function openPendenciasAguardandoMedicaoEditModal(orderId, statusName) {
         return;
     }
 
+    if (!pendenciasAguardandoMedicaoRefreshContext) {
+        pendenciasAguardandoMedicaoRefreshContext = { source: 'pendencias' };
+    }
+
     const sample = groupProjects[0];
     pendenciasAguardandoMedicaoEditGroup = {
         orderId: Number(orderId),
@@ -172,6 +236,52 @@ function openPendenciasAguardandoMedicaoEditModal(orderId, statusName) {
     }
 
     toggleModal('pendencias-aguardando-medicao-modal', true);
+}
+
+function openOrderProjectAlterarStatusModal(orderId, projectId) {
+    if (!canEditPendenciasAguardandoMedicaoStatus()) {
+        alertAppDialog('Sem permissão para alterar status.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const sourceProjects = typeof orderProjectsCache !== 'undefined' ? orderProjectsCache : [];
+    const project = sourceProjects.find(item => Number(item.id) === Number(projectId));
+    if (!project) {
+        alertAppDialog('Projeto não encontrado. Atualize a lista.');
+        return;
+    }
+
+    const statusName = getOrderProjectStatusName(project);
+    if (!PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES.includes(statusName)) {
+        alertAppDialog('Este projeto não está elegível para alteração de status.');
+        return;
+    }
+
+    const groupProjects = sourceProjects.filter(item => (
+        canActOnOrderProject(item)
+        && getOrderProjectStatusName(item) === statusName
+    ));
+
+    if (!groupProjects.length) {
+        alertAppDialog('Nenhum projeto elegível encontrado neste pedido.');
+        return;
+    }
+
+    pendenciasAguardandoMedicaoProjectsCache = enrichOrderProjectsForAguardandoMedicaoModal(orderId, groupProjects);
+    pendenciasAguardandoMedicaoRefreshContext = {
+        source: 'order',
+        orderId: Number(orderId)
+    };
+
+    openPendenciasAguardandoMedicaoEditModal(orderId, statusName);
+
+    const projectCheckbox = document.querySelector(
+        `#pendencias-am-modal-projects-list [data-project-id="${CSS.escape(String(projectId))}"] .pendencias-am-project-check`
+    );
+    if (projectCheckbox) {
+        projectCheckbox.checked = true;
+        syncPendenciasAguardandoMedicaoSelectAllCheckbox();
+    }
 }
 
 function syncPendenciasAguardandoMedicaoSelectAllCheckbox() {
@@ -282,7 +392,7 @@ async function applyPendenciasAguardandoObraToSelections(selections) {
         }
 
         setPendenciasAguardandoMedicaoModalLoading(true, 'Atualizando telas...');
-        await loadPendenciasAguardandoMedicao();
+        await refreshAfterPendenciasAguardandoMedicaoChange();
 
         setPendenciasAguardandoMedicaoModalLoading(true, 'Projetos marcados como Aguardando Obra!', 'success');
         await new Promise(resolve => setTimeout(resolve, 900));
@@ -351,7 +461,7 @@ async function applyPendenciasAguardandoMedicaoToSelections(selections) {
         }
 
         setPendenciasAguardandoMedicaoModalLoading(true, 'Atualizando telas...');
-        await loadPendenciasAguardandoMedicao();
+        await refreshAfterPendenciasAguardandoMedicaoChange();
 
         setPendenciasAguardandoMedicaoModalLoading(true, 'Projetos liberados para medição!', 'success');
         await new Promise(resolve => setTimeout(resolve, 900));
@@ -801,17 +911,9 @@ function renderPendenciasNomearList(projects) {
             const projectId = Number(button.dataset.projectId);
             if (!projectId) return;
 
-            button.disabled = true;
-            button.classList.add('opacity-60', 'cursor-not-allowed');
-
-            const success = await markOrderProjectAsNomeado(projectId, {
+            await markOrderProjectAsNomeado(projectId, {
                 onSuccess: () => loadPendenciasNomear()
             });
-
-            if (!success) {
-                button.disabled = false;
-                button.classList.remove('opacity-60', 'cursor-not-allowed');
-            }
         });
     });
 }

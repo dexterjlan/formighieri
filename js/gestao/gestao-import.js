@@ -206,6 +206,35 @@ async function createGestaoImportMedicaoForOrder(orderId, medicaoProjects, now) 
 let gestaoImportSelectedFile = null;
 let sheetJsLoadPromise = null;
 
+const SHEET_JS_LIBRARY_SOURCES = [
+    'js/vendor/xlsx.full.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js'
+];
+
+function loadSheetJsScript(src) {
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            reject(new Error('Tempo esgotado ao carregar a biblioteca de Excel.'));
+        }, 30000);
+
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+        script.onload = () => {
+            clearTimeout(timeoutId);
+            if (window.XLSX) resolve(window.XLSX);
+            else reject(new Error('Biblioteca de Excel indisponível.'));
+        };
+        script.onerror = () => {
+            clearTimeout(timeoutId);
+            script.remove();
+            reject(new Error('Não foi possível carregar a biblioteca de Excel.'));
+        };
+        document.head.appendChild(script);
+    });
+}
+
 function normalizeGestaoImportHeader(value) {
     return String(value || '')
         .trim()
@@ -220,24 +249,19 @@ function loadSheetJsLibrary() {
     if (window.XLSX) return Promise.resolve(window.XLSX);
 
     if (!sheetJsLoadPromise) {
-        sheetJsLoadPromise = new Promise((resolve, reject) => {
-            const timeoutId = setTimeout(() => {
-                reject(new Error('Tempo esgotado ao carregar a biblioteca de Excel.'));
-            }, 30000);
+        sheetJsLoadPromise = (async () => {
+            let lastError = null;
 
-            const script = document.createElement('script');
-            script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-            script.onload = () => {
-                clearTimeout(timeoutId);
-                if (window.XLSX) resolve(window.XLSX);
-                else reject(new Error('Biblioteca de Excel indisponível.'));
-            };
-            script.onerror = () => {
-                clearTimeout(timeoutId);
-                reject(new Error('Não foi possível carregar a biblioteca de Excel.'));
-            };
-            document.body.appendChild(script);
-        }).catch(error => {
+            for (const src of SHEET_JS_LIBRARY_SOURCES) {
+                try {
+                    return await loadSheetJsScript(src);
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+
+            throw lastError || new Error('Não foi possível carregar a biblioteca de Excel.');
+        })().catch(error => {
             sheetJsLoadPromise = null;
             throw error;
         });

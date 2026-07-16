@@ -1,32 +1,19 @@
 let medicoesCache = [];
 let editingMedicaoId = null;
+let medicaoPickerPreselectProjectId = null;
 
-const MEDICAO_ELIGIBLE_STATUS_NAMES = new Set([
-    'Vendido',
-    'Aguardando Obra',
-    'Aguardando Medição',
-    'Medição Realizada',
-    'Planta Levantada'
-]);
+const MEDICAO_NEW_PICKER_STATUS_NAME = 'Aguardando Medição';
 
 function getProjectStatusName(project) {
     return project?.projectStatus?.name || '';
 }
 
-function isProjectEligibleForMedicaoPicker(project) {
-    const statusName = getProjectStatusName(project);
-    return Boolean(statusName && MEDICAO_ELIGIBLE_STATUS_NAMES.has(statusName));
+function isProjectEligibleForNewMedicaoPicker(project) {
+    return getProjectStatusName(project) === MEDICAO_NEW_PICKER_STATUS_NAME;
 }
 
-function filterProjectsForMedicaoPicker(projects, medicao = null) {
-    const selectedIds = new Set(
-        getMedicaoProjects(medicao).map(item => Number(item.orderProjectId))
-    );
-
-    return projects.filter(project =>
-        isProjectEligibleForMedicaoPicker(project)
-        || selectedIds.has(Number(project.id))
-    );
+function filterProjectsForMedicaoPicker(projects) {
+    return projects.filter(isProjectEligibleForNewMedicaoPicker);
 }
 
 async function getMedicaoRealizadaStatusId() {
@@ -222,29 +209,137 @@ function isMedicaoPlantaLocked(row) {
     return row.querySelector('.medicao-project-planta-locked')?.value === '1';
 }
 
-function isAdminOrOrderConsultorForMedicao(orderId) {
-    if (currentUser?.role === 'Admin') return true;
-    if (currentUser?.role !== 'Consultor') return false;
-    const consultantName = getOrderConsultantName(orderId);
-    return Boolean(consultantName && currentUser.name === consultantName);
-}
-
 function canCreateMedicao() {
     if (!activeOrderId) return false;
     return canCreateAsAdminOrConferente();
 }
 
+function getMedicaoProjectStatusName(medicaoProject) {
+    return getProjectStatusName(medicaoProject?.orderProject)
+        || medicaoProject?.orderProject?.projectStatus?.name
+        || '';
+}
+
+function medicaoHasProjectsInMedicaoRealizadaStatus(medicao) {
+    const projects = getMedicaoProjects(medicao);
+    if (!projects.length) return false;
+
+    return projects.every(item => getMedicaoProjectStatusName(item) === 'Medição Realizada');
+}
+
 function canEditMedicao(medicao) {
     if (!medicao) return canCreateMedicao();
+    if (!medicaoHasProjectsInMedicaoRealizadaStatus(medicao)) return false;
     if (currentUser?.role === 'Admin') return true;
-    if (isAdminOrOrderConsultorForMedicao(medicao.orderId || activeOrderId)) return true;
-    return medicao.createdById === currentUser?.id;
+    return isConferente();
+}
+
+function canShowOrderProjectEditarMedicaoAction(project, medicaoInfo) {
+    if (!medicaoInfo?.id) return false;
+    if (getOrderProjectStatusName(project) !== 'Medição Realizada') return false;
+    if (currentUser?.role === 'Admin') return true;
+    return isConferente();
+}
+
+async function fetchMedicaoContextByProjectIds(projectIds, orderId) {
+    const normalizedProjectIds = [...new Set(projectIds.map(id => Number(id)).filter(Boolean))];
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedProjectIds.length || !normalizedOrderId) return {};
+
+    let result = await supabaseClient
+        .from('MedicaoProject')
+        .select('orderProjectId, medicaoId, medicao:Medicao(id, orderId, createdById, createdAt)')
+        .in('orderProjectId', normalizedProjectIds);
+
+    if (result.error?.message?.includes('Medicao')) {
+        result = await supabaseClient
+            .from('MedicaoProject')
+            .select('orderProjectId, medicaoId')
+            .in('orderProjectId', normalizedProjectIds);
+    }
+
+    if (result.error) {
+        console.error('fetchMedicaoContextByProjectIds:', result.error);
+        return {};
+    }
+
+    let rows = result.data || [];
+    const medicaoIds = [...new Set(rows.map(row => Number(row.medicaoId)).filter(Boolean))];
+    const medicaoById = {};
+
+    if (medicaoIds.length && rows.some(row => !row.medicao)) {
+        const { data: medicoes, error } = await supabaseClient
+            .from('Medicao')
+            .select('id, orderId, createdById, createdAt')
+            .in('id', medicaoIds);
+
+        if (error) {
+            console.error('fetchMedicaoContextByProjectIds:', error);
+            return {};
+        }
+
+        (medicoes || []).forEach(medicao => {
+            medicaoById[Number(medicao.id)] = medicao;
+        });
+    }
+
+    const byProjectId = {};
+
+    rows.forEach(row => {
+        const projectId = Number(row.orderProjectId);
+        const medicao = row.medicao || medicaoById[Number(row.medicaoId)];
+        if (!medicao || Number(medicao.orderId) !== normalizedOrderId) return;
+
+        const existing = byProjectId[projectId];
+        const createdAt = medicao.createdAt ? new Date(medicao.createdAt).getTime() : 0;
+        const existingCreatedAt = existing?.createdAt ? new Date(existing.createdAt).getTime() : 0;
+
+        if (!existing || createdAt >= existingCreatedAt) {
+            byProjectId[projectId] = {
+                id: medicao.id,
+                orderId: medicao.orderId,
+                createdById: medicao.createdById,
+                createdAt: medicao.createdAt || null
+            };
+        }
+    });
+
+    return byProjectId;
+}
+
+async function openOrderProjectEditarMedicao(medicaoId, orderId = activeOrderId) {
+    if (!canCreateAsAdminOrConferente()) {
+        alertAppDialog('Sem permissão para editar medição.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const normalizedOrderId = Number(orderId);
+    const normalizedMedicaoId = Number(medicaoId);
+    if (!normalizedOrderId || !normalizedMedicaoId) return;
+
+    activeOrderId = normalizedOrderId;
+
+    if (typeof loadMedicoes === 'function') {
+        await loadMedicoes(normalizedOrderId);
+    }
+
+    const medicao = medicoesCache.find(item => Number(item.id) === normalizedMedicaoId);
+    if (!medicao) {
+        alertAppDialog('Medição não encontrada. Atualize a lista.');
+        return;
+    }
+
+    if (!canEditMedicao(medicao)) {
+        alertAppDialog('Sem permissão para editar esta medição.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    await openMedicaoModal(normalizedMedicaoId);
 }
 
 function canDeleteMedicao(medicao) {
     if (!medicao) return false;
-    if (currentUser?.role === 'Admin') return true;
-    return isAdminOrOrderConsultorForMedicao(medicao.orderId || activeOrderId);
+    return currentUser?.role === 'Admin';
 }
 
 function formatDateOnly(dateStr) {
@@ -501,18 +596,21 @@ async function populateMedicaoProjectsPicker(medicao = null) {
     }
 
     const projects = filterProjectsForMedicaoPicker(
-        await resolveOrderProjectsForMedicao(activeOrderId),
-        null
+        await resolveOrderProjectsForMedicao(activeOrderId)
     );
-    const selectedByProjectId = {};
 
     const defaultDate = document.getElementById('medicao-default-date')?.value
         || getTodayInputDate();
+    const selectedByProjectId = {};
+
+    if (medicaoPickerPreselectProjectId) {
+        selectedByProjectId[medicaoPickerPreselectProjectId] = { measurementDate: defaultDate };
+    }
 
     if (!projects.length) {
         emptyMsg?.classList.remove('hidden');
         if (emptyMsg) {
-            emptyMsg.textContent = 'Nenhum projeto elegível para medição neste pedido (status: Vendido, Aguardando Obra, Aguardando Medição, Medição Realizada ou Planta Levantada).';
+            emptyMsg.textContent = 'Nenhum projeto com status Aguardando Medição neste pedido.';
         }
         return;
     }
@@ -579,7 +677,7 @@ function collectMedicaoProjectsFromDom() {
     return projects;
 }
 
-async function openMedicaoModal(medicaoId = null) {
+async function openMedicaoModal(medicaoId = null, options = {}) {
     if (!activeOrderId) {
         alertAppDialog('Selecione um pedido primeiro.');
         return;
@@ -615,7 +713,11 @@ async function openMedicaoModal(medicaoId = null) {
 
     document.getElementById('medicao-observation').value = medicao?.observation || '';
 
+    medicaoPickerPreselectProjectId = !isEdit && options?.preselectProjectId
+        ? Number(options.preselectProjectId)
+        : null;
     await populateMedicaoProjectsPicker(medicao);
+    medicaoPickerPreselectProjectId = null;
 
     const title = document.getElementById('medicao-modal-title');
     const submitBtn = document.getElementById('medicao-form-submit');
@@ -625,7 +727,7 @@ async function openMedicaoModal(medicaoId = null) {
     if (hintEl) {
         hintEl.textContent = medicao
             ? 'Altere a observação e marque planta levantada nos projetos já medidos nesta medição.'
-            : 'Marque os projetos medidos e informe a data da medição de cada um.';
+            : 'Marque os projetos com status Aguardando Medição e informe a data da medição de cada um.';
     }
 
     toggleModal('medicao-modal', true);
@@ -1054,7 +1156,7 @@ async function loadMedicoes(orderId) {
 
     if (result.error?.message?.includes('Medicao')) {
         list.innerHTML = '<p class="text-xs text-amber-700 text-center py-6 bg-amber-50 rounded-xl border border-amber-100">Execute o SQL <code>supabase/create-mediciao.sql</code> no Supabase.</p>';
-        updateOrderTabCounts(undefined, undefined, undefined, undefined, 0);
+        updateOrderTabCounts(undefined, undefined, 0);
         return;
     }
 
@@ -1092,7 +1194,7 @@ async function loadMedicoes(orderId) {
     medicoes = await enrichMedicoes(medicoes, orderId);
     medicoesCache = medicoes;
 
-    updateOrderTabCounts(undefined, undefined, undefined, undefined, medicoes.length);
+    updateOrderTabCounts(undefined, undefined, medicoes.length);
 
     const creatorIds = [...new Set(medicoes.map(item => item.createdById).filter(Boolean))];
     const creatorNames = {};
@@ -1127,7 +1229,7 @@ function updateMedicaoActionButtons() {
     const onTab = panel && !panel.classList.contains('hidden');
     const newBtn = document.getElementById('btn-new-medicao');
     if (newBtn) {
-        newBtn.classList.toggle('hidden', !onTab || !canActOrderDetailTab('medicao'));
+        newBtn.classList.toggle('hidden', !onTab || !canCreateMedicao());
     }
 }
 

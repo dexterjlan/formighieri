@@ -167,7 +167,17 @@
                 </div>
 
                 <div id="order-content" class="hidden flex flex-col gap-6">
-                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
+                        <div id="order-projects-action-loading"
+                            class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                            <div id="order-projects-action-loading-spinner"
+                                class="h-8 w-8 border-2 border-slate-300 border-t-violet-700 rounded-full animate-spin"></div>
+                            <div id="order-projects-action-loading-success"
+                                class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                            <div id="order-projects-action-loading-error"
+                                class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                            <p id="order-projects-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                        </div>
                         <div class="p-5 border-b border-slate-100">
                             <div>
                                 <div class="flex items-center gap-2">
@@ -180,12 +190,10 @@
                                 <p class="text-xs text-slate-500 mt-1" id="det-delivery">Entrega pedido: —</p>
                             </div>
                         </div>
-                        <button type="button" id="btn-toggle-projects-list"
-                            class="w-full px-5 py-2.5 border-b border-slate-100 bg-violet-50/50 flex items-center gap-1.5 text-xs font-semibold text-violet-800 uppercase text-left hover:bg-violet-100/60">
-                            <span id="order-projects-toggle-icon" class="hidden text-[10px] leading-none shrink-0">▶</span>
-                            <span>Projetos <span id="order-projects-count" class="font-normal opacity-80">(0)</span></span>
-                        </button>
-                        <div id="order-projects-panel" class="hidden px-3 py-2">
+                        <div class="px-5 py-2.5 border-b border-slate-100 bg-violet-50/50 text-xs font-semibold text-violet-800 uppercase">
+                            Projetos <span id="order-projects-count" class="font-normal opacity-80">(0)</span>
+                        </div>
+                        <div id="order-projects-panel" class="px-3 py-2">
                             <div id="order-projects-list"></div>
                         </div>
                     </div>
@@ -194,37 +202,17 @@
                         <div id="order-detail-tabs-wrap" class="flex flex-col flex-1 min-h-0">
                             <div class="order-detail-tabs-shell">
                                 <div id="order-detail-tabs-bar" class="order-detail-tabs-bar">
-                            <button type="button" id="order-tab-approvals"
-                                class="order-detail-tab order-detail-tab--emerald is-active" data-order-tab="approvals">
-                                Aprovações Comerciais <span id="order-tab-approvals-count" class="order-detail-tab-count">(0)</span>
-                            </button>
-                            <button type="button" id="order-tab-requests"
-                                class="order-detail-tab order-detail-tab--amber" data-order-tab="requests">
-                                Requisições <span id="order-tab-requests-count" class="order-detail-tab-count">(0)</span>
+                            <button type="button" id="order-tab-medicao"
+                                class="order-detail-tab order-detail-tab--teal is-active" data-order-tab="medicao">
+                                Medição <span id="order-tab-medicao-count" class="order-detail-tab-count">(0)</span>
                             </button>
                             <button type="button" id="order-tab-anteprojeto"
                                 class="order-detail-tab order-detail-tab--sky" data-order-tab="anteprojeto">
                                 Anteprojeto <span id="order-tab-anteprojeto-count" class="order-detail-tab-count">(0)</span>
                             </button>
-                            <button type="button" id="order-tab-medicao"
-                                class="order-detail-tab order-detail-tab--teal" data-order-tab="medicao">
-                                Medição <span id="order-tab-medicao-count" class="order-detail-tab-count">(0)</span>
-                            </button>
-                            <button type="button" id="order-tab-projeto-tecnico"
-                                class="order-detail-tab order-detail-tab--indigo" data-order-tab="projeto-tecnico">
-                                Projeto Técnico <span id="order-tab-projeto-tecnico-count" class="order-detail-tab-count">(0)</span>
-                            </button>
-                            <button type="button" id="order-tab-nomear"
-                                class="order-detail-tab order-detail-tab--purple" data-order-tab="nomear">
-                                Nomear <span id="order-tab-nomear-count" class="order-detail-tab-count">(0)</span>
-                            </button>
-                            <button type="button" id="order-tab-ppcp"
-                                class="order-detail-tab order-detail-tab--violet" data-order-tab="ppcp">
-                                PPCP <span id="order-tab-ppcp-count" class="order-detail-tab-count">(0)</span>
-                            </button>
-                            <button type="button" id="order-tab-fabrica"
-                                class="order-detail-tab order-detail-tab--orange" data-order-tab="fabrica">
-                                Fábrica <span id="order-tab-fabrica-count" class="order-detail-tab-count">(0)</span>
+                            <button type="button" id="order-tab-requests"
+                                class="order-detail-tab order-detail-tab--amber" data-order-tab="requests">
+                                Requisições <span id="order-tab-requests-count" class="order-detail-tab-count">(0)</span>
                             </button>
                             <button type="button" id="order-tab-compras"
                                 class="order-detail-tab order-detail-tab--rose" data-order-tab="compras">
@@ -233,25 +221,15 @@
                                 </div>
                             </div>
                             <p id="order-tab-readonly-notice" class="hidden order-tab-readonly-notice" role="status"></p>
-                        <div id="order-tab-panel-approvals" class="order-detail-tab-panel p-4 md:p-5">
+                        <div id="order-tab-panel-medicao" class="order-detail-tab-panel p-4 md:p-5">
                             <div class="order-tab-actions mb-3">
-                                <button type="button" id="btn-commercial-approval" onclick="openCommercialApprovalModal()"
-                                    class="order-tab-action-btn hidden bg-emerald-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-800">
-                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5A1.5 1.5 0 0 1 5.5 1h2.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 1 .44 1.06V12.5A1.5 1.5 0 0 1 10.5 14h-6A1.5 1.5 0 0 1 3 12.5v-10zM5.5 2a.5.5 0 0 0-.5.5v10a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5V5.621a.5.5 0 0 0-.146-.353L8.732 3.146A.5.5 0 0 0 8.379 3H5.5zm2.25 6.75a.75.75 0 0 1 1.06 0l1.5 1.5a.75.75 0 1 1-1.06 1.06L9.25 10.31l-.72.72a.75.75 0 1 1-1.06-1.06l.72-.72-.72-.72a.75.75 0 0 1 0-1.06z"/></svg>
-                                    <span>Solicitar Aprovação Comercial</span>
-                                </button>
-                            </div>
-                            <div class="space-y-4" id="commercial-approvals-list"></div>
-                        </div>
-                        <div id="order-tab-panel-requests" class="order-detail-tab-panel hidden p-4 md:p-5">
-                            <div class="order-tab-actions mb-3">
-                                <button type="button" id="btn-new-request" onclick="openConvModal()"
-                                    class="order-tab-action-btn hidden bg-slate-900 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">
+                                <button type="button" id="btn-new-medicao"
+                                    class="order-tab-action-btn hidden bg-teal-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-teal-800">
                                     <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5a.5.5 0 0 1 .5.5v4.5H13a.5.5 0 0 1 0 1H8.5V13a.5.5 0 0 1-1 0V8.5H3a.5.5 0 0 1 0-1h4.5V3a.5.5 0 0 1 .5-.5z"/></svg>
-                                    <span>Abrir Nova Requisição</span>
+                                    <span>Nova Medição</span>
                                 </button>
                             </div>
-                            <div class="space-y-4" id="conversations-list"></div>
+                            <div class="space-y-4" id="medicao-list"></div>
                         </div>
                         <div id="order-tab-panel-anteprojeto" class="order-detail-tab-panel hidden p-4 md:p-5 relative">
                             <div id="anteprojeto-tab-action-loading"
@@ -273,48 +251,15 @@
                             </div>
                             <div class="space-y-4" id="anteprojeto-list"></div>
                         </div>
-                        <div id="order-tab-panel-medicao" class="order-detail-tab-panel hidden p-4 md:p-5">
+                        <div id="order-tab-panel-requests" class="order-detail-tab-panel hidden p-4 md:p-5">
                             <div class="order-tab-actions mb-3">
-                                <button type="button" id="btn-new-medicao"
-                                    class="order-tab-action-btn hidden bg-teal-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-teal-800">
+                                <button type="button" id="btn-new-request" onclick="openConvModal()"
+                                    class="order-tab-action-btn hidden bg-slate-900 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">
                                     <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5a.5.5 0 0 1 .5.5v4.5H13a.5.5 0 0 1 0 1H8.5V13a.5.5 0 0 1-1 0V8.5H3a.5.5 0 0 1 0-1h4.5V3a.5.5 0 0 1 .5-.5z"/></svg>
-                                    <span>Nova Medição</span>
+                                    <span>Abrir Nova Requisição</span>
                                 </button>
                             </div>
-                            <div class="space-y-4" id="medicao-list"></div>
-                        </div>
-                        <div id="order-tab-panel-projeto-tecnico" class="order-detail-tab-panel hidden p-4 md:p-5 relative">
-                            <div id="projeto-tecnico-tab-action-loading"
-                                class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                                <div id="projeto-tecnico-tab-action-loading-spinner"
-                                    class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
-                                <div id="projeto-tecnico-tab-action-loading-success"
-                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                                <div id="projeto-tecnico-tab-action-loading-error"
-                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                                <p id="projeto-tecnico-tab-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
-                            </div>
-                            <p class="text-xs text-slate-500 mb-3">Todos os projetos do pedido. Ações disponíveis apenas em <strong>Aguardando Projeto Técnico</strong>: associar-se como responsável ou iniciar o trabalho.</p>
-                            <div id="projeto-tecnico-projects-list"></div>
-                        </div>
-                        <div id="order-tab-panel-nomear" class="order-detail-tab-panel hidden p-4 md:p-5">
-                            <p class="text-xs text-slate-500 mb-3">Confirme os projetos como nomeados para enviá-los ao PPCP. Somente o projetista responsável pode confirmar.</p>
-                            <div class="space-y-4" id="nomear-projects-list"></div>
-                        </div>
-                        <div id="order-tab-panel-ppcp" class="order-detail-tab-panel hidden p-4 md:p-5">
-                            <p class="text-xs text-slate-500 mb-3">Projetos do pedido no fluxo PPCP. Inicie a implantação ou abra o checklist quando disponível.</p>
-                            <div class="space-y-6" id="ppcp-projects-list"></div>
-                        </div>
-                        <div id="order-tab-panel-fabrica" class="order-detail-tab-panel hidden p-4 md:p-5">
-                            <p class="text-xs text-slate-500 mb-3">Projetos deste pedido em produção ou montagem interna — selecione e registre a montagem.</p>
-                            <div class="space-y-4" id="fabrica-projects-list"></div>
-                            <div id="fabrica-save-footer" class="hidden pt-4 mt-4 border-t border-slate-100 order-tab-actions">
-                                <button type="button" id="btn-fabrica-save"
-                                    class="order-tab-action-btn bg-orange-700 text-white text-xs px-5 py-2 rounded-lg font-semibold hover:bg-orange-800">
-                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M10.97 2.97a.75.75 0 0 1 1.06 0l2.5 2.5a.75.75 0 0 1 0 1.06l-6.22 6.22a.75.75 0 0 1-.397.207l-2.873.72a.75.75 0 0 1-.91-.91l.72-2.873a.75.75 0 0 1 .207-.397l6.22-6.22zM11.5 4.56 12.44 5.5 11.03 6.91 10.09 5.97 11.5 4.56zM4.75 9.25l-1.06 4.24 4.24-1.06L11.44 9.5 8.5 6.56 4.75 9.25z"/></svg>
-                                    <span>Salvar</span>
-                                </button>
-                            </div>
+                            <div class="space-y-4" id="conversations-list"></div>
                         </div>
                         <div id="order-tab-panel-compras" class="order-detail-tab-panel hidden p-4 md:p-5">
                             <p class="text-xs text-slate-500 mb-3">Solicitações de compra geradas pela implantação deste pedido.</p>
@@ -491,7 +436,17 @@
                     </div>
                 </form>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
+                <div id="approvals-query-action-loading"
+                    class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                    <div id="approvals-query-action-loading-spinner"
+                        class="h-8 w-8 border-2 border-slate-300 border-t-emerald-700 rounded-full animate-spin"></div>
+                    <div id="approvals-query-action-loading-success"
+                        class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                    <div id="approvals-query-action-loading-error"
+                        class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                    <p id="approvals-query-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                </div>
                 <div class="p-3 border-b border-slate-100 bg-slate-50/50">
                     <span class="text-xs text-slate-500" id="approval-query-results-count">0 aprovações</span>
                 </div>

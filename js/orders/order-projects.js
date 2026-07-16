@@ -1,7 +1,5 @@
 let environmentTypesCache = [];
 let orderProjectsCache = [];
-let orderProjectsExpanded = false;
-let orderProjectCharacteristicsExpanded = new Set();
 
 async function loadEnvironmentTypes() {
     if (environmentTypesCache.length) return environmentTypesCache;
@@ -77,37 +75,57 @@ function closeOrderProjectModal() {
 window.openOrderProjectModal = openOrderProjectModal;
 window.closeOrderProjectModal = closeOrderProjectModal;
 
-function updateProjectsListToggle(count) {
-    const btn = document.getElementById('btn-toggle-projects-list');
-    const icon = document.getElementById('order-projects-toggle-icon');
-    if (!btn || !icon) return;
-
-    const hasProjects = count > 0;
-    icon.classList.toggle('hidden', !hasProjects);
-    icon.textContent = orderProjectsExpanded ? '▼' : '▶';
-    btn.setAttribute(
-        'aria-label',
-        hasProjects
-            ? (orderProjectsExpanded ? 'Recolher projetos' : 'Expandir projetos')
-            : 'Projetos'
-    );
+function updateProjectsListHeader(count) {
+    const countEl = document.getElementById('order-projects-count');
+    if (countEl) {
+        countEl.textContent = `(${count})`;
+    }
 }
 
-function applyProjectsListCollapse() {
-    const panel = document.getElementById('order-projects-panel');
-    if (!panel) return;
+async function fetchOrderProjectActionContext(orderId, projectIds, projects = null) {
+    const [approvalsByProject, implantacaoByProjectId, medicaoByProject, conferenciaByProject] = await Promise.all([
+        typeof fetchCommercialApprovalsByProjectIds === 'function'
+            ? fetchCommercialApprovalsByProjectIds(projectIds)
+            : Promise.resolve({}),
+        typeof fetchImplantacoesMapForProjectIds === 'function'
+            ? fetchImplantacoesMapForProjectIds(projectIds)
+            : Promise.resolve({}),
+        typeof fetchMedicaoContextByProjectIds === 'function'
+            ? fetchMedicaoContextByProjectIds(projectIds, orderId)
+            : Promise.resolve({}),
+        typeof fetchAnteprojetoConferenceContextByProjectIds === 'function'
+            ? fetchAnteprojetoConferenceContextByProjectIds(projectIds, orderId)
+            : Promise.resolve({})
+    ]);
 
-    panel.classList.toggle('hidden', !orderProjectsExpanded || !orderProjectsCache.length);
+    let revisionsByProject = {};
+    const approvalIds = Object.values(approvalsByProject || {})
+        .map(approval => approval?.id)
+        .filter(Boolean);
+
+    if (approvalIds.length && typeof fetchCommercialRevisionsByApprovalIds === 'function') {
+        const revisionsByApproval = await fetchCommercialRevisionsByApprovalIds(approvalIds);
+        Object.entries(approvalsByProject || {}).forEach(([projectId, approval]) => {
+            if (!approval?.id) return;
+            revisionsByProject[projectId] = revisionsByApproval[approval.id] || [];
+        });
+    }
+
+    let implantacaoMap = implantacaoByProjectId || {};
+    const projectsForSync = projects || orderProjectsCache;
+    if (typeof syncImplantacaoRecordsMapForProjects === 'function' && projectsForSync.length) {
+        implantacaoMap = await syncImplantacaoRecordsMapForProjects(projectsForSync, implantacaoMap);
+    }
+
+    return {
+        orderId,
+        approvalsByProject,
+        revisionsByProject,
+        implantacaoByProjectId: implantacaoMap,
+        medicaoByProject,
+        conferenciaByProject
+    };
 }
-
-function toggleOrderProjectsList() {
-    if (!orderProjectsCache.length) return;
-    orderProjectsExpanded = !orderProjectsExpanded;
-    applyProjectsListCollapse();
-    updateProjectsListToggle(orderProjectsCache.length);
-}
-
-window.toggleOrderProjectsList = toggleOrderProjectsList;
 
 async function fetchOrderProjectsForOrder(orderId) {
     let result = await supabaseClient
@@ -324,22 +342,16 @@ async function loadOrderProjects(orderId) {
     const hasPhases = typeof orderHasDeliveryPhases === 'function'
         && orderHasDeliveryPhases(orderId);
     orderProjectsCache = projects;
-    orderProjectsExpanded = false;
-    orderProjectCharacteristicsExpanded = new Set();
-    updateOrderTabCounts(undefined, undefined, orderProjectsCache.length);
+    updateOrderTabCounts(orderProjectsCache.length);
+    updateProjectsListHeader(orderProjectsCache.length);
 
     const projectIds = orderProjectsCache.map(project => Number(project.id)).filter(Boolean);
-    const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
-        ? await fetchOrderProjectCharacteristicsMap(projectIds)
-        : new Map();
+    const actionContext = await fetchOrderProjectActionContext(orderId, projectIds, orderProjectsCache);
 
     if (!list) return;
 
     if (!orderProjectsCache.length) {
         list.innerHTML = '';
-        orderProjectsExpanded = false;
-        applyProjectsListCollapse();
-        updateProjectsListToggle(0);
         if (typeof refreshOrdersListSummary === 'function') {
             await refreshOrdersListSummary();
         }
@@ -352,11 +364,11 @@ async function loadOrderProjects(orderId) {
     const header = document.createElement('div');
     header.className = 'order-projects-grid__header';
     header.innerHTML = `
-        <span class="order-projects-grid__head">Projeto</span>
+        <span class="order-projects-grid__head order-projects-grid__head--project">Projeto</span>
         <span class="order-projects-grid__head">Projetista</span>
         <span class="order-projects-grid__head">${hasPhases ? 'Fase' : 'Entrega'}</span>
         <span class="order-projects-grid__head">Status</span>
-        <span class="order-projects-grid__head order-projects-grid__head--actions">Ações</span>
+        <span class="order-projects-grid__head order-projects-grid__head--actions">Ação</span>
     `;
     grid.appendChild(header);
 
@@ -379,8 +391,14 @@ async function loadOrderProjects(orderId) {
                 : `Entrega do projeto técnico: ${deliveryDate}`;
             const designerName = p.designer?.name || '—';
             const projectId = Number(p.id);
-            const isCharacteristicsExpanded = orderProjectCharacteristicsExpanded.has(projectId);
-            const characteristicRows = characteristicsMap.get(projectId) || [];
+            const approval = actionContext.approvalsByProject?.[projectId] || null;
+            const revisions = actionContext.revisionsByProject?.[projectId] || [];
+            const implantacao = actionContext.implantacaoByProjectId?.[projectId] || null;
+            const medicao = actionContext.medicaoByProject?.[projectId] || null;
+            const conferencia = actionContext.conferenciaByProject?.[projectId] || null;
+            const actions = typeof getOrderProjectActions === 'function'
+                ? getOrderProjectActions(p, { orderId, approval, revisions, implantacao, medicao, conferencia })
+                : [];
             const item = document.createElement('div');
             item.className = 'order-projects-grid__item';
             item.dataset.projectId = String(projectId);
@@ -388,15 +406,12 @@ async function loadOrderProjects(orderId) {
                 <div class="order-projects-grid__row">
                     <div class="order-projects-grid__cell order-projects-grid__cell--project min-w-0">
                         <div class="flex flex-wrap items-center gap-1.5">
-                            <button type="button"
-                                class="order-project-characteristics-toggle"
-                                data-project-id="${projectId}"
-                                aria-expanded="${isCharacteristicsExpanded}"
-                                aria-label="${isCharacteristicsExpanded ? 'Recolher características' : 'Expandir características'}"
-                                title="${isCharacteristicsExpanded ? 'Recolher características' : 'Expandir características'}">
-                                ${isCharacteristicsExpanded ? '▼' : '▶'}
-                            </button>
                             <span class="text-xs font-semibold text-slate-800 truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                            <button type="button"
+                                class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
+                                data-project-id="${projectId}">
+                                Detalhes
+                            </button>
                             ${renderComplementarProjectNoticeHtml(p)}
                             ${renderSubstituidoProjectNoticeHtml(p)}
                             ${renderSubstituicaoProjectNoticeHtml(p)}
@@ -404,26 +419,16 @@ async function loadOrderProjects(orderId) {
                     </div>
                     <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
                     <span class="order-projects-grid__cell text-[10px] text-slate-600 whitespace-nowrap" title="${escapeHtml(deliveryTitle)}">${deliveryCell}</span>
-                    <span class="order-projects-grid__cell text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+                    <span class="order-projects-grid__cell order-projects-grid__cell--status text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
                     <div class="order-projects-grid__cell order-projects-grid__cell--actions">
-                        <button type="button"
-                            class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
-                            data-project-id="${projectId}">
-                            Detalhes
-                        </button>
+                        ${typeof renderOrderProjectActionButtons === 'function'
+                            ? renderOrderProjectActionButtons(actions)
+                            : '<span class="text-xs text-slate-300">—</span>'}
                     </div>
-                </div>
-                <div class="order-projects-grid__characteristics ${isCharacteristicsExpanded ? '' : 'hidden'}">
-                    ${typeof renderOrderProjectCharacteristicsContent === 'function'
-                        ? renderOrderProjectCharacteristicsContent(characteristicRows)
-                        : ''}
                 </div>
             `;
             grid.appendChild(item);
         });
-
-    applyProjectsListCollapse();
-    updateProjectsListToggle(orderProjectsCache.length);
 
     if (typeof refreshOrdersListSummary === 'function') {
         await refreshOrdersListSummary();
@@ -431,33 +436,12 @@ async function loadOrderProjects(orderId) {
 }
 
 function bindOrderProjectEvents() {
-    document.getElementById('btn-toggle-projects-list')?.addEventListener('click', toggleOrderProjectsList);
-
     document.getElementById('order-projects-list')?.addEventListener('click', async (event) => {
-        const toggleBtn = event.target.closest('.order-project-characteristics-toggle');
-        if (toggleBtn) {
+        const actionBtn = event.target.closest('.order-project-action-btn');
+        if (actionBtn) {
             event.stopPropagation();
-            const projectId = Number(toggleBtn.dataset.projectId);
-            if (!projectId) return;
-
-            const item = toggleBtn.closest('.order-projects-grid__item');
-            const panel = item?.querySelector('.order-projects-grid__characteristics');
-            const isExpanded = orderProjectCharacteristicsExpanded.has(projectId);
-
-            if (isExpanded) {
-                orderProjectCharacteristicsExpanded.delete(projectId);
-                panel?.classList.add('hidden');
-                toggleBtn.textContent = '▶';
-                toggleBtn.setAttribute('aria-expanded', 'false');
-                toggleBtn.setAttribute('aria-label', 'Expandir características');
-                toggleBtn.title = 'Expandir características';
-            } else {
-                orderProjectCharacteristicsExpanded.add(projectId);
-                panel?.classList.remove('hidden');
-                toggleBtn.textContent = '▼';
-                toggleBtn.setAttribute('aria-expanded', 'true');
-                toggleBtn.setAttribute('aria-label', 'Recolher características');
-                toggleBtn.title = 'Recolher características';
+            if (typeof handleOrderProjectAction === 'function') {
+                await handleOrderProjectAction(actionBtn);
             }
             return;
         }

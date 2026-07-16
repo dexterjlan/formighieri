@@ -1,5 +1,43 @@
 let gestaoOrdersCache = [];
 let orderProjectViewContext = null;
+let orderProjectViewImplantacaoContext = null;
+
+function formatProjectViewMontagemDate(dateStr) {
+    if (!dateStr) return '—';
+    if (typeof formatFabricaDisplayDate === 'function') {
+        return formatFabricaDisplayDate(dateStr);
+    }
+    if (typeof formatGestaoDate === 'function') {
+        return formatGestaoDate(dateStr);
+    }
+    return String(dateStr).split('T')[0] || '—';
+}
+
+function resolveProjectViewMarceneiroRecord(project) {
+    if (!project) return null;
+
+    let marceneiro = project.marceneiro;
+    if (Array.isArray(marceneiro)) {
+        marceneiro = marceneiro.find(item => item?.name) || marceneiro[0] || null;
+    }
+    if (marceneiro?.name) return marceneiro;
+
+    const marceneiroId = Number(project.marceneiroId);
+    if (!marceneiroId) return null;
+
+    const caches = [
+        ...(Array.isArray(gestaoMarceneirosCache) ? gestaoMarceneirosCache : []),
+        ...(typeof fabricaMarceneirosCache !== 'undefined' && Array.isArray(fabricaMarceneirosCache)
+            ? fabricaMarceneirosCache
+            : [])
+    ];
+
+    return caches.find(item => Number(item.id) === marceneiroId) || null;
+}
+
+function getProjectViewMarceneiroName(project) {
+    return resolveProjectViewMarceneiroRecord(project)?.name || '—';
+}
 let gestaoEnvironmentTypesCache = [];
 let gestaoProjetistasCache = [];
 let gestaoProjectStatusesCache = [];
@@ -289,7 +327,7 @@ function renderProjectViewComplementarChildrenList(children = []) {
     if (!listEl) return;
 
     if (!children.length) {
-        listEl.innerHTML = '<p class="text-slate-500">—</p>';
+        listEl.innerHTML = '<p class="text-sm text-slate-500">Nenhum projeto complementar vinculado.</p>';
         return;
     }
 
@@ -303,15 +341,29 @@ function renderProjectViewComplementarChildrenList(children = []) {
             const statusClass = getOrderProjectStatusBadgeClass(statusName);
 
             return `
-                <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span class="font-mono text-slate-800">${escapeHtml(code)}</span>
-                    <span class="text-slate-400">·</span>
-                    <span class="text-slate-800">${escapeHtml(name)}</span>
+                <div class="project-view-related-item">
+                    <span class="project-view-related-item__code">${escapeHtml(code)}</span>
+                    <span class="project-view-related-item__name">${escapeHtml(name)}</span>
                     <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusClass}">${escapeHtml(statusName)}</span>
                 </div>
             `;
         })
         .join('');
+}
+
+function setProjectViewHeader(project = {}, statusName = '—') {
+    const titleEl = document.getElementById('project-view-title');
+    const codeEl = document.getElementById('project-view-header-code');
+    const statusEl = document.getElementById('project-view-header-status');
+    const code = normalizeProjectCodeInput(project.projectCode || '') || '—';
+    const name = project.name || '—';
+
+    if (titleEl) titleEl.textContent = name;
+    if (codeEl) codeEl.textContent = code;
+    if (statusEl) {
+        statusEl.textContent = statusName;
+        statusEl.className = `project-view-modal__status ${getOrderProjectStatusBadgeClass(statusName)}`;
+    }
 }
 
 function findComplementarChildrenInCaches(parentProjectId) {
@@ -385,6 +437,7 @@ function fillProjectViewModal(project = {}, complementarChildren = []) {
         if (el) el.textContent = value || '—';
     };
 
+    setProjectViewHeader(project, statusName);
     setText('project-view-code', normalizeProjectCodeInput(project.projectCode || ''));
     setText('project-view-name', project.name || '—');
     setText('project-view-environment', project.environmentType?.name || '—');
@@ -399,7 +452,16 @@ function fillProjectViewModal(project = {}, complementarChildren = []) {
         : (project.conclusaoProjetoTecnico || '—'));
     setText('project-view-status', statusName);
     setText('project-view-designer', project.designer?.name || '—');
-    setText('project-view-caminho-rede', project.caminhoRedeAprovacao || '—');
+    setText('project-view-marceneiro', getProjectViewMarceneiroName(project));
+    setText('project-view-montagem-inicio', formatProjectViewMontagemDate(project.inicioMontagemInterna));
+    setText('project-view-montagem-fim', formatProjectViewMontagemDate(project.fimMontagemInterna));
+
+    const caminhoRedeEl = document.getElementById('project-view-caminho-rede');
+    const caminhoRede = project.caminhoRedeAprovacao || '—';
+    if (caminhoRedeEl) {
+        caminhoRedeEl.textContent = caminhoRede;
+        caminhoRedeEl.classList.toggle('project-view-path--empty', caminhoRede === '—');
+    }
 
     const childWrap = document.getElementById('project-view-complementar-child-wrap');
     const parentWrap = document.getElementById('project-view-complementar-parent-wrap');
@@ -457,9 +519,9 @@ async function fetchProjectDetailsForView(projectId) {
     if (!normalizedId) return null;
 
     const selectVariants = [
-        'id, orderId, projectCode, name, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), order:salesOrders(orderCode, clientName), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
-        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), order:salesOrders(orderCode, clientName), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
-        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, marceneiroId, inicioMontagemInterna, fimMontagemInterna, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), marceneiro:Marceneiro(id, name), order:salesOrders(orderCode, clientName), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, marceneiroId, inicioMontagemInterna, fimMontagemInterna, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), order:salesOrders(orderCode, clientName), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, marceneiroId, inicioMontagemInterna, fimMontagemInterna, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)'
     ];
 
@@ -474,21 +536,65 @@ async function fetchProjectDetailsForView(projectId) {
             if (data.statusId && !data.projectStatus && gestaoProjectStatusesCache.length) {
                 data.projectStatus = gestaoProjectStatusesCache.find(item => item.id === data.statusId) || null;
             }
-            return data;
+            return await enrichProjectViewMarceneiro(data);
+        }
+
+        if (error?.message?.includes('marceneiro') || error?.message?.includes('Marceneiro')) {
+            continue;
         }
     }
 
     return null;
 }
 
-async function openProjectViewModal(projectOrId) {
-    let project = projectOrId;
+async function enrichProjectViewMarceneiro(project) {
+    if (!project) return project;
 
-    if (typeof projectOrId === 'number' || (typeof projectOrId === 'string' && projectOrId)) {
-        const cached = typeof fetchOrderProjectsForOrder === 'function' && Array.isArray(orderProjectsCache)
-            ? orderProjectsCache.find(item => Number(item.id) === Number(projectOrId))
-            : null;
-        project = cached || await fetchProjectDetailsForView(projectOrId);
+    const existing = resolveProjectViewMarceneiroRecord(project);
+    if (existing?.name) {
+        return { ...project, marceneiro: existing };
+    }
+
+    const marceneiroId = Number(project.marceneiroId);
+    if (!marceneiroId) return project;
+
+    if (typeof loadGestaoMarceneiros === 'function' && !gestaoMarceneirosCache.length) {
+        await loadGestaoMarceneiros(false);
+        const fromCache = gestaoMarceneirosCache.find(item => Number(item.id) === marceneiroId);
+        if (fromCache?.name) {
+            return { ...project, marceneiro: { id: fromCache.id, name: fromCache.name } };
+        }
+    }
+
+    const { data, error } = await supabaseClient
+        .from('Marceneiro')
+        .select('id, name')
+        .eq('id', marceneiroId)
+        .maybeSingle();
+
+    if (error || !data) {
+        return project;
+    }
+
+    return { ...project, marceneiro: data };
+}
+
+async function openProjectViewModal(projectOrId) {
+    let project = typeof projectOrId === 'object' ? projectOrId : null;
+    const projectId = typeof projectOrId === 'object'
+        ? Number(projectOrId?.id)
+        : Number(projectOrId);
+
+    if (projectId) {
+        const fetched = await fetchProjectDetailsForView(projectId);
+        if (fetched) {
+            project = fetched;
+        } else if (!project && (typeof projectOrId === 'number' || typeof projectOrId === 'string')) {
+            const cached = Array.isArray(orderProjectsCache)
+                ? orderProjectsCache.find(item => Number(item.id) === projectId)
+                : null;
+            project = cached || null;
+        }
     }
 
     if (!project) {
@@ -496,9 +602,11 @@ async function openProjectViewModal(projectOrId) {
         return;
     }
 
-    if (!project.designer?.name && project.designerId) {
-        const enriched = await fetchProjectDetailsForView(project.id);
-        if (enriched) project = enriched;
+    project = await enrichProjectViewMarceneiro(project);
+
+    let implantacaoRecord = null;
+    if (typeof fetchImplantacaoByOrderProjectId === 'function') {
+        implantacaoRecord = await fetchImplantacaoByOrderProjectId(project.id);
     }
 
     const complementarChildren = isComplementarOrderProject(project)
@@ -512,6 +620,11 @@ async function openProjectViewModal(projectOrId) {
     orderProjectViewContext = typeof buildProjectStatusHistoryContext === 'function'
         ? buildProjectStatusHistoryContext(project)
         : null;
+    orderProjectViewImplantacaoContext = implantacaoRecord
+        ? { projectId: project.id, projectName: project.name || 'Projeto' }
+        : null;
+    document.getElementById('btn-project-view-implantacao')
+        ?.classList.toggle('hidden', !orderProjectViewImplantacaoContext);
     toggleModal('order-project-view-modal', true);
 }
 
@@ -1147,10 +1260,21 @@ function bindGestaoEvents() {
     document.getElementById('btn-close-order-project-view')?.addEventListener('click', () => {
         toggleModal('order-project-view-modal', false);
         orderProjectViewContext = null;
+        orderProjectViewImplantacaoContext = null;
     });
     document.getElementById('btn-close-order-project-view-footer')?.addEventListener('click', () => {
         toggleModal('order-project-view-modal', false);
         orderProjectViewContext = null;
+        orderProjectViewImplantacaoContext = null;
+    });
+    document.getElementById('btn-project-view-implantacao')?.addEventListener('click', async () => {
+        if (!orderProjectViewImplantacaoContext) return;
+        const { projectId, projectName } = orderProjectViewImplantacaoContext;
+        if (typeof openPpcpImplantacaoModal === 'function') {
+            await openPpcpImplantacaoModal(projectId, projectName);
+        } else if (typeof openImplantacaoModal === 'function') {
+            await openImplantacaoModal(projectId, projectName, { requireExisting: true });
+        }
     });
     document.getElementById('btn-order-project-status-history')?.addEventListener('click', () => {
         if (!orderProjectViewContext) return;

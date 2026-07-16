@@ -424,13 +424,9 @@ function canSeeOrderNomearTab(user = currentUser) {
 }
 
 const ORDER_DETAIL_TAB_RESPONSIBLE_LABELS = {
-    approvals: 'Projetista ou Admin',
     requests: 'Consultor, Projetista ou Admin',
-    anteprojeto: 'Conferente, Gestor Comercial ou Admin',
-    medicao: 'Conferente, Gestor Comercial ou Admin',
-    'projeto-tecnico': 'Projetista responsável pelo projeto',
-    nomear: 'Projetista responsável pelo projeto',
-    ppcp: 'Projetista PPCP ou Admin',
+    anteprojeto: 'Conferente ou Admin',
+    medicao: 'Conferente ou Admin',
     fabrica: 'Gestor de Fábrica ou Admin',
     compras: 'Equipe de Compras'
 };
@@ -444,19 +440,11 @@ function canActOrderDetailTab(tabKey, user = currentUser) {
     if (isAdmin(user)) return true;
 
     switch (tabKey) {
-        case 'approvals':
-            return user.role === 'Projetista';
         case 'requests':
             return user.role === 'Consultor' || user.role === 'Projetista';
         case 'anteprojeto':
         case 'medicao':
             return isConferente(user) || isGestorComercial(user);
-        case 'projeto-tecnico':
-            return user.role === 'Projetista';
-        case 'nomear':
-            return user.role === 'Projetista';
-        case 'ppcp':
-            return isPpcp(user);
         case 'fabrica':
             return isGestorFabrica(user);
         case 'compras':
@@ -473,7 +461,7 @@ function canActOrderProjectNomear(project, user = currentUser) {
 }
 
 function canCreateAsAdminOrConferente() {
-    return isAdmin() || isConferente() || isGestorComercial();
+    return isAdmin() || isConferente();
 }
 
 function bindCollapsibleListCardToggles(root, options = {}) {
