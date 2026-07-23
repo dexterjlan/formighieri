@@ -1,0 +1,790 @@
+/**
+ * Oficina Sálvia — telas operacionais: Pedidos, Detalhe, Pendências, Modal projeto
+ */
+
+/* ── Painel de pedidos ── */
+html[data-theme="formighieri-sage"] #dashboard-view .fm-orders-panel,
+html[data-theme="formighieri-sage"] #dashboard-view > section:first-child {
+    border-color: var(--fm-border) !important;
+    box-shadow: var(--fm-shadow-sm) !important;
+}
+
+html[data-theme="formighieri-sage"] #dashboard-view .fm-orders-panel > div:first-child,
+html[data-theme="formighieri-sage"] #dashboard-view > section:first-child > div:first-child {
+    background: linear-gradient(180deg, var(--fm-sage-soft) 0%, var(--fm-surface) 100%) !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #filter-order-client {
+    border-color: var(--fm-border) !important;
+    background: var(--fm-surface-elevated) !important;
+    border-radius: var(--fm-radius-md) !important;
+}
+
+html[data-theme="formighieri-sage"] #filter-order-client:focus {
+    border-color: var(--fm-accent) !important;
+    box-shadow: 0 0 0 3px rgb(196 92 62 / 0.12) !important;
+    outline: none;
+}
+
+html[data-theme="formighieri-sage"] #filter-order-mine {
+    accent-color: var(--fm-sage);
+}
+
+html[data-theme="formighieri-sage"] #orders-list {
+    background: var(--fm-canvas) !important;
+}
+
+html[data-theme="formighieri-sage"] #orders-list > div {
+    border-color: var(--fm-border) !important;
+    background: var(--fm-surface-elevated) !important;
+    border-radius: var(--fm-radius-md) !important;
+}
+
+html[data-theme="formighieri-sage"] #orders-list > div:hover {
+    border-color: var(--fm-border-strong) !important;
+    background: var(--fm-surface) !important;
+}
+
+html[data-theme="formighieri-sage"] #orders-list > div.border-amber-500,
+html[data-theme="formighieri-sage"] #orders-list > div.ring-amber-200 {
+    border-color: var(--fm-accent) !important;
+    background: var(--fm-accent-soft) !important;
+    box-shadow: 0 0 0 1px rgb(196 92 62 / 0.2), var(--fm-shadow-sm) !important;
+}
+
+html[data-theme="formighieri-sage"] #orders-list .bg-slate-900 {
+    background: var(--fm-sage-deep) !important;
+    color: var(--fm-brass) !important;
+}
+
+/* ── Detalhe do pedido ── */
+html[data-theme="formighieri-sage"] #empty-state {
+    border-color: var(--fm-border) !important;
+    background: var(--fm-surface-elevated) !important;
+    color: var(--fm-ink-muted) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content > div {
+    border-color: var(--fm-border) !important;
+    box-shadow: var(--fm-shadow-sm) !important;
+}
+
+html[data-theme="formighieri-sage"] #det-code {
+    background: var(--fm-sage-deep) !important;
+    color: var(--fm-brass) !important;
+}
+
+html[data-theme="formighieri-sage"] #det-client {
+    font-family: var(--fm-font-display);
+    font-weight: 600;
+    color: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-order-projects-header,
+html[data-theme="formighieri-sage"] #order-content .bg-violet-50\/50 {
+    background: var(--fm-sage-soft) !important;
+    color: var(--fm-sage-deep) !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-projects-grid__header {
+    background: var(--fm-table-head-bg) !important;
+    border-color: var(--fm-table-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-projects-grid__head {
+    color: var(--fm-table-head-text) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-projects-grid__row {
+    background: var(--fm-table-row-bg) !important;
+    border-color: var(--fm-table-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-projects-grid__row:hover {
+    background: var(--fm-table-row-hover) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-project-action-btn.bg-violet-700 {
+    background: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-project-action-btn.bg-violet-700:hover {
+    background: var(--fm-ink) !important;
+}
+
+/* Abas do pedido */
+html[data-theme="formighieri-sage"] .order-detail-tabs-shell {
+    background: var(--fm-sage-soft) !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-detail-tab {
+    background: rgb(223 230 216 / 0.55) !important;
+    border-color: var(--fm-border) !important;
+    color: var(--fm-ink-muted) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-detail-tab:hover:not(.is-active) {
+    background: var(--fm-surface) !important;
+    color: var(--fm-ink-walnut) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-detail-tab.is-active {
+    background: var(--fm-surface-elevated) !important;
+    border-color: var(--fm-border) !important;
+    border-top: 2px solid var(--fm-accent) !important;
+    color: var(--fm-accent-hover) !important;
+    box-shadow: var(--fm-shadow-sm);
+}
+
+html[data-theme="formighieri-sage"] .order-detail-tab--teal.is-active,
+html[data-theme="formighieri-sage"] .order-detail-tab--sky.is-active,
+html[data-theme="formighieri-sage"] .order-detail-tab--amber.is-active,
+html[data-theme="formighieri-sage"] .order-detail-tab--rose.is-active,
+html[data-theme="formighieri-sage"] .order-detail-tab--violet.is-active,
+html[data-theme="formighieri-sage"] .order-detail-tab--indigo.is-active {
+    color: var(--fm-accent-hover) !important;
+    border-top-color: var(--fm-accent) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-detail-tab-panel {
+    background: var(--fm-surface-elevated) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-tab-action-btn.bg-teal-700,
+html[data-theme="formighieri-sage"] .order-tab-action-btn.bg-sky-700,
+html[data-theme="formighieri-sage"] .order-tab-action-btn.bg-amber-600 {
+    background: var(--fm-accent) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-tab-action-btn.bg-teal-700:hover,
+html[data-theme="formighieri-sage"] .order-tab-action-btn.bg-sky-700:hover,
+html[data-theme="formighieri-sage"] .order-tab-action-btn.bg-amber-600:hover {
+    background: var(--fm-accent-hover) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-tab-action-btn.border-violet-200 {
+    border-color: var(--fm-border) !important;
+    color: var(--fm-sage-deep) !important;
+    background: var(--fm-surface) !important;
+}
+
+html[data-theme="formighieri-sage"] .order-tab-action-btn.border-violet-200:hover {
+    background: var(--fm-sage-soft) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-projects-action-loading-spinner,
+html[data-theme="formighieri-sage"] #anteprojeto-tab-action-loading-spinner,
+html[data-theme="formighieri-sage"] #pendencias-action-loading-spinner {
+    border-top-color: var(--fm-accent) !important;
+}
+
+/* ── Pendências ── */
+html[data-theme="formighieri-sage"] #pendencias-view {
+    background: transparent;
+}
+
+html[data-theme="formighieri-sage"] .fm-pendencias-sidebar > div,
+html[data-theme="formighieri-sage"] #pendencias-view aside > div {
+    border-color: var(--fm-border) !important;
+    box-shadow: var(--fm-shadow-sm) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-pendencias-sidebar > div > div:first-child,
+html[data-theme="formighieri-sage"] #pendencias-view aside > div > div:first-child {
+    background: linear-gradient(180deg, var(--fm-sage-soft) 0%, var(--fm-surface) 100%) !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-pendencias-sidebar h2,
+html[data-theme="formighieri-sage"] #pendencias-view aside h2 {
+    font-family: var(--fm-font-display);
+    color: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] .pendencias-sidebar-section {
+    border-color: var(--fm-border) !important;
+    background: var(--fm-surface) !important;
+}
+
+html[data-theme="formighieri-sage"] .pendencias-sidebar-section.is-active {
+    border-color: var(--fm-sage) !important;
+    background: var(--fm-sage-soft) !important;
+    box-shadow: var(--fm-shadow-sm);
+}
+
+html[data-theme="formighieri-sage"] .pendencias-sidebar-section.is-active .pendencias-section-btn {
+    color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] .pendencias-sidebar-section.is-expanded .pendencias-section-chevron {
+    color: var(--fm-accent) !important;
+}
+
+html[data-theme="formighieri-sage"] .pendencias-section-items {
+    border-color: var(--fm-border) !important;
+    background: var(--fm-surface-elevated) !important;
+}
+
+html[data-theme="formighieri-sage"] .pendencias-subitem-btn.is-selected {
+    background: var(--fm-accent-soft) !important;
+    color: var(--fm-accent-hover) !important;
+    border-color: rgb(196 92 62 / 0.25) !important;
+}
+
+html[data-theme="formighieri-sage"] .pendencias-subitem-btn:hover {
+    background: var(--fm-sage-soft) !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .pendencias-overview-card {
+    border-color: var(--fm-border) !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+html[data-theme="formighieri-sage"] .pendencias-overview-card:hover {
+    border-color: var(--fm-sage) !important;
+    box-shadow: var(--fm-shadow-sm);
+}
+
+html[data-theme="formighieri-sage"] .pendencias-overview-card:focus-visible {
+    outline-color: var(--fm-accent) !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content > div,
+html[data-theme="formighieri-sage"] #pendencias-content .bg-white.rounded-xl {
+    border-color: var(--fm-border) !important;
+    box-shadow: var(--fm-shadow-sm) !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content .border-b.border-slate-100,
+html[data-theme="formighieri-sage"] #pendencias-content .bg-slate-50\/50,
+html[data-theme="formighieri-sage"] #pendencias-content .bg-slate-50\/80,
+html[data-theme="formighieri-sage"] #pendencias-content .bg-slate-50\/40,
+html[data-theme="formighieri-sage"] #pendencias-content .collapsible-list-header {
+    background: #fcfcfb !important;
+    border-color: var(--fm-table-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content .overflow-x-auto {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content table {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content table thead,
+html[data-theme="formighieri-sage"] #pendencias-content table thead.bg-slate-50,
+html[data-theme="formighieri-sage"] #pendencias-content table thead.bg-slate-50 th {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content table tbody tr,
+html[data-theme="formighieri-sage"] #pendencias-content table tbody td {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content table tbody tr:hover,
+html[data-theme="formighieri-sage"] #pendencias-content table tbody tr:hover td {
+    background: #f6f8f5 !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content .bg-white.rounded-xl {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content h2,
+html[data-theme="formighieri-sage"] #pendencias-content h3 {
+    color: var(--fm-ink) !important;
+}
+
+/* ── Tabelas (claras — leitura operacional) ── */
+html[data-theme="formighieri-sage"] table {
+    color: var(--fm-table-text);
+}
+
+html[data-theme="formighieri-sage"] table thead,
+html[data-theme="formighieri-sage"] table thead.bg-slate-50 {
+    background: var(--fm-table-head-bg) !important;
+}
+
+html[data-theme="formighieri-sage"] table thead th {
+    color: var(--fm-table-head-text) !important;
+    font-weight: 600;
+    border-bottom: 1px solid var(--fm-table-border);
+}
+
+html[data-theme="formighieri-sage"] table tbody tr {
+    background: var(--fm-table-row-bg) !important;
+}
+
+html[data-theme="formighieri-sage"] table tbody tr:hover {
+    background: var(--fm-table-row-hover) !important;
+}
+
+html[data-theme="formighieri-sage"] table tbody td {
+    color: var(--fm-table-text) !important;
+    border-color: var(--fm-table-border) !important;
+}
+
+html[data-theme="formighieri-sage"] table .text-slate-900,
+html[data-theme="formighieri-sage"] table .text-slate-800,
+html[data-theme="formighieri-sage"] table .text-slate-700,
+html[data-theme="formighieri-sage"] table .text-slate-600 {
+    color: var(--fm-table-text) !important;
+}
+
+html[data-theme="formighieri-sage"] table .text-slate-500,
+html[data-theme="formighieri-sage"] table .text-slate-400 {
+    color: var(--fm-table-head-text) !important;
+}
+
+html[data-theme="formighieri-sage"] table .font-mono {
+    color: #5f6a5e !important;
+}
+
+html[data-theme="formighieri-sage"] .divide-y.divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--fm-table-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content .bg-sky-100,
+html[data-theme="formighieri-sage"] #pendencias-content .hover\:bg-sky-200:hover {
+    background: var(--fm-sage-soft) !important;
+    color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] #pendencias-content .text-sky-800 {
+    color: var(--fm-sage-deep) !important;
+}
+
+/* ── Modal detalhe do projeto (ficha limpa) ── */
+html[data-theme="formighieri-sage"] .project-view-modal {
+    border-color: var(--fm-border) !important;
+    box-shadow: var(--fm-shadow-lg) !important;
+    border-radius: var(--fm-radius-lg) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-project-view-hero,
+html[data-theme="formighieri-sage"] .project-view-modal__hero {
+    background: #ffffff !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #project-view-title {
+    font-family: var(--fm-font-display);
+    font-weight: 600;
+    font-size: 1.375rem;
+    letter-spacing: -0.01em;
+    color: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-modal__code {
+    background: var(--fm-sage-deep) !important;
+    color: var(--fm-brass) !important;
+    border-radius: var(--fm-radius-sm) !important;
+    font-size: 0.6875rem !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-modal__status {
+    border: 1px solid var(--fm-border) !important;
+    background: var(--fm-surface) !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-modal__body {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-modal__body .project-view-section {
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--fm-table-border);
+}
+
+html[data-theme="formighieri-sage"] .project-view-modal__body .project-view-section:last-child,
+html[data-theme="formighieri-sage"] .project-view-modal__body .project-view-section--boxed:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+html[data-theme="formighieri-sage"] .project-view-section__title {
+    color: var(--fm-sage-deep) !important;
+    font-family: var(--fm-font-sans);
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.875rem;
+}
+
+html[data-theme="formighieri-sage"] .project-view-fields {
+    gap: 1rem 1.5rem;
+}
+
+html[data-theme="formighieri-sage"] .project-view-field {
+    padding: 0;
+    border: none !important;
+    background: transparent !important;
+    border-radius: 0;
+}
+
+html[data-theme="formighieri-sage"] .project-view-field dt,
+html[data-theme="formighieri-sage"] .project-view-field__label {
+    color: var(--fm-ink-subtle) !important;
+    font-size: 0.625rem;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.25rem;
+}
+
+html[data-theme="formighieri-sage"] .project-view-field dd {
+    color: var(--fm-ink-walnut) !important;
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+html[data-theme="formighieri-sage"] .project-view-section--boxed {
+    padding: 1rem 1.125rem;
+    border: 1px solid var(--fm-border) !important;
+    border-radius: var(--fm-radius-md) !important;
+    background: var(--fm-surface) !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-section--boxed .project-view-field {
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--fm-table-border) !important;
+    background: #ffffff !important;
+    border-radius: var(--fm-radius-sm) !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-section--boxed.project-view-section--amber {
+    border-color: rgb(168 146 106 / 0.35) !important;
+    background: #fdfbf7 !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-section--boxed.project-view-section--rose {
+    border-color: rgb(196 92 62 / 0.2) !important;
+    background: #fffaf8 !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-section--boxed.project-view-section--sky {
+    border-color: rgb(107 127 90 / 0.25) !important;
+    background: #f9fbf8 !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-path {
+    border-color: var(--fm-table-border) !important;
+    background: var(--fm-surface) !important;
+    color: var(--fm-ink-walnut) !important;
+    border-radius: var(--fm-radius-sm) !important;
+    font-size: 0.8125rem;
+}
+
+html[data-theme="formighieri-sage"] .project-view-related-item {
+    border-color: var(--fm-border) !important;
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-related-item__code {
+    color: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-characteristic-chip.is-selected {
+    background: var(--fm-sage-deep) !important;
+    border-color: var(--fm-sage-deep) !important;
+    color: #fff !important;
+    box-shadow: none !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-characteristic-chip:not(.is-selected) {
+    border-color: var(--fm-border) !important;
+    background: #ffffff !important;
+    color: var(--fm-ink-muted) !important;
+}
+
+html[data-theme="formighieri-sage"] .project-view-modal__footer {
+    background: var(--fm-surface) !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-project-view-revisions {
+    background: #ffffff !important;
+    color: var(--fm-sage-deep) !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-project-view-revisions:hover {
+    background: var(--fm-sage-soft) !important;
+    color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-order-project-status-history {
+    border-color: var(--fm-border) !important;
+    color: var(--fm-sage-deep) !important;
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-order-project-status-history:hover {
+    background: var(--fm-sage-soft) !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-close-order-project-view-footer {
+    background: transparent !important;
+    color: var(--fm-ink-muted) !important;
+    border: 1px solid var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-close-order-project-view-footer:hover {
+    background: var(--fm-sage-soft) !important;
+    color: var(--fm-ink-walnut) !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-project-view-implantacao {
+    background: var(--fm-accent) !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-project-view-implantacao:hover {
+    background: var(--fm-accent-hover) !important;
+}
+
+/* ── Conteúdo das abas do pedido (medição, requisições, anteprojeto) ── */
+html[data-theme="formighieri-sage"] #order-content .bg-teal-50,
+html[data-theme="formighieri-sage"] #order-content .bg-teal-50\/50,
+html[data-theme="formighieri-sage"] #order-content .bg-teal-50\/40 {
+    background: var(--fm-sage-soft) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .border-teal-100,
+html[data-theme="formighieri-sage"] #order-content .border-teal-200 {
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .text-teal-900,
+html[data-theme="formighieri-sage"] #order-content .text-teal-800 {
+    color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .bg-teal-100 {
+    background: rgb(223 230 216 / 0.85) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .bg-sky-50,
+html[data-theme="formighieri-sage"] #order-content .bg-sky-50\/80 {
+    background: var(--fm-sage-soft) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .bg-sky-700 {
+    background: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .hover\:bg-sky-800:hover {
+    background: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .bg-violet-50,
+html[data-theme="formighieri-sage"] #order-content .bg-violet-50\/60 {
+    background: var(--fm-accent-soft) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .border-violet-100 {
+    border-color: rgb(196 92 62 / 0.18) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .bg-amber-50 {
+    background: #f5efe6 !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .border-amber-100 {
+    border-color: rgb(168 146 106 / 0.35) !important;
+}
+
+html[data-theme="formighieri-sage"] #order-content .collapsible-list-card {
+    box-shadow: var(--fm-shadow-sm);
+}
+
+/* ── Revisão comercial (modal + histórico) ── */
+html[data-theme="formighieri-sage"] .fm-revision-modal,
+html[data-theme="formighieri-sage"] .fm-revision-history-modal {
+    border-color: var(--fm-border) !important;
+    box-shadow: var(--fm-shadow-lg) !important;
+    border-radius: var(--fm-radius-lg) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-modal__header h3,
+html[data-theme="formighieri-sage"] .fm-revision-history-modal__header h3 {
+    font-family: var(--fm-font-display);
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-modal__header,
+html[data-theme="formighieri-sage"] .fm-revision-history-modal__header {
+    border-color: var(--fm-table-border) !important;
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-modal__body,
+html[data-theme="formighieri-sage"] .fm-revision-history-modal__body {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-modal__footer,
+html[data-theme="formighieri-sage"] .fm-revision-history-modal__footer {
+    background: var(--fm-surface) !important;
+    border-color: var(--fm-table-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #revision-status-badge {
+    background: var(--fm-sage-soft) !important;
+    color: var(--fm-sage-deep) !important;
+    border: 1px solid var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-table-wrap,
+html[data-theme="formighieri-sage"] .fm-revision-block {
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-table-wrap {
+    border-radius: var(--fm-radius-md) !important;
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-block {
+    border-radius: var(--fm-radius-md) !important;
+    box-shadow: var(--fm-shadow-sm) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-block__header {
+    background: var(--fm-sage-soft) !important;
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-block__title {
+    color: var(--fm-ink) !important;
+    font-family: var(--fm-font-display);
+    font-weight: 600;
+    font-size: 1.125rem;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-block__meta {
+    color: var(--fm-ink-walnut) !important;
+    font-size: 0.8125rem;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-block__table-wrap thead th {
+    color: var(--fm-table-head-text) !important;
+    border-color: var(--fm-table-border) !important;
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-block__table-wrap tbody tr {
+    background: #ffffff !important;
+    border-color: var(--fm-table-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal table thead,
+html[data-theme="formighieri-sage"] .fm-revision-table-wrap table thead {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal table thead th,
+html[data-theme="formighieri-sage"] .fm-revision-table-wrap table thead th {
+    color: var(--fm-table-head-text) !important;
+    border-bottom: 1px solid var(--fm-table-border);
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal table tbody tr,
+html[data-theme="formighieri-sage"] .fm-revision-table-wrap table tbody tr {
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal .revision-activity-completed-at,
+html[data-theme="formighieri-sage"] #commercial-revision-modal .revision-resizable-input:disabled {
+    background: var(--fm-surface) !important;
+    border-color: var(--fm-table-border) !important;
+    color: var(--fm-ink-muted) !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal .revision-resizable-input:not(:disabled) {
+    border-color: var(--fm-border) !important;
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal .revision-resizable-input:focus {
+    border-color: var(--fm-sage) !important;
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(107 127 90 / 0.15);
+}
+
+html[data-theme="formighieri-sage"] .revision-resizable-field--readonly {
+    background: var(--fm-surface) !important;
+    border-color: var(--fm-table-border) !important;
+    color: var(--fm-ink-walnut) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-block__action,
+html[data-theme="formighieri-sage"] #commercial-revision-modal #btn-save-revision {
+    background: var(--fm-sage-deep) !important;
+    color: #fff !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-block__action:hover,
+html[data-theme="formighieri-sage"] #commercial-revision-modal #btn-save-revision:hover {
+    background: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal #btn-add-revision-activity {
+    background: var(--fm-sage-deep) !important;
+    color: #fff !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal #btn-add-revision-activity:hover {
+    background: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal #btn-send-back-approval {
+    background: var(--fm-success) !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal #btn-send-back-approval:hover:not(:disabled) {
+    background: #03624a !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal .fm-revision-modal__footer button[onclick="closeCommercialRevisionModal()"],
+html[data-theme="formighieri-sage"] #commercial-revisions-history-modal .fm-revision-history-modal__footer button[onclick="closeCommercialRevisionsHistoryModal()"] {
+    background: transparent !important;
+    color: var(--fm-ink-muted) !important;
+    border: 1px solid var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal .fm-revision-modal__footer button[onclick="closeCommercialRevisionModal()"]:hover,
+html[data-theme="formighieri-sage"] #commercial-revisions-history-modal .fm-revision-history-modal__footer button[onclick="closeCommercialRevisionsHistoryModal()"]:hover {
+    background: var(--fm-sage-soft) !important;
+    color: var(--fm-ink-walnut) !important;
+}
+
+html[data-theme="formighieri-sage"] #commercial-revision-modal .fm-revision-modal__header button[onclick="closeCommercialRevisionModal()"],
+html[data-theme="formighieri-sage"] #commercial-revisions-history-modal .fm-revision-history-modal__header button[onclick="closeCommercialRevisionsHistoryModal()"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+html[data-theme="formighieri-sage"] .revision-activity-attachments__add-btn {
+    border-color: var(--fm-border) !important;
+    color: var(--fm-sage-deep) !important;
+    background: #ffffff !important;
+}
+
+html[data-theme="formighieri-sage"] .revision-activity-attachments__add-btn:hover {
+    background: var(--fm-sage-soft) !important;
+}
+
+html[data-theme="formighieri-sage"] .revision-activity-attachment-item {
+    border-color: var(--fm-border) !important;
+    background: var(--fm-surface) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-revision-embedded-section {
+    border-color: var(--fm-border) !important;
+}

@@ -1,0 +1,432 @@
+/**
+ * Tema Oficina Sálvia — data-theme="formighieri-sage"
+ * Header claro, login split, acentos terracota + verde sálvia.
+ */
+
+html[data-theme="formighieri-sage"] {
+    color-scheme: light;
+}
+
+html[data-theme="formighieri-sage"] body {
+    background-color: var(--fm-canvas) !important;
+    color: var(--fm-ink-walnut);
+    font-family: var(--fm-font-sans);
+}
+
+/* ── Auth split ── */
+html[data-theme="formighieri-sage"] .fm-auth-screen {
+    background: var(--fm-canvas);
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand {
+    flex: 1.1;
+    min-height: 100%;
+    background:
+        linear-gradient(168deg, #141210 0%, #1f1b17 42%, #2a231c 100%);
+    color: #f5f0e8;
+    position: relative;
+    overflow: hidden;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(circle at 15% 85%, rgb(201 169 98 / 0.12), transparent 42%),
+        radial-gradient(circle at 88% 12%, rgb(201 169 98 / 0.08), transparent 38%);
+    pointer-events: none;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__grain {
+    position: absolute;
+    inset: 0;
+    opacity: 0.04;
+    background-image: repeating-linear-gradient(
+        -12deg,
+        transparent,
+        transparent 3px,
+        rgb(255 255 255 / 0.35) 3px,
+        rgb(255 255 255 / 0.35) 4px
+    );
+    pointer-events: none;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__inner {
+    position: relative;
+    z-index: 1;
+    max-width: 28rem;
+    padding: 3rem;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__logo-link {
+    display: inline-block;
+    margin-bottom: 1.75rem;
+    border-radius: var(--fm-radius-md);
+    background: #fff;
+    padding: 0.875rem 1.125rem;
+    box-shadow: 0 8px 32px rgb(0 0 0 / 0.35);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__logo-link:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__logo {
+    display: block;
+    width: min(16rem, 100%);
+    height: auto;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__heritage {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #c9a962;
+    margin-bottom: 1.25rem;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__title {
+    font-family: var(--fm-font-display);
+    font-size: clamp(1.75rem, 3.5vw, 2.625rem);
+    font-weight: 600;
+    line-height: 1.15;
+    margin-bottom: 1rem;
+    color: #fff;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__text {
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: rgb(245 240 232 / 0.82);
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 2rem;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__chip {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: rgb(201 169 98 / 0.1);
+    border: 1px solid rgb(201 169 98 / 0.35);
+    color: rgb(245 240 232 / 0.92);
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__footnote {
+    margin-top: 2.5rem;
+    font-size: 0.6875rem;
+    letter-spacing: 0.04em;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__footnote a {
+    color: rgb(201 169 98 / 0.75);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-brand__footnote a:hover {
+    color: #c9a962;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-main {
+    background: var(--fm-canvas);
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-card {
+    background: var(--fm-surface-elevated) !important;
+    border: 1px solid var(--fm-border) !important;
+    border-radius: var(--fm-radius-xl) !important;
+    box-shadow: var(--fm-shadow-lg) !important;
+    max-width: 26rem;
+    width: 100%;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-card .fgp-brand--auth .fgp-brand__logo {
+    max-width: 14rem;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-card input,
+html[data-theme="formighieri-sage"] .fm-auth-card select {
+    border-color: var(--fm-border) !important;
+    border-radius: var(--fm-radius-md) !important;
+    background: var(--fm-surface) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-auth-card input:focus,
+html[data-theme="formighieri-sage"] .fm-auth-card select:focus {
+    border-color: var(--fm-accent) !important;
+    box-shadow: 0 0 0 3px rgb(196 92 62 / 0.15) !important;
+    outline: none;
+}
+
+html[data-theme="formighieri-sage"] #btn-login-submit,
+html[data-theme="formighieri-sage"] #btn-register-submit {
+    background: var(--fm-accent) !important;
+    border-radius: var(--fm-radius-md) !important;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+html[data-theme="formighieri-sage"] #btn-login-submit:hover,
+html[data-theme="formighieri-sage"] #btn-register-submit:hover {
+    background: var(--fm-accent-hover) !important;
+}
+
+html[data-theme="formighieri-sage"] .text-amber-600,
+html[data-theme="formighieri-sage"] .text-amber-700,
+html[data-theme="formighieri-sage"] .hover\:text-amber-700:hover {
+    color: var(--fm-accent) !important;
+}
+
+/* ── Header claro (grande mudança vs slate-900) ── */
+html[data-theme="formighieri-sage"] .fm-app-header,
+html[data-theme="formighieri-sage"] .app-header {
+    background: var(--fm-surface-elevated) !important;
+    color: var(--fm-ink) !important;
+    border-bottom: 1px solid var(--fm-border) !important;
+    box-shadow: var(--fm-shadow-sm) !important;
+}
+
+html[data-theme="formighieri-sage"] .fgp-header-meta {
+    color: var(--fm-ink-muted) !important;
+}
+
+html[data-theme="formighieri-sage"] .fgp-header-meta__version {
+    color: var(--fm-sage) !important;
+}
+
+html[data-theme="formighieri-sage"] .fgp-brand__logo-surface {
+    background: var(--fm-surface) !important;
+    border: 1px solid var(--fm-border) !important;
+    box-shadow: none !important;
+}
+
+html[data-theme="formighieri-sage"] .app-header-menu-btn {
+    color: var(--fm-ink-walnut) !important;
+    background: var(--fm-sage-soft) !important;
+    border-color: var(--fm-border) !important;
+}
+
+/* Nav principal — respeita bg-amber-600 (ativo) vs bg-slate-800 (inativo) do navigation.js */
+html[data-theme="formighieri-sage"] .app-header-nav button.bg-slate-800 {
+    background: var(--fm-surface-elevated) !important;
+    color: var(--fm-ink-muted) !important;
+    border: 1px solid var(--fm-border) !important;
+    font-weight: 500;
+}
+
+html[data-theme="formighieri-sage"] .app-header-nav button.bg-slate-800:hover {
+    background: var(--fm-sage-soft) !important;
+    color: var(--fm-sage-deep) !important;
+    border-color: var(--fm-border-strong) !important;
+}
+
+html[data-theme="formighieri-sage"] .app-header-nav button.bg-amber-600 {
+    background: var(--fm-accent) !important;
+    color: #fff !important;
+    border: 1px solid var(--fm-accent) !important;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgb(196 92 62 / 0.28);
+}
+
+html[data-theme="formighieri-sage"] .app-header-nav button.bg-amber-600:hover {
+    background: var(--fm-accent-hover) !important;
+    border-color: var(--fm-accent-hover) !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-logout.bg-slate-800 {
+    color: var(--fm-ink-subtle) !important;
+    background: transparent !important;
+    border-color: transparent !important;
+}
+
+html[data-theme="formighieri-sage"] #btn-logout.bg-slate-800:hover {
+    color: var(--fm-accent) !important;
+    background: var(--fm-accent-soft) !important;
+    border-color: transparent !important;
+}
+
+@media (max-width: 767px) {
+    html[data-theme="formighieri-sage"] .app-header-nav {
+        border-top-color: var(--fm-border) !important;
+    }
+}
+
+/* ── Welcome hero ── */
+html[data-theme="formighieri-sage"] .fm-welcome-hero {
+    background: linear-gradient(
+        135deg,
+        var(--fm-sage-deep) 0%,
+        #4a5f42 35%,
+        var(--fm-accent) 72%,
+        #8b3d2a 100%
+    ) !important;
+}
+
+html[data-theme="formighieri-sage"] .fm-welcome-hero h1 {
+    font-family: var(--fm-font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+html[data-theme="formighieri-sage"] .fm-welcome-hero .fgp-brand__logo-surface {
+    background: rgb(255 255 255 / 0.95) !important;
+    border: none !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-card--consultor {
+    border-color: var(--fm-border) !important;
+    background: linear-gradient(180deg, #fff 0%, var(--fm-sage-soft) 100%) !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-card--consultor h2,
+html[data-theme="formighieri-sage"] .welcome-profile-card--consultor .font-semibold {
+    color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-dot--consultor {
+    background: var(--fm-sage) !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-card--projetista {
+    border-color: rgb(196 92 62 / 0.25) !important;
+    background: linear-gradient(180deg, #fff 0%, var(--fm-accent-soft) 100%) !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-card--projetista h2,
+html[data-theme="formighieri-sage"] .welcome-profile-card--projetista .font-semibold {
+    color: #8b3d2a !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-dot--projetista {
+    background: var(--fm-accent) !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-card--gestor {
+    border-color: rgb(168 146 106 / 0.35) !important;
+    background: linear-gradient(180deg, #fff 0%, #f5efe6 100%) !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-card--gestor h2,
+html[data-theme="formighieri-sage"] .welcome-profile-card--gestor .font-semibold {
+    color: #6b5638 !important;
+}
+
+html[data-theme="formighieri-sage"] .welcome-profile-dot--gestor {
+    background: var(--fm-brass) !important;
+}
+
+/* ── Superfícies globais ── */
+html[data-theme="formighieri-sage"] .bg-white {
+    background-color: var(--fm-surface-elevated) !important;
+}
+
+html[data-theme="formighieri-sage"] .bg-slate-50\/50,
+html[data-theme="formighieri-sage"] .bg-slate-50 {
+    background-color: var(--fm-surface) !important;
+}
+
+html[data-theme="formighieri-sage"] table .bg-slate-50,
+html[data-theme="formighieri-sage"] thead.bg-slate-50,
+html[data-theme="formighieri-sage"] table thead.bg-slate-50 {
+    background-color: var(--fm-table-head-bg) !important;
+}
+
+html[data-theme="formighieri-sage"] .border-slate-100,
+html[data-theme="formighieri-sage"] .border-slate-200 {
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .text-slate-900,
+html[data-theme="formighieri-sage"] .text-slate-800 {
+    color: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] .text-slate-700,
+html[data-theme="formighieri-sage"] .text-slate-600 {
+    color: var(--fm-ink-walnut) !important;
+}
+
+html[data-theme="formighieri-sage"] .text-slate-500,
+html[data-theme="formighieri-sage"] .text-slate-400 {
+    color: var(--fm-ink-muted) !important;
+}
+
+/* ── Botões primários (substitui indigo/violet/slate escuro) ── */
+html[data-theme="formighieri-sage"] .bg-indigo-700,
+html[data-theme="formighieri-sage"] .bg-violet-700,
+html[data-theme="formighieri-sage"] .bg-slate-900 {
+    background-color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] .hover\:bg-indigo-800:hover,
+html[data-theme="formighieri-sage"] .hover\:bg-violet-800:hover,
+html[data-theme="formighieri-sage"] .hover\:bg-slate-800:hover {
+    background-color: var(--fm-ink) !important;
+}
+
+html[data-theme="formighieri-sage"] .bg-amber-600,
+html[data-theme="formighieri-sage"] .bg-teal-700 {
+    background-color: var(--fm-accent) !important;
+}
+
+html[data-theme="formighieri-sage"] .hover\:bg-amber-700:hover,
+html[data-theme="formighieri-sage"] .hover\:bg-teal-800:hover {
+    background-color: var(--fm-accent-hover) !important;
+}
+
+html[data-theme="formighieri-sage"] .border-indigo-200,
+html[data-theme="formighieri-sage"] .border-violet-200 {
+    border-color: var(--fm-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .text-indigo-800,
+html[data-theme="formighieri-sage"] .text-violet-800,
+html[data-theme="formighieri-sage"] .text-sky-700,
+html[data-theme="formighieri-sage"] .text-violet-700 {
+    color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] .text-sky-900,
+html[data-theme="formighieri-sage"] .text-violet-900 {
+    color: var(--fm-ink) !important;
+}
+
+/* ── Modais ── */
+html[data-theme="formighieri-sage"] .fixed.inset-0.bg-slate-900\/50,
+html[data-theme="formighieri-sage"] .fixed.inset-0.bg-slate-900\/40 {
+    background-color: var(--fm-overlay) !important;
+    backdrop-filter: blur(4px);
+}
+
+/* ── Badge dev ── */
+html[data-theme="formighieri-sage"]::before {
+    content: 'Oficina Sálvia · v2';
+    position: fixed;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    z-index: 9999;
+    pointer-events: none;
+    font-family: var(--fm-font-sans);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fm-sage-deep);
+    background: var(--fm-surface-elevated);
+    border: 1px solid var(--fm-border);
+    border-radius: 999px;
+    padding: 0.3rem 0.7rem;
+    box-shadow: var(--fm-shadow-md);
+}

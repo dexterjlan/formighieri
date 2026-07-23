@@ -1,16 +1,43 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="formighieri-sage">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FGP - Formighieri Gestão de Processo</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        fm: {
+                            canvas: '#e8ebe3',
+                            surface: '#f4f6f1',
+                            ink: '#1f2a1e',
+                            sage: '#6b7f5a',
+                            'sage-deep': '#3d4f36',
+                            accent: '#c45c3e',
+                            brass: '#a8926a',
+                            border: '#c8d0c0'
+                        }
+                    },
+                    fontFamily: {
+                        display: ['"Cormorant Garamond"', 'Georgia', 'serif'],
+                        sans: ['Outfit', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="css/app.css?v=20261026">
+    <link rel="stylesheet" href="css/identity-tokens.css?v=20261044">
+    <link rel="stylesheet" href="css/identity-theme.css?v=20261048">
+    <link rel="stylesheet" href="css/identity-theme-screens.css?v=20261044">
+    <link rel="stylesheet" href="css/app.css?v=20261049">
 </head>
 
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">

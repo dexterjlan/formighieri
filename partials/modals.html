@@ -143,9 +143,9 @@
                             <thead class="bg-slate-50 text-slate-500 uppercase">
                                 <tr>
                                     <th class="text-left p-3 font-semibold">Atividade solicitada</th>
-                                    <th class="text-center p-3 font-semibold">Realizado</th>
-                                    <th class="text-left p-3 font-semibold">Observação</th>
-                                    <th class="text-left p-3 font-semibold">Data realização</th>
+                                    <th class="text-center p-3 font-semibold align-top">Realizado</th>
+                                    <th class="text-left p-3 font-semibold align-top">Observação</th>
+                                    <th class="text-left p-3 font-semibold align-top">Data realização</th>
                                 </tr>
                             </thead>
                             <tbody id="conv-activities-list" class="divide-y divide-slate-100"></tbody>
@@ -269,8 +269,8 @@
 
     <!-- MODAL: SOLICITAÇÃO DE REVISÃO -->
     <div id="commercial-revision-modal"
-        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[70]">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-4xl shadow-xl max-h-[90vh] overflow-y-auto relative">
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[80]">
+        <div class="fm-revision-modal bg-white rounded-2xl w-full max-w-4xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 relative">
             <div id="commercial-revision-loading"
                 class="hidden absolute inset-0 bg-white/90 rounded-2xl flex flex-col items-center justify-center gap-3 z-10 px-6 text-center">
                 <div id="commercial-revision-loading-spinner"
@@ -281,20 +281,24 @@
                     class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
                 <p id="commercial-revision-loading-msg" class="text-sm text-slate-700 font-medium">Salvando revisão...</p>
             </div>
-            <div class="flex justify-between items-start gap-3 mb-4">
-                <div>
+            <div class="fm-revision-modal__header shrink-0 px-5 md:px-6 py-4 md:py-5 border-b border-slate-100 flex justify-between items-start gap-3">
+                <div class="min-w-0 flex-1">
                     <h3 class="font-bold text-base text-slate-900">Solicitação de Revisão</h3>
                     <p id="revision-approval-info" class="text-xs text-slate-500 mt-1"></p>
                 </div>
-                <span id="revision-status-badge" class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-sky-100 text-sky-800">Em revisão</span>
-            </div>
-            <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                    <p class="text-xs font-semibold text-slate-500 uppercase">Atividades</p>
-                    <button type="button" id="btn-add-revision-activity"
-                        class="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">+ Adicionar atividade</button>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span id="revision-status-badge" class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-sky-100 text-sky-800">Em revisão</span>
+                    <button type="button" onclick="closeCommercialRevisionModal()"
+                        class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
                 </div>
-                <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            </div>
+            <div class="fm-revision-modal__body flex-1 overflow-y-auto px-5 md:px-6 py-5 space-y-4 min-h-0">
+                <div class="flex justify-between items-center gap-3">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Atividades</p>
+                    <button type="button" id="btn-add-revision-activity"
+                        class="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800 shrink-0">+ Adicionar atividade</button>
+                </div>
+                <div class="fm-revision-table-wrap overflow-x-auto border border-slate-200 rounded-xl">
                     <table class="revision-activities-table w-full text-xs">
                         <colgroup>
                             <col style="width:36%">
@@ -305,9 +309,9 @@
                         <thead class="bg-slate-50 text-slate-500 uppercase">
                             <tr>
                                 <th class="text-left p-3 font-semibold">Atividade solicitada</th>
-                                <th class="text-center p-3 font-semibold">Realizado</th>
-                                <th class="text-left p-3 font-semibold">Observação</th>
-                                <th class="text-left p-3 font-semibold">Data realização</th>
+                                <th class="text-center p-3 font-semibold align-top">Realizado</th>
+                                <th class="text-left p-3 font-semibold align-top">Observação</th>
+                                <th class="text-left p-3 font-semibold align-top">Data realização</th>
                             </tr>
                         </thead>
                         <tbody id="revision-activities-list" class="divide-y divide-slate-100"></tbody>
@@ -316,30 +320,34 @@
                 <p id="revision-empty-msg" class="hidden text-xs text-slate-400 text-center py-4">Adicione ao menos uma atividade.</p>
                 <input type="file" id="revision-activity-image-input" class="hidden" accept="image/*">
             </div>
-            <div class="flex flex-wrap gap-2 pt-4 mt-2 border-t border-slate-100">
+            <div class="fm-revision-modal__footer shrink-0 px-5 md:px-6 py-4 border-t border-slate-100 bg-white flex flex-wrap gap-2">
                 <button type="button" onclick="closeCommercialRevisionModal()"
-                    class="flex-1 min-w-[120px] bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
+                    class="flex-1 min-w-[120px] bg-slate-100 text-slate-600 py-2.5 rounded-lg text-xs font-semibold">Cancelar</button>
                 <button type="button" id="btn-save-revision"
-                    class="flex-1 min-w-[120px] bg-sky-700 text-white py-2 rounded-lg text-xs font-medium">Salvar Revisão</button>
+                    class="flex-1 min-w-[120px] bg-sky-700 text-white py-2.5 rounded-lg text-xs font-semibold">Salvar Revisão</button>
                 <button type="button" id="btn-send-back-approval"
-                    class="hidden flex-1 min-w-[160px] bg-emerald-700 text-white py-2 rounded-lg text-xs font-medium">Enviar novamente para Aprovação</button>
+                    class="hidden flex-1 min-w-[160px] bg-emerald-700 text-white py-2.5 rounded-lg text-xs font-semibold">Enviar novamente para Aprovação</button>
             </div>
         </div>
     </div>
 
     <!-- MODAL: HISTÓRICO DE REVISÕES -->
     <div id="commercial-revisions-history-modal"
-        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[65]">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-4xl shadow-xl max-h-[90vh] flex flex-col">
-            <div class="shrink-0 mb-4">
-                <h3 class="font-bold text-base text-slate-900">Revisões do projeto</h3>
-                <p id="commercial-revisions-history-context" class="text-xs text-slate-500 mt-1"></p>
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[75]">
+        <div class="fm-revision-history-modal bg-white rounded-2xl w-full max-w-4xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
+            <div class="fm-revision-history-modal__header shrink-0 px-5 md:px-6 py-4 md:py-5 border-b border-slate-100 flex justify-between items-start gap-3">
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-bold text-base text-slate-900">Revisões do projeto</h3>
+                    <p id="commercial-revisions-history-context" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <button type="button" onclick="closeCommercialRevisionsHistoryModal()"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1 shrink-0" aria-label="Fechar">×</button>
             </div>
             <div id="commercial-revisions-history-content"
-                class="overflow-y-auto space-y-3 pr-1 flex-1 min-h-0"></div>
-            <div class="flex pt-4 mt-4 border-t border-slate-100 shrink-0">
+                class="fm-revision-history-modal__body overflow-y-auto px-5 md:px-6 py-5 flex-1 min-h-0"></div>
+            <div class="fm-revision-history-modal__footer shrink-0 px-5 md:px-6 py-4 border-t border-slate-100 bg-white">
                 <button type="button" onclick="closeCommercialRevisionsHistoryModal()"
-                    class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Fechar</button>
+                    class="w-full bg-slate-100 text-slate-600 py-2.5 rounded-lg text-xs font-semibold">Fechar</button>
             </div>
         </div>
     </div>
@@ -871,19 +879,18 @@
     <div id="order-project-view-modal"
         class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[65]">
         <div class="project-view-modal bg-white rounded-2xl w-full max-w-3xl shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
-            <div class="project-view-modal__hero p-5 md:p-6 border-b border-violet-100 bg-gradient-to-br from-violet-50/80 to-white flex justify-between items-start gap-4">
-                <div class="min-w-0 flex-1 space-y-3">
-                    <p class="text-[10px] font-bold uppercase tracking-wider text-violet-600">Detalhes do Projeto</p>
-                    <h3 id="project-view-title" class="text-lg md:text-xl font-bold text-slate-900 leading-snug break-words">—</h3>
+            <div class="fm-project-view-hero project-view-modal__hero px-5 md:px-6 py-4 md:py-5 border-b border-slate-100 bg-white flex justify-between items-start gap-4">
+                <div class="min-w-0 flex-1 space-y-2">
                     <div class="flex flex-wrap items-center gap-2">
                         <span id="project-view-header-code" class="project-view-modal__code">—</span>
                         <span id="project-view-header-status" class="project-view-modal__status">—</span>
                     </div>
+                    <h3 id="project-view-title" class="text-xl md:text-2xl font-semibold text-slate-900 leading-tight break-words">—</h3>
                 </div>
                 <button type="button" id="btn-close-order-project-view"
                     class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1 shrink-0" aria-label="Fechar">×</button>
             </div>
-            <div class="project-view-modal__body p-5 md:p-6 overflow-y-auto space-y-5">
+            <div class="project-view-modal__body p-5 md:p-6 overflow-y-auto space-y-6">
                 <section class="project-view-section">
                     <h4 class="project-view-section__title">Informações gerais</h4>
                     <dl class="project-view-fields">
@@ -989,7 +996,7 @@
                 <span id="project-view-name" class="hidden" aria-hidden="true"></span>
                 <span id="project-view-status" class="hidden" aria-hidden="true"></span>
             </div>
-            <div class="p-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row gap-2">
+            <div class="project-view-modal__footer p-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row gap-2">
                 <button type="button" id="btn-project-view-implantacao"
                     class="hidden flex-1 bg-teal-700 text-white py-2.5 rounded-lg text-xs font-semibold hover:bg-teal-800">
                     Implantação

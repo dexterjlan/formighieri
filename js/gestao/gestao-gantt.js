@@ -103,25 +103,62 @@ function getGestaoGanttDesignerFilterValue() {
     return value ? Number(value) : null;
 }
 
-function buildGestaoGanttTimelineRange(scheduledGroups) {
-    const today = startOfGestaoGanttDay(new Date());
-    let minDate = addGestaoGanttDays(today, -7);
-    let maxDate = addGestaoGanttDays(today, 42);
+function startOfGestaoGanttWeekMonday(date) {
+    const day = startOfGestaoGanttDay(date);
+    const weekday = day.getDay();
+    const diff = weekday === 0 ? -6 : 1 - weekday;
+    return addGestaoGanttDays(day, diff);
+}
 
-    (scheduledGroups || []).forEach(group => {
-        (group.schedule || []).forEach(item => {
-            [item.barStart, item.barEnd, parseGestaoGanttDate(item.project.deliveryDate)].forEach(date => {
-                if (!date) return;
-                if (date < minDate) minDate = startOfGestaoGanttDay(date);
-                if (date > maxDate) maxDate = startOfGestaoGanttDay(date);
-            });
+/** Domingo da semana calendário seguinte à atual. */
+function endOfGestaoGanttFollowingWeek(referenceDate = new Date()) {
+    const monday = startOfGestaoGanttWeekMonday(referenceDate);
+    return addGestaoGanttDays(monday, 13);
+}
+
+function getGestaoGanttScheduleMaxDate(schedule) {
+    let maxDate = null;
+
+    (schedule || []).forEach(item => {
+        [
+            item.barStart,
+            item.barEnd,
+            parseGestaoGanttDate(item.project?.previsaoConclusaoProjetoTecnico),
+            parseGestaoGanttDate(item.project?.deliveryDate)
+        ].forEach(date => {
+            if (!date) return;
+            const day = startOfGestaoGanttDay(date);
+            if (!maxDate || day > maxDate) maxDate = day;
         });
     });
 
-    if (today > maxDate) maxDate = addGestaoGanttDays(today, 7);
-    if (today < minDate) minDate = addGestaoGanttDays(today, -7);
+    return maxDate;
+}
 
-    maxDate = addGestaoGanttDays(maxDate, 7);
+function buildGestaoGanttTimelineRangeForDesigner(schedule) {
+    const today = startOfGestaoGanttDay(new Date());
+    const endOfFollowingWeek = endOfGestaoGanttFollowingWeek(today);
+    const projectMaxDate = getGestaoGanttScheduleMaxDate(schedule);
+
+    let maxDate = projectMaxDate && projectMaxDate > endOfFollowingWeek
+        ? projectMaxDate
+        : endOfFollowingWeek;
+
+    let minDate = addGestaoGanttDays(today, -7);
+
+    (schedule || []).forEach(item => {
+        [item.barStart, item.barEnd, parseGestaoGanttDate(item.project?.deliveryDate)].forEach(date => {
+            if (!date) return;
+            const day = startOfGestaoGanttDay(date);
+            if (day < minDate) minDate = day;
+        });
+    });
+
+    if (today < minDate) minDate = addGestaoGanttDays(today, -7);
+    if (today > maxDate) maxDate = today;
+
+    maxDate = addGestaoGanttDays(maxDate, 1);
+
     return { start: minDate, end: maxDate, today };
 }
 
@@ -318,10 +355,10 @@ function renderGestaoGanttContent(projects, projetistas) {
     }
 
     const groups = groupGestaoGanttProjectsByDesigner(filteredProjects);
-    const range = buildGestaoGanttTimelineRange(groups);
-    const timelineHeader = renderGestaoGanttTimelineHeader(range.start, range.end);
 
     const groupsHtml = groups.map(group => {
+        const range = buildGestaoGanttTimelineRangeForDesigner(group.schedule);
+        const timelineHeader = renderGestaoGanttTimelineHeader(range.start, range.end);
         const rowsHtml = group.schedule
             .map(item => renderGestaoGanttProjectRow(item, range.start, range.end))
             .join('');
