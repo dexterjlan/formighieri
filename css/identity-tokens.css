@@ -1,0 +1,73 @@
+/**
+ * Tokens de identidade visual — branch feat/identidade-visual
+ *
+ * Temas:
+ *   formighieri       → Ateliê Nogueira (v1, sutil)
+ *   formighieri-sage  → Oficina Sálvia (v2, contraste alto)
+ */
+
+/* ── v1 Ateliê Nogueira ── */
+html[data-theme="formighieri"] {
+    --fm-canvas: #f7f3ed;
+    --fm-surface: #fffdf9;
+    --fm-surface-elevated: #ffffff;
+    --fm-overlay: rgb(47 33 22 / 0.55);
+    --fm-ink: #2f2116;
+    --fm-ink-walnut: #403a34;
+    --fm-ink-muted: #686867;
+    --fm-border: #d3cec5;
+    --fm-accent: #b45309;
+    --fm-accent-hover: #92400e;
+    --fm-accent-soft: #fef3c7;
+    --fm-sage: #6b7f5a;
+    --fm-sage-soft: #e8ebe3;
+    --fm-sage-deep: #3d4f36;
+    --fm-brass: #987f61;
+    --fm-charcoal: #36454f;
+    --fm-font-sans: 'Inter', system-ui, sans-serif;
+    --fm-font-display: 'Libre Baskerville', Georgia, serif;
+    --fm-radius-lg: 1rem;
+    --fm-shadow-sm: 0 1px 2px rgb(47 33 22 / 0.06);
+    --fm-shadow-md: 0 8px 24px rgb(47 33 22 / 0.08);
+}
+
+/* ── v2 Oficina Sálvia (ativa por padrão na branch) ── */
+html[data-theme="formighieri-sage"] {
+    --fm-canvas: #e8ebe3;
+    --fm-surface: #f4f6f1;
+    --fm-surface-elevated: #ffffff;
+    --fm-overlay: rgb(31 42 30 / 0.45);
+    --fm-ink: #1f2a1e;
+    --fm-ink-walnut: #2d3a2e;
+    --fm-ink-muted: #5c6658;
+    --fm-ink-subtle: #7a8578;
+    --fm-border: #c8d0c0;
+    --fm-border-strong: #a8b4a0;
+    --fm-accent: #c45c3e;
+    --fm-accent-hover: #a8482f;
+    --fm-accent-soft: #fdeee8;
+    --fm-sage: #6b7f5a;
+    --fm-sage-soft: #dfe6d8;
+    --fm-sage-deep: #3d4f36;
+    --fm-brass: #a8926a;
+    --fm-charcoal: #252a24;
+    --fm-success: #047857;
+    --fm-success-soft: #ecfdf5;
+    --fm-font-sans: 'Outfit', system-ui, sans-serif;
+    --fm-font-display: 'Cormorant Garamond', Georgia, serif;
+    --fm-radius-sm: 0.5rem;
+    --fm-radius-md: 0.875rem;
+    --fm-radius-lg: 1.125rem;
+    --fm-radius-xl: 1.5rem;
+    --fm-shadow-sm: 0 2px 8px rgb(45 58 46 / 0.06);
+    --fm-shadow-md: 0 12px 32px rgb(45 58 46 / 0.1);
+    --fm-shadow-lg: 0 24px 48px rgb(45 58 46 / 0.14);
+
+    /* Tabelas — tons claros para leitura operacional */
+    --fm-table-head-bg: #ffffff;
+    --fm-table-row-bg: #ffffff;
+    --fm-table-row-hover: #f6f8f5;
+    --fm-table-text: #525c52;
+    --fm-table-head-text: #9aa39a;
+    --fm-table-border: #ecefea;
+}

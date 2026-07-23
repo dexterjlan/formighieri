@@ -839,58 +839,69 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
                             ? `<div class="mt-2">${renderRevisionActivityAttachmentsReadonlyHtml(activity.attachment)}</div>`
                             : ''}
                     </td>
-                    <td class="py-2 px-2 text-center text-xs align-middle">
+                    <td class="py-2 px-2 text-center text-xs align-top">
                         ${activity.completed
                             ? '<span class="text-emerald-700 font-semibold">Sim</span>'
                             : '<span class="text-slate-400">Não</span>'}
                     </td>
                     <td class="py-2 px-2 align-top">${renderRevisionResizableText(activity.observation, 'muted')}</td>
-                    <td class="py-2 pl-2 text-xs text-slate-500 whitespace-nowrap align-middle">${activity.completedAt ? formatDate(activity.completedAt) : '—'}</td>
+                    <td class="py-2 pl-2 text-xs text-slate-500 whitespace-nowrap align-top">${activity.completedAt ? formatDate(activity.completedAt) : '—'}</td>
                 </tr>
             `).join('')
             : `<tr><td colspan="4" class="py-2 text-xs text-slate-400">Nenhuma atividade registrada.</td></tr>`;
 
         const viewButton = shouldShowRevisionActionButton(approval, isCurrentRevision)
             ? `<button type="button" onclick="openCommercialRevisionForRevision(${approval.id}, ${revision.id})"
-                class="text-xs bg-sky-700 text-white hover:bg-sky-800 px-4 py-2 rounded-lg font-semibold shadow-sm whitespace-nowrap">${getRevisionActionButtonLabel(approval, showInHistoryModal)}</button>`
+                class="fm-revision-block__action text-xs bg-sky-700 text-white hover:bg-sky-800 px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap">${getRevisionActionButtonLabel(approval, showInHistoryModal)}</button>`
             : '';
 
+        const activityCount = revision.activities.length;
+        const completedCount = revision.activities.filter(a => a.completed).length;
+
         return `
-            <div class="bg-sky-50 border border-sky-200 rounded-xl overflow-hidden shadow-sm">
-                <div class="bg-sky-100/80 px-4 py-3 flex justify-between items-center gap-3 border-b border-sky-200">
-                    <div>
-                        <p class="text-xs font-bold text-sky-900">Revisão ${index + 1}</p>
-                        <p class="text-[10px] text-sky-700 mt-0.5">${revision.createdAt ? formatDate(revision.createdAt) : '—'}</p>
+            <article class="fm-revision-block">
+                <header class="fm-revision-block__header">
+                    <div class="min-w-0">
+                        <p class="fm-revision-block__title">Revisão ${index + 1}</p>
+                        <p class="fm-revision-block__meta">
+                            <span>${revision.createdAt ? formatDate(revision.createdAt) : '—'}</span>
+                            <span class="fm-revision-block__meta-sep">·</span>
+                            <span>${completedCount}/${activityCount} atividades concluídas</span>
+                        </p>
                     </div>
                     ${viewButton}
-                </div>
-                <div class="overflow-x-auto bg-white/70">
-                    <table class="revision-history-table min-w-[480px]">
+                </header>
+                <div class="fm-revision-block__table-wrap overflow-x-auto">
+                    <table class="revision-history-table min-w-[480px] w-full text-xs">
                         <colgroup>
                             <col style="width:36%">
                             <col style="width:72px">
                             <col style="width:36%">
                             <col style="width:112px">
                         </colgroup>
-                        <thead class="text-[9px] uppercase text-slate-500 bg-sky-50/50">
+                        <thead>
                             <tr>
-                                <th class="px-3 py-1.5 font-semibold text-left">Atividade</th>
-                                <th class="px-2 py-1.5 font-semibold text-center">Realizado</th>
-                                <th class="px-2 py-1.5 font-semibold text-left">Observação</th>
-                                <th class="px-3 py-1.5 font-semibold text-left">Data realização</th>
+                                <th class="text-left p-3 font-semibold">Atividade</th>
+                                <th class="text-center p-3 font-semibold align-top">Realizado</th>
+                                <th class="text-left p-3 font-semibold align-top">Observação</th>
+                                <th class="text-left p-3 font-semibold align-top">Data realização</th>
                             </tr>
                         </thead>
                         <tbody>${activitiesHtml}</tbody>
                     </table>
                 </div>
-            </div>
+            </article>
         `;
     }).join('');
 
+    if (showInHistoryModal) {
+        return `<div class="fm-revision-history-list space-y-4">${blocks}</div>`;
+    }
+
     return `
-        <div class="space-y-3 pt-3 border-t border-dashed border-slate-200">
-            <p class="text-[10px] font-bold text-slate-400 uppercase">Histórico de revisões</p>
-            ${blocks}
+        <div class="fm-revision-embedded-section space-y-3 pt-3 border-t border-dashed border-slate-200">
+            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Histórico de revisões</p>
+            <div class="fm-revision-history-list space-y-3">${blocks}</div>
         </div>
     `;
 }

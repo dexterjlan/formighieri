@@ -377,18 +377,6 @@ function getMontagemProgSoloCrewKey(montadorId) {
     return String(Number(montadorId));
 }
 
-function getMontagemProgOccupiedColumns(laneItems) {
-    const occupied = new Set();
-
-    laneItems.forEach(({ placement }) => {
-        for (let column = placement.startCol; column < placement.startCol + placement.span; column += 1) {
-            occupied.add(column);
-        }
-    });
-
-    return occupied;
-}
-
 function montagemProgLaneHasPlacementOverlap(lane, placement) {
     return lane.some(item => montagemProgPlacementsOverlap(item.placement, placement));
 }
@@ -411,6 +399,10 @@ function assignMontagemProgLanes(programacoes, weekStartKey) {
             lane.some(item => getMontagemProgCrewKey(item.prog) === crewKey)
             && !montagemProgLaneHasPlacementOverlap(lane, placement)
         );
+
+        if (!targetLane) {
+            targetLane = lanes.find(lane => !montagemProgLaneHasPlacementOverlap(lane, placement));
+        }
 
         if (!targetLane) {
             targetLane = [];
@@ -659,13 +651,20 @@ function renderMontagemProgPalette() {
     palette.querySelectorAll('.montagem-prog-palette-item').forEach(item => {
         item.addEventListener('dragstart', event => {
             montagemProgDragMontadorId = Number(item.dataset.montadorId);
-            event.dataTransfer?.setData('text/plain', String(montagemProgDragMontadorId));
-            event.dataTransfer.effectAllowed = 'copy';
+            if (event.dataTransfer) {
+                event.dataTransfer.setData('text/plain', String(montagemProgDragMontadorId));
+                event.dataTransfer.setData('application/x-montagem-montador-id', String(montagemProgDragMontadorId));
+                event.dataTransfer.effectAllowed = 'copy';
+            }
             item.classList.add('is-dragging');
+            document.body.classList.add('montagem-prog-dragging');
         });
         item.addEventListener('dragend', () => {
             montagemProgDragMontadorId = null;
             item.classList.remove('is-dragging');
+            document.body.classList.remove('montagem-prog-dragging');
+            document.querySelectorAll('.montagem-prog-day-slot.is-drop-target, .montagem-prog-bar.is-drop-target, .montagem-prog-lane.is-drop-target')
+                .forEach(element => element.classList.remove('is-drop-target'));
         });
         item.addEventListener('dblclick', () => {
             openMontagemProgModal(null, getMontagemProgWeekStartKey(), Number(item.dataset.montadorId));
@@ -730,11 +729,8 @@ function renderMontagemProgWeekGrid() {
     }).join('');
 
     const lanesHtml = lanes.map((laneItems, laneIndex) => {
-        const occupiedColumns = getMontagemProgOccupiedColumns(laneItems);
         const slotsHtml = weekDateKeys.map((dateKey, index) => {
             const column = index + 1;
-            if (occupiedColumns.has(column)) return '';
-
             return `
             <div class="montagem-prog-day-slot ${index >= 5 ? 'montagem-prog-day-slot--weekend' : ''}"
                 style="grid-column: ${column};"
@@ -802,85 +798,123 @@ function renderMontagemProgWeekGrid() {
     bindMontagemProgWeekInteractions(grid);
 }
 
+function getMontagemProgDragMontadorIdFromEvent(event) {
+    const fromTransfer = event.dataTransfer?.getData('text/plain')
+        || event.dataTransfer?.getData('application/x-montagem-montador-id');
+    return Number(fromTransfer || montagemProgDragMontadorId) || null;
+}
+
+function clearMontagemProgDropTargets(grid) {
+    grid?.querySelectorAll('.montagem-prog-day-slot.is-drop-target, .montagem-prog-bar.is-drop-target, .montagem-prog-lane.is-drop-target')
+        .forEach(element => element.classList.remove('is-drop-target'));
+}
+
+function updateMontagemProgDropTargetHighlight(event, grid) {
+    clearMontagemProgDropTargets(grid);
+
+    const bar = event.target.closest('.montagem-prog-bar');
+    if (bar) {
+        bar.classList.add('is-drop-target');
+        return;
+    }
+
+    const slot = getMontagemProgDropTargetSlot(event.clientX, event.clientY, grid);
+    if (slot) {
+        slot.classList.add('is-drop-target');
+        return;
+    }
+
+    const lane = getMontagemProgLaneFromPointer(event.clientY, grid);
+    lane?.classList.add('is-drop-target');
+}
+
+async function handleMontagemProgCalendarDrop(event, grid) {
+    event.preventDefault();
+    event.stopPropagation();
+    clearMontagemProgDropTargets(grid);
+
+    const montadorId = getMontagemProgDragMontadorIdFromEvent(event);
+    if (!montadorId) return;
+
+    const bar = event.target.closest('.montagem-prog-bar');
+    if (bar) {
+        await createMontagemProgFromDrop(montadorId, null, Number(bar.dataset.programacaoId));
+        return;
+    }
+
+    const slot = getMontagemProgDropTargetSlot(event.clientX, event.clientY, grid);
+    const dateKey = slot?.dataset.date || getMontagemProgDateKeyFromPointer(event.clientX, grid);
+    if (!dateKey) return;
+
+    await createMontagemProgFromDrop(montadorId, dateKey);
+}
+
 function bindMontagemProgWeekInteractions(grid) {
-    const lanesContainer = grid.querySelector('.montagem-prog-lanes');
+    if (grid.dataset.interactionsBound === '1') return;
+    grid.dataset.interactionsBound = '1';
+
     const allowDrop = event => {
         event.preventDefault();
         if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
     };
 
-    const clearDropTargets = () => {
-        grid.querySelectorAll('.montagem-prog-day-slot.is-drop-target, .montagem-prog-bar.is-drop-target')
-            .forEach(element => element.classList.remove('is-drop-target'));
-    };
+    grid.addEventListener('dragover', event => {
+        if (!montagemProgDragMontadorId && !event.dataTransfer?.types?.length) return;
+        allowDrop(event);
+        updateMontagemProgDropTargetHighlight(event, grid);
+    });
 
-    const updateDropTargetHighlight = event => {
-        clearDropTargets();
+    grid.addEventListener('dragleave', event => {
+        const related = event.relatedTarget;
+        if (related && grid.contains(related)) return;
+        clearMontagemProgDropTargets(grid);
+    });
 
-        const bar = event.target.closest('.montagem-prog-bar');
-        if (bar) {
-            bar.classList.add('is-drop-target');
+    grid.addEventListener('drop', event => {
+        handleMontagemProgCalendarDrop(event, grid);
+    });
+
+    grid.addEventListener('click', event => {
+        const slot = event.target.closest('.montagem-prog-day-slot');
+        if (slot?.dataset.date) {
+            openMontagemProgModal(null, slot.dataset.date);
             return;
         }
 
-        const slot = getMontagemProgDropTargetSlot(event.clientX, event.clientY, grid);
-        slot?.classList.add('is-drop-target');
-    };
+        const button = event.target.closest('.montagem-prog-bar-body');
+        if (!button) return;
 
-    grid.addEventListener('dragover', event => {
-        allowDrop(event);
-        updateDropTargetHighlight(event);
+        event.stopPropagation();
+        const prog = montagemProgCache.find(item => Number(item.id) === Number(button.dataset.programacaoId));
+        if (prog) openMontagemProgModal(prog);
     });
 
-    lanesContainer?.addEventListener('drop', async event => {
+    grid.addEventListener('pointerdown', event => {
+        const handle = event.target.closest('.montagem-prog-bar-resize');
+        if (!handle) return;
+
         event.preventDefault();
         event.stopPropagation();
-        clearDropTargets();
-
-        const montadorId = Number(event.dataTransfer?.getData('text/plain') || montagemProgDragMontadorId);
-        if (!montadorId) return;
-
-        const bar = event.target.closest('.montagem-prog-bar');
-        if (bar) {
-            await createMontagemProgFromDrop(montadorId, null, Number(bar.dataset.programacaoId));
-            return;
-        }
-
-        const dateKey = getMontagemProgDateKeyFromPointer(event.clientX, grid);
-        if (!dateKey) return;
-
-        await createMontagemProgFromDrop(montadorId, dateKey);
+        startMontagemProgResize(handle, event);
     });
 
-    grid.querySelectorAll('.montagem-prog-day-slot').forEach(slot => {
-        slot.addEventListener('click', () => {
-            openMontagemProgModal(null, slot.dataset.date);
-        });
+    document.getElementById('montagem-prog-week-grid')?.closest('.montagem-prog-calendar')?.addEventListener('dragover', event => {
+        if (!montagemProgDragMontadorId && !event.dataTransfer?.types?.length) return;
+        allowDrop(event);
     });
 
-    grid.querySelectorAll('.montagem-prog-bar').forEach(bar => {
-        bar.addEventListener('dragover', allowDrop);
-    });
-
-    grid.querySelectorAll('.montagem-prog-bar-body').forEach(button => {
-        button.addEventListener('click', event => {
-            event.stopPropagation();
-            const prog = montagemProgCache.find(item => Number(item.id) === Number(button.dataset.programacaoId));
-            if (prog) openMontagemProgModal(prog);
-        });
-    });
-
-    grid.querySelectorAll('.montagem-prog-bar-resize').forEach(handle => {
-        handle.addEventListener('pointerdown', event => {
-            event.preventDefault();
-            event.stopPropagation();
-            startMontagemProgResize(handle, event);
-        });
+    document.getElementById('montagem-prog-week-grid')?.closest('.montagem-prog-calendar')?.addEventListener('drop', event => {
+        const gridEl = document.getElementById('montagem-prog-week-grid');
+        if (!gridEl || gridEl.contains(event.target)) return;
+        handleMontagemProgCalendarDrop(event, gridEl);
     });
 }
 
 function getMontagemProgDateKeyFromPointer(clientX, grid) {
     const weekDateKeys = getMontagemProgWeekDateKeys();
+    const slot = getMontagemProgDropTargetSlot(clientX, Number.NaN, grid);
+    if (slot?.dataset.date) return slot.dataset.date;
+
     const headers = grid?.querySelectorAll('.montagem-prog-day-header') || [];
     if (!headers.length) return null;
 
@@ -917,13 +951,41 @@ function getMontagemProgDropTargetSlot(clientX, clientY, grid) {
 
     slots.forEach(slot => {
         const rect = slot.getBoundingClientRect();
-        if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return;
+        if (clientX < rect.left || clientX > rect.right) return;
+        if (Number.isFinite(clientY) && (clientY < rect.top || clientY > rect.bottom)) return;
         if (!targetSlot || rect.top >= targetSlot.getBoundingClientRect().top) {
             targetSlot = slot;
         }
     });
 
     return targetSlot;
+}
+
+function getMontagemProgLaneFromPointer(clientY, grid) {
+    const lanes = grid?.querySelectorAll('.montagem-prog-lane') || [];
+    if (!lanes.length || !Number.isFinite(clientY)) return null;
+
+    for (let index = 0; index < lanes.length; index += 1) {
+        const rect = lanes[index].getBoundingClientRect();
+        if (clientY >= rect.top && clientY <= rect.bottom) {
+            return lanes[index];
+        }
+    }
+
+    let closestLane = lanes[0];
+    let closestDistance = Infinity;
+
+    lanes.forEach(lane => {
+        const rect = lane.getBoundingClientRect();
+        const center = rect.top + rect.height / 2;
+        const distance = Math.abs(clientY - center);
+        if (distance < closestDistance) {
+            closestDistance = distance;
+            closestLane = lane;
+        }
+    });
+
+    return closestLane;
 }
 
 function startMontagemProgResize(handle, event) {

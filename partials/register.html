@@ -1,59 +1,82 @@
     <!-- TELA DE CADASTRO DE USUÁRIO -->
-    <div id="register-screen" class="hidden flex-1 items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 w-full max-w-md">
-            <div class="mb-6">
-                <div class="fgp-brand fgp-brand--auth">
-                    <img src="images/fgp_logo.png" alt="FGP - Formighieri Gestão de Processo" class="fgp-brand__logo">
-                </div>
-                <h2 class="text-sm font-bold text-slate-700 mt-5 text-center uppercase tracking-wide">Novo usuário</h2>
-                <p class="text-xs text-slate-400 mt-1 text-center">Cadastre-se para acessar o painel</p>
+    <div id="register-screen" class="hidden fm-auth-screen flex-1 min-h-0">
+        <aside class="fm-auth-brand hidden lg:flex flex-col justify-center">
+            <div class="fm-auth-brand__grain" aria-hidden="true"></div>
+            <div class="fm-auth-brand__inner">
+                <a href="https://formighierimadeiras.com.br/" target="_blank" rel="noopener noreferrer"
+                    class="fm-auth-brand__logo-link">
+                    <img src="images/logo.jpg" alt="Formighieri Pisos e Móveis Sob Medida"
+                        class="fm-auth-brand__logo" width="280" height="80">
+                </a>
+                <p class="fm-auth-brand__heritage">Há mais de 70 anos em Curitiba</p>
+                <h1 class="fm-auth-brand__title">Cadastro de usuário</h1>
+                <p class="fm-auth-brand__text">
+                    Solicite acesso ao painel operacional FGP. Após a aprovação, você acompanha
+                    pendências e etapas do processo conforme seu perfil.
+                </p>
+                <p class="fm-auth-brand__footnote">
+                    <a href="https://formighierimadeiras.com.br/" target="_blank" rel="noopener noreferrer">
+                        formighierimadeiras.com.br
+                    </a>
+                </p>
             </div>
-            <form id="register-form" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome completo</label>
-                    <input type="text" id="reg-name"
-                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                        required>
+        </aside>
+        <div class="fm-auth-main flex-1 flex items-center justify-center p-4 md:p-8">
+            <div class="fm-auth-card bg-white p-8 w-full">
+                <div class="mb-6">
+                    <div class="fgp-brand fgp-brand--auth">
+                        <img src="images/fgp_logo.png" alt="FGP - Formighieri Gestão de Processo" class="fgp-brand__logo">
+                    </div>
+                    <h2 class="text-sm font-bold text-slate-700 mt-5 text-center uppercase tracking-wide">Novo usuário</h2>
+                    <p class="text-xs text-slate-400 mt-1 text-center">Cadastre-se para acessar o painel</p>
                 </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">E-mail</label>
-                    <input type="email" id="reg-email"
-                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                        required>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Senha</label>
-                    <input type="password" id="reg-password" minlength="6"
-                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                        required>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Confirmar senha</label>
-                    <input type="password" id="reg-password-confirm" minlength="6"
-                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                        required>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Perfil</label>
-                    <select id="reg-role"
-                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
-                        required>
-                        <option value="">Selecione...</option>
-                        <option value="Consultor">Consultor</option>
-                        <option value="Projetista">Projetista</option>
-                        <option value="Marceneiro">Marceneiro</option>
-                        <option value="Compras">Comprador</option>
-                    </select>
-                </div>
-                <p id="register-status" class="hidden text-xs text-center text-slate-500"></p>
-                <button type="submit" id="btn-register-submit"
-                    class="w-full bg-amber-600 text-white py-2 rounded-lg text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-60 disabled:cursor-not-allowed">Criar
-                    Usuário</button>
-            </form>
-            <p class="text-center text-xs text-slate-400 mt-4">
-                Já tem conta?
-                <button type="button" id="btn-show-login"
-                    class="text-amber-600 font-semibold hover:text-amber-700">Entrar</button>
-            </p>
+                <form id="register-form" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Nome completo</label>
+                        <input type="text" id="reg-name"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                            required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">E-mail</label>
+                        <input type="email" id="reg-email"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                            required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Senha</label>
+                        <input type="password" id="reg-password" minlength="6"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                            required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Confirmar senha</label>
+                        <input type="password" id="reg-password-confirm" minlength="6"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                            required>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Perfil</label>
+                        <select id="reg-role"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
+                            required>
+                            <option value="">Selecione...</option>
+                            <option value="Consultor">Consultor</option>
+                            <option value="Projetista">Projetista</option>
+                            <option value="Marceneiro">Marceneiro</option>
+                            <option value="Compras">Comprador</option>
+                        </select>
+                    </div>
+                    <p id="register-status" class="hidden text-xs text-center text-slate-500"></p>
+                    <button type="submit" id="btn-register-submit"
+                        class="w-full bg-amber-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-amber-700 transition disabled:opacity-60 disabled:cursor-not-allowed">Criar
+                        Usuário</button>
+                </form>
+                <p class="text-center text-xs text-slate-400 mt-4">
+                    Já tem conta?
+                    <button type="button" id="btn-show-login"
+                        class="text-amber-600 font-semibold hover:text-amber-700">Entrar</button>
+                </p>
+            </div>
         </div>
     </div>

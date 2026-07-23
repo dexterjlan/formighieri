@@ -266,8 +266,8 @@ function renderGestaoRelatorioPieChart(statusCounts) {
     }).join('');
 
     return `
-        <div class="flex flex-col md:flex-row items-center md:items-start gap-6">
-            <div class="relative w-44 h-44 shrink-0">
+        <div class="flex flex-col md:flex-row md:items-start gap-6 w-full">
+            <div class="relative w-44 h-44 shrink-0 mx-auto md:mx-0">
                 <div class="w-full h-full rounded-full border border-slate-200 shadow-inner"
                     style="background: conic-gradient(${segments.join(', ')});"></div>
                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -455,7 +455,7 @@ function renderGestaoRelatorioPedidosPendentesOrderGroup(orderGroup) {
             </div>
             <div class="collapsible-list-body hidden p-2">
                 <div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[660px]">
+                    <table class="gestao-relatorios-table w-full text-xs min-w-[36rem]">
                         <thead class="bg-slate-50 text-[10px] uppercase text-slate-400">
                             <tr>
                                 <th class="text-left p-2.5 font-semibold">Projeto</th>
@@ -595,7 +595,7 @@ function renderGestaoRelatorioFechamentoProducaoGroups(groups) {
                 </div>
                 <div class="collapsible-list-body hidden">
                     <div class="overflow-x-auto">
-                        <table class="w-full text-sm min-w-[720px]">
+                        <table class="gestao-relatorios-table w-full text-xs min-w-[40rem]">
                             <thead class="bg-white text-[10px] uppercase text-slate-400">
                                 <tr>
                                     <th class="text-left p-2.5 font-semibold">Pedido</th>

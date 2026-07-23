@@ -1,6 +1,6 @@
     <!-- PAINEL PRINCIPAL (Oculto antes do login) -->
     <div id="main-panel" class="hidden flex flex-col flex-1">
-        <header id="app-header" class="app-header bg-slate-900 text-white shadow-md">
+        <header id="app-header" class="app-header fm-app-header shadow-md">
             <div class="app-header-top">
                 <div class="app-header-brand min-w-0">
                     <div class="fgp-brand fgp-brand--compact">
@@ -43,7 +43,7 @@
         <main id="welcome-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6 overflow-auto">
             <div class="max-w-5xl mx-auto space-y-8 pb-8">
                 <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 px-6 py-8 md:px-10 md:py-12 text-white text-center flex flex-col items-center">
+                    <div class="fm-welcome-hero bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 px-6 py-8 md:px-10 md:py-12 text-white text-center flex flex-col items-center">
                         <div class="fgp-brand fgp-brand--hero mb-6 md:mb-8">
                             <div class="fgp-brand__logo-surface">
                                 <img src="images/fgp_logo.png" alt="FGP - Formighieri Gestão de Processo" class="fgp-brand__logo">
@@ -136,11 +136,11 @@
         </main>
 
         <!-- PAINEL DE PEDIDOS -->
-        <main id="dashboard-view" class="flex-1 max-w-[90rem] w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)] gap-5 xl:gap-6">
+        <main id="dashboard-view" class="fm-dashboard flex-1 max-w-[90rem] w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-[minmax(17rem,20rem)_minmax(0,1fr)] gap-5 xl:gap-6">
 
             <!-- 2. TELA / COLUNA DE PEDIDOS -->
             <section
-                class="app-panel-height bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                class="fm-orders-panel app-panel-height bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                 <div class="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3">
                     <h2 class="font-bold text-sm text-slate-900">Pedidos de Venda</h2>
                     <input type="text" id="filter-order-client" placeholder="Filtrar por cliente..."
@@ -160,7 +160,7 @@
             </section>
 
             <!-- 3. TELA DE DETALHES E CONVERSAS -->
-            <section class="app-panel-height flex flex-col overflow-y-auto min-w-0" id="detail-section">
+            <section class="fm-order-detail app-panel-height flex flex-col overflow-y-auto min-w-0" id="detail-section">
                 <div id="empty-state"
                     class="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center flex flex-col items-center justify-center h-full text-slate-400">
                     <p class="text-sm font-medium">Selecione um pedido para gerenciar as requisições técnicas.</p>
@@ -190,7 +190,7 @@
                                 <p class="text-xs text-slate-500 mt-1" id="det-delivery">Entrega pedido: —</p>
                             </div>
                         </div>
-                        <div class="px-5 py-2.5 border-b border-slate-100 bg-violet-50/50 text-xs font-semibold text-violet-800 uppercase">
+                        <div class="fm-order-projects-header px-5 py-2.5 border-b border-slate-100 bg-violet-50/50 text-xs font-semibold text-violet-800 uppercase">
                             Projetos <span id="order-projects-count" class="font-normal opacity-80">(0)</span>
                         </div>
                         <div id="order-projects-panel" class="px-3 py-2">
@@ -539,7 +539,7 @@
                     </nav>
                 </aside>
 
-                <div class="flex-1 min-w-0">
+                <div class="flex-1 min-w-0 w-full">
                     <div id="gestao-pedido-list-panel" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
                             <div>
@@ -1006,7 +1006,7 @@
                         </div>
                     </div>
 
-                    <div id="gestao-dashboard-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                    <div id="gestao-dashboard-panel" class="hidden w-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
                             <div>
                                 <h3 class="font-bold text-sm text-slate-900">Dashboard</h3>
@@ -1046,24 +1046,33 @@
                         </div>
                     </div>
 
-                    <div id="gestao-kanban-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                    <div id="gestao-kanban-panel" class="hidden w-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
                             <div>
                                 <h3 class="font-bold text-sm text-slate-900">Kanban</h3>
                                 <p class="text-xs text-slate-400 mt-0.5">Projetos por status — código do pedido, cliente e projetos em cada coluna.</p>
                             </div>
-                            <button type="button" id="btn-gestao-kanban-refresh"
-                                class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
-                                <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
-                                <span>Atualizar</span>
-                            </button>
+                            <div class="order-tab-actions ml-auto shrink-0">
+                                <button type="button" id="btn-gestao-kanban-fullscreen"
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50"
+                                    aria-pressed="false">
+                                    <svg class="order-tab-action-btn__icon" data-fullscreen-icon="enter" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0V2A1.5 1.5 0 0 1 1.5.5h4a.5.5 0 0 1 0 1H1.5zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0V1.5a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zM.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1H1.5A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5z"/></svg>
+                                    <svg class="order-tab-action-btn__icon hidden" data-fullscreen-icon="exit" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M5.5 0a.5.5 0 0 0 0 1h4A1.5 1.5 0 0 1 11 2.5v4a.5.5 0 0 0 1 0v-4A2.5 2.5 0 0 0 9.5 0h-4zM1 5.5a.5.5 0 0 0-1 0v4A2.5 2.5 0 0 0 2.5 12h4a.5.5 0 0 0 0-1h-4A1.5 1.5 0 0 1 1 9.5v-4zM14.5 11a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 1 0v-4a1.5 1.5 0 0 0-1.5-1.5h-4a.5.5 0 0 0 0 1h4a.5.5 0 0 0 .5-.5zM10 1.5a.5.5 0 0 0-1 0v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 0 0 1h4A2.5 2.5 0 0 0 10 6.5v-4z"/></svg>
+                                    <span data-gestao-kanban-fullscreen-label>Tela cheia</span>
+                                </button>
+                                <button type="button" id="btn-gestao-kanban-refresh"
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                    <span>Atualizar</span>
+                                </button>
+                            </div>
                         </div>
                         <div id="gestao-kanban-board" class="flex-1 overflow-auto p-4 bg-slate-50/30">
                             <p class="text-xs text-slate-400 text-center py-8">Carregando kanban...</p>
                         </div>
                     </div>
 
-                    <div id="gestao-gantt-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                    <div id="gestao-gantt-panel" class="hidden w-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
                             <div>
                                 <h3 class="font-bold text-sm text-slate-900">Gantt Projetos</h3>
@@ -1089,24 +1098,26 @@
                         </div>
                     </div>
 
-                    <div id="gestao-relatorios-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                    <div id="gestao-relatorios-panel" class="hidden w-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
                             <div>
                                 <h3 class="font-bold text-sm text-slate-900">Relatórios</h3>
                                 <p class="text-xs text-slate-400 mt-0.5">Visão gerencial dos projetos por status, faixa comercial e fechamento de produção.</p>
                             </div>
-                            <button type="button" id="btn-gestao-relatorios-refresh"
-                                class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
-                                <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
-                                <span>Atualizar</span>
-                            </button>
+                            <div class="order-tab-actions ml-auto shrink-0">
+                                <button type="button" id="btn-gestao-relatorios-refresh"
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                    <span>Atualizar</span>
+                                </button>
+                            </div>
                         </div>
-                        <div id="gestao-relatorios-content" class="flex-1 overflow-auto p-4 space-y-4 bg-slate-50/30">
+                        <div id="gestao-relatorios-content" class="flex-1 min-h-0 overflow-auto p-4 space-y-4 bg-slate-50/30">
                             <p class="text-xs text-slate-400 text-center py-8">Carregando relatórios...</p>
                         </div>
                     </div>
 
-                    <div id="gestao-performance-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                    <div id="gestao-performance-panel" class="hidden w-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
                             <div>
                                 <h3 class="font-bold text-sm text-slate-900">Performance</h3>
@@ -1129,7 +1140,7 @@
                                 </button>
                             </form>
                         </div>
-                        <div id="gestao-performance-content" class="flex-1 overflow-auto p-4 space-y-4 bg-slate-50/30">
+                        <div id="gestao-performance-content" class="flex-1 min-h-0 overflow-auto p-4 space-y-4 bg-slate-50/30">
                             <p class="text-xs text-slate-400 text-center py-8">Carregando performance...</p>
                         </div>
                     </div>
@@ -1276,9 +1287,9 @@
         </main>
 
         <!-- TELA: PENDÊNCIAS -->
-        <main id="pendencias-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6">
+        <main id="pendencias-view" class="fm-pendencias hidden flex-1 w-full mx-auto p-4 md:p-6">
             <div class="flex flex-col lg:flex-row gap-4 min-h-[calc(100vh-140px)]">
-                <aside class="lg:w-56 shrink-0">
+                <aside class="fm-pendencias-sidebar lg:w-56 shrink-0">
                     <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden sticky top-4">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h2 class="font-bold text-sm text-slate-900">Pendências</h2>
@@ -1287,7 +1298,7 @@
                         <nav id="pendencias-sidebar-nav" class="p-3 pendencias-sidebar-nav"></nav>
                     </div>
                 </aside>
-                <div class="flex-1 min-w-0 relative">
+                <div class="fm-pendencias-main flex-1 min-w-0 relative">
                     <div id="pendencias-action-loading"
                         class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
                         <div id="pendencias-action-loading-spinner"

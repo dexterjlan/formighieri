@@ -116,6 +116,9 @@ function hideAllGestaoPanels() {
     if (typeof setGestaoDashboardFullscreen === 'function') {
         setGestaoDashboardFullscreen(false);
     }
+    if (typeof setGestaoKanbanFullscreen === 'function') {
+        setGestaoKanbanFullscreen(false);
+    }
 }
 
 function formatGestaoDateTime(dateStr) {
@@ -1008,6 +1011,9 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoDashboardEvents === 'function') {
         bindGestaoDashboardEvents();
+    }
+    if (typeof bindGestaoKanbanEvents === 'function') {
+        bindGestaoKanbanEvents();
     }
     if (typeof bindGestaoPhasesEvents === 'function') {
         bindGestaoPhasesEvents();
