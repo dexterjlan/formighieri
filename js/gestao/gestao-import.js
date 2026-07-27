@@ -657,7 +657,8 @@ function groupGestaoImportRowsByOrder(rows) {
                 orderCode: row.orderCode,
                 clientName: row.clientName,
                 consultantName: row.consultantName,
-                clientDeliveryDate: row.clientDeliveryDate,
+                clientDeliveryDate: row.clientDeliveryDate || null,
+                clientDeliveryDatesSeen: row.clientDeliveryDate ? new Set([row.clientDeliveryDate]) : new Set(),
                 projects: [],
                 rowNumbers: []
             });
@@ -673,13 +674,9 @@ function groupGestaoImportRowsByOrder(rows) {
             row.errors.push(`Consultor diverge do pedido ${key} (linha ${order.rowNumbers[0]}).`);
             return;
         }
-        if (order.clientDeliveryDate && row.clientDeliveryDate
-            && order.clientDeliveryDate !== row.clientDeliveryDate) {
-            row.errors.push(`Entrega do cliente diverge do pedido ${key}.`);
-            return;
-        }
-        if (!order.clientDeliveryDate && row.clientDeliveryDate) {
-            order.clientDeliveryDate = row.clientDeliveryDate;
+        if (row.clientDeliveryDate) {
+            order.clientDeliveryDatesSeen.add(row.clientDeliveryDate);
+            order.clientDeliveryDate = pickLatestIsoDate(order.clientDeliveryDate, row.clientDeliveryDate);
         }
 
         if (order.projects.some(project => project.projectCode === row.projectCode)) {
@@ -1087,6 +1084,12 @@ function validateGestaoImportOrder(order, lookups, context) {
     }
 
     const existingOrder = context.existingOrdersByCode.get(order.orderCode) || null;
+
+    if (order.clientDeliveryDatesSeen?.size > 1) {
+        notes.push(
+            `Pedido ${order.orderCode}: múltiplas datas de entrega na planilha — será usada a maior (${formatGestaoDate(order.clientDeliveryDate)}).`
+        );
+    }
 
     if (existingOrder) {
         notes.push(`Pedido ${order.orderCode}: já cadastrado — serão adicionados apenas projetos novos.`);

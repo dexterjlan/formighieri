@@ -841,7 +841,15 @@ async function saveGestaoOrder(event) {
     const orderCode = document.getElementById('gestao-ord-code')?.value.trim();
     const clientName = document.getElementById('gestao-ord-client')?.value.trim();
     const consultantName = document.getElementById('gestao-ord-consultant')?.value.trim();
-    const clientDeliveryDate = document.getElementById('gestao-ord-client-delivery')?.value || null;
+    let clientDeliveryDate = document.getElementById('gestao-ord-client-delivery')?.value || null;
+    if (hasGestaoOrderMultiplePhases()) {
+        const maxFromPhases = pickLatestIsoDate(
+            ...(gestaoOrderPhasesDraft || []).map(phase => phase.deliveryDate)
+        );
+        if (maxFromPhases) {
+            clientDeliveryDate = maxFromPhases;
+        }
+    }
     const projects = gestaoOrderProjectsDraft || [];
 
     if (!orderCode) {

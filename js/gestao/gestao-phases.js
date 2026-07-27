@@ -473,6 +473,12 @@ async function saveGestaoOrderPhasesFromModal() {
         orderCode
     })));
 
+    const maxDeliveryDate = pickLatestIsoDate(...validRows.map(row => row.deliveryDate));
+    const deliveryInput = document.getElementById('gestao-ord-client-delivery');
+    if (deliveryInput && maxDeliveryDate) {
+        deliveryInput.value = maxDeliveryDate;
+    }
+
     assignGestaoFirstPhaseToAllProjects();
 
     if (editingGestaoOrderId) {

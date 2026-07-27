@@ -508,6 +508,25 @@ function bindSaleValueCurrencyInput(input) {
     });
 }
 
+function normalizeIsoDateValue(dateStr) {
+    if (!dateStr) return '';
+    return String(dateStr).split('T')[0];
+}
+
+function pickLatestIsoDate(...dates) {
+    let latest = '';
+
+    for (const dateStr of dates) {
+        const normalized = normalizeIsoDateValue(dateStr);
+        if (!normalized) continue;
+        if (!latest || normalized > latest) {
+            latest = normalized;
+        }
+    }
+
+    return latest || null;
+}
+
 function isProjectTechnicalDeliveryBeforeOrderDelivery(projectDeliveryDate, orderDeliveryDate) {
     if (!projectDeliveryDate || !orderDeliveryDate) return true;
     return String(projectDeliveryDate) < String(orderDeliveryDate);
