@@ -272,49 +272,186 @@
         </main>
 
         <!-- TELA ADMIN: CONFIGURAÇÕES DO SISTEMA -->
-        <main id="system-settings-view" class="hidden flex-1 max-w-3xl w-full mx-auto p-4 md:p-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50">
-                    <h2 class="font-bold text-sm text-slate-900">Configurações do Sistema</h2>
-                    <p class="text-xs text-slate-400 mt-1">Defina destinatários em cópia dos e-mails e prazos para destaque de itens em aberto.</p>
-                    <p id="settings-updated-at" class="text-[10px] text-slate-400 mt-2"></p>
-                </div>
-                <form id="system-settings-form" class="p-4 md:p-5 space-y-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 mb-1">E-mails em cópia — Aprovações</label>
-                        <textarea id="settings-approval-cc-emails" rows="2"
-                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                            placeholder="email1@empresa.com, email2@empresa.com"></textarea>
-                        <p class="text-[10px] text-slate-400 mt-1">Separe múltiplos e-mails por vírgula. Recebem cópia nas notificações de aprovação comercial.</p>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 mb-1">E-mails em cópia — Requisições</label>
-                        <textarea id="settings-request-cc-emails" rows="2"
-                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
-                            placeholder="email1@empresa.com, email2@empresa.com"></textarea>
-                        <p class="text-[10px] text-slate-400 mt-1">Separe múltiplos e-mails por vírgula. Recebem cópia nas notificações de requisições técnicas.</p>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-1">Dias — aprovação em aberto atrasada</label>
-                            <input type="number" id="settings-approval-overdue-days" min="1" step="1" value="5"
-                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
-                            <p class="text-[10px] text-slate-400 mt-1">Após esse prazo, aprovações abertas ficam em vermelho.</p>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-500 mb-1">Dias — requisição em aberto atrasada</label>
-                            <input type="number" id="settings-request-overdue-days" min="1" step="1" value="5"
-                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
-                            <p class="text-[10px] text-slate-400 mt-1">Após esse prazo, requisições abertas ficam em vermelho.</p>
-                        </div>
-                    </div>
-                    <div class="pt-2">
-                        <button type="submit" id="settings-form-submit"
-                            class="w-full md:w-auto bg-slate-900 text-white text-xs px-4 py-2 rounded-lg font-semibold hover:bg-slate-800">
-                            Salvar Configurações
+        <main id="system-settings-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6">
+            <div class="max-w-6xl mx-auto flex flex-col lg:flex-row gap-4">
+                <aside class="settings-nav shrink-0 lg:w-52">
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden p-2 space-y-1">
+                        <p class="px-2 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Configurações</p>
+                        <button type="button" id="settings-nav-geral"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-slate-900 text-white">
+                            Geral
+                        </button>
+                        <button type="button" id="settings-nav-import-pedido"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            ImportPedido
                         </button>
                     </div>
-                </form>
+                </aside>
+
+                <div class="settings-content flex-1 min-w-0 space-y-4">
+                    <div id="settings-general-panel" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h2 class="font-bold text-sm text-slate-900">Configurações do Sistema</h2>
+                            <p class="text-xs text-slate-400 mt-1">Defina destinatários em cópia dos e-mails e prazos para destaque de itens em aberto.</p>
+                            <p id="settings-updated-at" class="text-[10px] text-slate-400 mt-2"></p>
+                        </div>
+                        <form id="system-settings-form" class="p-4 md:p-5 space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">E-mails em cópia — Aprovações</label>
+                                <textarea id="settings-approval-cc-emails" rows="2"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                    placeholder="email1@empresa.com, email2@empresa.com"></textarea>
+                                <p class="text-[10px] text-slate-400 mt-1">Separe múltiplos e-mails por vírgula. Recebem cópia nas notificações de aprovação comercial.</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">E-mails em cópia — Requisições</label>
+                                <textarea id="settings-request-cc-emails" rows="2"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                    placeholder="email1@empresa.com, email2@empresa.com"></textarea>
+                                <p class="text-[10px] text-slate-400 mt-1">Separe múltiplos e-mails por vírgula. Recebem cópia nas notificações de requisições técnicas.</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Dias — aprovação em aberto atrasada</label>
+                                    <input type="number" id="settings-approval-overdue-days" min="1" step="1" value="5"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                    <p class="text-[10px] text-slate-400 mt-1">Após esse prazo, aprovações abertas ficam em vermelho.</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Dias — requisição em aberto atrasada</label>
+                                    <input type="number" id="settings-request-overdue-days" min="1" step="1" value="5"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                    <p class="text-[10px] text-slate-400 mt-1">Após esse prazo, requisições abertas ficam em vermelho.</p>
+                                </div>
+                            </div>
+                            <div class="pt-2">
+                                <button type="submit" id="settings-form-submit"
+                                    class="w-full md:w-auto bg-slate-900 text-white text-xs px-4 py-2 rounded-lg font-semibold hover:bg-slate-800">
+                                    Salvar Configurações
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="settings-import-pedido-panel" class="hidden space-y-4">
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                                <h2 class="font-bold text-sm text-slate-900">ImportPedido — Status WPS</h2>
+                                <p class="text-xs text-slate-400 mt-1">Mapeamento de <span class="font-mono text-[10px]">status_projeto</span> da planilha (WPS) para status FGP na importação.</p>
+                            </div>
+                            <div class="p-4 md:p-5 space-y-4">
+                                <form id="import-status-wps-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                    <div class="flex-1 min-w-[160px]">
+                                        <label class="block text-[10px] font-semibold text-slate-500 mb-1">StatusWPS</label>
+                                        <input type="text" id="import-status-wps-new-wps" required
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                            placeholder="Ex: Medida Fina">
+                                    </div>
+                                    <div class="flex-1 min-w-[160px]">
+                                        <label class="block text-[10px] font-semibold text-slate-500 mb-1">StatusFGP</label>
+                                        <input type="text" id="import-status-wps-new-fgp" required
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                            placeholder="Ex: Medição Realizada">
+                                    </div>
+                                    <button type="submit"
+                                        class="bg-slate-900 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-slate-800">
+                                        + Adicionar
+                                    </button>
+                                </form>
+                                <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                    <table class="w-full text-sm">
+                                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                            <tr>
+                                                <th class="text-left p-3 font-semibold">StatusWPS</th>
+                                                <th class="text-left p-3 font-semibold">StatusFGP</th>
+                                                <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="import-status-wps-list" class="divide-y divide-slate-100"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                                <h2 class="font-bold text-sm text-slate-900">ImportPedido — Consultor WPS</h2>
+                                <p class="text-xs text-slate-400 mt-1">Mapeamento de <span class="font-mono text-[10px]">consultor</span> da planilha (WPS) para consultor FGP na importação.</p>
+                            </div>
+                            <div class="p-4 md:p-5 space-y-4">
+                                <form id="import-consultor-wps-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                    <div class="flex-1 min-w-[160px]">
+                                        <label class="block text-[10px] font-semibold text-slate-500 mb-1">ConsultorWPS</label>
+                                        <input type="text" id="import-consultor-wps-new-wps" required
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                            placeholder="Ex: Bruna">
+                                    </div>
+                                    <div class="flex-1 min-w-[160px]">
+                                        <label class="block text-[10px] font-semibold text-slate-500 mb-1">ConsultorFGP</label>
+                                        <input type="text" id="import-consultor-wps-new-fgp" required
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                            placeholder="Ex: Bruna Dalbem">
+                                    </div>
+                                    <button type="submit"
+                                        class="bg-slate-900 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-slate-800">
+                                        + Adicionar
+                                    </button>
+                                </form>
+                                <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                    <table class="w-full text-sm">
+                                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                            <tr>
+                                                <th class="text-left p-3 font-semibold">ConsultorWPS</th>
+                                                <th class="text-left p-3 font-semibold">ConsultorFGP</th>
+                                                <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="import-consultor-wps-list" class="divide-y divide-slate-100"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                                <h2 class="font-bold text-sm text-slate-900">ImportPedido — Marceneiro WPS</h2>
+                                <p class="text-xs text-slate-400 mt-1">Mapeamento de <span class="font-mono text-[10px]">marceneiro</span> da planilha (WPS) para marceneiro FGP na montagem interna.</p>
+                            </div>
+                            <div class="p-4 md:p-5 space-y-4">
+                                <form id="import-marceneiro-wps-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                    <div class="flex-1 min-w-[160px]">
+                                        <label class="block text-[10px] font-semibold text-slate-500 mb-1">MarceneiroWPS</label>
+                                        <input type="text" id="import-marceneiro-wps-new-wps" required
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                            placeholder="Ex: Lucas Nogueira">
+                                    </div>
+                                    <div class="flex-1 min-w-[160px]">
+                                        <label class="block text-[10px] font-semibold text-slate-500 mb-1">MarceneiroFGP</label>
+                                        <input type="text" id="import-marceneiro-wps-new-fgp" required
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                            placeholder="Nome cadastrado em Gestão → Marceneiros">
+                                    </div>
+                                    <button type="submit"
+                                        class="bg-slate-900 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-slate-800">
+                                        + Adicionar
+                                    </button>
+                                </form>
+                                <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                    <table class="w-full text-sm">
+                                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                            <tr>
+                                                <th class="text-left p-3 font-semibold">MarceneiroWPS</th>
+                                                <th class="text-left p-3 font-semibold">MarceneiroFGP</th>
+                                                <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="import-marceneiro-wps-list" class="divide-y divide-slate-100"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
 
@@ -591,8 +728,10 @@
                                 <ol class="text-xs text-slate-600 space-y-1.5 list-decimal list-inside">
                                     <li>Baixe o template Excel e preencha uma linha por projeto (repita os dados do pedido em cada linha).</li>
                                     <li>Se o pedido já existir, apenas os projetos novos serão criados; projeto duplicado gera erro.</li>
-                                    <li>Opcional: use <span class="font-mono text-[10px]">data_medicao</span>, <span class="font-mono text-[10px]">data_planta_levantada</span>, <span class="font-mono text-[10px]">data_inicio_montagem_interna</span> e <span class="font-mono text-[10px]">data_fim_montagem_interna</span>.</li>
-                                    <li>Use os nomes cadastrados no sistema para ambiente, status, consultor e projetista.</li>
+                                    <li>Opcional: <span class="font-mono text-[10px]">data_medicao</span> cria a entidade de medição do pedido; <span class="font-mono text-[10px]">data_planta_levantada</span> vincula planta levantada.</li>
+                                    <li>Opcional: <span class="font-mono text-[10px]">data_inicio_montagem_interna</span>, <span class="font-mono text-[10px]">data_fim_montagem_interna</span> e <span class="font-mono text-[10px]">marceneiro</span> (nome WPS).</li>
+                                    <li><span class="font-mono text-[10px]">consultor</span>, <span class="font-mono text-[10px]">status_projeto</span> e <span class="font-mono text-[10px]">marceneiro</span> usam nomes WPS; o sistema converte via tabelas <span class="font-mono text-[10px]">importConsultorWPS</span>, <span class="font-mono text-[10px]">importStatusWPS</span> e <span class="font-mono text-[10px]">importMarceneiroWPS</span>.</li>
+                                    <li>Use os nomes cadastrados no sistema para ambiente e projetista.</li>
                                     <li>Salve o arquivo e selecione-o abaixo para importar.</li>
                                 </ol>
                                 <button type="button" id="btn-gestao-import-template"

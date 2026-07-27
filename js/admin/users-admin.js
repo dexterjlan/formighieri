@@ -232,12 +232,15 @@ function renderUsersAdminCards(users) {
             <div class="px-3 py-2.5">
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                     <div class="min-w-[160px] flex-1">
-                        <div class="flex flex-wrap items-center gap-1.5">
-                            <h3 class="text-xs font-semibold ${isActive ? 'text-slate-900' : 'text-slate-400 line-through'}">${escapeHtml(u.name)}</h3>
+                        <label for="name-input-${u.id}" class="block text-[9px] font-semibold uppercase text-slate-400 mb-0.5">Nome</label>
+                        <input type="text" id="name-input-${u.id}" value="${escapeHtml(u.name || '')}" ${disableEdit}
+                            maxlength="120"
+                            class="w-full px-2 py-1 text-xs font-semibold border border-slate-200/80 rounded-md bg-white/90 focus:outline-none focus:border-amber-600 disabled:bg-slate-100 disabled:text-slate-400 ${isActive ? 'text-slate-900' : 'text-slate-400 line-through'}">
+                        <div class="flex flex-wrap items-center gap-1.5 mt-1">
                             ${statusBadge}
                             ${isSelf ? '<span class="text-[9px] text-slate-400">(você)</span>' : ''}
                         </div>
-                        <p class="text-[10px] text-slate-500 truncate">${escapeHtml(u.email)}</p>
+                        <p class="text-[10px] text-slate-500 truncate mt-0.5">${escapeHtml(u.email)}</p>
                         <div class="flex flex-wrap gap-1 mt-1">${buildUserRoleBadges(u)}</div>
                     </div>
 
@@ -367,12 +370,14 @@ function refreshLoggedInUserDisplay() {
 async function saveUserRole(userId) {
     if (!isAdmin()) return;
 
+    const nameInput = document.getElementById(`name-input-${userId}`);
     const select = document.getElementById(`role-select-${userId}`);
     const conferenteCheck = document.getElementById(`conferente-check-${userId}`);
     const gestorComercialCheck = document.getElementById(`gestor-comercial-check-${userId}`);
     const gestorProjetosCheck = document.getElementById(`gestor-projetos-check-${userId}`);
     const ppcpCheck = document.getElementById(`ppcp-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
+    const name = nameInput?.value.trim() || '';
     const role = select?.value;
     const conferente = role === 'Projetista' && Boolean(conferenteCheck?.checked);
     const gestorComercial = (role === 'Admin' || role === 'Consultor') && Boolean(gestorComercialCheck?.checked);
@@ -380,19 +385,25 @@ async function saveUserRole(userId) {
     const ppcp = role === 'Projetista' && Boolean(ppcpCheck?.checked);
     const gestorFabrica = role === 'Marceneiro' && Boolean(gestorFabricaCheck?.checked);
 
+    if (!name) {
+        alertAppDialog('Informe o nome do usuário.');
+        nameInput?.focus();
+        return;
+    }
+
     if (!role) {
         alertAppDialog("Selecione Admin, Projetista, Consultor, Marceneiro ou Compras.");
         return;
     }
 
-    let payload = { role, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica };
+    let payload = { name, role, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica };
     let { error } = await supabaseClient
         .from('appUsers')
         .update(payload)
         .eq('id', userId);
 
     if (error?.message?.includes('gestorFabrica') || error?.message?.includes('ppcp')) {
-        payload = { role, conferente, gestorComercial, gestorProjetos };
+        payload = { name, role, conferente, gestorComercial, gestorProjetos };
         ({ error } = await supabaseClient
             .from('appUsers')
             .update(payload)
@@ -402,7 +413,7 @@ async function saveUserRole(userId) {
     if (error?.message?.includes('gestorProjetos') || error?.message?.includes('gestorComercial')) {
         ({ error } = await supabaseClient
             .from('appUsers')
-            .update({ role, conferente })
+            .update({ name, role, conferente })
             .eq('id', userId));
     }
 
@@ -414,6 +425,7 @@ async function saveUserRole(userId) {
     if (userId === currentUser.id) {
         currentUser = {
             ...currentUser,
+            name,
             role,
             conferente,
             gestorComercial,

@@ -103,6 +103,7 @@ async function showSystemSettings() {
     updateMainNavActive('settings');
     updateAdminNav();
     if (typeof saveAppNavState === 'function') saveAppNavState({ view: 'settings' });
+    setSettingsNavActive('geral');
     await loadSystemSettings();
     fillSystemSettingsForm(systemSettingsCache);
 }
@@ -214,4 +215,7 @@ function bindSystemSettingsEvents() {
         e.preventDefault();
         saveSystemSettings();
     });
+    if (typeof bindImportPedidoSettingsEvents === 'function') {
+        bindImportPedidoSettingsEvents();
+    }
 }

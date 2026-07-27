@@ -44,6 +44,7 @@ const SCRIPTS = [
     'js/pendencias/pendencias-compras.js',
     'js/pendencias/pendencias-overview.js',
     'js/admin/system-settings.js',
+    'js/admin/import-pedido-settings.js',
     'js/core/auth.js',
     'js/orders/orders.js',
     'js/orders/order-projects.js',
@@ -116,7 +117,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261049`);
+            await loadScript(`${src}?v=20261054`);
         }
 
         initAppEvents();
