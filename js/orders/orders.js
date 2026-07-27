@@ -231,7 +231,7 @@ function renderOrdersList() {
 
     let orders = ordersCache;
     if (filterMine) {
-        orders = orders.filter(o => o.consultantName === currentUser.name);
+        orders = orders.filter(o => isCurrentUserOrderConsultor(o.consultantName, o.consultantUserId));
     }
     if (filter) {
         orders = orders.filter(o => (o.clientName || '').toLowerCase().includes(filter));
@@ -564,6 +564,8 @@ function bindOrderEvents() {
             return;
         }
 
+        const consultantUserId = await resolveConsultantUserIdByNameAsync(consultantName);
+
         const { data: existing } = await supabaseClient
             .from('salesOrders')
             .select('id')
@@ -579,11 +581,21 @@ function bindOrderEvents() {
             orderCode,
             clientName,
             consultantName,
+            consultantUserId: consultantUserId || undefined,
             createdById: currentUser.id,
             updatedById: currentUser.id
         };
 
-        const { error } = await supabaseClient.from('salesOrders').insert([payload]);
+        let { error } = await supabaseClient.from('salesOrders').insert([payload]);
+        if (error?.message?.includes('consultantUserId')) {
+            ({ error } = await supabaseClient.from('salesOrders').insert([{
+                orderCode,
+                clientName,
+                consultantName,
+                createdById: currentUser.id,
+                updatedById: currentUser.id
+            }]));
+        }
         if (error) {
             alertAppDialog("Erro ao salvar pedido: " + error.message);
             return;

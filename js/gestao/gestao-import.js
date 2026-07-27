@@ -299,6 +299,7 @@ async function createGestaoImportMedicaoForOrder(orderId, medicaoProjects, now) 
 }
 
 let gestaoImportSelectedFile = null;
+let gestaoImportValidationPassed = false;
 let sheetJsLoadPromise = null;
 
 const SHEET_JS_LIBRARY_SOURCES = [
@@ -804,6 +805,9 @@ async function loadGestaoImportLookups() {
                 .map(marceneiro => [marceneiro.name.trim().toLowerCase(), marceneiro.id])
         ),
         consultantNames: new Set((consultants || []).map(item => item.name.trim())),
+        consultantByName: Object.fromEntries(
+            (consultants || []).map(item => [item.name.trim().toLowerCase(), item.id])
+        ),
         statusWpsToFgp: wpsMappings.statusWpsToFgp,
         consultorWpsToFgp: wpsMappings.consultorWpsToFgp,
         marceneiroWpsToFgp: wpsMappings.marceneiroWpsToFgp
@@ -906,10 +910,13 @@ async function createGestaoImportOrder(order, lookups, now) {
             };
         }
 
+        const consultantUserId = lookups.consultantByName?.[consultantFgp.trim().toLowerCase()] || null;
+
         const orderPayload = {
             orderCode: order.orderCode,
             clientName: order.clientName,
             consultantName: consultantFgp,
+            consultantUserId: consultantUserId || undefined,
             clientDeliveryDate: order.clientDeliveryDate,
             createdById: currentUser.id,
             updatedById: currentUser.id,
@@ -922,8 +929,8 @@ async function createGestaoImportOrder(order, lookups, now) {
             .select('id')
             .single();
 
-        if (error?.message?.includes('clientDeliveryDate')) {
-            const { clientDeliveryDate: _d, updatedAt: _u, ...fallback } = orderPayload;
+        if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('consultantUserId')) {
+            const { clientDeliveryDate: _d, updatedAt: _u, consultantUserId: _c, ...fallback } = orderPayload;
             ({ data: created, error } = await supabaseClient
                 .from('salesOrders')
                 .insert(fallback)
@@ -1018,6 +1025,189 @@ async function createGestaoImportOrder(order, lookups, now) {
     return { ok: true, message, partial: projectErrors.length > 0 };
 }
 
+async function loadGestaoImportValidationContext(orders) {
+    const orderCodes = [...new Set(orders.map(order => order.orderCode).filter(Boolean))];
+    const existingOrdersByCode = new Map();
+    const existingProjectsByOrderId = new Map();
+
+    if (!orderCodes.length) {
+        return { existingOrdersByCode, existingProjectsByOrderId };
+    }
+
+    const { data: existingOrders, error } = await supabaseClient
+        .from('salesOrders')
+        .select('id, orderCode')
+        .in('orderCode', orderCodes);
+
+    if (error) {
+        throw new Error(`Erro ao verificar pedidos existentes: ${error.message}`);
+    }
+
+    (existingOrders || []).forEach(order => {
+        const code = normalizeProjectCodeInput(order.orderCode || '');
+        if (code) existingOrdersByCode.set(code, order);
+    });
+
+    const orderIds = (existingOrders || []).map(order => order.id).filter(Boolean);
+    if (orderIds.length) {
+        const { data: projects, error: projectsError } = await supabaseClient
+            .from('OrderProject')
+            .select('orderId, projectCode')
+            .in('orderId', orderIds);
+
+        if (projectsError) {
+            throw new Error(`Erro ao verificar projetos existentes: ${projectsError.message}`);
+        }
+
+        (projects || []).forEach(project => {
+            const orderId = Number(project.orderId);
+            if (!existingProjectsByOrderId.has(orderId)) {
+                existingProjectsByOrderId.set(orderId, new Set());
+            }
+            const code = normalizeProjectCodeInput(project.projectCode || '');
+            if (code) existingProjectsByOrderId.get(orderId).add(code);
+        });
+    }
+
+    return { existingOrdersByCode, existingProjectsByOrderId };
+}
+
+function validateGestaoImportOrder(order, lookups, context) {
+    const errors = [];
+    const notes = [];
+    const importableProjects = [];
+
+    for (const row of order.projects) {
+        const resolved = resolveGestaoImportProject(row, lookups);
+        if (resolved.error) {
+            errors.push(`Pedido ${order.orderCode}, linha ${row.rowNumber}: ${resolved.error}`);
+            continue;
+        }
+        importableProjects.push({ row, project: resolved.project });
+    }
+
+    const existingOrder = context.existingOrdersByCode.get(order.orderCode) || null;
+
+    if (existingOrder) {
+        notes.push(`Pedido ${order.orderCode}: já cadastrado — serão adicionados apenas projetos novos.`);
+    } else {
+        const consultantFgp = mapGestaoImportConsultorWpsToFgp(order.consultantName, lookups);
+        if (!consultantFgp) {
+            errors.push(`Pedido ${order.orderCode}: consultor WPS "${order.consultantName}" não mapeado em importConsultorWPS.`);
+        } else if (!lookups.consultantNames.has(consultantFgp)) {
+            errors.push(`Pedido ${order.orderCode}: consultor FGP "${consultantFgp}" (WPS: "${order.consultantName}") não cadastrado ou inativo.`);
+        } else {
+            notes.push(`Pedido ${order.orderCode}: será criado com consultor ${consultantFgp}.`);
+        }
+    }
+
+    const existingProjectCodes = existingOrder
+        ? context.existingProjectsByOrderId.get(Number(existingOrder.id)) || new Set()
+        : new Set();
+
+    const newProjectsInFile = new Set();
+
+    for (const { row, project } of importableProjects) {
+        const code = project.projectCode;
+        if (existingProjectCodes.has(code)) {
+            errors.push(`Pedido ${order.orderCode}, linha ${row.rowNumber}: projeto ${code} já existe no pedido.`);
+            continue;
+        }
+        if (newProjectsInFile.has(code)) {
+            errors.push(`Pedido ${order.orderCode}, linha ${row.rowNumber}: projeto ${code} duplicado na planilha.`);
+            continue;
+        }
+        newProjectsInFile.add(code);
+    }
+
+    if (!importableProjects.length && !errors.length) {
+        errors.push(`Pedido ${order.orderCode}: nenhum projeto válido para importação.`);
+    } else if (!newProjectsInFile.size && !errors.length) {
+        errors.push(`Pedido ${order.orderCode}: nenhum projeto novo para importar.`);
+    } else if (newProjectsInFile.size) {
+        notes.push(`Pedido ${order.orderCode}: ${newProjectsInFile.size} projeto(s) novo(s) serão importados.`);
+    }
+
+    return {
+        ok: errors.length === 0,
+        errors,
+        notes,
+        importableCount: newProjectsInFile.size
+    };
+}
+
+async function validateGestaoImportFromFile(file) {
+    const buffer = await file.arrayBuffer();
+    const parsed = await parseGestaoImportWorkbook(buffer);
+
+    if (parsed.errors.length) {
+        return {
+            valid: false,
+            orderCount: 0,
+            projectCount: 0,
+            importableProjectCount: 0,
+            errors: parsed.errors,
+            notes: []
+        };
+    }
+
+    const orders = groupGestaoImportRowsByOrder(parsed.rows);
+    const rowErrors = parsed.rows
+        .filter(row => row.errors.length)
+        .map(row => `Linha ${row.rowNumber}: ${row.errors.join(' ')}`);
+
+    if (rowErrors.length) {
+        return {
+            valid: false,
+            orderCount: orders.length,
+            projectCount: parsed.rows.length,
+            importableProjectCount: 0,
+            errors: rowErrors,
+            notes: []
+        };
+    }
+
+    if (!orders.length) {
+        return {
+            valid: false,
+            orderCount: 0,
+            projectCount: 0,
+            importableProjectCount: 0,
+            errors: ['Nenhum pedido encontrado na planilha.'],
+            notes: []
+        };
+    }
+
+    const lookups = await loadGestaoImportLookups();
+    const context = await loadGestaoImportValidationContext(orders);
+
+    const errors = [];
+    const notes = [];
+    let importableProjectCount = 0;
+
+    for (const order of orders) {
+        const result = validateGestaoImportOrder(order, lookups, context);
+        errors.push(...result.errors);
+        notes.push(...result.notes);
+        importableProjectCount += result.importableCount;
+    }
+
+    const projectCount = parsed.rows.length;
+
+    if (importableProjectCount === 0 && !errors.length) {
+        errors.push('Nenhum projeto novo encontrado para importação.');
+    }
+
+    return {
+        valid: errors.length === 0 && importableProjectCount > 0,
+        orderCount: orders.length,
+        projectCount,
+        importableProjectCount,
+        errors,
+        notes
+    };
+}
+
 async function runGestaoImportFromFile(file) {
     const buffer = await file.arrayBuffer();
     const parsed = await parseGestaoImportWorkbook(buffer);
@@ -1094,43 +1284,97 @@ function renderGestaoImportResult(result) {
     `;
 }
 
+function renderGestaoImportValidationResult(result) {
+    const container = document.getElementById('gestao-import-result');
+    if (!container) return;
+
+    container.classList.remove('hidden');
+    container.innerHTML = `
+        <div class="rounded-xl border ${result.valid ? 'border-emerald-200 bg-emerald-50/60' : 'border-red-200 bg-red-50/60'} p-4 space-y-3">
+            <p class="text-sm font-semibold ${result.valid ? 'text-emerald-800' : 'text-red-800'}">
+                ${result.valid
+                    ? `Arquivo válido: ${result.orderCount} pedido(s), ${result.importableProjectCount} projeto(s) prontos para importação.`
+                    : 'Arquivo com pendências — corrija os erros antes de importar.'}
+            </p>
+            ${result.notes.length
+                ? `<div>
+                    <p class="text-[10px] font-semibold uppercase tracking-wide ${result.valid ? 'text-emerald-700' : 'text-slate-500'} mb-1">Resumo</p>
+                    <ul class="space-y-1 max-h-40 overflow-y-auto text-xs ${result.valid ? 'text-emerald-800' : 'text-slate-600'}">
+                        ${result.notes.map(note => `<li>• ${escapeHtml(note)}</li>`).join('')}
+                    </ul>
+                </div>`
+                : ''}
+            ${result.errors.length
+                ? `<div>
+                    <p class="text-[10px] font-semibold uppercase tracking-wide text-red-700 mb-1">Erros</p>
+                    <ul class="space-y-1 max-h-56 overflow-y-auto text-xs text-red-700">
+                        ${result.errors.map(error => `<li>• ${escapeHtml(error)}</li>`).join('')}
+                    </ul>
+                </div>`
+                : ''}
+        </div>
+    `;
+}
+
+function updateGestaoImportActionButtons() {
+    const validateBtn = document.getElementById('gestao-import-validate');
+    const submit = document.getElementById('gestao-import-submit');
+    const hasFile = Boolean(gestaoImportSelectedFile);
+
+    if (validateBtn) {
+        if (hasFile) validateBtn.removeAttribute('disabled');
+        else validateBtn.setAttribute('disabled', 'disabled');
+    }
+
+    if (submit) {
+        if (hasFile && gestaoImportValidationPassed) submit.removeAttribute('disabled');
+        else submit.setAttribute('disabled', 'disabled');
+    }
+}
+
 function resetGestaoImportSubmitButton(forceDisabled = false) {
     const submit = document.getElementById('gestao-import-submit');
     if (!submit) return;
 
     submit.textContent = 'Importar arquivo';
 
-    if (forceDisabled || !gestaoImportSelectedFile) {
+    if (forceDisabled || !gestaoImportSelectedFile || !gestaoImportValidationPassed) {
         submit.setAttribute('disabled', 'disabled');
     } else {
         submit.removeAttribute('disabled');
     }
 }
 
+function resetGestaoImportValidateButton() {
+    const validateBtn = document.getElementById('gestao-import-validate');
+    if (!validateBtn) return;
+    validateBtn.textContent = 'Validar arquivo';
+}
+
 function resetGestaoImportForm() {
     gestaoImportSelectedFile = null;
+    gestaoImportValidationPassed = false;
     const input = document.getElementById('gestao-import-file');
     if (input) input.value = '';
     document.getElementById('gestao-import-file-name')?.classList.add('hidden');
     resetGestaoImportSubmitButton(true);
+    resetGestaoImportValidateButton();
+    updateGestaoImportActionButtons();
     document.getElementById('gestao-import-result')?.classList.add('hidden');
 }
 
 function updateGestaoImportFileLabel(file) {
     const label = document.getElementById('gestao-import-file-name');
-    const submit = document.getElementById('gestao-import-submit');
-    if (!label || !submit) return;
+    if (!label) return;
 
     if (!file) {
         label.classList.add('hidden');
         label.textContent = '';
-        submit.setAttribute('disabled', 'disabled');
         return;
     }
 
     label.textContent = file.name;
     label.classList.remove('hidden');
-    submit.removeAttribute('disabled');
 }
 
 function showGestaoImportPanel() {
@@ -1143,10 +1387,53 @@ function showGestaoImportPanel() {
     resetGestaoImportForm();
 }
 
+async function validateGestaoImport() {
+    if (!canAccessGestao()) return;
+    if (!gestaoImportSelectedFile) {
+        alertAppDialog('Selecione um arquivo Excel para validar.');
+        return;
+    }
+
+    const validateBtn = document.getElementById('gestao-import-validate');
+    if (validateBtn) {
+        validateBtn.setAttribute('disabled', 'disabled');
+        validateBtn.textContent = 'Validando...';
+    }
+
+    gestaoImportValidationPassed = false;
+    updateGestaoImportActionButtons();
+
+    try {
+        const result = await validateGestaoImportFromFile(gestaoImportSelectedFile);
+        renderGestaoImportValidationResult(result);
+        gestaoImportValidationPassed = result.valid;
+        updateGestaoImportActionButtons();
+    } catch (error) {
+        console.error('validateGestaoImport:', error);
+        gestaoImportValidationPassed = false;
+        renderGestaoImportValidationResult({
+            valid: false,
+            orderCount: 0,
+            projectCount: 0,
+            importableProjectCount: 0,
+            errors: [error?.message || 'Erro inesperado ao validar o arquivo.'],
+            notes: []
+        });
+        updateGestaoImportActionButtons();
+    } finally {
+        resetGestaoImportValidateButton();
+        updateGestaoImportActionButtons();
+    }
+}
+
 async function submitGestaoImport() {
     if (!canAccessGestao()) return;
     if (!gestaoImportSelectedFile) {
         alertAppDialog('Selecione um arquivo Excel para importar.');
+        return;
+    }
+    if (!gestaoImportValidationPassed) {
+        alertAppDialog('Valide o arquivo antes de importar.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1159,6 +1446,9 @@ async function submitGestaoImport() {
     try {
         const result = await runGestaoImportFromFile(gestaoImportSelectedFile);
         renderGestaoImportResult(result);
+        if (result.imported > 0) {
+            gestaoImportValidationPassed = false;
+        }
     } catch (error) {
         console.error('submitGestaoImport:', error);
         renderGestaoImportResult({
@@ -1182,8 +1472,11 @@ function bindGestaoImportEvents() {
     document.getElementById('gestao-import-file')?.addEventListener('change', async (event) => {
         const file = event.target.files?.[0] || null;
         gestaoImportSelectedFile = file;
+        gestaoImportValidationPassed = false;
         updateGestaoImportFileLabel(file);
+        updateGestaoImportActionButtons();
         document.getElementById('gestao-import-result')?.classList.add('hidden');
     });
+    document.getElementById('gestao-import-validate')?.addEventListener('click', validateGestaoImport);
     document.getElementById('gestao-import-submit')?.addEventListener('click', submitGestaoImport);
 }

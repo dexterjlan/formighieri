@@ -117,7 +117,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261054`);
+            await loadScript(`${src}?v=20261059`);
         }
 
         initAppEvents();

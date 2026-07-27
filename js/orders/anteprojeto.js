@@ -4,11 +4,16 @@ let editingAnteprojetoConferenceId = null;
 let pendingAnteprojetoReturnConferenceId = null;
 let pendingAnteprojetoApproveConferenceId = null;
 
-function isAdminOrOrderConsultorForOrder(orderId) {
+function isAdminOrOrderConsultorForOrder(orderId, consultantInfo = null) {
     if (currentUser?.role === 'Admin') return true;
     if (currentUser?.role !== 'Consultor') return false;
-    const consultantName = getOrderConsultantName(orderId);
-    return Boolean(consultantName && currentUser.name === consultantName);
+
+    const info = consultantInfo || {
+        name: getOrderConsultantName(orderId),
+        userId: getOrderConsultantUserId(orderId)
+    };
+
+    return isCurrentUserOrderConsultor(info.name, info.userId);
 }
 
 function isAnteprojetoConferenceConfirmed(conference) {

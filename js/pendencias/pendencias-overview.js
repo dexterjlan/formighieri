@@ -5,7 +5,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         requisicoes: 'Requisições aguardando resposta do consultor.'
     },
     projetista: {
-        'aguardando-projeto-tecnico': 'Projetos aguardando projeto técnico (sem responsável ou associados a você).',
+        'aguardando-projeto-tecnico': 'Projetos aguardando projeto técnico (visualização; associação pelo gestor).',
         'projeto-tecnico': 'Projetos em projeto técnico associados a você.',
         'em-revisao': 'Projetos em revisão sob sua responsabilidade.',
         requisicao: 'Requisições aguardando sua resposta.',

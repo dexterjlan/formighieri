@@ -94,6 +94,8 @@ function renderPendenciasAssociacaoPrevisaoInput(project) {
 
 function renderPendenciasSemResponsavelProjectRow(project, characteristicsMap = new Map(), options = {}) {
     const mode = options.mode === 'projetista' ? 'projetista' : 'gestor';
+    const showPrevisao = options.showPrevisao !== false;
+    const showAction = options.showAction !== false;
     const orderCode = project.order?.orderCode || '—';
     const clientName = project.order?.clientName || '—';
     const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
@@ -113,19 +115,27 @@ function renderPendenciasSemResponsavelProjectRow(project, characteristicsMap = 
             </td>`
         : '';
 
-    const actionCell = mode === 'gestor'
-        ? `<button type="button"
-                class="pendencias-gestor-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
-                data-project-id="${project.id}"
-                data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
-                Associar
-            </button>`
-        : `<button type="button"
-                class="pendencias-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
-                data-project-id="${project.id}"
-                data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
-                Associar a mim
-            </button>`;
+    const previsaoCell = showPrevisao
+        ? `<td class="p-3 pendencias-sem-projetista-previsao">
+                ${renderPendenciasAssociacaoPrevisaoInput(project)}
+            </td>`
+        : '';
+
+    const actionCell = showAction
+        ? (mode === 'gestor'
+            ? `<button type="button"
+                    class="pendencias-gestor-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
+                    data-project-id="${project.id}"
+                    data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
+                    Associar
+                </button>`
+            : `<button type="button"
+                    class="pendencias-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
+                    data-project-id="${project.id}"
+                    data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
+                    Associar a mim
+                </button>`)
+        : '';
 
     return `
         <tr class="border-b border-slate-100 last:border-0">
@@ -134,16 +144,17 @@ function renderPendenciasSemResponsavelProjectRow(project, characteristicsMap = 
             <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
             <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
             <td class="p-3 text-xs text-slate-600 pendencias-sem-projetista-characteristics">${characteristicsCell}</td>
-            <td class="p-3 pendencias-sem-projetista-previsao">
-                ${renderPendenciasAssociacaoPrevisaoInput(project)}
-            </td>
+            ${previsaoCell}
             ${designerCell}
-            <td class="p-3 text-right pendencias-sem-projetista-action">${actionCell}</td>
+            ${showAction ? `<td class="p-3 text-right pendencias-sem-projetista-action">${actionCell}</td>` : ''}
         </tr>
     `;
 }
 
-function renderPendenciasSemResponsavelTableHead(showDesigner = true) {
+function renderPendenciasSemResponsavelTableHead(showDesigner = true, options = {}) {
+    const showPrevisao = options.showPrevisao !== false;
+    const showAction = options.showAction !== false;
+
     return `
         <tr>
             <th class="text-left p-3 font-semibold">Pedido</th>
@@ -151,11 +162,11 @@ function renderPendenciasSemResponsavelTableHead(showDesigner = true) {
             <th class="text-left p-3 font-semibold">Projeto</th>
             <th class="text-left p-3 font-semibold">Entrega Proj. Téc.</th>
             <th class="text-left p-3 font-semibold min-w-[10rem]">Características</th>
-            <th class="text-left p-3 font-semibold min-w-[9.5rem]">Previsão</th>
+            ${showPrevisao ? '<th class="text-left p-3 font-semibold min-w-[9.5rem]">Previsão</th>' : ''}
             ${showDesigner
                 ? '<th class="text-left p-3 font-semibold min-w-[11rem]">Projetista</th>'
                 : ''}
-            <th class="text-right p-3 font-semibold w-28">Ação</th>
+            ${showAction ? '<th class="text-right p-3 font-semibold w-28">Ação</th>' : ''}
         </tr>
     `;
 }
@@ -180,7 +191,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
         const rows = unassigned.map(project => renderPendenciasSemResponsavelProjectRow(
             project,
             characteristicsMap,
-            { mode: 'projetista' }
+            { mode: 'projetista', showPrevisao: false, showAction: false }
         ));
 
         return `
@@ -188,7 +199,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                 <div>
                     <h3 class="font-bold text-sm text-slate-900">Sem responsável</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${unassigned.length} projeto${unassigned.length === 1 ? '' : 's'}</p>
+                    <p class="text-xs text-slate-400 mt-0.5">${unassigned.length} projeto${unassigned.length === 1 ? '' : 's'} · associação pelo gestor de projetos</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-aguardando-pt"
                     class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
@@ -199,7 +210,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
                 ? `<div class="overflow-x-auto">
                     <table class="pendencias-sem-projetista-table w-full text-sm min-w-[60rem]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            ${renderPendenciasSemResponsavelTableHead(false)}
+                            ${renderPendenciasSemResponsavelTableHead(false, { showPrevisao: false, showAction: false })}
                         </thead>
                         <tbody>${rows.join('')}</tbody>
                     </table>
@@ -213,24 +224,32 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
         const orderCode = project.order?.orderCode || '—';
         const clientName = project.order?.clientName || '—';
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const previsaoConclusao = formatPendenciasDeliveryDate(project.previsaoConclusaoProjetoTecnico);
         const projectLabel = project.projectCode
             ? `${project.projectCode} — ${project.name || 'Projeto'}`
             : (project.name || 'Projeto');
         const statusName = getPendenciasProjectStatusName(project);
         const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
+        const showActionColumn = options.showActionColumn !== false;
 
         let actionCell = '';
-        if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) {
-            actionCell = `<button type="button"
-                class="pendencias-iniciar-projeto-btn text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-1.5 rounded-lg font-medium"
-                data-project-id="${project.id}">
-                Iniciar projeto
-            </button>`;
-        } else {
-            const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
-            actionCell = `<span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName || '—')}</span>`;
+        if (showActionColumn) {
+            if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) {
+                actionCell = `<button type="button"
+                    class="pendencias-iniciar-projeto-btn text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-1.5 rounded-lg font-medium"
+                    data-project-id="${project.id}">
+                    Iniciar projeto
+                </button>`;
+            } else {
+                const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
+                actionCell = `<span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName || '—')}</span>`;
+            }
         }
+
+        const statusCell = !showActionColumn
+            ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">
+                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${getPendenciasProjectStatusBadgeClass(statusName)}">${escapeHtml(statusName || '—')}</span>
+                </td>`
+            : '';
 
         return `
             <tr class="border-b border-slate-100 last:border-0">
@@ -239,9 +258,10 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 ${showPrevisaoColumn
-                    ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(previsaoConclusao)}</td>`
+                    ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(formatPendenciasDeliveryDate(project.previsaoConclusaoProjetoTecnico))}</td>`
                     : ''}
-                <td class="p-3 text-right">${actionCell}</td>
+                ${statusCell}
+                ${showActionColumn ? `<td class="p-3 text-right">${actionCell}</td>` : ''}
             </tr>
         `;
     };
@@ -249,6 +269,8 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
     const renderTable = (title, rows, emptyMessage, options = {}) => {
         const lastColumnLabel = options.lastColumnLabel || 'Ação';
         const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
+        const showActionColumn = options.showActionColumn !== false;
+        const showStatusColumn = !showActionColumn;
 
         return `
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -270,7 +292,12 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
                                 ${showPrevisaoColumn
                                     ? '<th class="text-left p-3 font-semibold">Previsão conclusão</th>'
                                     : ''}
-                                <th class="text-right p-3 font-semibold min-w-[18rem]">${escapeHtml(lastColumnLabel)}</th>
+                                ${showStatusColumn
+                                    ? '<th class="text-left p-3 font-semibold">Status</th>'
+                                    : ''}
+                                ${showActionColumn
+                                    ? `<th class="text-right p-3 font-semibold min-w-[18rem]">${escapeHtml(lastColumnLabel)}</th>`
+                                    : ''}
                             </tr>
                         </thead>
                         <tbody>${rows.join('')}</tbody>
@@ -286,27 +313,15 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
             ${renderUnassignedTable()}
             ${renderTable(
                 'Associados a mim',
-                mine.map(project => renderRow(project, 'mine', { showPrevisaoColumn: true })),
+                mine.map(project => renderRow(project, 'mine', { showPrevisaoColumn: false, showActionColumn: false })),
                 'Nenhum projeto associado a você.',
-                { lastColumnLabel: 'Status', showPrevisaoColumn: true }
+                { showPrevisaoColumn: false, showActionColumn: false }
             )}
         </div>
     `;
 
     content.querySelector('#btn-pendencias-refresh-aguardando-pt')
         ?.addEventListener('click', () => loadPendenciasAguardandoProjetoTecnico());
-
-    content.querySelectorAll('.pendencias-associar-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            const row = button.closest('tr');
-            const previsaoDate = row?.querySelector('.pendencias-previsao-input')?.value || '';
-            associarPendenciaProjetoAMim(
-                Number(button.dataset.projectId),
-                previsaoDate,
-                button.dataset.deliveryDate || ''
-            );
-        });
-    });
 
     content.querySelectorAll('.pendencias-iniciar-projeto-btn').forEach(button => {
         button.addEventListener('click', () => iniciarPendenciaProjetoTecnico(Number(button.dataset.projectId)));

@@ -894,6 +894,7 @@ async function saveGestaoOrder(event) {
     }
 
     const now = new Date().toISOString();
+    const consultantUserId = await resolveConsultantUserIdByNameAsync(consultantName);
 
     try {
         let orderId = editingGestaoOrderId;
@@ -904,13 +905,14 @@ async function saveGestaoOrder(event) {
                 .update({
                     clientName,
                     consultantName,
+                    consultantUserId: consultantUserId || null,
                     clientDeliveryDate,
                     updatedById: currentUser.id,
                     updatedAt: now
                 })
                 .eq('id', editingGestaoOrderId);
 
-            if (error?.message?.includes('clientDeliveryDate')) {
+            if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('consultantUserId')) {
                 ({ error } = await supabaseClient
                     .from('salesOrders')
                     .update({
@@ -938,6 +940,7 @@ async function saveGestaoOrder(event) {
                 orderCode,
                 clientName,
                 consultantName,
+                consultantUserId: consultantUserId || undefined,
                 clientDeliveryDate,
                 createdById: currentUser.id,
                 updatedById: currentUser.id,
@@ -950,8 +953,8 @@ async function saveGestaoOrder(event) {
                 .select('id')
                 .single();
 
-            if (error?.message?.includes('clientDeliveryDate')) {
-                const { clientDeliveryDate: _d, updatedAt: _u, ...fallback } = orderPayload;
+            if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('consultantUserId')) {
+                const { clientDeliveryDate: _d, updatedAt: _u, consultantUserId: _c, ...fallback } = orderPayload;
                 ({ data: created, error } = await supabaseClient
                     .from('salesOrders')
                     .insert(fallback)

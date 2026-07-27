@@ -396,6 +396,12 @@ async function saveUserRole(userId) {
         return;
     }
 
+    const { data: previousUser } = await supabaseClient
+        .from('appUsers')
+        .select('name, role')
+        .eq('id', userId)
+        .maybeSingle();
+
     let payload = { name, role, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica };
     let { error } = await supabaseClient
         .from('appUsers')
@@ -420,6 +426,13 @@ async function saveUserRole(userId) {
     if (error) {
         alertAppDialog("Erro ao salvar usuário: " + error.message);
         return;
+    }
+
+    if ((previousUser?.role === 'Consultor' || role === 'Consultor')
+        && previousUser?.name
+        && previousUser.name !== name) {
+        await syncSalesOrdersConsultantName(previousUser.name, name, userId);
+        await loadConsultantUsersCache(true);
     }
 
     if (userId === currentUser.id) {

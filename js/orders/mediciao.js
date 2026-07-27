@@ -3,6 +3,7 @@ let editingMedicaoId = null;
 let medicaoPickerPreselectProjectId = null;
 
 const MEDICAO_NEW_PICKER_STATUS_NAME = 'Aguardando Medição';
+const MEDICAO_EDITABLE_PROJECT_STATUSES = ['Medição Realizada', 'Planta Levantada'];
 
 function getProjectStatusName(project) {
     return project?.projectStatus?.name || '';
@@ -220,11 +221,18 @@ function getMedicaoProjectStatusName(medicaoProject) {
         || '';
 }
 
+function medicaoProjectIsEditableForMedicao(medicaoProject) {
+    const statusName = getMedicaoProjectStatusName(medicaoProject);
+    if (MEDICAO_EDITABLE_PROJECT_STATUSES.includes(statusName)) return true;
+    // Fallback quando o status do projeto não veio enriquecido na consulta.
+    return !statusName && Boolean(medicaoProject?.measurementDate);
+}
+
 function medicaoHasProjectsInMedicaoRealizadaStatus(medicao) {
     const projects = getMedicaoProjects(medicao);
     if (!projects.length) return false;
 
-    return projects.every(item => getMedicaoProjectStatusName(item) === 'Medição Realizada');
+    return projects.every(medicaoProjectIsEditableForMedicao);
 }
 
 function canEditMedicao(medicao) {
@@ -1082,7 +1090,7 @@ async function enrichMedicoes(medicoes, orderId) {
         ...medicao,
         medicaoProjects: (medicao.medicaoProjects || []).map(item => ({
             ...item,
-            orderProject: item.orderProject || orderProjectById[Number(item.orderProjectId)] || null
+            orderProject: orderProjectById[Number(item.orderProjectId)] || item.orderProject || null
         }))
     }));
 }

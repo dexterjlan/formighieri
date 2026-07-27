@@ -13,8 +13,10 @@ function isAdminOrOrderConsultorForApproval(approval) {
     if (currentUser?.role === 'Admin') return true;
     if (currentUser?.role !== 'Consultor') return false;
 
-    const consultantName = getOrderConsultantNameForApproval(approval);
-    return Boolean(consultantName && currentUser.name === consultantName);
+    return isCurrentUserOrderConsultor(
+        getOrderConsultantNameForApproval(approval),
+        approval.order?.consultantUserId ?? null
+    );
 }
 
 function canEditCommercialApprovalCommercialFields(approval) {

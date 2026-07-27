@@ -237,10 +237,10 @@ async function fetchPendenciasConsultorConferenciaProjects() {
     let projects = sortPendenciasByDeliveryDate(result.data || []);
 
     if (!overviewMode) {
-        projects = projects.filter(project => {
-            const consultantName = project.order?.consultantName;
-            return Boolean(consultantName && currentUser?.name === consultantName);
-        });
+        projects = projects.filter(project => isCurrentUserOrderConsultor(
+            project.order?.consultantName,
+            project.order?.consultantUserId
+        ));
     }
 
     const conferenceByProjectId = await fetchPendenciasConferenceByProjectIds(
@@ -468,10 +468,10 @@ async function fetchPendenciasConsultorAguardandoAprovacaoProjects() {
     let projects = sortPendenciasByDeliveryDate(result.data || []);
 
     if (!overviewMode) {
-        projects = projects.filter(project => {
-            const consultantName = project.order?.consultantName;
-            return Boolean(consultantName && currentUser?.name === consultantName);
-        });
+        projects = projects.filter(project => isCurrentUserOrderConsultor(
+            project.order?.consultantName,
+            project.order?.consultantUserId
+        ));
     }
 
     const approvalsByProjectRaw = await fetchCommercialApprovalsByProjectIds(
@@ -721,12 +721,13 @@ async function fetchPendenciasConsultorRequisicaoRequests() {
     }
 
     let requests = (result.data || []).filter(request => isRequestWaitingConsultor(request));
+    requests = await enrichItemsWithOrderConsultantUserId(requests);
 
     if (!overviewMode) {
-        requests = requests.filter(request => {
-            const consultantName = request.order?.consultantName;
-            return Boolean(consultantName && currentUser?.name === consultantName);
-        });
+        requests = requests.filter(request => isCurrentUserOrderConsultor(
+            request.order?.consultantName,
+            request.order?.consultantUserId
+        ));
     }
 
     requests = sortOrderRequests(requests);

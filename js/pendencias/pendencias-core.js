@@ -470,6 +470,7 @@ async function queryPendenciasProjects(filters = {}) {
     if (result.error) return result;
 
     let projects = await enrichPendenciasProjectsWithStatus(result.data || []);
+    projects = await enrichPendenciasProjectsWithConsultantUserId(projects);
     projects = excludeInactivePendenciasProjects(projects);
     return { ...result, data: projects };
 }
@@ -498,6 +499,10 @@ async function enrichPendenciasProjectsWithStatus(projects) {
         ...project,
         projectStatus: project.projectStatus || statusById[project.statusId] || null
     }));
+}
+
+async function enrichPendenciasProjectsWithConsultantUserId(projects) {
+    return enrichItemsWithOrderConsultantUserId(projects, project => project?.order);
 }
 
 function getPendenciasProjectStatusName(project) {

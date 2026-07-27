@@ -39,11 +39,138 @@ function getOrderConsultantName(orderId) {
     return ordersCache.find(o => o.id === orderId)?.consultantName || null;
 }
 
+function getOrderConsultantUserId(orderId) {
+    if (!orderId || typeof ordersCache === 'undefined') return null;
+    const userId = ordersCache.find(o => o.id === orderId)?.consultantUserId;
+    return userId == null ? null : Number(userId);
+}
+
+function normalizeConsultantNameKey(name) {
+    return String(name || '').trim().toLocaleLowerCase('pt-BR');
+}
+
+function isCurrentUserOrderConsultor(consultantNameOnOrder, consultantUserId = null, user = currentUser) {
+    if (!user || user.role !== 'Consultor') return false;
+
+    const currentUserId = Number(user.id);
+    const orderUserId = Number(consultantUserId);
+    if (currentUserId && orderUserId && currentUserId === orderUserId) return true;
+
+    if (!consultantNameOnOrder) return false;
+    return normalizeConsultantNameKey(user.name) === normalizeConsultantNameKey(consultantNameOnOrder);
+}
+
+let consultantUsersCache = [];
+
+async function loadConsultantUsersCache(force = false) {
+    if (consultantUsersCache.length && !force) return consultantUsersCache;
+
+    const { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, name')
+        .eq('role', 'Consultor')
+        .eq('isActive', true)
+        .order('name', { ascending: true });
+
+    if (error) {
+        console.error('loadConsultantUsersCache:', error);
+        return consultantUsersCache;
+    }
+
+    consultantUsersCache = data || [];
+    return consultantUsersCache;
+}
+
+function resolveConsultantUserIdByName(consultantName, consultants = consultantUsersCache) {
+    const key = normalizeConsultantNameKey(consultantName);
+    if (!key) return null;
+
+    const match = (consultants || []).find(consultant => normalizeConsultantNameKey(consultant.name) === key);
+    return match?.id || null;
+}
+
+async function resolveConsultantUserIdByNameAsync(consultantName) {
+    await loadConsultantUsersCache();
+    return resolveConsultantUserIdByName(consultantName);
+}
+
+async function syncSalesOrdersConsultantName(oldName, newName, consultantUserId = null) {
+    const from = String(oldName || '').trim();
+    const to = String(newName || '').trim();
+    if (!from || !to || from === to) return;
+
+    const payload = { consultantName: to };
+    const resolvedUserId = Number(consultantUserId);
+    if (resolvedUserId) payload.consultantUserId = resolvedUserId;
+
+    const updates = [];
+
+    if (resolvedUserId) {
+        updates.push(
+            supabaseClient
+                .from('salesOrders')
+                .update(payload)
+                .eq('consultantUserId', resolvedUserId)
+        );
+    }
+
+    updates.push(
+        supabaseClient
+            .from('salesOrders')
+            .update(payload)
+            .eq('consultantName', from)
+    );
+
+    for (const request of updates) {
+        const { error } = await request;
+        if (error?.message?.includes('consultantUserId')) {
+            const { error: nameOnlyError } = await supabaseClient
+                .from('salesOrders')
+                .update({ consultantName: to })
+                .eq('consultantName', from);
+            if (nameOnlyError) console.error('syncSalesOrdersConsultantName:', nameOnlyError);
+        } else if (error) {
+            console.error('syncSalesOrdersConsultantName:', error);
+        }
+    }
+
+    if (typeof ordersCache !== 'undefined' && Array.isArray(ordersCache)) {
+        ordersCache.forEach(order => {
+            const matchesUser = resolvedUserId && Number(order.consultantUserId) === resolvedUserId;
+            const matchesName = order.consultantName === from;
+            if (!matchesUser && !matchesName) return;
+            order.consultantName = to;
+            if (resolvedUserId) order.consultantUserId = resolvedUserId;
+        });
+    }
+}
+
+async function enrichItemsWithOrderConsultantUserId(items, getOrder = item => item?.order) {
+    if (!items?.length) return items || [];
+
+    await loadConsultantUsersCache();
+
+    return items.map(item => {
+        const order = getOrder(item);
+        if (!order || order.consultantUserId || !order.consultantName) return item;
+
+        const consultantUserId = resolveConsultantUserIdByName(order.consultantName);
+        if (!consultantUserId) return item;
+
+        return { ...item, order: { ...order, consultantUserId } };
+    });
+}
+
 function isOrderConsultorForRequest(conv) {
     if (currentUser?.role === 'Admin') return true;
     if (currentUser?.role !== 'Consultor') return false;
-    const consultantName = getOrderConsultantName(conv?.orderId);
-    return Boolean(consultantName && currentUser.name === consultantName);
+    const order = typeof ordersCache !== 'undefined'
+        ? ordersCache.find(item => Number(item.id) === Number(conv?.orderId))
+        : null;
+    return isCurrentUserOrderConsultor(
+        order?.consultantName || getOrderConsultantName(conv?.orderId),
+        order?.consultantUserId || getOrderConsultantUserId(conv?.orderId)
+    );
 }
 
 function normalizeRequestStatus(conv) {
