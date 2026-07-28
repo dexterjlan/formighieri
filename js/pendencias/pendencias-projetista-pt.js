@@ -310,12 +310,17 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
 
     content.innerHTML = `
         <div class="space-y-4">
-            ${renderUnassignedTable()}
+            <div class="flex justify-end">
+                <button type="button" id="btn-pendencias-refresh-aguardando-pt"
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
+                </button>
+            </div>
             ${renderTable(
                 'Associados a mim',
-                mine.map(project => renderRow(project, 'mine', { showPrevisaoColumn: false, showActionColumn: false })),
+                mine.map(project => renderRow(project, 'mine', { showPrevisaoColumn: false, showActionColumn: true })),
                 'Nenhum projeto associado a você.',
-                { showPrevisaoColumn: false, showActionColumn: false }
+                { showPrevisaoColumn: false, showActionColumn: true }
             )}
         </div>
     `;
@@ -878,7 +883,7 @@ async function loadPendenciasAguardandoProjetoTecnico() {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando projetos...</p>';
     }
 
-    const { error, unassigned, mine } = await fetchPendenciasAguardandoProjetoTecnico();
+    const { error, mine } = await fetchPendenciasAguardandoProjetoTecnico();
     if (error) {
         renderPendenciasPlaceholder(
             'Aguardando Projeto Técnico',
@@ -887,12 +892,7 @@ async function loadPendenciasAguardandoProjetoTecnico() {
         return;
     }
 
-    const unassignedIds = (unassigned || []).map(project => Number(project.id)).filter(Boolean);
-    const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
-        ? await fetchOrderProjectCharacteristicsMap(unassignedIds)
-        : new Map();
-
-    renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characteristicsMap);
+    renderPendenciasAguardandoProjetoTecnicoList([], mine, new Map());
 }
 
 async function associarPendenciaProjetoAMim(projectId, previsaoDate, deliveryDate = '') {

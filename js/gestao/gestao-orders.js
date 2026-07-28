@@ -368,7 +368,9 @@ async function enrichGestaoOrdersWithProjectStatuses(orders) {
     }));
 }
 
-async function fetchGestaoOrders() {
+async function fetchGestaoOrders(filters = {}) {
+    const orderCode = String(filters.orderCode || '').trim();
+    const clientName = String(filters.clientName || '').trim();
     const orderSelectVariants = [
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
         '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
@@ -389,10 +391,19 @@ async function fetchGestaoOrders() {
     let lastError = null;
 
     for (const selectCols of orderSelectVariants) {
-        const attempt = await supabaseClient
+        let query = supabaseClient
             .from('salesOrders')
             .select(selectCols)
             .order('createdAt', { ascending: false });
+
+        if (orderCode) {
+            query = query.ilike('orderCode', `%${orderCode}%`);
+        }
+        if (clientName) {
+            query = query.ilike('clientName', `%${clientName}%`);
+        }
+
+        const attempt = await query;
 
         if (!attempt.error) {
             result = attempt;
@@ -421,26 +432,24 @@ async function fetchGestaoOrders() {
     return { data: orders, error: null };
 }
 
-async function loadGestaoOrdersList() {
+function getGestaoOrdersListFilters() {
+    return {
+        orderCode: document.getElementById('gestao-orders-filter-order')?.value.trim() || '',
+        clientName: document.getElementById('gestao-orders-filter-client')?.value.trim() || ''
+    };
+}
+
+function renderGestaoOrdersListRows(orders) {
     const tbody = document.getElementById('gestao-orders-list');
     if (!tbody) return;
 
-    const result = await fetchGestaoOrders();
-
-    if (result.error) {
-        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-xs text-red-500">Erro ao carregar pedidos: ${escapeHtml(result.error.message)}</td></tr>`;
-        return;
-    }
-
-    gestaoOrdersCache = result.data || [];
-
-    if (!gestaoOrdersCache.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-xs text-slate-400">Nenhum pedido cadastrado.</td></tr>';
+    if (!orders.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-xs text-slate-400">Nenhum pedido encontrado.</td></tr>';
         return;
     }
 
     tbody.innerHTML = '';
-    gestaoOrdersCache.forEach(order => {
+    orders.forEach(order => {
         const projectCount = (order.projects || []).length;
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -459,6 +468,44 @@ async function loadGestaoOrdersList() {
         tbody.appendChild(tr);
     });
 }
+
+async function loadGestaoOrdersList() {
+    const tbody = document.getElementById('gestao-orders-list');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-xs text-slate-400">Carregando pedidos...</td></tr>';
+
+    const result = await fetchGestaoOrders(getGestaoOrdersListFilters());
+
+    if (result.error) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-xs text-red-500">Erro ao carregar pedidos: ${escapeHtml(result.error.message)}</td></tr>`;
+        return;
+    }
+
+    gestaoOrdersCache = result.data || [];
+    renderGestaoOrdersListRows(gestaoOrdersCache);
+}
+
+function resetGestaoOrdersListFilters() {
+    const orderInput = document.getElementById('gestao-orders-filter-order');
+    const clientInput = document.getElementById('gestao-orders-filter-client');
+    if (orderInput) orderInput.value = '';
+    if (clientInput) clientInput.value = '';
+    loadGestaoOrdersList();
+}
+
+function bindGestaoOrdersListFilterEvents() {
+    document.getElementById('gestao-orders-filter-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        await loadGestaoOrdersList();
+    });
+
+    document.getElementById('gestao-orders-filter-clear')?.addEventListener('click', () => {
+        resetGestaoOrdersListFilters();
+    });
+}
+
+bindGestaoOrdersListFilterEvents();
 
 async function insertGestaoProject(orderId, project, now) {
     const statusId = project.statusId || getDefaultProjectStatusId();

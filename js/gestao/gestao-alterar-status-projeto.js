@@ -23,6 +23,68 @@ function getGestaoAlterarStatusProjectStatusName(project) {
         || '—';
 }
 
+function setGestaoAlterarStatusSaveButtonState(button, state = 'idle', pendingCount = 0) {
+    if (!button) return;
+
+    if (state === 'saving') {
+        button.dataset.originalLabel = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Salvando...';
+        return;
+    }
+
+    button.disabled = pendingCount === 0;
+    button.textContent = pendingCount > 0
+        ? `Salvar alterações (${pendingCount})`
+        : (button.dataset.originalLabel || 'Salvar alterações');
+}
+
+function collectGestaoAlterarStatusPendingChanges() {
+    const tbody = document.getElementById('gestao-alterar-status-list');
+    if (!tbody) return [];
+
+    const changes = [];
+
+    tbody.querySelectorAll('tr[data-project-id]').forEach(row => {
+        const projectId = Number(row.dataset.projectId);
+        const select = row.querySelector('.gestao-alterar-status-new');
+        const newStatusId = Number(select?.value);
+        const currentStatusId = Number(select?.dataset.currentStatusId);
+
+        if (!projectId || !newStatusId || newStatusId === currentStatusId) {
+            return;
+        }
+
+        const project = gestaoAlterarStatusProjectsCache.find(item => Number(item.id) === projectId);
+        if (!project) return;
+
+        const currentStatusName = getGestaoAlterarStatusProjectStatusName(project);
+        const newStatusName = gestaoProjectStatusesCache.find(status => Number(status.id) === newStatusId)?.name || '—';
+
+        changes.push({
+            projectId,
+            project,
+            row,
+            select,
+            currentStatusId,
+            newStatusId,
+            currentStatusName,
+            newStatusName
+        });
+    });
+
+    return changes;
+}
+
+function syncGestaoAlterarStatusSaveButton() {
+    const button = document.getElementById('gestao-alterar-status-save-all');
+    setGestaoAlterarStatusSaveButtonState(
+        button,
+        'idle',
+        collectGestaoAlterarStatusPendingChanges().length
+    );
+}
+
 async function fetchGestaoAlterarStatusProjects(filters = {}) {
     const orderCode = String(filters.orderCode || '').trim();
     const clientName = String(filters.clientName || '').trim();
@@ -99,11 +161,12 @@ function renderGestaoAlterarStatusProjectsList(projects = gestaoAlterarStatusPro
     if (!projects.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="p-6 text-center text-xs text-slate-500">
+                <td colspan="5" class="p-6 text-center text-xs text-slate-500">
                     Nenhum projeto encontrado para os filtros informados.
                 </td>
             </tr>
         `;
+        syncGestaoAlterarStatusSaveButton();
         return;
     }
 
@@ -124,102 +187,87 @@ function renderGestaoAlterarStatusProjectsList(projects = gestaoAlterarStatusPro
                         ${getGestaoAllProjectStatusOptionsHtml(currentStatusId)}
                     </select>
                 </td>
-                <td class="p-3 whitespace-nowrap">
-                    <button type="button"
-                        class="gestao-alterar-status-submit text-xs bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1.5 rounded-lg font-medium">
-                        Alterar Status
-                    </button>
-                </td>
             </tr>
         `;
     }).join('');
 
-    tbody.querySelectorAll('.gestao-alterar-status-submit').forEach(button => {
-        button.addEventListener('click', () => {
-            const row = button.closest('tr');
-            applyGestaoAlterarStatusProjectRow(row, button);
-        });
+    tbody.querySelectorAll('.gestao-alterar-status-new').forEach(select => {
+        select.addEventListener('change', syncGestaoAlterarStatusSaveButton);
     });
+
+    syncGestaoAlterarStatusSaveButton();
 }
 
-async function applyGestaoAlterarStatusProjectRow(row, button = null) {
-    if (!row || !canAccessGestao()) return;
+async function saveGestaoAlterarStatusPendingChanges() {
+    if (!canAccessGestao()) return;
 
-    const projectId = Number(row.dataset.projectId);
-    const select = row.querySelector('.gestao-alterar-status-new');
-    const newStatusId = Number(select?.value);
-    const currentStatusId = Number(select?.dataset.currentStatusId);
-
-    if (!projectId || !newStatusId) {
-        alertAppDialog('Selecione o novo status.', { variant: 'warning', title: 'Aviso' });
+    const changes = collectGestaoAlterarStatusPendingChanges();
+    if (!changes.length) {
+        alertAppDialog('Nenhuma alteração de status para salvar.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (newStatusId === currentStatusId) {
-        alertAppDialog('O novo status deve ser diferente do status atual.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
-
-    const project = gestaoAlterarStatusProjectsCache.find(item => Number(item.id) === projectId);
-    if (!project) {
-        alertAppDialog('Projeto não encontrado. Atualize a busca.');
-        return;
-    }
-
-    const currentStatusName = getGestaoAlterarStatusProjectStatusName(project);
-    const newStatusName = gestaoProjectStatusesCache.find(status => Number(status.id) === newStatusId)?.name || 'novo status';
-    const projectName = project.name || '—';
+    const summaryLines = changes.slice(0, 8).map(change => {
+        const projectName = change.project.name || '—';
+        const orderCode = change.project.order?.orderCode || '—';
+        return `• ${orderCode} — ${projectName}: ${change.currentStatusName} → ${change.newStatusName}`;
+    });
+    const extraCount = changes.length - summaryLines.length;
+    const extraLine = extraCount > 0 ? `\n... e mais ${extraCount} projeto(s).` : '';
 
     const confirmed = await confirmAppDialog(
-        `Confirmar alteração de status do projeto "${projectName}" (pedido ${project.order?.orderCode || '—'}) de "${currentStatusName}" para "${newStatusName}"?`
+        `Confirmar alteração de status de ${changes.length} projeto(s)?\n\n${summaryLines.join('\n')}${extraLine}`
     );
     if (!confirmed) return;
 
-    const originalLabel = button?.textContent || 'Alterar Status';
-    if (button) {
-        button.disabled = true;
-        button.textContent = 'Salvando...';
-    }
+    const button = document.getElementById('gestao-alterar-status-save-all');
+    setGestaoAlterarStatusSaveButtonState(button, 'saving');
 
-    try {
-        const now = new Date().toISOString();
+    const now = new Date().toISOString();
+    const errors = [];
+
+    for (const change of changes) {
         const { error } = await supabaseClient
             .from('OrderProject')
             .update({
-                statusId: newStatusId,
+                statusId: change.newStatusId,
                 updatedById: currentUser.id,
                 updatedAt: now
             })
-            .eq('id', projectId);
+            .eq('id', change.projectId);
 
         if (error) {
-            throw error;
+            errors.push(`${change.project.name || change.projectId}: ${error.message}`);
+            continue;
         }
 
-        project.statusId = newStatusId;
-        project.projectStatus = gestaoProjectStatusesCache.find(status => Number(status.id) === newStatusId) || {
-            id: newStatusId,
-            name: newStatusName
+        change.project.statusId = change.newStatusId;
+        change.project.projectStatus = gestaoProjectStatusesCache.find(status => Number(status.id) === change.newStatusId) || {
+            id: change.newStatusId,
+            name: change.newStatusName
         };
 
-        if (select) {
-            select.dataset.currentStatusId = String(newStatusId);
+        if (change.select) {
+            change.select.dataset.currentStatusId = String(change.newStatusId);
         }
 
-        const statusCell = row.querySelector('td:nth-child(4)');
+        const statusCell = change.row?.querySelector('td:nth-child(4)');
         if (statusCell) {
-            statusCell.textContent = newStatusName;
-        }
-
-        alertAppDialog('Status alterado com sucesso.', { variant: 'success', title: 'Sucesso' });
-    } catch (error) {
-        alertAppDialog(`Erro ao alterar status: ${error.message}`);
-    } finally {
-        if (button) {
-            button.disabled = false;
-            button.textContent = originalLabel;
+            statusCell.textContent = change.newStatusName;
         }
     }
+
+    syncGestaoAlterarStatusSaveButton();
+
+    if (errors.length) {
+        alertAppDialog(
+            `${changes.length - errors.length} projeto(s) atualizado(s). Falhas:\n${errors.join('\n')}`,
+            { variant: 'warning', title: 'Aviso' }
+        );
+        return;
+    }
+
+    alertAppDialog(`${changes.length} projeto(s) atualizado(s) com sucesso.`, { variant: 'success', title: 'Sucesso' });
 }
 
 async function loadGestaoAlterarStatusProjectsList() {
@@ -235,19 +283,21 @@ async function loadGestaoAlterarStatusProjectsList() {
         if (countEl) countEl.textContent = '0 projetos';
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="p-6 text-center text-xs text-slate-500">
+                <td colspan="5" class="p-6 text-center text-xs text-slate-500">
                     Informe o código do pedido e/ou o nome do cliente para buscar projetos.
                 </td>
             </tr>
         `;
+        syncGestaoAlterarStatusSaveButton();
         return;
     }
 
     tbody.innerHTML = `
         <tr>
-            <td colspan="6" class="p-6 text-center text-xs text-slate-500">Carregando projetos...</td>
+            <td colspan="5" class="p-6 text-center text-xs text-slate-500">Carregando projetos...</td>
         </tr>
     `;
+    syncGestaoAlterarStatusSaveButton();
 
     try {
         await loadGestaoProjectStatuses(false);
@@ -261,11 +311,12 @@ async function loadGestaoAlterarStatusProjectsList() {
         if (countEl) countEl.textContent = '0 projetos';
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="p-6 text-center text-xs text-red-600">
+                <td colspan="5" class="p-6 text-center text-xs text-red-600">
                     Erro ao carregar projetos: ${escapeHtml(error.message)}
                 </td>
             </tr>
         `;
+        syncGestaoAlterarStatusSaveButton();
     }
 }
 
@@ -285,6 +336,10 @@ function bindGestaoAlterarStatusProjetoEvents() {
 
     document.getElementById('gestao-alterar-status-filter-clear')?.addEventListener('click', () => {
         resetGestaoAlterarStatusFilters();
+    });
+
+    document.getElementById('gestao-alterar-status-save-all')?.addEventListener('click', () => {
+        saveGestaoAlterarStatusPendingChanges();
     });
 }
 

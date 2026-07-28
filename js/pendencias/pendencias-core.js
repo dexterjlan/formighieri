@@ -68,7 +68,20 @@ const PENDENCIAS_GESTOR_WORKLOAD_COLUMNS = [
     'Aguardando PPCP'
 ];
 
-let pendenciasProjetistasCache = [];
+const PENDENCIAS_CONFERENTE_MENU_ITEM_IDS = [
+    'aguardando-medicao',
+    'aguardando-planta',
+    'conferencias'
+];
+
+function isPendenciasAguardandoProjetoTecnicoView() {
+    return pendenciasActiveSection === 'projetista'
+        && pendenciasActiveItem === 'aguardando-projeto-tecnico';
+}
+
+function shouldHidePendenciasGestorAndConferenteNav() {
+    return isPendenciasAguardandoProjetoTecnicoView();
+}
 let pendenciasRequisicaoCache = [];
 let pendenciasAguardandoAprovacaoCache = [];
 let pendenciasConsultorRequisicaoCache = [];
@@ -166,7 +179,8 @@ function getPendenciasProjetistaMenuItems() {
         }
     }
 
-    if (canSeePendenciasProjetistaMedicaoConferenciaMenus()) {
+    if (canSeePendenciasProjetistaMedicaoConferenciaMenus()
+        && !shouldHidePendenciasGestorAndConferenteNav()) {
         items.push(
             { id: 'aguardando-medicao', label: 'Aguardando Medição' },
             { id: 'aguardando-planta', label: 'Aguardando Planta' },
@@ -226,6 +240,8 @@ function getDefaultPendenciasSection() {
 }
 
 function getPendenciasSidebarSections() {
+    const hideGestorAndConferente = shouldHidePendenciasGestorAndConferenteNav();
+
     return [
         {
             id: 'consultor',
@@ -255,7 +271,7 @@ function getPendenciasSidebarSections() {
         {
             id: 'gestor-projetos',
             label: 'Gestor de Projetos',
-            visible: canSeePendenciasGestorProjetosMenu(),
+            visible: canSeePendenciasGestorProjetosMenu() && !hideGestorAndConferente,
             items: [
                 { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' }
             ]
