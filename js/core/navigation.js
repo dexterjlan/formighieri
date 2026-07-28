@@ -76,6 +76,9 @@ async function restoreGestaoView(state) {
         'project-status': () => {
             if (typeof showGestaoProjectStatusPanel === 'function') showGestaoProjectStatusPanel();
         },
+        'alterar-status-projeto': () => {
+            if (typeof showGestaoAlterarStatusProjetoPanel === 'function') showGestaoAlterarStatusProjetoPanel();
+        },
         marceneiros: () => {
             if (typeof showGestaoMarceneirosPanel === 'function') showGestaoMarceneirosPanel();
         },

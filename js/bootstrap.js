@@ -27,6 +27,7 @@ const SCRIPTS = [
     'js/gestao/gestao-kanban.js',
     'js/gestao/gestao-gantt.js',
     'js/gestao/gestao-cadastros.js',
+    'js/gestao/gestao-alterar-status-projeto.js',
     'js/gestao/gestao-dashboard.js',
     'js/gestao/gestao-relatorios.js',
     'js/gestao/gestao-performance.js',
@@ -117,7 +118,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261060`);
+            await loadScript(`${src}?v=20261061`);
         }
 
         initAppEvents();

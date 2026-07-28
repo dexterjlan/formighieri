@@ -631,6 +631,10 @@
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Status de Projeto
                                 </button>
+                                <button type="button" id="gestao-nav-alterar-status-projeto"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Alterar Status Projeto
+                                </button>
                                 <button type="button" id="gestao-nav-marceneiros"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Marceneiros
@@ -996,6 +1000,63 @@
                                         </tr>
                                     </thead>
                                     <tbody id="gestao-project-status-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-alterar-status-projeto-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Alterar Status Projeto</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Busque projetos por pedido ou cliente e altere o status individualmente.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-alterar-status-filter-form" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div>
+                                    <label for="gestao-alterar-status-filter-order" class="block text-[10px] font-semibold text-slate-500 mb-1">Pedido</label>
+                                    <input type="text" id="gestao-alterar-status-filter-order"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Ex: 4050">
+                                </div>
+                                <div>
+                                    <label for="gestao-alterar-status-filter-client" class="block text-[10px] font-semibold text-slate-500 mb-1">Cliente</label>
+                                    <input type="text" id="gestao-alterar-status-filter-client"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Nome do cliente">
+                                </div>
+                                <div class="flex gap-2">
+                                    <button type="submit"
+                                        class="flex-1 bg-indigo-700 text-white text-xs py-2 rounded-lg font-semibold hover:bg-indigo-800">
+                                        Buscar
+                                    </button>
+                                    <button type="button" id="gestao-alterar-status-filter-clear"
+                                        class="flex-1 bg-slate-100 text-slate-600 text-xs py-2 rounded-lg font-medium hover:bg-slate-200">
+                                        Limpar
+                                    </button>
+                                </div>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <div class="p-3 border-b border-slate-100 bg-slate-50/50">
+                                    <span class="text-xs text-slate-500" id="gestao-alterar-status-count">0 projetos</span>
+                                </div>
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold">Pedido</th>
+                                            <th class="text-left p-3 font-semibold">Cliente</th>
+                                            <th class="text-left p-3 font-semibold">Projeto</th>
+                                            <th class="text-left p-3 font-semibold">Status atual</th>
+                                            <th class="text-left p-3 font-semibold">Novo status</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-alterar-status-list" class="divide-y divide-slate-100">
+                                        <tr>
+                                            <td colspan="6" class="p-6 text-center text-xs text-slate-500">
+                                                Informe o código do pedido e/ou o nome do cliente para buscar projetos.
+                                            </td>
+                                        </tr>
+                                    </tbody>
                                 </table>
                             </div>
                         </div>
