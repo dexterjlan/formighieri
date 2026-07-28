@@ -17,10 +17,10 @@ const MONTAGEM_PROG_CREW_PALETTE = [
 
 let montagemProgWeekAnchor = startOfWeekMonday(new Date());
 let montagemProgCache = [];
-let montagemProgMontadorFilterId = null;
+let montagemProgWorkerFilter = null;
 let editingMontagemProgId = null;
 let montagemProgResizeState = null;
-let montagemProgDragMontadorId = null;
+let montagemProgDragWorker = null;
 
 function startOfWeekMonday(date) {
     const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -154,21 +154,89 @@ function getMontagemProgMontadorIds(prog) {
     return getMontagemProgMontadores(prog).map(montador => Number(montador.id));
 }
 
-function getMontagemProgVisibleProgramacoes() {
-    if (!montagemProgMontadorFilterId) return montagemProgCache;
-    return montagemProgCache.filter(prog =>
-        getMontagemProgMontadorIds(prog).includes(Number(montagemProgMontadorFilterId))
+function getMontagemProgMarceneiros(prog) {
+    return (prog?.marceneiros || [])
+        .map(row => row.marceneiro || { id: row.marceneiroId, name: 'Marceneiro' })
+        .filter(marceneiro => marceneiro?.id);
+}
+
+function getMontagemProgMarceneiroIds(prog) {
+    return getMontagemProgMarceneiros(prog).map(marceneiro => Number(marceneiro.id));
+}
+
+function getMontagemProgMarceneiroName(marceneiroId) {
+    const fromCache = (marceneirosCache || []).find(item => Number(item.id) === Number(marceneiroId));
+    if (fromCache?.name) return fromCache.name;
+
+    for (const prog of montagemProgCache) {
+        const marceneiro = getMontagemProgMarceneiros(prog).find(item => Number(item.id) === Number(marceneiroId));
+        if (marceneiro?.name) return marceneiro.name;
+    }
+
+    return 'Marceneiro';
+}
+
+function getMontagemProgSelectableMarceneiros() {
+    return (marceneirosCache || []).filter(marceneiro => marceneiro.isActive !== false);
+}
+
+function getMontagemProgCrewMembers(prog) {
+    return [
+        ...getMontagemProgMontadores(prog).map(montador => ({
+            type: 'montador',
+            id: Number(montador.id),
+            name: montador.name
+        })),
+        ...getMontagemProgMarceneiros(prog).map(marceneiro => ({
+            type: 'marceneiro',
+            id: Number(marceneiro.id),
+            name: marceneiro.name
+        }))
+    ].filter(member => member.id);
+}
+
+function formatMontagemProgCrewMemberLabel(member) {
+    return member?.name || (member?.type === 'marceneiro' ? 'Marceneiro' : 'Montador');
+}
+
+function formatMontagemProgCrewLabel(members) {
+    if (!members.length) return 'Montagem';
+    if (members.length === 1) return formatMontagemProgCrewMemberLabel(members[0]);
+    return `${formatMontagemProgCrewMemberLabel(members[0])} + ${formatMontagemProgCrewMemberLabel(members[1])}`;
+}
+
+function getMontagemProgPrimaryCrewLabel(prog) {
+    return formatMontagemProgCrewLabel(getMontagemProgCrewMembers(prog));
+}
+
+function getMontagemProgWorkerFilterKey(worker) {
+    return worker?.type && worker?.id ? `${worker.type}:${worker.id}` : '';
+}
+
+function parseMontagemProgWorkerFilterKey(key) {
+    if (!key) return null;
+    const [type, idPart] = String(key).split(':');
+    const id = Number(idPart);
+    if ((type !== 'montador' && type !== 'marceneiro') || !id) return null;
+    return { type, id };
+}
+
+function montagemProgWorkerMatchesFilter(prog, filter) {
+    if (!filter) return true;
+    return getMontagemProgCrewMembers(prog).some(member =>
+        member.type === filter.type && member.id === filter.id
     );
+}
+
+function getMontagemProgVisibleProgramacoes() {
+    if (!montagemProgWorkerFilter) return montagemProgCache;
+    return montagemProgCache.filter(prog => montagemProgWorkerMatchesFilter(prog, montagemProgWorkerFilter));
 }
 
 function shiftMontagemProgDateKey(dateKey, days) {
     const date = montagemProgParseDateKey(dateKey);
     if (!date) return dateKey;
     return montagemProgToDateKey(montagemProgAddDays(date, days));
-}
-
-function getMontagemProgMontadorNames(prog) {
-    return getMontagemProgMontadores(prog).map(montador => montador.name).join(' + ');
 }
 
 function getMontagemProgClientLabel(prog) {
@@ -179,20 +247,13 @@ function getMontagemProgOrderLabel(prog) {
     return prog?.orderCode || prog?.order?.orderCode || '';
 }
 
-function getMontagemProgPrimaryMontadorLabel(prog) {
-    const montadores = getMontagemProgMontadores(prog);
-    if (!montadores.length) return 'Montagem';
-    if (montadores.length === 1) return montadores[0].name;
-    return `${montadores[0].name} + ${montadores[1].name}`;
-}
-
 function getMontagemProgBarClientLabel(prog) {
     const clientLabel = getMontagemProgClientLabel(prog);
     return clientLabel ? `Cliente: ${clientLabel}` : 'Cliente: —';
 }
 
 function getMontagemProgBarSummary(prog) {
-    const parts = [getMontagemProgPrimaryMontadorLabel(prog), getMontagemProgBarClientLabel(prog)];
+    const parts = [getMontagemProgPrimaryCrewLabel(prog), getMontagemProgBarClientLabel(prog)];
     const orderLabel = getMontagemProgOrderLabel(prog);
     if (orderLabel) parts.push(orderLabel);
     if (prog?.observation) parts.push(prog.observation);
@@ -200,7 +261,11 @@ function getMontagemProgBarSummary(prog) {
 }
 
 function getMontagemProgTooltipRows(prog) {
-    const rows = [['Montador', getMontagemProgPrimaryMontadorLabel(prog)]];
+    const members = getMontagemProgCrewMembers(prog);
+    const crewLabel = members.length && members.every(member => member.type === 'marceneiro')
+        ? 'Marceneiro'
+        : (members.length && members.every(member => member.type === 'montador') ? 'Montador' : 'Equipe');
+    const rows = [[crewLabel, getMontagemProgPrimaryCrewLabel(prog)]];
     const clientLabel = getMontagemProgClientLabel(prog);
     const orderLabel = getMontagemProgOrderLabel(prog);
 
@@ -350,9 +415,11 @@ function montagemProgPlacementsOverlap(a, b) {
 }
 
 function getMontagemProgCrewKey(prog) {
-    const ids = getMontagemProgMontadorIds(prog).sort((left, right) => left - right);
-    if (!ids.length) return 'none';
-    return ids.join('+');
+    const keys = getMontagemProgCrewMembers(prog)
+        .map(member => `${member.type}:${member.id}`)
+        .sort((left, right) => left.localeCompare(right, 'pt-BR'));
+    if (!keys.length) return 'none';
+    return keys.join('+');
 }
 
 function getMontagemProgCrewColorIndex(crewKey) {
@@ -373,8 +440,8 @@ function getMontagemProgCrewBarStyle(crewKey) {
     return `--montagem-prog-bar-from: ${colors.from}; --montagem-prog-bar-to: ${colors.to};`;
 }
 
-function getMontagemProgSoloCrewKey(montadorId) {
-    return String(Number(montadorId));
+function getMontagemProgSoloCrewKey(workerType, workerId) {
+    return `${workerType}:${Number(workerId)}`;
 }
 
 function montagemProgLaneHasPlacementOverlap(lane, placement) {
@@ -431,25 +498,25 @@ function assignMontagemProgLanes(programacoes, weekStartKey) {
 
 function buildMontagemProgConflictMap(programacoes) {
     const conflictsByProgId = new Map();
-    const assignmentsByDateMontador = new Map();
+    const assignmentsByDateWorker = new Map();
 
     programacoes.forEach(prog => {
         const start = montagemProgParseDateKey(prog.startDate);
         const end = montagemProgParseDateKey(prog.endDate);
         if (!start || !end) return;
 
-        const montadorIds = getMontagemProgMontadorIds(prog);
+        const crewMembers = getMontagemProgCrewMembers(prog);
         for (let cursor = new Date(start); cursor <= end; cursor = montagemProgAddDays(cursor, 1)) {
             const dateKey = montagemProgToDateKey(cursor);
-            montadorIds.forEach(montadorId => {
-                const key = `${dateKey}:${montadorId}`;
-                if (!assignmentsByDateMontador.has(key)) assignmentsByDateMontador.set(key, []);
-                assignmentsByDateMontador.get(key).push(prog.id);
+            crewMembers.forEach(member => {
+                const key = `${dateKey}:${member.type}:${member.id}`;
+                if (!assignmentsByDateWorker.has(key)) assignmentsByDateWorker.set(key, []);
+                assignmentsByDateWorker.get(key).push(prog.id);
             });
         }
     });
 
-    assignmentsByDateMontador.forEach(ids => {
+    assignmentsByDateWorker.forEach(ids => {
         if (ids.length < 2) return;
         ids.forEach(id => {
             if (!conflictsByProgId.has(id)) conflictsByProgId.set(id, new Set());
@@ -463,35 +530,37 @@ function buildMontagemProgConflictMap(programacoes) {
 }
 
 function buildMontagemProgConflictDetails(programacoes) {
-    const assignmentsByDateMontador = new Map();
+    const assignmentsByDateWorker = new Map();
 
     programacoes.forEach(prog => {
         const start = montagemProgParseDateKey(prog.startDate);
         const end = montagemProgParseDateKey(prog.endDate);
         if (!start || !end) return;
 
-        const montadorIds = getMontagemProgMontadorIds(prog);
+        const crewMembers = getMontagemProgCrewMembers(prog);
         for (let cursor = new Date(start); cursor <= end; cursor = montagemProgAddDays(cursor, 1)) {
             const dateKey = montagemProgToDateKey(cursor);
-            montadorIds.forEach(montadorId => {
-                const key = `${dateKey}:${montadorId}`;
-                if (!assignmentsByDateMontador.has(key)) assignmentsByDateMontador.set(key, new Set());
-                assignmentsByDateMontador.get(key).add(prog.id);
+            crewMembers.forEach(member => {
+                const key = `${dateKey}:${member.type}:${member.id}`;
+                if (!assignmentsByDateWorker.has(key)) assignmentsByDateWorker.set(key, new Set());
+                assignmentsByDateWorker.get(key).add(prog.id);
             });
         }
     });
 
     const details = [];
 
-    assignmentsByDateMontador.forEach((progIds, key) => {
+    assignmentsByDateWorker.forEach((progIds, key) => {
         if (progIds.size < 2) return;
 
-        const [dateKey, montadorId] = key.split(':');
+        const [dateKey, workerType, workerId] = key.split(':');
         const date = montagemProgParseDateKey(dateKey);
         const dateLabel = date
             ? date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })
             : dateKey;
-        const montadorName = getMontagemProgMontadorName(montadorId);
+        const workerName = workerType === 'marceneiro'
+            ? getMontagemProgMarceneiroName(workerId)
+            : getMontagemProgMontadorName(workerId);
         const summaries = [...progIds]
             .map(id => {
                 const prog = programacoes.find(item => Number(item.id) === Number(id));
@@ -500,8 +569,8 @@ function buildMontagemProgConflictDetails(programacoes) {
             .join(' · ');
 
         details.push({
-            sortKey: `${dateKey}:${montadorName}`,
-            text: `${montadorName} em ${dateLabel}: ${summaries}`
+            sortKey: `${dateKey}:${workerName}`,
+            text: `${workerName} em ${dateLabel}: ${summaries}`
         });
     });
 
@@ -535,6 +604,27 @@ async function loadMontagemProgramacoesForWeek(weekStartKey = getMontagemProgWee
         `
             *,
             order:salesOrders(id, orderCode, clientName),
+            montadores:MontagemProgramacaoMontador(
+                id, montadorId,
+                montador:Montador(id, name)
+            ),
+            marceneiros:MontagemProgramacaoMarceneiro(
+                id, marceneiroId,
+                marceneiro:Marceneiro(id, name)
+            )
+        `,
+        `
+            *,
+            montadores:MontagemProgramacaoMontador(id, montadorId, montador:Montador(id, name)),
+            marceneiros:MontagemProgramacaoMarceneiro(id, marceneiroId, marceneiro:Marceneiro(id, name))
+        `,
+        `
+            *,
+            montadores:MontagemProgramacaoMontador(id, montadorId),
+            marceneiros:MontagemProgramacaoMarceneiro(id, marceneiroId)
+        `,
+        `
+            *,
             montadores:MontagemProgramacaoMontador(
                 id, montadorId,
                 montador:Montador(id, name)
@@ -600,26 +690,123 @@ async function loadMontagemProgramacoesForWeek(weekStartKey = getMontagemProgWee
         }
     }
 
+    if (programacoes.some(prog => prog.marceneiros === undefined)) {
+        const ids = programacoes.map(prog => prog.id).filter(Boolean);
+        if (ids.length) {
+            const { data: marceneiroRows, error: marceneiroError } = await supabaseClient
+                .from('MontagemProgramacaoMarceneiro')
+                .select('id, programacaoId, marceneiroId, marceneiro:Marceneiro(id, name)')
+                .in('programacaoId', ids);
+
+            if (!marceneiroError) {
+                const byProgId = {};
+                (marceneiroRows || []).forEach(row => {
+                    const progId = Number(row.programacaoId);
+                    if (!byProgId[progId]) byProgId[progId] = [];
+                    byProgId[progId].push(row);
+                });
+
+                programacoes = programacoes.map(prog => ({
+                    ...prog,
+                    marceneiros: prog.marceneiros || byProgId[Number(prog.id)] || []
+                }));
+            } else if (!marceneiroError.message?.includes('MontagemProgramacaoMarceneiro')) {
+                console.warn('loadMontagemProgramacoesForWeek marceneiros:', marceneiroError);
+            } else {
+                programacoes = programacoes.map(prog => ({
+                    ...prog,
+                    marceneiros: prog.marceneiros || []
+                }));
+            }
+        }
+    }
+
     if (updateCache) montagemProgCache = programacoes;
     return programacoes;
 }
 
-function renderMontagemProgMontadorFilter() {
+function renderMontagemProgWorkerFilter() {
     const select = document.getElementById('montagem-prog-montador-filter');
     if (!select) return;
 
     const montadores = getMontagemProgSelectableMontadores();
-    const currentValue = montagemProgMontadorFilterId ? String(montagemProgMontadorFilterId) : '';
+    const marceneiros = getMontagemProgSelectableMarceneiros();
+    const currentValue = getMontagemProgWorkerFilterKey(montagemProgWorkerFilter);
 
     select.innerHTML = `
         <option value="">Todos</option>
-        ${montadores.map(montador => `
-            <option value="${montador.id}">${escapeHtml(montador.name)}</option>
-        `).join('')}
+        ${montadores.length ? `
+            <optgroup label="Montadores">
+                ${montadores.map(montador => `
+                    <option value="montador:${montador.id}">${escapeHtml(montador.name)}</option>
+                `).join('')}
+            </optgroup>
+        ` : ''}
+        ${marceneiros.length ? `
+            <optgroup label="Marceneiros">
+                ${marceneiros.map(marceneiro => `
+                    <option value="marceneiro:${marceneiro.id}">${escapeHtml(marceneiro.name)}</option>
+                `).join('')}
+            </optgroup>
+        ` : ''}
     `;
 
-    select.value = montadores.some(montador => String(montador.id) === currentValue) ? currentValue : '';
-    if (!select.value) montagemProgMontadorFilterId = null;
+    select.value = currentValue;
+    if (!select.value) montagemProgWorkerFilter = null;
+}
+
+function renderMontagemProgPaletteItem(workerType, worker) {
+    const filterKey = getMontagemProgWorkerFilterKey(montagemProgWorkerFilter);
+    const workerKey = getMontagemProgWorkerFilterKey({ type: workerType, id: worker.id });
+    const isFiltered = filterKey && workerKey === filterKey;
+    const crewStyle = getMontagemProgCrewBarStyle(getMontagemProgSoloCrewKey(workerType, worker.id));
+    const itemClass = workerType === 'marceneiro'
+        ? 'montagem-prog-palette-item montagem-prog-palette-item--marceneiro'
+        : 'montagem-prog-palette-item';
+
+    return `
+        <div class="${itemClass} ${isFiltered ? 'montagem-prog-palette-item--filtered' : ''}"
+            draggable="true"
+            data-worker-type="${workerType}"
+            data-worker-id="${worker.id}"
+            title="Arraste para a semana">
+            <span class="montagem-prog-palette-item__color" style="${crewStyle}" aria-hidden="true"></span>
+            <span class="montagem-prog-palette-item__grip" aria-hidden="true">⠿</span>
+            <span>${escapeHtml(worker.name)}</span>
+        </div>
+    `;
+}
+
+function bindMontagemProgPaletteItems(palette) {
+    palette.querySelectorAll('.montagem-prog-palette-item').forEach(item => {
+        item.addEventListener('dragstart', event => {
+            montagemProgDragWorker = {
+                type: item.dataset.workerType,
+                id: Number(item.dataset.workerId)
+            };
+            if (event.dataTransfer) {
+                event.dataTransfer.setData('text/plain', getMontagemProgWorkerFilterKey(montagemProgDragWorker));
+                event.dataTransfer.setData('application/x-montagem-worker-type', montagemProgDragWorker.type);
+                event.dataTransfer.setData('application/x-montagem-worker-id', String(montagemProgDragWorker.id));
+                event.dataTransfer.effectAllowed = 'copy';
+            }
+            item.classList.add('is-dragging');
+            document.body.classList.add('montagem-prog-dragging');
+        });
+        item.addEventListener('dragend', () => {
+            montagemProgDragWorker = null;
+            item.classList.remove('is-dragging');
+            document.body.classList.remove('montagem-prog-dragging');
+            document.querySelectorAll('.montagem-prog-day-slot.is-drop-target, .montagem-prog-bar.is-drop-target, .montagem-prog-lane.is-drop-target')
+                .forEach(element => element.classList.remove('is-drop-target'));
+        });
+        item.addEventListener('dblclick', () => {
+            openMontagemProgModal(null, getMontagemProgWeekStartKey(), {
+                type: item.dataset.workerType,
+                id: Number(item.dataset.workerId)
+            });
+        });
+    });
 }
 
 function renderMontagemProgPalette() {
@@ -627,49 +814,35 @@ function renderMontagemProgPalette() {
     if (!palette) return;
 
     const montadores = getMontagemProgSelectableMontadores();
+    const marceneiros = getMontagemProgSelectableMarceneiros();
 
-    if (!montadores.length) {
-        palette.innerHTML = '<p class="text-[11px] text-amber-700">Cadastre montadores ativos em Gestão → Montadores.</p>';
+    if (!montadores.length && !marceneiros.length) {
+        palette.innerHTML = '<p class="text-[11px] text-amber-700">Cadastre montadores ou marceneiros ativos em Gestão.</p>';
         return;
     }
 
-    palette.innerHTML = montadores.map(montador => {
-        const isFiltered = montagemProgMontadorFilterId && Number(montador.id) === Number(montagemProgMontadorFilterId);
-        const crewStyle = getMontagemProgCrewBarStyle(getMontagemProgSoloCrewKey(montador.id));
-        return `
-        <div class="montagem-prog-palette-item ${isFiltered ? 'montagem-prog-palette-item--filtered' : ''}"
-            draggable="true"
-            data-montador-id="${montador.id}"
-            title="Arraste para a semana">
-            <span class="montagem-prog-palette-item__color" style="${crewStyle}" aria-hidden="true"></span>
-            <span class="montagem-prog-palette-item__grip" aria-hidden="true">⠿</span>
-            <span>${escapeHtml(montador.name)}</span>
-        </div>
-    `;
-    }).join('');
+    const sections = [];
 
-    palette.querySelectorAll('.montagem-prog-palette-item').forEach(item => {
-        item.addEventListener('dragstart', event => {
-            montagemProgDragMontadorId = Number(item.dataset.montadorId);
-            if (event.dataTransfer) {
-                event.dataTransfer.setData('text/plain', String(montagemProgDragMontadorId));
-                event.dataTransfer.setData('application/x-montagem-montador-id', String(montagemProgDragMontadorId));
-                event.dataTransfer.effectAllowed = 'copy';
-            }
-            item.classList.add('is-dragging');
-            document.body.classList.add('montagem-prog-dragging');
-        });
-        item.addEventListener('dragend', () => {
-            montagemProgDragMontadorId = null;
-            item.classList.remove('is-dragging');
-            document.body.classList.remove('montagem-prog-dragging');
-            document.querySelectorAll('.montagem-prog-day-slot.is-drop-target, .montagem-prog-bar.is-drop-target, .montagem-prog-lane.is-drop-target')
-                .forEach(element => element.classList.remove('is-drop-target'));
-        });
-        item.addEventListener('dblclick', () => {
-            openMontagemProgModal(null, getMontagemProgWeekStartKey(), Number(item.dataset.montadorId));
-        });
-    });
+    if (montadores.length) {
+        sections.push(`
+            <p class="montagem-prog-palette-section-label">Montadores</p>
+            <div class="space-y-1.5">
+                ${montadores.map(montador => renderMontagemProgPaletteItem('montador', montador)).join('')}
+            </div>
+        `);
+    }
+
+    if (marceneiros.length) {
+        sections.push(`
+            <p class="montagem-prog-palette-section-label ${montadores.length ? 'mt-3' : ''}">Marceneiros</p>
+            <div class="space-y-1.5">
+                ${marceneiros.map(marceneiro => renderMontagemProgPaletteItem('marceneiro', marceneiro)).join('')}
+            </div>
+        `);
+    }
+
+    palette.innerHTML = sections.join('');
+    bindMontagemProgPaletteItems(palette);
 }
 
 function renderMontagemProgConflicts(conflictMap) {
@@ -757,7 +930,7 @@ function renderMontagemProgWeekGrid() {
                         data-edge="start"
                         aria-label="Ajustar início"></button>
                     <button type="button" class="montagem-prog-bar-body" data-programacao-id="${prog.id}">
-                        <span class="montagem-prog-bar-montadores">${escapeHtml(getMontagemProgPrimaryMontadorLabel(prog))}</span>
+                        <span class="montagem-prog-bar-montadores">${escapeHtml(getMontagemProgPrimaryCrewLabel(prog))}</span>
                         <span class="montagem-prog-bar-meta">${escapeHtml(getMontagemProgBarClientLabel(prog))}</span>
                     </button>
                     <button type="button" class="montagem-prog-bar-resize montagem-prog-bar-resize--end"
@@ -783,12 +956,12 @@ function renderMontagemProgWeekGrid() {
     `;
 
     const emptyState = document.getElementById('montagem-prog-empty-filter');
-    if (montagemProgMontadorFilterId && !visibleProgramacoes.length) {
+    if (montagemProgWorkerFilter && !visibleProgramacoes.length) {
         if (!emptyState) {
             const message = document.createElement('p');
             message.id = 'montagem-prog-empty-filter';
             message.className = 'montagem-prog-empty-filter text-xs text-slate-400 text-center py-4';
-            message.textContent = 'Nenhuma montagem para o montador selecionado nesta semana.';
+            message.textContent = 'Nenhuma montagem para o responsável selecionado nesta semana.';
             grid.insertAdjacentElement('afterend', message);
         }
     } else {
@@ -798,10 +971,27 @@ function renderMontagemProgWeekGrid() {
     bindMontagemProgWeekInteractions(grid);
 }
 
-function getMontagemProgDragMontadorIdFromEvent(event) {
-    const fromTransfer = event.dataTransfer?.getData('text/plain')
-        || event.dataTransfer?.getData('application/x-montagem-montador-id');
-    return Number(fromTransfer || montagemProgDragMontadorId) || null;
+function getMontagemProgDragWorkerFromEvent(event) {
+    const type = event.dataTransfer?.getData('application/x-montagem-worker-type')
+        || montagemProgDragWorker?.type;
+    const id = Number(
+        event.dataTransfer?.getData('application/x-montagem-worker-id')
+        || montagemProgDragWorker?.id
+    );
+
+    if (type && id && (type === 'montador' || type === 'marceneiro')) {
+        return { type, id };
+    }
+
+    const legacyMontadorId = Number(
+        event.dataTransfer?.getData('application/x-montagem-montador-id')
+        || event.dataTransfer?.getData('text/plain')
+    );
+    if (legacyMontadorId) {
+        return { type: 'montador', id: legacyMontadorId };
+    }
+
+    return null;
 }
 
 function clearMontagemProgDropTargets(grid) {
@@ -833,12 +1023,12 @@ async function handleMontagemProgCalendarDrop(event, grid) {
     event.stopPropagation();
     clearMontagemProgDropTargets(grid);
 
-    const montadorId = getMontagemProgDragMontadorIdFromEvent(event);
-    if (!montadorId) return;
+    const worker = getMontagemProgDragWorkerFromEvent(event);
+    if (!worker) return;
 
     const bar = event.target.closest('.montagem-prog-bar');
     if (bar) {
-        await createMontagemProgFromDrop(montadorId, null, Number(bar.dataset.programacaoId));
+        await createMontagemProgFromDrop(worker, null, Number(bar.dataset.programacaoId));
         return;
     }
 
@@ -846,7 +1036,7 @@ async function handleMontagemProgCalendarDrop(event, grid) {
     const dateKey = slot?.dataset.date || getMontagemProgDateKeyFromPointer(event.clientX, grid);
     if (!dateKey) return;
 
-    await createMontagemProgFromDrop(montadorId, dateKey);
+    await createMontagemProgFromDrop(worker, dateKey);
 }
 
 function bindMontagemProgWeekInteractions(grid) {
@@ -859,7 +1049,7 @@ function bindMontagemProgWeekInteractions(grid) {
     };
 
     grid.addEventListener('dragover', event => {
-        if (!montagemProgDragMontadorId && !event.dataTransfer?.types?.length) return;
+        if (!montagemProgDragWorker && !event.dataTransfer?.types?.length) return;
         allowDrop(event);
         updateMontagemProgDropTargetHighlight(event, grid);
     });
@@ -899,7 +1089,7 @@ function bindMontagemProgWeekInteractions(grid) {
     });
 
     document.getElementById('montagem-prog-week-grid')?.closest('.montagem-prog-calendar')?.addEventListener('dragover', event => {
-        if (!montagemProgDragMontadorId && !event.dataTransfer?.types?.length) return;
+        if (!montagemProgDragWorker && !event.dataTransfer?.types?.length) return;
         allowDrop(event);
     });
 
@@ -1131,22 +1321,83 @@ async function persistMontagemProgMontadores(programacaoId, montadorIds) {
     }
 }
 
-async function createMontagemProgFromDrop(montadorId, dateKey, targetProgramacaoId = null) {
-    if (!canAccessMontagemProgramacao()) return;
+async function persistMontagemProgMarceneiros(programacaoId, marceneiroIds) {
+    const uniqueIds = [...new Set(marceneiroIds.map(id => Number(id)).filter(Boolean))].slice(0, 2);
+
+    const { data: current, error: readError } = await supabaseClient
+        .from('MontagemProgramacaoMarceneiro')
+        .select('id, marceneiroId')
+        .eq('programacaoId', programacaoId);
+
+    if (readError?.message?.includes('MontagemProgramacaoMarceneiro')) return;
+    if (readError) throw readError;
+
+    const keepIds = new Set(uniqueIds);
+    const deleteIds = (current || [])
+        .filter(row => !keepIds.has(Number(row.marceneiroId)))
+        .map(row => row.id);
+
+    if (deleteIds.length) {
+        const { error } = await supabaseClient
+            .from('MontagemProgramacaoMarceneiro')
+            .delete()
+            .in('id', deleteIds);
+        if (error) throw error;
+    }
+
+    for (const marceneiroId of uniqueIds) {
+        const exists = (current || []).some(row => Number(row.marceneiroId) === marceneiroId);
+        if (exists) continue;
+
+        const { error } = await supabaseClient
+            .from('MontagemProgramacaoMarceneiro')
+            .insert({ programacaoId, marceneiroId });
+        if (error) throw error;
+    }
+}
+
+async function persistMontagemProgCrew(programacaoId, montadorIds, marceneiroIds) {
+    const normalizedMontadorIds = [...new Set(montadorIds.map(id => Number(id)).filter(Boolean))].slice(0, 2);
+    const normalizedMarceneiroIds = [...new Set(marceneiroIds.map(id => Number(id)).filter(Boolean))].slice(0, 2);
+
+    if (normalizedMontadorIds.length && normalizedMarceneiroIds.length) {
+        throw new Error('Marceneiro e montador não podem ser agendados juntos na mesma montagem.');
+    }
+
+    await persistMontagemProgMontadores(programacaoId, normalizedMontadorIds);
+    await persistMontagemProgMarceneiros(programacaoId, normalizedMarceneiroIds);
+}
+
+async function createMontagemProgFromDrop(worker, dateKey, targetProgramacaoId = null) {
+    if (!canAccessMontagemProgramacao() || !worker?.type || !worker?.id) return;
 
     try {
         if (targetProgramacaoId) {
             const prog = montagemProgCache.find(item => Number(item.id) === Number(targetProgramacaoId));
             if (!prog) return;
 
-            const montadorIds = getMontagemProgMontadorIds(prog);
-            if (montadorIds.includes(Number(montadorId))) return;
-            if (montadorIds.length >= 2) {
+            const crewMembers = getMontagemProgCrewMembers(prog);
+            if (crewMembers.some(member => member.type === worker.type && member.id === worker.id)) return;
+
+            if (crewMembers.length >= 2) {
                 alertAppDialog('Esta montagem já possui dupla.', { variant: 'warning', title: 'Aviso' });
                 return;
             }
 
-            await persistMontagemProgMontadores(targetProgramacaoId, [...montadorIds, Number(montadorId)]);
+            if (crewMembers.length === 1 && crewMembers[0].type !== worker.type) {
+                alertAppDialog('Marceneiro e montador não podem formar dupla.', { variant: 'warning', title: 'Aviso' });
+                return;
+            }
+
+            const montadorIds = getMontagemProgMontadorIds(prog);
+            const marceneiroIds = getMontagemProgMarceneiroIds(prog);
+
+            if (worker.type === 'montador') {
+                await persistMontagemProgCrew(targetProgramacaoId, [...montadorIds, worker.id], marceneiroIds);
+            } else {
+                await persistMontagemProgCrew(targetProgramacaoId, montadorIds, [...marceneiroIds, worker.id]);
+            }
+
             await loadMontagemProgramacaoView();
             warnMontagemProgConflictsIfNeeded();
             return;
@@ -1170,28 +1421,48 @@ async function createMontagemProgFromDrop(montadorId, dateKey, targetProgramacao
 
         if (error) throw error;
 
-        await persistMontagemProgMontadores(created.id, [Number(montadorId)]);
+        if (worker.type === 'montador') {
+            await persistMontagemProgCrew(created.id, [worker.id], []);
+        } else {
+            await persistMontagemProgCrew(created.id, [], [worker.id]);
+        }
+
         await loadMontagemProgramacaoView();
 
         const createdProg = montagemProgCache.find(item => Number(item.id) === Number(created.id));
-        openMontagemProgModal(createdProg || { id: created.id, startDate: dateKey, endDate: dateKey, montadores: [] });
+        openMontagemProgModal(createdProg || {
+            id: created.id,
+            startDate: dateKey,
+            endDate: dateKey,
+            montadores: [],
+            marceneiros: []
+        }, null, worker);
         warnMontagemProgConflictsIfNeeded();
     } catch (error) {
         console.error('createMontagemProgFromDrop:', error);
-        const sqlHint = error.message?.includes('MontagemProgramacao')
-            ? '\n\nExecute supabase/create-montagem-programacao.sql no Supabase.'
-            : '';
+        const sqlHint = error.message?.includes('MontagemProgramacaoMarceneiro')
+            ? '\n\nExecute supabase/create-montagem-programacao-marceneiro.sql no Supabase.'
+            : (error.message?.includes('MontagemProgramacao')
+                ? '\n\nExecute supabase/create-montagem-programacao.sql no Supabase.'
+                : '');
         alertAppDialog('Erro ao criar montagem: ' + error.message + sqlHint);
     }
 }
 
-function populateMontagemProgMontadorSelects(selectedIds = [], selectedMontadores = []) {
+function populateMontagemProgCrewSelects(options = {}) {
+    const {
+        montadorIds = [],
+        marceneiroIds = [],
+        selectedMontadores = [],
+        selectedMarceneiros = []
+    } = options;
+
     const montadoresById = new Map();
     getMontagemProgSelectableMontadores().forEach(montador => {
         montadoresById.set(Number(montador.id), montador);
     });
 
-    selectedIds.forEach(montadorId => {
+    montadorIds.forEach(montadorId => {
         const normalizedId = Number(montadorId);
         if (!normalizedId || montadoresById.has(normalizedId)) return;
 
@@ -1203,23 +1474,53 @@ function populateMontagemProgMontadorSelects(selectedIds = [], selectedMontadore
         });
     });
 
+    const marceneirosById = new Map();
+    getMontagemProgSelectableMarceneiros().forEach(marceneiro => {
+        marceneirosById.set(Number(marceneiro.id), marceneiro);
+    });
+
+    marceneiroIds.forEach(marceneiroId => {
+        const normalizedId = Number(marceneiroId);
+        if (!normalizedId || marceneirosById.has(normalizedId)) return;
+
+        const fromProg = selectedMarceneiros.find(item => Number(item.id) === normalizedId);
+        marceneirosById.set(normalizedId, fromProg || {
+            id: normalizedId,
+            name: getMontagemProgMarceneiroName(normalizedId),
+            isActive: false
+        });
+    });
+
     const montadores = [...montadoresById.values()]
         .sort((left, right) => (left.name || '').localeCompare(right.name || '', 'pt-BR', { sensitivity: 'base' }));
+    const marceneiros = [...marceneirosById.values()]
+        .sort((left, right) => (left.name || '').localeCompare(right.name || '', 'pt-BR', { sensitivity: 'base' }));
 
-    const options = montadores.map(montador => {
+    const montadorOptions = montadores.map(montador => {
         const inactiveSuffix = montador.isActive === false ? ' (inativo)' : '';
         return `<option value="${montador.id}">${escapeHtml(`${montador.name || 'Montador'}${inactiveSuffix}`)}</option>`;
     }).join('');
 
-    const select1 = document.getElementById('montagem-prog-montador-1');
-    const select2 = document.getElementById('montagem-prog-montador-2');
-    if (!select1 || !select2) return;
+    const marceneiroOptions = marceneiros.map(marceneiro => {
+        const inactiveSuffix = marceneiro.isActive === false ? ' (inativo)' : '';
+        return `<option value="${marceneiro.id}">${escapeHtml(`${marceneiro.name || 'Marceneiro'}${inactiveSuffix}`)}</option>`;
+    }).join('');
 
-    select1.innerHTML = `<option value="">Selecione...</option>${options}`;
-    select2.innerHTML = `<option value="">Nenhum</option>${options}`;
+    const selectMontador1 = document.getElementById('montagem-prog-montador-1');
+    const selectMontador2 = document.getElementById('montagem-prog-montador-2');
+    const selectMarceneiro1 = document.getElementById('montagem-prog-marceneiro-1');
+    const selectMarceneiro2 = document.getElementById('montagem-prog-marceneiro-2');
+    if (!selectMontador1 || !selectMontador2 || !selectMarceneiro1 || !selectMarceneiro2) return;
 
-    select1.value = selectedIds[0] ? String(selectedIds[0]) : '';
-    select2.value = selectedIds[1] ? String(selectedIds[1]) : '';
+    selectMontador1.innerHTML = `<option value="">Selecione...</option>${montadorOptions}`;
+    selectMontador2.innerHTML = `<option value="">Nenhum</option>${montadorOptions}`;
+    selectMarceneiro1.innerHTML = `<option value="">Selecione...</option>${marceneiroOptions}`;
+    selectMarceneiro2.innerHTML = `<option value="">Nenhum</option>${marceneiroOptions}`;
+
+    selectMontador1.value = montadorIds[0] ? String(montadorIds[0]) : '';
+    selectMontador2.value = montadorIds[1] ? String(montadorIds[1]) : '';
+    selectMarceneiro1.value = marceneiroIds[0] ? String(marceneiroIds[0]) : '';
+    selectMarceneiro2.value = marceneiroIds[1] ? String(marceneiroIds[1]) : '';
 }
 
 function syncMontagemProgClientRequired() {
@@ -1228,13 +1529,16 @@ function syncMontagemProgClientRequired() {
     requiredMarker?.classList.toggle('hidden', Boolean(orderCode));
 }
 
-async function openMontagemProgModal(prog = null, presetDate = null, presetMontadorId = null) {
+async function openMontagemProgModal(prog = null, presetDate = null, presetWorker = null) {
     if (!canAccessMontagemProgramacao()) return;
 
     hideMontagemProgFloatingTooltip();
 
     if (typeof loadGestaoMontadores === 'function') {
         await loadGestaoMontadores(true);
+    }
+    if (typeof loadMarceneiros === 'function') {
+        await loadMarceneiros(true);
     }
 
     editingMontagemProgId = prog?.id || null;
@@ -1247,9 +1551,21 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetMonta
     deleteBtn?.classList.toggle('hidden', !editingMontagemProgId);
 
     const montadorIds = prog ? getMontagemProgMontadorIds(prog) : [];
-    if (presetMontadorId && !montadorIds.length) montadorIds.push(Number(presetMontadorId));
+    const marceneiroIds = prog ? getMontagemProgMarceneiroIds(prog) : [];
 
-    populateMontagemProgMontadorSelects(montadorIds, prog ? getMontagemProgMontadores(prog) : []);
+    if (presetWorker?.type === 'montador' && !montadorIds.length && !marceneiroIds.length) {
+        montadorIds.push(Number(presetWorker.id));
+    }
+    if (presetWorker?.type === 'marceneiro' && !montadorIds.length && !marceneiroIds.length) {
+        marceneiroIds.push(Number(presetWorker.id));
+    }
+
+    populateMontagemProgCrewSelects({
+        montadorIds,
+        marceneiroIds,
+        selectedMontadores: prog ? getMontagemProgMontadores(prog) : [],
+        selectedMarceneiros: prog ? getMontagemProgMarceneiros(prog) : []
+    });
 
     const defaultDate = presetDate || getMontagemProgWeekStartKey();
     document.getElementById('montagem-prog-start-date').value = prog?.startDate || defaultDate;
@@ -1270,6 +1586,8 @@ async function saveMontagemProg(event) {
     const endDate = document.getElementById('montagem-prog-end-date')?.value;
     const montador1 = Number(document.getElementById('montagem-prog-montador-1')?.value);
     const montador2 = Number(document.getElementById('montagem-prog-montador-2')?.value);
+    const marceneiro1 = Number(document.getElementById('montagem-prog-marceneiro-1')?.value);
+    const marceneiro2 = Number(document.getElementById('montagem-prog-marceneiro-2')?.value);
     const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
     let clientName = document.getElementById('montagem-prog-client-name')?.value.trim();
     const observation = document.getElementById('montagem-prog-observation')?.value.trim() || '';
@@ -1284,13 +1602,26 @@ async function saveMontagemProg(event) {
         return;
     }
 
-    if (!montador1) {
-        alertAppDialog('Selecione ao menos um montador.');
+    const montadorIds = [montador1, montador2].filter(Boolean);
+    const marceneiroIds = [marceneiro1, marceneiro2].filter(Boolean);
+
+    if (!montadorIds.length && !marceneiroIds.length) {
+        alertAppDialog('Selecione ao menos um montador ou marceneiro.');
+        return;
+    }
+
+    if (montadorIds.length && marceneiroIds.length) {
+        alertAppDialog('Marceneiro e montador não podem ser agendados juntos na mesma montagem.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     if (montador2 && montador2 === montador1) {
         alertAppDialog('Selecione montadores diferentes para formar a dupla.');
+        return;
+    }
+
+    if (marceneiro2 && marceneiro2 === marceneiro1) {
+        alertAppDialog('Selecione marceneiros diferentes para formar a dupla.');
         return;
     }
 
@@ -1308,7 +1639,6 @@ async function saveMontagemProg(event) {
         return;
     }
 
-    const montadorIds = [montador1, montador2].filter(Boolean);
     const now = new Date().toISOString();
     const payload = {
         startDate,
@@ -1343,16 +1673,18 @@ async function saveMontagemProg(event) {
             programacaoId = created.id;
         }
 
-        await persistMontagemProgMontadores(programacaoId, montadorIds);
+        await persistMontagemProgCrew(programacaoId, montadorIds, marceneiroIds);
         editingMontagemProgId = null;
         toggleModal('montagem-prog-modal', false);
         await loadMontagemProgramacaoView();
         warnMontagemProgConflictsIfNeeded();
     } catch (error) {
         console.error('saveMontagemProg:', error);
-        const sqlHint = error.message?.includes('MontagemProgramacao')
-            ? '\n\nExecute supabase/create-montagem-programacao.sql no Supabase.'
-            : '';
+        const sqlHint = error.message?.includes('MontagemProgramacaoMarceneiro')
+            ? '\n\nExecute supabase/create-montagem-programacao-marceneiro.sql no Supabase.'
+            : (error.message?.includes('MontagemProgramacao')
+                ? '\n\nExecute supabase/create-montagem-programacao.sql no Supabase.'
+                : '');
         alertAppDialog('Erro ao salvar montagem: ' + error.message + sqlHint);
     }
 }
@@ -1381,7 +1713,7 @@ function warnMontagemProgConflictsIfNeeded() {
     if (!conflictMap.size) return;
 
     alertAppDialog(
-        'Existem montadores programados em mais de uma obra no mesmo dia. Revise as barras destacadas em amarelo.',
+        'Existem montadores ou marceneiros programados em mais de uma obra no mesmo dia. Revise as barras destacadas em amarelo.',
         { variant: 'warning', title: 'Conflito de agenda' }
     );
 }
@@ -1427,8 +1759,9 @@ async function copyMontagemProgPreviousWeek() {
             if (error) throw error;
 
             const montadorIds = getMontagemProgMontadorIds(prog);
-            if (montadorIds.length) {
-                await persistMontagemProgMontadores(created.id, montadorIds);
+            const marceneiroIds = getMontagemProgMarceneiroIds(prog);
+            if (montadorIds.length || marceneiroIds.length) {
+                await persistMontagemProgCrew(created.id, montadorIds, marceneiroIds);
             }
         }
 
@@ -1454,9 +1787,9 @@ function printMontagemProgWeek() {
     if (printLabel) printLabel.textContent = weekLabel;
 
     const filterSelect = document.getElementById('montagem-prog-montador-filter');
-    const previousFilter = montagemProgMontadorFilterId;
+    const previousFilter = montagemProgWorkerFilter;
     if (previousFilter) {
-        montagemProgMontadorFilterId = null;
+        montagemProgWorkerFilter = null;
         if (filterSelect) filterSelect.value = '';
         renderMontagemProgWeekGrid();
     }
@@ -1466,8 +1799,8 @@ function printMontagemProgWeek() {
     window.addEventListener('afterprint', () => {
         document.body.classList.remove('montagem-prog-printing');
         if (previousFilter) {
-            montagemProgMontadorFilterId = previousFilter;
-            if (filterSelect) filterSelect.value = String(previousFilter);
+            montagemProgWorkerFilter = previousFilter;
+            if (filterSelect) filterSelect.value = getMontagemProgWorkerFilterKey(previousFilter);
             renderMontagemProgPalette();
             renderMontagemProgWeekGrid();
         }
@@ -1483,9 +1816,12 @@ async function loadMontagemProgramacaoView() {
     if (typeof loadGestaoMontadores === 'function') {
         await loadGestaoMontadores(true);
     }
+    if (typeof loadMarceneiros === 'function') {
+        await loadMarceneiros(true);
+    }
 
     await loadMontagemProgramacoesForWeek();
-    renderMontagemProgMontadorFilter();
+    renderMontagemProgWorkerFilter();
     renderMontagemProgPalette();
     renderMontagemProgWeekGrid();
 }
@@ -1536,7 +1872,7 @@ function bindMontagemProgramacaoEvents() {
     document.getElementById('btn-montagem-prog-print')?.addEventListener('click', printMontagemProgWeek);
     document.getElementById('montagem-prog-montador-filter')?.addEventListener('change', event => {
         const value = event.target.value;
-        montagemProgMontadorFilterId = value ? Number(value) : null;
+        montagemProgWorkerFilter = parseMontagemProgWorkerFilterKey(value);
         renderMontagemProgPalette();
         renderMontagemProgWeekGrid();
     });

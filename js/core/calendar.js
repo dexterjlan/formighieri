@@ -754,6 +754,197 @@ function goToCalendarToday() {
     refreshCalendarView();
 }
 
+function getCalendarFilteredEvents() {
+    return calendarEventsCache
+        .filter(matchesCalendarFilters)
+        .sort((left, right) => String(left.eventDate).localeCompare(String(right.eventDate))
+            || String(left.eventTime).localeCompare(String(right.eventTime)));
+}
+
+function escapeIcsText(value) {
+    return String(value || '')
+        .replace(/\\/g, '\\\\')
+        .replace(/;/g, '\\;')
+        .replace(/,/g, '\\,')
+        .replace(/\r?\n/g, '\\n');
+}
+
+function foldIcsLine(line) {
+    const maxLength = 75;
+    if (line.length <= maxLength) return line;
+
+    let result = line.slice(0, maxLength);
+    let rest = line.slice(maxLength);
+
+    while (rest.length) {
+        result += `\r\n ${rest.slice(0, maxLength - 1)}`;
+        rest = rest.slice(maxLength - 1);
+    }
+
+    return result;
+}
+
+function formatIcsUtcStamp(date = new Date()) {
+    return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function buildCalendarIcsDateTime(dateKey, timeValue) {
+    const timeParts = String(timeValue || '09:00:00').split(':');
+    const hours = String(Number(timeParts[0]) || 9).padStart(2, '0');
+    const minutes = String(Number(timeParts[1]) || 0).padStart(2, '0');
+    return `${String(dateKey || '').replace(/-/g, '')}T${hours}${minutes}00`;
+}
+
+function buildCalendarIcsEndDateTime(dateKey, timeValue, durationMinutes = 60) {
+    const date = parseDateKey(dateKey);
+    if (!date) return buildCalendarIcsDateTime(dateKey, timeValue);
+
+    const timeParts = String(timeValue || '09:00:00').split(':');
+    let hours = Number(timeParts[0]) || 9;
+    let minutes = Number(timeParts[1]) || 0;
+    minutes += durationMinutes;
+    hours += Math.floor(minutes / 60);
+    minutes %= 60;
+
+    const endDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes, 0);
+    const pad = value => String(value).padStart(2, '0');
+    return `${endDate.getFullYear()}${pad(endDate.getMonth() + 1)}${pad(endDate.getDate())}T${pad(endDate.getHours())}${pad(endDate.getMinutes())}00`;
+}
+
+function buildCalendarIcsEventSummary(event) {
+    const parts = [event.eventType || 'Evento'];
+    const clientLabel = getCalendarEventClientLabel(event);
+    const orderLabel = getCalendarEventOrderLabel(event);
+
+    if (clientLabel) parts.push(clientLabel);
+    else if (orderLabel) parts.push(`Pedido ${orderLabel}`);
+
+    return parts.join(' - ');
+}
+
+function buildCalendarIcsEventDescription(event) {
+    const lines = [
+        `Responsável: ${getCalendarEventResponsibleLabel(event)}`
+    ];
+    const clientLabel = getCalendarEventClientLabel(event);
+    const orderLabel = getCalendarEventOrderLabel(event);
+
+    if (clientLabel) lines.push(`Cliente: ${clientLabel}`);
+    if (orderLabel) lines.push(`Pedido: ${orderLabel}`);
+    if (event.description) lines.push(`Observação: ${event.description}`);
+
+    return lines.join('\n');
+}
+
+function buildCalendarIcsEventLines(event) {
+    const dtStart = buildCalendarIcsDateTime(event.eventDate, event.eventTime);
+    const dtEnd = buildCalendarIcsEndDateTime(event.eventDate, event.eventTime);
+    const uid = `fgp-calendar-event-${event.id}@formighieri`;
+
+    return [
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${formatIcsUtcStamp()}`,
+        `DTSTART;TZID=America/Sao_Paulo:${dtStart}`,
+        `DTEND;TZID=America/Sao_Paulo:${dtEnd}`,
+        `SUMMARY:${escapeIcsText(buildCalendarIcsEventSummary(event))}`,
+        `DESCRIPTION:${escapeIcsText(buildCalendarIcsEventDescription(event))}`,
+        'END:VEVENT'
+    ];
+}
+
+function buildCalendarIcsDocument(events) {
+    const lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Formighieri//FGP Calendario//PT',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'X-WR-CALNAME:FGP Calendário',
+        'BEGIN:VTIMEZONE',
+        'TZID:America/Sao_Paulo',
+        'END:VTIMEZONE'
+    ];
+
+    events.forEach(event => {
+        lines.push(...buildCalendarIcsEventLines(event));
+    });
+
+    lines.push('END:VCALENDAR');
+    return `${lines.map(foldIcsLine).join('\r\n')}\r\n`;
+}
+
+function slugifyCalendarExportLabel(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'export';
+}
+
+function getCalendarExportFilename() {
+    const { startDate } = getCalendarVisibleRange();
+    const periodLabel = calendarViewMode === 'week' ? 'semana' : 'mes';
+    let responsibleSlug = 'todos';
+
+    if (calendarFilterResponsibleId) {
+        const user = calendarUsersCache.find(item => String(item.id) === String(calendarFilterResponsibleId));
+        responsibleSlug = slugifyCalendarExportLabel(user?.name || calendarFilterResponsibleId);
+    }
+
+    let typeSlug = '';
+    if (calendarFilterEventType) {
+        typeSlug = `-${slugifyCalendarExportLabel(calendarFilterEventType)}`;
+    }
+
+    return `fgp-calendario-${periodLabel}-${startDate}-${responsibleSlug}${typeSlug}.ics`;
+}
+
+function downloadCalendarIcsFile(content, filename) {
+    const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+}
+
+async function exportCalendarToIcs() {
+    if (!canAccessCalendar()) return;
+
+    const events = getCalendarFilteredEvents();
+    if (!events.length) {
+        alertAppDialog(
+            'Nenhum evento no período visível com os filtros aplicados.',
+            { variant: 'warning', title: 'Aviso' }
+        );
+        return;
+    }
+
+    if (!calendarFilterResponsibleId) {
+        const confirmed = await confirmAppDialog(
+            'Nenhum responsável selecionado no filtro. Deseja exportar os eventos de todos os responsáveis deste período?'
+        );
+        if (!confirmed) return;
+    }
+
+    const content = buildCalendarIcsDocument(events);
+    downloadCalendarIcsFile(content, getCalendarExportFilename());
+
+    const responsibleName = calendarFilterResponsibleId
+        ? (calendarUsersCache.find(item => String(item.id) === String(calendarFilterResponsibleId))?.name || 'responsável')
+        : 'todos os responsáveis';
+
+    alertAppDialog(
+        `${events.length} evento(s) exportado(s) para ${responsibleName}.\n\nNo Google Calendar: Configurações → Importar e exportar → Importar → selecione o arquivo .ics.`,
+        { variant: 'success', title: 'Arquivo .ics gerado' }
+    );
+}
+
 function showCalendar() {
     if (!canAccessCalendar()) return;
 
@@ -812,6 +1003,7 @@ function bindCalendarEvents() {
     document.getElementById('btn-calendar-next')?.addEventListener('click', () => shiftCalendarPeriod(1));
     document.getElementById('btn-calendar-today')?.addEventListener('click', goToCalendarToday);
     document.getElementById('btn-calendar-new')?.addEventListener('click', () => openCalendarEventModal());
+    document.getElementById('btn-calendar-export-ics')?.addEventListener('click', exportCalendarToIcs);
     document.getElementById('calendar-filter-responsible')?.addEventListener('change', applyCalendarFilters);
     document.getElementById('calendar-filter-type')?.addEventListener('change', applyCalendarFilters);
 

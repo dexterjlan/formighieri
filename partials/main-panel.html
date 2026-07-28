@@ -1387,7 +1387,7 @@
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
                             <div>
                                 <h3 class="font-bold text-sm text-slate-900">Programação Montagem</h3>
-                                <p class="text-xs text-slate-400 mt-0.5">Arraste montadores para a semana. Solte sobre outra barra para formar dupla.</p>
+                                <p class="text-xs text-slate-400 mt-0.5">Arraste montadores ou marceneiros para a semana. Solte sobre outra barra para formar dupla (somente do mesmo tipo).</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <button type="button" id="btn-montagem-prog-prev-week"
@@ -1429,7 +1429,7 @@
                                     <p class="text-[10px] font-semibold uppercase text-slate-400">Montadores</p>
                                     <select id="montagem-prog-montador-filter"
                                         class="montagem-prog-montador-filter text-[10px] border border-slate-200 rounded-md px-1.5 py-0.5 bg-white text-slate-600 max-w-[7rem]"
-                                        title="Filtrar barras por montador">
+                                        title="Filtrar barras por responsável">
                                         <option value="">Todos</option>
                                     </select>
                                 </div>
@@ -1466,7 +1466,7 @@
                 <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
                     <div>
                         <h2 class="font-bold text-sm text-slate-900">Calendário</h2>
-                        <p class="text-xs text-slate-400 mt-0.5">Agenda de medições e atendimentos.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Agenda de medições e atendimentos. Filtre por responsável e exporte .ics para sua agenda do Google.</p>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="calendar-zoom-toggle" role="group" aria-label="Visualização do calendário">
@@ -1484,6 +1484,11 @@
                             aria-label="Próximo mês">▶</button>
                         <button type="button" id="btn-calendar-today"
                             class="text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium">Hoje</button>
+                        <button type="button" id="btn-calendar-export-ics"
+                            class="text-xs bg-white border border-amber-200 text-amber-800 hover:bg-amber-50 px-3 py-1.5 rounded-lg font-medium"
+                            title="Exporta o período visível respeitando os filtros, para importar no Google Calendar">
+                            Exportar .ics
+                        </button>
                         <button type="button" id="btn-calendar-new"
                             class="text-xs bg-amber-600 text-white hover:bg-amber-700 px-3 py-1.5 rounded-lg font-medium">Novo evento</button>
                     </div>
