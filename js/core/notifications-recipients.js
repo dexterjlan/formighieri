@@ -239,6 +239,24 @@ async function fetchActiveGestorProjetosRecipientEmails() {
     return uniqueEmails(emails);
 }
 
+async function fetchMontagemExternaFinalizadaRecipientEmails(orderId) {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    const [gestorComercialEmails, consultorEmail, gestorProjetosEmails] = await Promise.all([
+        fetchActiveGestorComercialRecipientEmails(),
+        fetchConsultorEmailForOrder(orderId),
+        fetchActiveGestorProjetosRecipientEmails()
+    ]);
+
+    return uniqueEmails([
+        ...gestorComercialEmails,
+        consultorEmail,
+        ...gestorProjetosEmails
+    ].filter(Boolean));
+}
+
 async function fetchIniciarProjetoTecnicoRecipientEmails(orderId, designerId) {
     if (NOTIFICATION_TEST_MODE) {
         return [NOTIFICATION_TEST_EMAIL];

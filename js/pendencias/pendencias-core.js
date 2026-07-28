@@ -13,6 +13,8 @@ const PENDENCIAS_STATUS_AGUARDANDO_PPCP = 'Aguardando PPCP';
 const PENDENCIAS_STATUS_IMPLANTACAO = 'Implantação';
 const PENDENCIAS_STATUS_EM_PRODUCAO = 'Em Produção';
 const PENDENCIAS_STATUS_MONTAGEM_INTERNA = 'Montagem Interna';
+const PENDENCIAS_STATUS_MONTAGEM_EXTERNA = 'Montagem Externa';
+const PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA = 'Aguardando Entrega Técnica';
 const PENDENCIAS_STATUS_EXPEDICAO = 'Expedição';
 
 const PENDENCIAS_FABRICA_PROJECT_SELECT = `
@@ -273,7 +275,8 @@ function getPendenciasSidebarSections() {
             label: 'Gestor de Projetos',
             visible: canSeePendenciasGestorProjetosMenu() && !hideGestorAndConferente,
             items: [
-                { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' }
+                { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
+                { id: 'montagem-externa', label: 'Montagem Externa' }
             ]
         },
         {
@@ -540,6 +543,8 @@ function getPendenciasProjectStatusBadgeClass(statusName) {
     if (statusName === PENDENCIAS_STATUS_IMPLANTACAO) return 'bg-teal-100 text-teal-800';
     if (statusName === PENDENCIAS_STATUS_EM_PRODUCAO) return 'bg-orange-100 text-orange-800';
     if (statusName === PENDENCIAS_STATUS_MONTAGEM_INTERNA) return 'bg-amber-100 text-amber-800';
+    if (statusName === PENDENCIAS_STATUS_MONTAGEM_EXTERNA) return 'bg-purple-100 text-purple-800';
+    if (statusName === PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA) return 'bg-sky-100 text-sky-800';
     return 'bg-slate-100 text-slate-700';
 }
 
@@ -618,6 +623,11 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'projetos-sem-projetistas') {
         loadPendenciasProjetosSemProjetistas();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'montagem-externa') {
+        loadPendenciasMontagemExterna();
         return;
     }
 

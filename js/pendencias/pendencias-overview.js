@@ -21,7 +21,8 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'aprovar-conferencia': 'Conferências confirmadas aguardando aprovação comercial.'
     },
     'gestor-projetos': {
-        'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.'
+        'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.',
+        'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
     },
     'gestor-fabrica': {
         'aguardando-montagem-interna': 'Projetos em produção aguardando início da montagem interna.',
@@ -99,6 +100,10 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             }
             case 'gestor-projetos:projetos-sem-projetistas': {
                 const { error, projects } = await fetchPendenciasAguardandoPtSemProjetista();
+                return error ? null : projects.length;
+            }
+            case 'gestor-projetos:montagem-externa': {
+                const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);
                 return error ? null : projects.length;
             }
             case 'gestor-fabrica:aguardando-montagem-interna': {

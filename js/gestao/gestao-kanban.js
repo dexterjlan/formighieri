@@ -698,6 +698,8 @@ async function loadGestaoKanban() {
         return;
     }
 
+    gestaoKanbanStatusesCache = visibleStatuses;
+
     const boardInner = document.createElement('div');
     boardInner.className = 'flex gap-3 min-w-max items-start';
 
@@ -710,6 +712,151 @@ async function loadGestaoKanban() {
 }
 
 let gestaoKanbanFullscreen = false;
+let gestaoKanbanStatusesCache = [];
+
+function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplementar = false) {
+    const deliveryDate = phase?.deliveryDate || order.clientDeliveryDate || project.deliveryDate || '';
+    const designerName = project.designer?.name || '';
+
+    return [
+        statusName,
+        order.orderCode || '',
+        order.clientName || '',
+        order.consultantName || '',
+        phase?.name || '',
+        typeof formatGestaoDate === 'function' ? formatGestaoDate(deliveryDate) : (deliveryDate || ''),
+        project.name || '',
+        project.projectCode || '',
+        isComplementar ? 'Complementar' : 'Principal',
+        designerName
+    ];
+}
+
+function buildGestaoKanbanExportRows(orders, statuses) {
+    const rows = [];
+
+    statuses.forEach(status => {
+        const cards = buildGestaoKanbanCardsForStatus(status.id, orders);
+        cards.forEach(({ order, phase, projectTree }) => {
+            projectTree.forEach(({ project, children }) => {
+                rows.push(buildGestaoKanbanExportRow(status.name, order, phase, project, false));
+                (children || []).forEach(child => {
+                    rows.push(buildGestaoKanbanExportRow(status.name, order, phase, child, true));
+                });
+            });
+        });
+    });
+
+    return rows;
+}
+
+function getGestaoKanbanExportFilename() {
+    const today = typeof getTodayInputDate === 'function'
+        ? getTodayInputDate()
+        : new Date().toISOString().slice(0, 10);
+    return `fgp-kanban-${today}.xlsx`;
+}
+
+async function resolveGestaoKanbanExportData() {
+    let orders = gestaoOrdersCache || [];
+    let statuses = (gestaoKanbanStatusesCache || []).filter(status => !isSubstituidoStatusName(status.name));
+
+    if (!orders.length || !statuses.length) {
+        const [loadedStatuses, ordersResult] = await Promise.all([
+            loadGestaoProjectStatuses(true),
+            fetchGestaoOrders()
+        ]);
+
+        if (ordersResult.error) {
+            throw ordersResult.error;
+        }
+
+        orders = ordersResult.data || [];
+        statuses = (loadedStatuses || []).filter(status => !isSubstituidoStatusName(status.name));
+
+        if (orders.length && typeof fetchGestaoOrderPhasesByOrderIds === 'function') {
+            const phasesByOrderId = await fetchGestaoOrderPhasesByOrderIds(orders.map(order => order.id));
+            orders = orders.map(order => ({
+                ...order,
+                deliveryPhases: phasesByOrderId[order.id] || order.deliveryPhases || []
+            }));
+        }
+    }
+
+    return { orders, statuses };
+}
+
+async function exportGestaoKanbanToExcel() {
+    if (!canAccessGestao()) return;
+
+    const button = document.getElementById('btn-gestao-kanban-export');
+    const originalLabel = button?.querySelector('span')?.textContent || 'Exportar Excel';
+
+    if (button) {
+        button.disabled = true;
+        const label = button.querySelector('span');
+        if (label) label.textContent = 'Exportando...';
+    }
+
+    try {
+        if (typeof loadSheetJsLibrary !== 'function') {
+            throw new Error('Módulo de importação não carregado.');
+        }
+
+        const { orders, statuses } = await resolveGestaoKanbanExportData();
+        if (!statuses.length) {
+            alertAppDialog('Nenhum status disponível para exportação.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
+
+        const dataRows = buildGestaoKanbanExportRows(orders, statuses);
+        if (!dataRows.length) {
+            alertAppDialog('Nenhum projeto no kanban para exportar.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
+
+        const headers = [
+            'Status',
+            'Pedido',
+            'Cliente',
+            'Consultor',
+            'Fase',
+            'Entrega',
+            'Projeto',
+            'Código Projeto',
+            'Tipo',
+            'Projetista'
+        ];
+
+        const XLSX = await loadSheetJsLibrary();
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+        sheet['!cols'] = [
+            { wch: 24 },
+            { wch: 12 },
+            { wch: 28 },
+            { wch: 22 },
+            { wch: 16 },
+            { wch: 12 },
+            { wch: 28 },
+            { wch: 14 },
+            { wch: 14 },
+            { wch: 22 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, 'Kanban');
+        XLSX.writeFile(workbook, getGestaoKanbanExportFilename());
+    } catch (error) {
+        console.error('exportGestaoKanbanToExcel:', error);
+        alertAppDialog(`Erro ao exportar kanban: ${error.message}`);
+    } finally {
+        if (button) {
+            button.disabled = false;
+            const label = button.querySelector('span');
+            if (label) label.textContent = originalLabel;
+        }
+    }
+}
 
 function setGestaoKanbanFullscreen(enabled) {
     gestaoKanbanFullscreen = Boolean(enabled);
@@ -736,6 +883,7 @@ window.setGestaoKanbanFullscreen = setGestaoKanbanFullscreen;
 
 function bindGestaoKanbanEvents() {
     document.getElementById('btn-gestao-kanban-fullscreen')?.addEventListener('click', toggleGestaoKanbanFullscreen);
+    document.getElementById('btn-gestao-kanban-export')?.addEventListener('click', exportGestaoKanbanToExcel);
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && gestaoKanbanFullscreen) {

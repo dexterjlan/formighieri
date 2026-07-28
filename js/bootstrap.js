@@ -41,6 +41,7 @@ const SCRIPTS = [
     'js/pendencias/pendencias-projetista-flows.js',
     'js/pendencias/pendencias-projetista-medicao.js',
     'js/pendencias/pendencias-operacional.js',
+    'js/pendencias/pendencias-gestor-montagem-externa.js',
     'js/pendencias/pendencias-comercial.js',
     'js/pendencias/pendencias-compras.js',
     'js/pendencias/pendencias-overview.js',
@@ -118,7 +119,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261063`);
+            await loadScript(`${src}?v=20261065`);
         }
 
         initAppEvents();

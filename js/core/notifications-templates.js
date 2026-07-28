@@ -495,7 +495,8 @@ const PROCESS_EMAIL_TITLE = {
     liberacao_medicao: 'Liberação para Medição',
     projeto_nomeado: 'Projeto Nomeado',
     projeto_tecnico_iniciado: 'Projeto Técnico Iniciado',
-    implantacao_enviado_producao: 'Projeto Enviado para Produção'
+    implantacao_enviado_producao: 'Projeto Enviado para Produção',
+    montagem_externa_finalizada: 'Montagem Externa Finalizada'
 };
 function buildProcessEmailSubject(eventType, orderCode, clientName) {
     const prefix = PROCESS_EMAIL_TITLE[eventType] || 'Atualização de Processo';

@@ -675,6 +675,31 @@ async function notifyImplantacaoEnviarProducaoEmail(options = {}) {
 
 window.notifyImplantacaoEnviarProducaoEmail = notifyImplantacaoEnviarProducaoEmail;
 
+async function notifyMontagemExternaFinalizadaEmail(options = {}) {
+    const { orderId, orderProjectId } = options;
+    if (!orderId || !orderProjectId) return;
+
+    try {
+        const recipientEmails = await fetchMontagemExternaFinalizadaRecipientEmails(orderId);
+
+        await sendProcessNotificationEmail('montagem_externa_finalizada', {
+            orderId,
+            orderProjectIds: [orderProjectId],
+            recipientEmails,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto finalizado',
+            accentColor: '#059669',
+            extraFields: [
+                { label: 'Novo status', value: 'Aguardando Entrega Técnica' }
+            ]
+        });
+    } catch (err) {
+        console.warn('notifyMontagemExternaFinalizadaEmail:', err);
+    }
+}
+
+window.notifyMontagemExternaFinalizadaEmail = notifyMontagemExternaFinalizadaEmail;
+
 async function notifyLiberacaoMedicaoEmail(options = {}) {
     const { orderId, projects = [] } = options;
     if (!orderId || !projects.length) return;
