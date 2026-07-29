@@ -37,7 +37,7 @@ const GESTAO_PERFORMANCE_AREA_METRICS = [
         label: 'Aprovação comercial',
         description: 'Tempo médio desde Aguardando Aprovação até o primeiro Em Revisão ou Aguardando PPCP.',
         startStatuses: ['Aguardando Aprovação'],
-        endStatuses: ['Em Revisão', 'Em revisão', 'Aguardando PPCP']
+        endStatuses: ['Em Revisão Comercial', 'Em Revisão Técnica', 'Em Revisão', 'Em revisão', 'Aguardando PPCP']
     },
     {
         id: 'conferencia-comercial',

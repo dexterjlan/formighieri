@@ -447,13 +447,22 @@ function enrichPendenciasApprovalWithProject(approval, project) {
     };
 }
 
-async function fetchPendenciasConsultorAguardandoAprovacaoProjects() {
+async function fetchPendenciasConsultorAguardandoAprovacaoProjects(targetStatusName = null) {
     const overviewMode = isPendenciasConsultorConferenciaOverviewMode();
-    const statusIds = await getPendenciasStatusIdsByNames([PENDENCIAS_STATUS_AGUARDANDO_APROVACAO]);
+
+    const isEmRevisaoComercialView = targetStatusName
+        ? targetStatusName === PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL
+        : (typeof pendenciasActiveItem !== 'undefined' && pendenciasActiveItem === 'em-revisao-comercial');
+
+    const expectedStatusName = isEmRevisaoComercialView
+        ? PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL
+        : PENDENCIAS_STATUS_AGUARDANDO_APROVACAO;
+
+    const statusIds = await getPendenciasStatusIdsByNames([expectedStatusName]);
 
     if (!statusIds.length) {
         return {
-            error: new Error(`Status "${PENDENCIAS_STATUS_AGUARDANDO_APROVACAO}" não encontrado.`),
+            error: new Error(`Status "${expectedStatusName}" não encontrado.`),
             overviewMode,
             projects: [],
             approvalsByProject: {}
@@ -466,6 +475,11 @@ async function fetchPendenciasConsultorAguardandoAprovacaoProjects() {
     }
 
     let projects = sortPendenciasByDeliveryDate(result.data || []);
+
+    projects = projects.filter(project => {
+        const pStatusName = project.projectStatus?.name || '';
+        return pStatusName === expectedStatusName;
+    });
 
     if (!overviewMode) {
         projects = projects.filter(project => isCurrentUserOrderConsultor(
@@ -484,7 +498,7 @@ async function fetchPendenciasConsultorAguardandoAprovacaoProjects() {
             approvalsByProjectRaw[project.id],
             project
         );
-        if (!approval || approval.status !== PENDENCIAS_STATUS_AGUARDANDO_APROVACAO) {
+        if (!approval) {
             return false;
         }
         approvalsByProject[project.id] = approval;
@@ -500,9 +514,12 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
+    const isEmRevisaoComercialView = (typeof pendenciasActiveItem !== 'undefined' && pendenciasActiveItem === 'em-revisao-comercial');
+    const titleText = isEmRevisaoComercialView ? 'Em Revisão Comercial' : 'Aguardando Aprovação';
+
     const subtitle = overviewMode
-        ? 'Todos os projetos aguardando aprovação comercial.'
-        : 'Projetos dos seus pedidos aguardando aprovação comercial.';
+        ? `Todos os projetos em ${titleText.toLowerCase()}.`
+        : `Projetos dos seus pedidos em ${titleText.toLowerCase()}.`;
 
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
@@ -512,13 +529,19 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
             : (project?.name || 'Projeto');
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const approval = approvalsByProject[project.id];
+        const projectStatusName = project.projectStatus?.name || '';
         const canApprove = approval
             && typeof canApproveCommercialApproval === 'function'
             && canApproveCommercialApproval(approval);
         const showRequestRevision = approval
+            && (projectStatusName === 'Em Revisão Comercial' || isEmRevisaoComercialView)
             && typeof canRequestNewRevision === 'function'
-            && canRequestNewRevision(approval);
+            && canRequestNewRevision(approval, projectStatusName);
         const actionButtons = [];
+
+        const canCommercialRevision = approval
+            && typeof canAccessCommercialRevision === 'function'
+            && canAccessCommercialRevision(approval);
 
         if (canApprove) {
             actionButtons.push(`<button type="button" onclick="approveCommercialApprovalFromPendencias(${approval.id})"
@@ -527,6 +550,10 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
         if (showRequestRevision) {
             actionButtons.push(`<button type="button" onclick="openCommercialRevisionFromPendencias(${approval.id})"
                 class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Solicitar Revisão</button>`);
+        }
+        if (canCommercialRevision) {
+            actionButtons.push(`<button type="button" onclick="openCommercialRevisionCommercialFromPendencias(${approval.id})"
+                class="text-xs bg-purple-100 text-purple-800 hover:bg-purple-200 px-2.5 py-1 rounded-lg font-medium">Revisão Comercial</button>`);
         }
 
         const actionCell = actionButtons.length
@@ -552,7 +579,7 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                 <div>
-                    <h3 class="font-bold text-sm text-slate-900">Aguardando Aprovação</h3>
+                    <h3 class="font-bold text-sm text-slate-900">${escapeHtml(titleText)}</h3>
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-consultor-aprovacao"
@@ -688,8 +715,25 @@ async function openCommercialRevisionFromPendencias(approvalId) {
     await openCommercialRevisionModal(approval.id);
 }
 
+async function openCommercialRevisionCommercialFromPendencias(approvalId) {
+    const approval = await ensureCommercialApprovalInPendenciasContext(approvalId);
+
+    if (!approval) {
+        alertAppDialog('Solicitação comercial não encontrada.');
+        return;
+    }
+
+    if (typeof openCommercialRevisionModal !== 'function') {
+        alertAppDialog('Recurso de revisão indisponível.');
+        return;
+    }
+
+    await openCommercialRevisionModal(approval.id, 'comercial');
+}
+
 window.approveCommercialApprovalFromPendencias = approveCommercialApprovalFromPendencias;
 window.openCommercialRevisionFromPendencias = openCommercialRevisionFromPendencias;
+window.openCommercialRevisionCommercialFromPendencias = openCommercialRevisionCommercialFromPendencias;
 
 async function fetchPendenciasConsultorRequisicaoRequests() {
     const overviewMode = isPendenciasConsultorConferenciaOverviewMode();

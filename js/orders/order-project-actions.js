@@ -135,11 +135,13 @@ function getOrderProjectActions(project, context = {}) {
         });
     }
 
-    if (statusName === 'Aguardando Aprovação' && approvalCtx) {
+    if (statusName === 'Em Revisão Comercial' && approvalCtx) {
         const canApprove = typeof canApproveCommercialApproval === 'function'
             && canApproveCommercialApproval(approvalCtx);
         const canRevision = typeof canRequestNewRevision === 'function'
-            && canRequestNewRevision(approvalCtx);
+            && canRequestNewRevision(approvalCtx, statusName);
+        const canCommercialRev = typeof canAccessCommercialRevision === 'function'
+            && canAccessCommercialRevision(approvalCtx);
 
         actions.push({
             id: 'approve',
@@ -149,10 +151,38 @@ function getOrderProjectActions(project, context = {}) {
         });
         actions.push({
             id: 'revision',
-            label: 'Solicitar Revisão',
+            label: 'Solicitar Revisão Técnica',
             enabled: canRevision,
             approvalId: approvalCtx.id
         });
+        if (canCommercialRev) {
+            actions.push({
+                id: 'commercial-revision',
+                label: 'Revisão Comercial',
+                enabled: true,
+                approvalId: approvalCtx.id
+            });
+        }
+    } else if (statusName === 'Aguardando Aprovação' && approvalCtx) {
+        const canApprove = typeof canApproveCommercialApproval === 'function'
+            && canApproveCommercialApproval(approvalCtx);
+        const canCommercialRev = typeof canAccessCommercialRevision === 'function'
+            && canAccessCommercialRevision(approvalCtx);
+
+        actions.push({
+            id: 'approve',
+            label: 'Aprovar',
+            enabled: canApprove,
+            approvalId: approvalCtx.id
+        });
+        if (canCommercialRev) {
+            actions.push({
+                id: 'commercial-revision',
+                label: 'Revisão Comercial',
+                enabled: true,
+                approvalId: approvalCtx.id
+            });
+        }
     }
 
     if (approvalCtx) {
@@ -170,7 +200,7 @@ function getOrderProjectActions(project, context = {}) {
         }
     }
 
-    if (statusName === 'Projeto Técnico') {
+    if (statusName === 'Projeto Técnico' || statusName === 'Em Revisão Técnica' || statusName === 'Em Revisão' || statusName === 'Em revisão') {
         const canSubmit = typeof canSubmitCommercialApprovalFromPendencias === 'function'
             && canSubmitCommercialApprovalFromPendencias(project, approval);
         actions.push({
@@ -345,7 +375,12 @@ async function handleOrderProjectAction(button) {
             break;
         case 'revision':
             if (typeof openCommercialRevisionModal === 'function' && approvalId) {
-                await openCommercialRevisionModal(approvalId);
+                await openCommercialRevisionModal(approvalId, 'tecnica');
+            }
+            break;
+        case 'commercial-revision':
+            if (typeof openCommercialRevisionModal === 'function' && approvalId) {
+                await openCommercialRevisionModal(approvalId, 'comercial');
             }
             break;
         case 'view-revision':

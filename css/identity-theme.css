@@ -409,24 +409,3 @@ html[data-theme="formighieri-sage"] .fixed.inset-0.bg-slate-900\/40 {
     background-color: var(--fm-overlay) !important;
     backdrop-filter: blur(4px);
 }
-
-/* ── Badge dev ── */
-html[data-theme="formighieri-sage"]::before {
-    content: 'Oficina Sálvia · v2';
-    position: fixed;
-    right: 0.75rem;
-    bottom: 0.75rem;
-    z-index: 9999;
-    pointer-events: none;
-    font-family: var(--fm-font-sans);
-    font-size: 0.625rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--fm-sage-deep);
-    background: var(--fm-surface-elevated);
-    border: 1px solid var(--fm-border);
-    border-radius: 999px;
-    padding: 0.3rem 0.7rem;
-    box-shadow: var(--fm-shadow-md);
-}

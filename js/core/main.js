@@ -31,6 +31,7 @@ function initAppEvents() {
     document.getElementById("btn-show-register").addEventListener("click", showRegisterScreen);
     document.getElementById("btn-show-login").addEventListener("click", showLoginScreen);
     bindAppDialogEvents();
+    bindOrderCodePickerEvents();
     bindAuthEvents();
     bindNavigationEvents();
     bindResponsiveLayout();

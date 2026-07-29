@@ -1,5 +1,7 @@
 const PENDENCIAS_STATUS_AGUARDANDO_PT = 'Aguardando Projeto Técnico';
 const PENDENCIAS_STATUS_PROJETO_TECNICO = 'Projeto Técnico';
+const PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL = 'Em Revisão Comercial';
+const PENDENCIAS_STATUS_EM_REVISAO_TECNICA = 'Em Revisão Técnica';
 const PENDENCIAS_STATUS_EM_REVISAO = 'Em Revisão';
 const PENDENCIAS_STATUS_VENDIDO = 'Vendido';
 const PENDENCIAS_STATUS_AGUARDANDO_OBRA = 'Aguardando Obra';
@@ -36,6 +38,8 @@ const PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES = [
 ];
 const PENDENCIAS_MINE_EXTRA_STATUSES = [
     PENDENCIAS_STATUS_PROJETO_TECNICO,
+    'Em Revisão Comercial',
+    'Em Revisão Técnica',
     'Aguardando Aprovação',
     'Em Revisão',
     'Em revisão'
@@ -56,6 +60,8 @@ const PENDENCIAS_PROJECT_SELECT_FALLBACK = `
 const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
     PENDENCIAS_STATUS_AGUARDANDO_PT,
     PENDENCIAS_STATUS_PROJETO_TECNICO,
+    'Em Revisão Comercial',
+    'Em Revisão Técnica',
     'Em Revisão',
     'Em revisão',
     'Aguardando Aprovação',
@@ -65,6 +71,8 @@ const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
 const PENDENCIAS_GESTOR_WORKLOAD_COLUMNS = [
     PENDENCIAS_STATUS_AGUARDANDO_PT,
     PENDENCIAS_STATUS_PROJETO_TECNICO,
+    'Em Revisão Comercial',
+    'Em Revisão Técnica',
     'Em Revisão',
     'Aguardando Aprovação',
     'Aguardando PPCP'
@@ -251,6 +259,7 @@ function getPendenciasSidebarSections() {
             visible: canSeePendenciasConsultorMenu(),
             items: [
                 { id: 'conferencia', label: 'Conferência' },
+                { id: 'em-revisao-comercial', label: 'Em Revisão Comercial' },
                 { id: 'aguardando-aprovacao', label: 'Aguardando Aprovação' },
                 { id: 'requisicoes', label: 'Requisições' }
             ]
@@ -530,7 +539,8 @@ function getPendenciasProjectStatusName(project) {
 
 function getPendenciasProjectStatusBadgeClass(statusName) {
     if (statusName === 'Aguardando Aprovação') return 'bg-amber-100 text-amber-800';
-    if (statusName === 'Em Revisão' || statusName === 'Em revisão') return 'bg-sky-100 text-sky-800';
+    if (statusName === 'Em Revisão Comercial') return 'bg-sky-100 text-sky-800';
+    if (statusName === 'Em Revisão Técnica' || statusName === 'Em Revisão' || statusName === 'Em revisão') return 'bg-sky-100 text-sky-800';
     if (statusName === PENDENCIAS_STATUS_PROJETO_TECNICO) return 'bg-violet-100 text-violet-800';
     if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) return 'bg-indigo-100 text-indigo-800';
     if (statusName === PENDENCIAS_STATUS_VENDIDO) return 'bg-emerald-100 text-emerald-800';
@@ -561,7 +571,7 @@ function loadPendenciasContent() {
         return;
     }
 
-    if (pendenciasActiveSection === 'consultor' && pendenciasActiveItem === 'aguardando-aprovacao') {
+    if (pendenciasActiveSection === 'consultor' && (pendenciasActiveItem === 'em-revisao-comercial' || pendenciasActiveItem === 'aguardando-aprovacao')) {
         loadPendenciasConsultorAguardandoAprovacao();
         return;
     }

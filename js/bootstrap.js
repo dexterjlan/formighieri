@@ -13,6 +13,7 @@ const SCRIPTS = [
     'js/core/marceneiro.js',
     'js/core/attachment-lightbox.js',
     'js/core/dialog.js',
+    'js/core/order-code-picker.js',
     'js/core/navigation.js',
     'js/core/responsive.js',
     'js/core/calendar.js',
@@ -119,7 +120,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261067`);
+            await loadScript(`${src}?v=20261068`);
         }
 
         initAppEvents();

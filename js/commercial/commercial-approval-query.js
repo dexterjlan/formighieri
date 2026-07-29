@@ -163,11 +163,13 @@ async function searchCommercialApprovalsQuery() {
         const showViewRevision = hasRevision
             && typeof canViewCommercialRevision === 'function'
             && canViewCommercialRevision(r);
+        const projectStatusName = r.projectStatus?.name || '';
         const isWaitingApproval = r.status === 'Aguardando Aprovação';
         const showApprove = isWaitingApproval && canApproveCommercialApproval(r);
         const showRequestRevision = isWaitingApproval
+            && (projectStatusName === 'Em Revisão Comercial' || !projectStatusName)
             && typeof canRequestNewRevision === 'function'
-            && canRequestNewRevision(r);
+            && canRequestNewRevision(r, projectStatusName);
         const actionButtons = [];
 
         if (showApprove) {

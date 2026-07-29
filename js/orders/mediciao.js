@@ -237,14 +237,12 @@ function medicaoHasProjectsInMedicaoRealizadaStatus(medicao) {
 
 function canEditMedicao(medicao) {
     if (!medicao) return canCreateMedicao();
-    if (!medicaoHasProjectsInMedicaoRealizadaStatus(medicao)) return false;
     if (currentUser?.role === 'Admin') return true;
     return isConferente();
 }
 
 function canShowOrderProjectEditarMedicaoAction(project, medicaoInfo) {
     if (!medicaoInfo?.id) return false;
-    if (getOrderProjectStatusName(project) !== 'Medição Realizada') return false;
     if (currentUser?.role === 'Admin') return true;
     return isConferente();
 }

@@ -334,7 +334,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
 }
 
 function normalizePendenciasWorkloadStatusName(statusName) {
-    if (statusName === 'Em revisão') return 'Em Revisão';
+    if (statusName === 'Em revisão' || statusName === 'Em Revisão') return 'Em Revisão Técnica';
     return statusName;
 }
 

@@ -1,6 +1,7 @@
 const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     consultor: {
         conferencia: 'Conferências enviadas aguardando retorno do consultor.',
+        'em-revisao-comercial': 'Projetos em revisão comercial aguardando aprovação.',
         'aguardando-aprovacao': 'Projetos aguardando aprovação comercial.',
         requisicoes: 'Requisições aguardando resposta do consultor.'
     },
@@ -41,8 +42,12 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 if (error) return null;
                 return groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId).length;
             }
+            case 'consultor:em-revisao-comercial': {
+                const { error, projects } = await fetchPendenciasConsultorAguardandoAprovacaoProjects(PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL);
+                return error ? null : projects.length;
+            }
             case 'consultor:aguardando-aprovacao': {
-                const { error, projects } = await fetchPendenciasConsultorAguardandoAprovacaoProjects();
+                const { error, projects } = await fetchPendenciasConsultorAguardandoAprovacaoProjects(PENDENCIAS_STATUS_AGUARDANDO_APROVACAO);
                 return error ? null : projects.length;
             }
             case 'consultor:requisicoes': {

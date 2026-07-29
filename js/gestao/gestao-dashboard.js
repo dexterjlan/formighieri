@@ -55,6 +55,8 @@ const GESTAO_DASHBOARD_STATUS_DOT_COLORS = {
     'Conferência Realizada': '#14b8a6',
     'Aguardando Projeto Técnico': '#6366f1',
     'Projeto Técnico': '#8b5cf6',
+    'Em Revisão Comercial': '#0ea5e9',
+    'Em Revisão Técnica': '#0284c7',
     'Aguardando Aprovação': '#f59e0b',
     'Em Revisão': '#0ea5e9',
     'Em revisão': '#0ea5e9',

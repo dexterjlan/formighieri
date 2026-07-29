@@ -1,4 +1,8 @@
 function canEditRevisionActivitiesConsultor(approval) {
+    if (currentUser?.role === 'Admin') return true;
+    if (typeof currentRevisionType !== 'undefined' && currentRevisionType === 'comercial') {
+        if (typeof isGestorComercial === 'function' && isGestorComercial()) return true;
+    }
     if (!approval) {
         return currentUser?.role === 'Admin';
     }
@@ -15,11 +19,19 @@ function canEditRevisionActivityProjetista(approval) {
 }
 
 function canEditRevisionActivityCompletionFields(approval) {
-    if (approval?.status !== 'Em revisão') return false;
     if (currentUser?.role === 'Admin') return true;
-    return currentUser?.role === 'Projetista'
-        && approval?.designerId
-        && Number(approval.designerId) === Number(currentUser.id);
+    if (currentUser?.role !== 'Projetista') return false;
+    if (!approval?.designerId || Number(approval.designerId) !== Number(currentUser.id)) return false;
+
+    const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
+        ? getCommercialApprovalProjectStatusName(approval)
+        : '';
+
+    if (projectStatusName) {
+        return projectStatusName === 'Em Revisão Técnica' || projectStatusName === 'Em Revisão' || projectStatusName === 'Em revisão';
+    }
+
+    return approval?.status === 'Em revisão';
 }
 
 function canViewCommercialRevision(approval) {
@@ -32,29 +44,64 @@ function canViewCommercialRevision(approval) {
 }
 
 function canOpenRevisionModal(approval) {
-    if (approval.status === 'Em revisão') {
+    if (!approval) return false;
+    if (currentUser?.role === 'Projetista') {
+        const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
+            ? getCommercialApprovalProjectStatusName(approval)
+            : '';
+        const isEmRevisaoTecnica = projectStatusName
+            ? (projectStatusName === 'Em Revisão Técnica' || projectStatusName === 'Em Revisão' || projectStatusName === 'Em revisão')
+            : approval?.status === 'Em revisão';
+
+        if (!isEmRevisaoTecnica) return false;
+        return approval?.designerId && Number(approval.designerId) === Number(currentUser.id);
+    }
+
+    const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
+        ? getCommercialApprovalProjectStatusName(approval)
+        : '';
+    if (projectStatusName === 'Em Revisão Comercial') {
+        return canRequestNewRevision(approval, projectStatusName);
+    }
+
+    if (approval?.status === 'Em revisão') {
         if (currentUser?.role === 'Admin') return true;
-        if (currentUser?.role === 'Projetista'
-            && approval?.designerId
-            && Number(approval.designerId) === Number(currentUser.id)) return true;
         return typeof isAdminOrOrderConsultorForApproval === 'function'
             && isAdminOrOrderConsultorForApproval(approval);
     }
-    return canRequestNewRevision(approval);
+
+    return canRequestNewRevision(approval, projectStatusName);
 }
 
-function canRequestNewRevision(approval) {
-    return approval?.status === 'Aguardando Aprovação'
-        && typeof isAdminOrOrderConsultorForApproval === 'function'
-        && isAdminOrOrderConsultorForApproval(approval);
+function canRequestNewRevision(approval, projectStatusName = null) {
+    if (!approval) return false;
+
+    const canUserExecute = currentUser?.role === 'Admin'
+        || (typeof isAdminOrOrderConsultorForApproval === 'function' && isAdminOrOrderConsultorForApproval(approval));
+    if (!canUserExecute) return false;
+
+    const status = projectStatusName || (typeof getCommercialApprovalProjectStatusName === 'function' ? getCommercialApprovalProjectStatusName(approval) : '');
+    if (status) {
+        return status === 'Em Revisão Comercial';
+    }
+
+    return approval?.status === 'Em Revisão Comercial';
 }
 
 function canSendBackToApproval(approval) {
-    if (approval?.status !== 'Em revisão') return false;
     if (currentUser?.role === 'Admin') return true;
-    return currentUser?.role === 'Projetista'
-        && approval?.designerId
-        && Number(approval.designerId) === Number(currentUser.id);
+    if (currentUser?.role !== 'Projetista') return false;
+    if (!approval?.designerId || Number(approval.designerId) !== Number(currentUser.id)) return false;
+
+    const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
+        ? getCommercialApprovalProjectStatusName(approval)
+        : '';
+
+    if (projectStatusName) {
+        return projectStatusName === 'Em Revisão Técnica' || projectStatusName === 'Em Revisão' || projectStatusName === 'Em revisão';
+    }
+
+    return approval?.status === 'Em revisão';
 }
 
 function allRevisionActivitiesCompleted() {
@@ -77,13 +124,20 @@ function renderRevisionResizableText(text, tone = 'default') {
     return `<div class="revision-resizable-field revision-resizable-field--readonly ${toneClass}">${content}</div>`;
 }
 
+let currentRevisionType = 'tecnica';
+
 function renderRevisionActivityRow(activity) {
     const approval = getCurrentApproval();
+    const isComercial = currentRevisionType === 'comercial';
     const isNewRevision = approval?.status === 'Aguardando Aprovação';
     const consultorCanEdit = !revisionModalViewOnly
         && canEditRevisionActivitiesConsultor(approval)
-        && (isNewRevision || approval?.status === 'Em revisão');
-    const completionCanEdit = !revisionModalViewOnly && canEditRevisionActivityCompletionFields(approval);
+        && (isComercial || isNewRevision || approval?.status === 'Em revisão');
+    const completionCanEdit = !revisionModalViewOnly && (
+        isComercial
+            ? consultorCanEdit
+            : canEditRevisionActivityCompletionFields(approval)
+    );
     const rowId = activity.id || activity.tempId;
 
     const tr = document.createElement('tr');
@@ -91,6 +145,8 @@ function renderRevisionActivityRow(activity) {
     if (activity.completedAt) {
         tr.dataset.completedAt = activity.completedAt;
     }
+
+    const obsPlaceholder = isComercial ? 'Observação do consultor...' : 'Observação do projetista...';
 
     tr.innerHTML = `
         <td class="p-3 align-top">
@@ -108,7 +164,7 @@ function renderRevisionActivityRow(activity) {
         </td>
         <td class="p-3 align-top">
             <textarea rows="2" class="revision-activity-observation revision-resizable-input px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600 disabled:bg-slate-50"
-                placeholder="Observação do projetista..."
+                placeholder="${obsPlaceholder}"
                 ${completionCanEdit ? '' : 'disabled'}>${escapeHtml(activity.observation || '')}</textarea>
         </td>
         <td class="p-3 align-top">
@@ -182,6 +238,15 @@ function updateRevisionModalControls(approval) {
         return;
     }
 
+    if (currentRevisionType === 'comercial') {
+        const canEditComercial = canEditRevisionActivitiesConsultor(approval);
+        addBtn.classList.toggle('hidden', !canEditComercial);
+        saveBtn.classList.toggle('hidden', !canEditComercial);
+        sendBackBtn.classList.add('hidden');
+        saveBtn.textContent = 'Salvar Revisão Comercial';
+        return;
+    }
+
     const isNewRevision = approval.status === 'Aguardando Aprovação';
     const canSend = canSendBackToApproval(approval);
     const allComplete = allRevisionActivitiesCompleted();
@@ -192,7 +257,7 @@ function updateRevisionModalControls(approval) {
     sendBackBtn.disabled = !canSend || !allComplete;
     sendBackBtn.classList.toggle('opacity-50', !allComplete);
     sendBackBtn.classList.toggle('cursor-not-allowed', !allComplete);
-    saveBtn.textContent = isNewRevision ? 'Criar Revisão' : 'Salvar Revisão';
+    saveBtn.textContent = isNewRevision ? 'Criar Revisão Técnica' : 'Salvar Revisão Técnica';
 }
 
 async function loadRevisionActivities(revisionId) {
@@ -226,35 +291,48 @@ async function loadRevisionActivities(revisionId) {
 
 async function ensureApprovalInCache(approvalId) {
     let approval = commercialApprovalsCache.find(a => a.id === approvalId);
-    if (approval) return approval;
 
-    let { data, error } = await supabaseClient
-        .from('CommercialApproval')
-        .select('id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status')
-        .eq('id', approvalId)
-        .maybeSingle();
-
-    if (error) {
-        ({ data, error } = await supabaseClient
+    if (!approval) {
+        let { data, error } = await supabaseClient
             .from('CommercialApproval')
-            .select('id, orderId, projectName, designerId, approved, approvedAt')
+            .select('id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status')
             .eq('id', approvalId)
-            .maybeSingle());
+            .maybeSingle();
+
+        if (error) {
+            ({ data, error } = await supabaseClient
+                .from('CommercialApproval')
+                .select('id, orderId, projectName, designerId, approved, approvedAt')
+                .eq('id', approvalId)
+                .maybeSingle());
+        }
+
+        if (error || !data) return null;
+
+        const { data: orderInfo } = await supabaseClient
+            .from('salesOrders')
+            .select('consultantName')
+            .eq('id', data.orderId)
+            .maybeSingle();
+
+        approval = normalizeCommercialApproval({
+            ...data,
+            orderConsultantName: orderInfo?.consultantName || null
+        });
+        commercialApprovalsCache.push(approval);
     }
 
-    if (error || !data) return null;
+    if (approval && approval.orderProjectId && !approval.projectStatus) {
+        const { data: proj } = await supabaseClient
+            .from('OrderProject')
+            .select('id, projectStatus:OrderProjectStatus(name)')
+            .eq('id', approval.orderProjectId)
+            .maybeSingle();
+        if (proj?.projectStatus) {
+            approval.projectStatus = proj.projectStatus;
+        }
+    }
 
-    const { data: orderInfo } = await supabaseClient
-        .from('salesOrders')
-        .select('consultantName')
-        .eq('id', data.orderId)
-        .maybeSingle();
-
-    approval = normalizeCommercialApproval({
-        ...data,
-        orderConsultantName: orderInfo?.consultantName || null
-    });
-    commercialApprovalsCache.push(approval);
     return approval;
 }
 
@@ -281,18 +359,29 @@ async function getLatestRevisionForApproval(approvalId) {
 }
 
 function setupCommercialRevisionModalHeader(approval) {
+    const isComercial = currentRevisionType === 'comercial';
+    const typeLabel = isComercial ? 'Revisão Comercial' : 'Revisão Técnica';
+
     document.getElementById('revision-approval-info').textContent =
-        `Projeto: ${approval.projectName} | Status da aprovação: ${getApprovalStatusLabel(approval.status)}`;
+        `${typeLabel} | Projeto: ${approval.projectName} | Status: ${getApprovalStatusLabel(approval.status)}`;
 
     const badge = document.getElementById('revision-status-badge');
-    badge.textContent = approval.status === 'Aguardando Aprovação' ? 'Nova revisão' : getApprovalStatusLabel(approval.status);
-    badge.className = `text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${getApprovalStatusBadgeClass(approval.status === 'Aguardando Aprovação' ? 'Em revisão' : approval.status)}`;
+    badge.textContent = isComercial ? 'Revisão Comercial' : (approval.status === 'Aguardando Aprovação' ? 'Nova revisão' : getApprovalStatusLabel(approval.status));
+    badge.className = `text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${isComercial ? 'bg-purple-100 text-purple-800' : getApprovalStatusBadgeClass(approval.status === 'Aguardando Aprovação' ? 'Em revisão' : approval.status)}`;
 }
 
-async function openCommercialRevisionModal(approvalId) {
+async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica', options = {}) {
+    currentRevisionType = revisionType;
     revisionModalViewOnly = false;
     const approval = await ensureApprovalInCache(approvalId);
-    if (!approval || !canOpenRevisionModal(approval)) return;
+    if (!approval) return;
+
+    if (revisionType === 'tecnica' && !canOpenRevisionModal(approval)) return;
+    if (revisionType === 'comercial') {
+        const canAccessComercial = (typeof canAccessCommercialRevision === 'function' && canAccessCommercialRevision(approval))
+            || canEditRevisionActivitiesConsultor(approval);
+        if (!canAccessComercial) return;
+    }
 
     currentRevisionApprovalId = approvalId;
     editingRevisionId = null;
@@ -304,13 +393,18 @@ async function openCommercialRevisionModal(approvalId) {
     document.getElementById('revision-activities-list').innerHTML = '';
     document.getElementById('revision-empty-msg').classList.add('hidden');
     setupCommercialRevisionModalHeader(approval);
-    updateRevisionModalControls(approval);
 
-    if (approval.status === 'Em revisão') {
-        const { data: revision } = await supabaseClient
+    const targetRevisionId = options?.revisionId || null;
+
+    if (targetRevisionId) {
+        editingRevisionId = targetRevisionId;
+        await loadRevisionActivities(targetRevisionId);
+    } else if (revisionType === 'comercial') {
+        let { data: revision } = await supabaseClient
             .from('CommercialRevision')
-            .select('id')
+            .select('id, type')
             .eq('commercialApprovalId', approvalId)
+            .eq('type', 'comercial')
             .order('createdAt', { ascending: false })
             .limit(1)
             .maybeSingle();
@@ -318,8 +412,29 @@ async function openCommercialRevisionModal(approvalId) {
         if (revision) {
             editingRevisionId = revision.id;
             await loadRevisionActivities(revision.id);
+        } else {
+            updateRevisionModalControls(approval);
+            addRevisionActivityRow();
+        }
+    } else if (approval.status === 'Em revisão' && currentUser?.role === 'Projetista') {
+        let { data: revision } = await supabaseClient
+            .from('CommercialRevision')
+            .select('id, type')
+            .eq('commercialApprovalId', approvalId)
+            .eq('type', 'tecnica')
+            .order('createdAt', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (revision) {
+            editingRevisionId = revision.id;
+            await loadRevisionActivities(revision.id);
+        } else {
+            updateRevisionModalControls(approval);
+            addRevisionActivityRow();
         }
     } else {
+        updateRevisionModalControls(approval);
         addRevisionActivityRow();
     }
 
@@ -342,8 +457,12 @@ async function openCommercialRevisionsHistoryView(approvalId, prefetched = null)
         revisions = revisionsByApproval[approvalId] || [];
     }
 
+    revisions = filterRevisionsForCurrentUser(revisions);
+
     if (!revisions?.length) {
-        alertAppDialog('Nenhuma revisão encontrada para este projeto.');
+        alertAppDialog(currentUser?.role === 'Projetista'
+            ? 'Nenhuma revisão técnica encontrada para este projeto.'
+            : 'Nenhuma revisão encontrada para este projeto.');
         return;
     }
 
@@ -460,13 +579,27 @@ async function persistCommercialRevision() {
     const createdRevision = !revisionId;
 
     if (!revisionId) {
-        const { data: revision, error: revisionError } = await supabaseClient
+        let revision = null;
+        let revisionError = null;
+
+        ({ data: revision, error: revisionError } = await supabaseClient
             .from('CommercialRevision')
             .insert([{
-                commercialApprovalId: approval.id
+                commercialApprovalId: approval.id,
+                type: currentRevisionType
             }])
             .select('id')
-            .single();
+            .single());
+
+        if (revisionError && revisionError.message?.includes('type')) {
+            ({ data: revision, error: revisionError } = await supabaseClient
+                .from('CommercialRevision')
+                .insert([{
+                    commercialApprovalId: approval.id
+                }])
+                .select('id')
+                .single());
+        }
 
         if (revisionError || !revision) {
             alertAppDialog('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
@@ -476,27 +609,29 @@ async function persistCommercialRevision() {
         revisionId = revision.id;
         editingRevisionId = revisionId;
 
-        const { error: statusError } = await supabaseClient
-            .from('CommercialApproval')
-            .update({
-                status: 'Em revisão',
-                approved: false,
-                approvedAt: null
-            })
-            .eq('id', approval.id);
-
-        if (statusError && statusError.message?.includes('status')) {
-            await supabaseClient
+        if (currentRevisionType === 'tecnica') {
+            const { error: statusError } = await supabaseClient
                 .from('CommercialApproval')
-                .update({ approved: false, approvedAt: null })
+                .update({
+                    status: 'Em revisão',
+                    approved: false,
+                    approvedAt: null
+                })
                 .eq('id', approval.id);
-        } else if (statusError) {
-            alertAppDialog('Erro ao atualizar status da aprovação: ' + statusError.message);
-            return { ok: false };
-        }
 
-        if (typeof applyEmRevisaoStatusForCommercialApproval === 'function') {
-            await applyEmRevisaoStatusForCommercialApproval(approval);
+            if (statusError && statusError.message?.includes('status')) {
+                await supabaseClient
+                    .from('CommercialApproval')
+                    .update({ approved: false, approvedAt: null })
+                    .eq('id', approval.id);
+            } else if (statusError) {
+                alertAppDialog('Erro ao atualizar status da aprovação: ' + statusError.message);
+                return { ok: false };
+            }
+
+            if (typeof applyEmRevisaoStatusForCommercialApproval === 'function') {
+                await applyEmRevisaoStatusForCommercialApproval(approval);
+            }
         }
     }
 
@@ -613,7 +748,7 @@ async function saveCommercialRevision() {
         if (!result.ok) return;
 
         const approval = getCurrentApproval();
-        if (result.createdRevision && approval) {
+        if (result.createdRevision && approval && currentRevisionType === 'tecnica') {
             setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
             await notifyApprovalEmail('revision_created', {
                 ...approval,
@@ -668,7 +803,7 @@ async function sendRevisionBackToApproval() {
         let { error } = await supabaseClient
             .from('CommercialApproval')
             .update({
-                status: 'Aguardando Aprovação',
+                status: 'Em Revisão Comercial',
                 approved: false,
                 approvedAt: null
             })
@@ -687,7 +822,10 @@ async function sendRevisionBackToApproval() {
             return;
         }
 
-        if (typeof applyAguardandoAprovacaoStatusForCommercialApproval === 'function') {
+        if (typeof applyEmRevisaoComercialStatusForCommercialApproval === 'function') {
+            setCommercialRevisionModalLoading(true, 'Atualizando status do projeto...');
+            await applyEmRevisaoComercialStatusForCommercialApproval(approval);
+        } else if (typeof applyAguardandoAprovacaoStatusForCommercialApproval === 'function') {
             setCommercialRevisionModalLoading(true, 'Atualizando status do projeto...');
             await applyAguardandoAprovacaoStatusForCommercialApproval(approval);
         }
@@ -695,7 +833,7 @@ async function sendRevisionBackToApproval() {
         setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
         await notifyApprovalEmail('sent_back_to_approval', {
             ...approval,
-            status: 'Aguardando Aprovação',
+            status: 'Em Revisão Comercial',
             approved: false,
             approvedAt: null
         }, { activities: result.activities });
@@ -729,7 +867,7 @@ async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
 
     let { data: revisions, error } = await supabaseClient
         .from('CommercialRevision')
-        .select('id, commercialApprovalId, createdAt')
+        .select('id, commercialApprovalId, type, createdAt')
         .in('commercialApprovalId', approvalIds)
         .order('createdAt', { ascending: false })
         .order('id', { ascending: false });
@@ -783,6 +921,14 @@ async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
     return byApproval;
 }
 
+function filterRevisionsForCurrentUser(revisions) {
+    if (!revisions || !Array.isArray(revisions)) return [];
+    if (currentUser?.role === 'Projetista') {
+        return revisions.filter(r => r.type !== 'comercial');
+    }
+    return revisions;
+}
+
 function sortCommercialRevisionsChronologically(revisions) {
     return [...revisions].sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -790,6 +936,14 @@ function sortCommercialRevisionsChronologically(revisions) {
         if (dateA !== dateB) return dateA - dateB;
         return (a.id || 0) - (b.id || 0);
     });
+}
+
+function sortRevisionsWithCommercialFirst(revisions) {
+    const commercial = revisions.filter(r => r.type === 'comercial');
+    const technical = sortCommercialRevisionsChronologically(
+        revisions.filter(r => r.type !== 'comercial')
+    );
+    return [...commercial, ...technical];
 }
 
 function getCurrentCommercialRevision(revisions) {
@@ -822,14 +976,29 @@ function shouldShowRevisionActionButton(approval, isCurrentRevision) {
 }
 
 function renderCommercialRevisionsSection(revisions, approval, options = {}) {
+    revisions = filterRevisionsForCurrentUser(revisions);
     if (!revisions || revisions.length === 0) return '';
 
     const showInHistoryModal = Boolean(options.showInHistoryModal);
-    const sortedRevisions = sortCommercialRevisionsChronologically(revisions);
+    const sortedRevisions = sortRevisionsWithCommercialFirst(revisions);
     const currentRevision = getCurrentCommercialRevision(revisions);
 
-    const blocks = sortedRevisions.map((revision, index) => {
+    let tecnicaCounter = 0;
+
+    const blocks = sortedRevisions.map((revision) => {
         const isCurrentRevision = currentRevision && revision.id === currentRevision.id;
+        const isComercial = revision.type === 'comercial';
+        
+        let titleText = '';
+        if (isComercial) {
+            titleText = 'Revisão Comercial';
+        } else {
+            tecnicaCounter += 1;
+            titleText = `Revisão Técnica ${tecnicaCounter}`;
+        }
+
+        const typeBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${isComercial ? 'bg-purple-100 text-purple-800' : 'bg-sky-100 text-sky-800'}">${isComercial ? 'Comercial' : 'Técnica'}</span>`;
+
         const activitiesHtml = revision.activities.length
             ? revision.activities.map(activity => `
                 <tr class="border-t border-slate-100">
@@ -860,10 +1029,13 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
 
         return `
             <article class="fm-revision-block">
-                <header class="fm-revision-block__header">
+                <header class="fm-revision-block__header flex justify-between items-center">
                     <div class="min-w-0">
-                        <p class="fm-revision-block__title">Revisão ${index + 1}</p>
-                        <p class="fm-revision-block__meta">
+                        <div class="flex items-center gap-2">
+                            <p class="fm-revision-block__title font-semibold text-slate-900">${titleText}</p>
+                            ${typeBadge}
+                        </div>
+                        <p class="fm-revision-block__meta mt-0.5">
                             <span>${revision.createdAt ? formatDate(revision.createdAt) : '—'}</span>
                             <span class="fm-revision-block__meta-sep">·</span>
                             <span>${completedCount}/${activityCount} atividades concluídas</span>

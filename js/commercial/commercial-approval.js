@@ -19,13 +19,27 @@ function isAdminOrOrderConsultorForApproval(approval) {
     );
 }
 
+function canAccessCommercialRevision(approval) {
+    if (currentUser?.role === 'Admin') return true;
+    if (typeof isGestorComercial === 'function' && isGestorComercial()) return true;
+    return isAdminOrOrderConsultorForApproval(approval);
+}
+window.canAccessCommercialRevision = canAccessCommercialRevision;
+
 function canEditCommercialApprovalCommercialFields(approval) {
     return isAdminOrOrderConsultorForApproval(approval || { orderId: activeOrderId });
 }
 
 function canApproveCommercialApproval(approval) {
-    return approval?.status === 'Aguardando Aprovação'
-        && isAdminOrOrderConsultorForApproval(approval);
+    if (!approval) return false;
+    if (!isAdminOrOrderConsultorForApproval(approval)) return false;
+
+    const projectStatusName = getCommercialApprovalProjectStatusName(approval);
+    if (projectStatusName === 'Em Revisão Comercial' || projectStatusName === 'Aguardando Aprovação') {
+        return true;
+    }
+
+    return !approval.approved && approval.status !== 'Aprovado';
 }
 
 function canEditCommercialApprovalCommercialFieldsOnly(approval) {
@@ -136,13 +150,13 @@ async function setApprovalDesignerReadonlyLabel(approval) {
 }
 
 const COMMERCIAL_APPROVAL_PROJECT_STATUS = 'Projeto Técnico';
-const COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS = 'Aguardando Aprovação';
+const COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS = 'Em Revisão Comercial';
 
-async function getAguardandoAprovacaoProjectStatusId() {
+async function getEmRevisaoComercialProjectStatusId() {
     const { data, error } = await supabaseClient
         .from('OrderProjectStatus')
         .select('id')
-        .eq('name', COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS)
+        .eq('name', 'Em Revisão Comercial')
         .eq('isActive', true)
         .maybeSingle();
 
@@ -151,19 +165,41 @@ async function getAguardandoAprovacaoProjectStatusId() {
     const { data: fallback } = await supabaseClient
         .from('OrderProjectStatus')
         .select('id')
-        .eq('name', COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS)
+        .eq('name', 'Em Revisão Comercial')
         .maybeSingle();
 
     return fallback?.id || null;
 }
 
-async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
+async function getAguardandoAprovacaoProjectStatusId() {
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Aguardando Aprovação')
+        .eq('isActive', true)
+        .maybeSingle();
+
+    if (!error && data?.id) return data.id;
+
+    const { data: fallback } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id')
+        .eq('name', 'Aguardando Aprovação')
+        .maybeSingle();
+
+    return fallback?.id || null;
+}
+
+async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
-    const statusId = await getAguardandoAprovacaoProjectStatusId();
+    let statusId = await getEmRevisaoComercialProjectStatusId();
     if (!statusId) {
-        throw new Error(`Status "${COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS}" não encontrado. Cadastre em Gestão → Status de Projeto.`);
+        statusId = await getAguardandoAprovacaoProjectStatusId();
+    }
+    if (!statusId) {
+        throw new Error(`Status "Em Revisão Comercial" não encontrado.`);
     }
 
     const now = new Date().toISOString();
@@ -213,25 +249,58 @@ async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
     if (conclusaoError) throw conclusaoError;
 }
 
-const COMMERCIAL_REVISION_PROJECT_STATUS = 'Em Revisão';
+async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
+    const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return;
+
+    const statusId = await getAguardandoAprovacaoProjectStatusId();
+    if (!statusId) {
+        throw new Error(`Status "Aguardando Aprovação" não encontrado.`);
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .in('id', uniqueIds);
+
+    if (error) throw error;
+}
+
+const COMMERCIAL_REVISION_PROJECT_STATUS = 'Em Revisão Técnica';
 
 async function getEmRevisaoProjectStatusId() {
+    const candidateNames = ['Em Revisão Técnica', 'Em Revisão Comercial', 'Em Revisão', 'Em revisão'];
     const { data, error } = await supabaseClient
         .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', COMMERCIAL_REVISION_PROJECT_STATUS)
-        .eq('isActive', true)
-        .maybeSingle();
+        .select('id, name')
+        .in('name', candidateNames)
+        .eq('isActive', true);
 
-    if (!error && data?.id) return data.id;
+    if (!error && data?.length) {
+        for (const targetName of candidateNames) {
+            const found = data.find(item => item.name === targetName);
+            if (found) return found.id;
+        }
+    }
 
     const { data: fallback } = await supabaseClient
         .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', COMMERCIAL_REVISION_PROJECT_STATUS)
-        .maybeSingle();
+        .select('id, name')
+        .in('name', candidateNames);
 
-    return fallback?.id || null;
+    if (fallback?.length) {
+        for (const targetName of candidateNames) {
+            const found = fallback.find(item => item.name === targetName);
+            if (found) return found.id;
+        }
+    }
+
+    return null;
 }
 
 async function applyEmRevisaoStatusToProjects(orderProjectIds) {
@@ -285,6 +354,15 @@ async function applyAguardandoAprovacaoStatusForCommercialApproval(approval) {
     await applyAguardandoAprovacaoStatusToProjects([orderProjectId]);
 }
 
+async function applyEmRevisaoComercialStatusForCommercialApproval(approval) {
+    const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
+    if (!orderProjectId) return;
+
+    await applyEmRevisaoComercialStatusToProjects([orderProjectId]);
+}
+
+window.applyEmRevisaoComercialStatusForCommercialApproval = applyEmRevisaoComercialStatusForCommercialApproval;
+
 const COMMERCIAL_APPROVED_PROJECT_STATUS = 'Nomear';
 
 async function getNomearProjectStatusId() {
@@ -336,8 +414,37 @@ async function applyNomearStatusForCommercialApproval(approval) {
     await applyNomearStatusToProjects([orderProjectId]);
 }
 
+async function applyApprovedStatusForCommercialApproval(approval) {
+    const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
+    if (!orderProjectId) return;
+
+    const { data: project } = await supabaseClient
+        .from('OrderProject')
+        .select('id, statusId, projectStatus:OrderProjectStatus(id, name)')
+        .eq('id', orderProjectId)
+        .maybeSingle();
+
+    const currentStatusName = project?.projectStatus?.name || '';
+
+    if (currentStatusName === 'Em Revisão Comercial' || currentStatusName === 'Em Revisão' || currentStatusName === 'Em revisão') {
+        await applyAguardandoAprovacaoStatusToProjects([orderProjectId]);
+    } else {
+        await applyNomearStatusToProjects([orderProjectId]);
+    }
+}
+
 function getCommercialApprovalProjectStatusName(project) {
-    return project?.projectStatus?.name || '';
+    if (!project) return '';
+    if (project.projectStatus?.name) return project.projectStatus.name;
+    if (project.project?.projectStatus?.name) return project.project.projectStatus.name;
+    if (project.orderProject?.projectStatus?.name) return project.orderProject.projectStatus.name;
+
+    const orderProjectId = project.orderProjectId || project.id;
+    if (orderProjectId && typeof orderProjectsCache !== 'undefined' && Array.isArray(orderProjectsCache)) {
+        const proj = orderProjectsCache.find(p => Number(p.id) === Number(orderProjectId));
+        if (proj?.projectStatus?.name) return proj.projectStatus.name;
+    }
+    return '';
 }
 
 async function enrichCommercialApprovalProjectsWithStatus(projects) {
@@ -801,7 +908,7 @@ async function submitCommercialApprovalFromPendencias(projectId) {
         if (error) throw error;
 
         setCommercialApprovalSubmitLoading(true, 'Atualizando status do projeto...');
-        await applyAguardandoAprovacaoStatusToProjects([normalizedId]);
+        await applyEmRevisaoComercialStatusToProjects([normalizedId]);
 
         if (insertedApprovals?.length) {
             setCommercialApprovalSubmitLoading(true, 'Enviando e-mail de notificação...');
@@ -1051,6 +1158,49 @@ async function submitCommercialApprovalOrderDeliveryModal() {
     }
 }
 
+async function hasUncompletedCommercialRevisions(approvalId) {
+    if (!approvalId) return false;
+
+    let { data: revisions, error: revError } = await supabaseClient
+        .from('CommercialRevision')
+        .select('id, type')
+        .eq('commercialApprovalId', approvalId)
+        .eq('type', 'comercial');
+
+    if (revError?.message?.includes('type')) {
+        return false;
+    }
+
+    if (revError || !revisions?.length) return false;
+
+    const revisionIds = revisions.map(r => r.id);
+    const { data: activities, error: actError } = await supabaseClient
+        .from('CommercialRevisionActivity')
+        .select('id')
+        .in('revisionId', revisionIds)
+        .eq('completed', false)
+        .limit(1);
+
+    if (actError) return false;
+    return (activities || []).length > 0;
+}
+
+async function isProjectInAguardandoAprovacaoStatus(approval) {
+    let orderProjectId = approval?.orderProjectId;
+    if (!orderProjectId && approval?.id && typeof resolveCommercialApprovalOrderProjectId === 'function') {
+        orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
+    }
+    if (!orderProjectId) return false;
+
+    const { data: project } = await supabaseClient
+        .from('OrderProject')
+        .select('id, projectStatus:OrderProjectStatus(name)')
+        .eq('id', orderProjectId)
+        .maybeSingle();
+
+    return project?.projectStatus?.name === 'Aguardando Aprovação';
+}
+
 async function approveCommercialApproval(id) {
     let approval = commercialApprovalsCache.find(a => a.id === id);
     if (!approval && typeof ensureApprovalInCache === 'function') {
@@ -1058,7 +1208,16 @@ async function approveCommercialApproval(id) {
     }
     if (!approval || !canApproveCommercialApproval(approval)) return;
 
-    if (await isFirstCommercialApprovalForOrder(approval)) {
+    if (await isProjectInAguardandoAprovacaoStatus(approval) && await hasUncompletedCommercialRevisions(id)) {
+        alertAppDialog(
+            'Não é possível aprovar o projeto pois existe(m) atividade(s) pendente(s) na Revisão Comercial. Conclua todas as atividades antes de aprovar.',
+            { variant: 'warning', title: 'Revisão Comercial Pendente' }
+        );
+        return;
+    }
+
+    const isAguardandoAprovacao = await isProjectInAguardandoAprovacaoStatus(approval);
+    if (isAguardandoAprovacao && await isFirstCommercialApprovalForOrder(approval)) {
         await showCommercialApprovalOrderDeliveryModal(approval);
         return;
     }
@@ -1083,47 +1242,72 @@ async function executeCommercialApproval(id) {
     }
     if (!approval || !canApproveCommercialApproval(approval)) return;
 
+    if (await isProjectInAguardandoAprovacaoStatus(approval) && await hasUncompletedCommercialRevisions(id)) {
+        alertAppDialog(
+            'Não é possível aprovar o projeto pois existe(m) atividade(s) pendente(s) na Revisão Comercial. Conclua todas as atividades antes de aprovar.',
+            { variant: 'warning', title: 'Revisão Comercial Pendente' }
+        );
+        return;
+    }
+
+    const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
+    let currentStatusName = '';
+    if (orderProjectId) {
+        const { data: proj } = await supabaseClient
+            .from('OrderProject')
+            .select('id, projectStatus:OrderProjectStatus(name)')
+            .eq('id', orderProjectId)
+            .maybeSingle();
+        currentStatusName = proj?.projectStatus?.name || '';
+    }
+
+    const isMovingToAguardandoAprovacao = currentStatusName === 'Em Revisão Comercial' || currentStatusName === 'Em Revisão' || currentStatusName === 'Em revisão';
     const now = new Date().toISOString();
-    let payload = {
-        approved: true,
-        approvedAt: now,
-        status: 'Aprovado'
-    };
 
     setCommercialApprovalActionLoading(id, true, 'Registrando aprovação...');
 
     try {
-        let { error } = await supabaseClient
-            .from('CommercialApproval')
-            .update(payload)
-            .eq('id', id);
+        if (!isMovingToAguardandoAprovacao) {
+            let payload = {
+                approved: true,
+                approvedAt: now,
+                status: 'Aprovado'
+            };
 
-        if (error && payload.status) {
-            const { status, ...payloadWithoutStatus } = payload;
-            ({ error } = await supabaseClient
+            let { error } = await supabaseClient
                 .from('CommercialApproval')
-                .update(payloadWithoutStatus)
-                .eq('id', id));
-        }
+                .update(payload)
+                .eq('id', id);
 
-        if (error) {
-            setCommercialApprovalActionLoading(id, true, `Erro ao aprovar: ${error.message}`, 'error');
-            await new Promise(resolve => setTimeout(resolve, 2200));
-            return;
+            if (error && payload.status) {
+                const { status, ...payloadWithoutStatus } = payload;
+                ({ error } = await supabaseClient
+                    .from('CommercialApproval')
+                    .update(payloadWithoutStatus)
+                    .eq('id', id));
+            }
+
+            if (error) {
+                setCommercialApprovalActionLoading(id, true, `Erro ao aprovar: ${error.message}`, 'error');
+                await new Promise(resolve => setTimeout(resolve, 2200));
+                return;
+            }
         }
 
         setCommercialApprovalActionLoading(id, true, 'Atualizando status do projeto...');
-        if (typeof applyNomearStatusForCommercialApproval === 'function') {
-            await applyNomearStatusForCommercialApproval(approval);
+        if (typeof applyApprovedStatusForCommercialApproval === 'function') {
+            await applyApprovedStatusForCommercialApproval(approval);
         }
 
-        setCommercialApprovalActionLoading(id, true, 'Enviando notificação por e-mail...');
-        await notifyApprovalEmail('approved', {
-            ...approval,
-            status: 'Aprovado',
-            approved: true,
-            approvedAt: now
-        });
+        if (!isMovingToAguardandoAprovacao) {
+            setCommercialApprovalActionLoading(id, true, 'Enviando notificação por e-mail...');
+            await notifyApprovalEmail('approved', {
+                ...approval,
+                status: 'Aprovado',
+                approved: true,
+                approvedAt: now
+            });
+        }
 
         setCommercialApprovalActionLoading(id, true, 'Atualizando telas...');
         if (activeOrderId) {
@@ -1246,13 +1430,9 @@ function renderCommercialApprovalCard(approval, context) {
     const showEdit = currentUser?.role !== 'Consultor'
         && canEditCommercialApproval(approval)
         && canEditCommercialApprovalCommercialFieldsOnly(approval);
-    const showRequestRevision = typeof canRequestNewRevision === 'function' && canRequestNewRevision(approval);
-    const revisions = revisionsByApproval[approval.id] || [];
-    const revisionsHtml = typeof renderCommercialRevisionsSection === 'function'
-        ? renderCommercialRevisionsSection(revisions, approval)
-        : '';
-
     const linkedProject = approval.orderProjectId ? projectById[approval.orderProjectId] : null;
+    const projectStatusName = linkedProject?.projectStatus?.name || '';
+    const showRequestRevision = typeof canRequestNewRevision === 'function' && canRequestNewRevision(approval, projectStatusName);
     const environmentName = linkedProject?.environmentType?.name || '';
     const projetistaName = projetistaNames[approval.designerId] || '—';
     const approvalDate = approval.approved && approval.approvedAt
@@ -1622,10 +1802,8 @@ function bindCommercialApprovalEvents() {
                 return;
             }
 
-            await applyAguardandoAprovacaoStatusToProjects(selectedProjectIds);
-
             setCommercialApprovalFormLoading(true, 'Atualizando status dos projetos...');
-            await applyAguardandoAprovacaoStatusToProjects(selectedProjectIds);
+            await applyEmRevisaoComercialStatusToProjects(selectedProjectIds);
 
             setCommercialApprovalFormLoading(true, 'Enviando notificação por e-mail...');
             for (const inserted of insertedApprovals) {

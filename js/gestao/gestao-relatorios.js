@@ -1,5 +1,5 @@
 const GESTAO_RELATORIO_RANGE_START = 'Medição Realizada';
-const GESTAO_RELATORIO_RANGE_END_STATUSES = ['Aguardando Aprovação', 'Em Revisão', 'Em revisão'];
+const GESTAO_RELATORIO_RANGE_END_STATUSES = ['Aguardando Aprovação', 'Em Revisão Comercial', 'Em Revisão Técnica', 'Em Revisão', 'Em revisão'];
 const GESTAO_RELATORIO_EXPEDICAO_STATUS = 'Expedição';
 
 const GESTAO_RELATORIO_PROJECT_SELECT = `

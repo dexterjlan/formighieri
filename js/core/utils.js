@@ -573,7 +573,9 @@ function normalizeAppUserProfile(profile) {
 }
 
 function isConferente(user = currentUser) {
-    return user?.role === 'Projetista' && Boolean(user?.conferente);
+    if (!user) return false;
+    if (user.role === 'Admin') return true;
+    return Boolean(user.conferente);
 }
 
 function isGestorComercial(user = currentUser) {
@@ -831,6 +833,8 @@ const COMPLEMENTAR_PARENT_BLOCKED_FROM_SORT_ORDER = 10;
 
 const COMPLEMENTAR_PARENT_BLOCKED_STATUS_NAMES = new Set([
     'Aguardando Aprovação',
+    'Em Revisão Comercial',
+    'Em Revisão Técnica',
     'Em Revisão',
     'Em revisão',
     'Nomear',
@@ -887,6 +891,8 @@ const SUBSTITUICAO_MAX_ORIGINAL_SORT_ORDER = 8;
 
 const SUBSTITUICAO_BLOCKED_STATUS_NAMES = new Set([
     'Projeto Técnico',
+    'Em Revisão Comercial',
+    'Em Revisão Técnica',
     'Aguardando Aprovação',
     'Em Revisão',
     'Em revisão',
@@ -1033,7 +1039,8 @@ function applyOrderProjectReadOnlyToElement(root, project) {
 function getOrderProjectStatusBadgeClass(statusName) {
     if (!statusName || statusName === '—') return 'bg-slate-100 text-slate-600';
     if (statusName === 'Aguardando Aprovação') return 'bg-amber-100 text-amber-800';
-    if (statusName === 'Em Revisão' || statusName === 'Em revisão') return 'bg-sky-100 text-sky-800';
+    if (statusName === 'Em Revisão Comercial') return 'bg-sky-100 text-sky-800';
+    if (statusName === 'Em Revisão Técnica' || statusName === 'Em Revisão' || statusName === 'Em revisão') return 'bg-sky-100 text-sky-800';
     if (statusName === 'Projeto Técnico') return 'bg-violet-100 text-violet-800';
     if (statusName === 'Aguardando Projeto Técnico') return 'bg-indigo-100 text-indigo-800';
     if (statusName === 'Vendido') return 'bg-emerald-100 text-emerald-800';
