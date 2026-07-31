@@ -50,9 +50,14 @@ window.openGestaoEditOrderForm = openGestaoEditOrderForm;
 function groupGestaoProjectsByOrderId(projects) {
     const byOrderId = {};
     (projects || []).forEach(project => {
-        const orderId = Number(project.orderId);
+        const p = {
+            ...project,
+            parentProjectCode: project.parentProjectCode || project.parentProject?.projectCode || '',
+            substituidoPorProjectCode: project.substituidoPorProjectCode || project.substituidoPor?.projectCode || ''
+        };
+        const orderId = Number(p.orderId);
         if (!byOrderId[orderId]) byOrderId[orderId] = [];
-        byOrderId[orderId].push(project);
+        byOrderId[orderId].push(p);
     });
     return byOrderId;
 }
@@ -90,10 +95,43 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
     const byCode = new Map();
 
     (projects || []).forEach(project => {
+        if (!project.parentProjectCode && project.parentProject?.projectCode) {
+            project.parentProjectCode = project.parentProject.projectCode;
+        }
         if (project.projectCode) {
             byCode.set(project.projectCode, project);
         }
     });
+
+    const missingParentIdSet = new Set();
+    for (const project of projects || []) {
+        if (project.isComplementar && !project.parentProjectCode && project.parentProjectId) {
+            missingParentIdSet.add(project.parentProjectId);
+        }
+    }
+
+    if (missingParentIdSet.size > 0) {
+        const { data: parentsById } = await supabaseClient
+            .from('OrderProject')
+            .select('id, projectCode, name, order:salesOrders(orderCode)')
+            .in('id', [...missingParentIdSet]);
+
+        if (parentsById?.length) {
+            const parentMap = Object.fromEntries(parentsById.map(p => [p.id, p]));
+            for (const project of projects || []) {
+                if (project.isComplementar && !project.parentProjectCode && project.parentProjectId) {
+                    const parentObj = parentMap[project.parentProjectId];
+                    if (parentObj) {
+                        project.parentProjectCode = parentObj.projectCode;
+                        project.parentProject = parentObj;
+                        if (parentObj.projectCode) {
+                            byCode.set(parentObj.projectCode, parentObj);
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     const dbLookupCodes = new Set();
     for (const project of projects) {
@@ -162,6 +200,39 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
 }
 
 async function validateAndResolveGestaoSubstituidoProjects(projects) {
+    (projects || []).forEach(project => {
+        if (!project.substituidoPorProjectCode && project.substituidoPorProject?.projectCode) {
+            project.substituidoPorProjectCode = project.substituidoPorProject.projectCode;
+        }
+    });
+
+    const missingReplacementIdSet = new Set();
+    for (const project of projects || []) {
+        if (project.isSubstituido && !project.substituidoPorProjectCode && project.substituidoPorProjectId) {
+            missingReplacementIdSet.add(project.substituidoPorProjectId);
+        }
+    }
+
+    if (missingReplacementIdSet.size > 0) {
+        const { data: replacementsById } = await supabaseClient
+            .from('OrderProject')
+            .select('id, projectCode, name, order:salesOrders(orderCode)')
+            .in('id', [...missingReplacementIdSet]);
+
+        if (replacementsById?.length) {
+            const replacementMap = Object.fromEntries(replacementsById.map(p => [p.id, p]));
+            for (const project of projects || []) {
+                if (project.isSubstituido && !project.substituidoPorProjectCode && project.substituidoPorProjectId) {
+                    const replacementObj = replacementMap[project.substituidoPorProjectId];
+                    if (replacementObj) {
+                        project.substituidoPorProjectCode = replacementObj.projectCode;
+                        project.substituidoPorProject = replacementObj;
+                    }
+                }
+            }
+        }
+    }
+
     const dbLookupCodes = new Set();
 
     for (const project of projects) {
