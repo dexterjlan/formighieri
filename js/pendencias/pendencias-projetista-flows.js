@@ -274,11 +274,15 @@ function canAccessPendenciasProjetoTecnico() {
 }
 
 function canSubmitCommercialApprovalFromPendencias(project, approval) {
-    if (!project || isPendenciasProjetoTecnicoOverviewMode()) return false;
+    if (!project) return false;
     if (approval && !isCommercialApprovalApproved(approval)) return false;
-    if (currentUser?.role === 'Admin') return true;
+    if (typeof isAdmin === 'function' ? isAdmin() : currentUser?.role === 'Admin') return true;
+
+    const designerId = project.designerId || approval?.designerId;
+    if (!designerId) return false;
+
     return currentUser?.role === 'Projetista'
-        && Number(project.designerId) === Number(currentUser.id);
+        && Number(designerId) === Number(currentUser.id);
 }
 
 async function fetchPendenciasProjetoTecnicoProjects() {
@@ -351,11 +355,9 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
         const actionCell = canSubmit
             ? `<button type="button" onclick="submitCommercialApprovalFromPendencias(${project.id})"
                 class="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium">Enviar para Aprovação</button>`
-            : overviewMode
-                ? '<span class="text-xs text-slate-300">—</span>'
-                : approval && !isCommercialApprovalApproved(approval)
-                    ? `<span class="text-xs text-amber-700">Aprovação em aberto</span>`
-                    : '<span class="text-xs text-slate-300">—</span>';
+            : approval && !isCommercialApprovalApproved(approval)
+                ? `<span class="text-xs text-amber-700">Aprovação em aberto</span>`
+                : '<span class="text-xs text-slate-300">—</span>';
 
         return `
             <tr class="border-b border-slate-100 last:border-0">
@@ -366,7 +368,7 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
                     : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                ${overviewMode ? '' : `<td class="p-3 text-right whitespace-nowrap">${actionCell}</td>`}
+                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
             </tr>
         `;
     }).join('');
@@ -400,7 +402,7 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
                                 ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
-                                ${overviewMode ? '' : '<th class="text-right p-3 font-semibold w-44">Ações</th>'}
+                                <th class="text-right p-3 font-semibold w-44">Ações</th>
                             </tr>
                         </thead>
                         <tbody>${rows}</tbody>

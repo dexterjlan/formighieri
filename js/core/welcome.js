@@ -17,8 +17,9 @@ const WELCOME_FLOW_STEPS = [
     { status: 'Conferência Realizada', lane: 'consultor' },
     { status: 'Aguardando Projeto Técnico', lane: 'gestor-comercial' },
     { status: 'Projeto Técnico', lane: 'projetista' },
-    { status: 'Aguardando Aprovação', lane: 'projetista' },
-    { status: 'Em Revisão', lane: 'consultor' },
+    { status: 'Em Revisão Comercial', lane: 'consultor' },
+    { status: 'Em Revisão Técnica', lane: 'projetista' },
+    { status: 'Aguardando Aprovação', lane: 'consultor' },
     { status: 'Nomear', lane: 'consultor' },
     { status: 'Aguardando PPCP', lane: 'projetista' },
     { status: 'Implantação', lane: 'projetista-ppcp' },
@@ -27,26 +28,26 @@ const WELCOME_FLOW_STEPS = [
     { status: 'Expedição', lane: 'gestor-fabrica' }
 ];
 
-function renderWelcomeFlowLegend() {
+function renderWelcomeFlowLegend(steps = WELCOME_FLOW_STEPS) {
     const legend = document.getElementById('welcome-flow-legend');
     if (!legend) return;
 
     const seen = new Set();
     const items = [];
 
-    WELCOME_FLOW_STEPS.forEach(step => {
+    steps.forEach(step => {
         if (seen.has(step.lane)) return;
         seen.add(step.lane);
-        const meta = WELCOME_FLOW_LANE_META[step.lane];
+        const meta = WELCOME_FLOW_LANE_META[step.lane] || WELCOME_FLOW_LANE_META['gestor-comercial'];
         items.push(`<span class="welcome-legend ${meta.legendClass}">${escapeHtml(meta.label)}</span>`);
     });
 
     legend.innerHTML = items.join('');
 }
 
-function renderWelcomeFlowStep(step, index) {
-    const meta = WELCOME_FLOW_LANE_META[step.lane];
-    const connector = index < WELCOME_FLOW_STEPS.length - 1
+function renderWelcomeFlowStep(step, index, totalSteps = WELCOME_FLOW_STEPS.length) {
+    const meta = WELCOME_FLOW_LANE_META[step.lane] || WELCOME_FLOW_LANE_META['gestor-comercial'];
+    const connector = index < totalSteps - 1
         ? '<div class="welcome-flow-timeline-connector" aria-hidden="true"><span class="welcome-flow-timeline-line"></span></div>'
         : '';
 
@@ -64,13 +65,60 @@ function renderWelcomeFlowStep(step, index) {
     `;
 }
 
-function renderWelcomeFlowchart() {
+async function renderWelcomeFlowchart() {
     const container = document.getElementById('welcome-flowchart');
     if (!container) return;
 
     container.className = 'welcome-flow-timeline';
-    container.innerHTML = WELCOME_FLOW_STEPS
-        .map((step, index) => renderWelcomeFlowStep(step, index))
+
+    const statusLaneMap = {
+        'Vendido': 'gestor-comercial',
+        'Aguardando Obra': 'gestor-comercial',
+        'Aguardando Medição': 'gestor-comercial',
+        'Medição Realizada': 'projetista-conferente',
+        'Planta Levantada': 'projetista-conferente',
+        'Conferência Enviada': 'projetista-conferente',
+        'Conferência Realizada': 'consultor',
+        'Aguardando Projeto Técnico': 'gestor-comercial',
+        'Projeto Técnico': 'projetista',
+        'Em Revisão Comercial': 'consultor',
+        'Em Revisão Técnica': 'projetista',
+        'Em Revisão': 'consultor',
+        'Em revisão': 'consultor',
+        'Aguardando Aprovação': 'consultor',
+        'Nomear': 'consultor',
+        'Aguardando PPCP': 'projetista',
+        'Implantação': 'projetista-ppcp',
+        'Em Produção': 'projetista-ppcp',
+        'Montagem Interna': 'gestor-fabrica',
+        'Expedição': 'gestor-fabrica'
+    };
+
+    let steps = WELCOME_FLOW_STEPS;
+
+    try {
+        if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+            const { data: dbStatuses } = await supabaseClient
+                .from('OrderProjectStatus')
+                .select('name, sortOrder')
+                .order('sortOrder', { ascending: true });
+
+            if (dbStatuses && dbStatuses.length > 0) {
+                steps = dbStatuses
+                    .filter(s => s.name && s.name !== 'Projeto Substituído')
+                    .map(s => ({
+                        status: s.name,
+                        lane: statusLaneMap[s.name] || 'gestor-comercial'
+                    }));
+            }
+        }
+    } catch (err) {
+        console.warn('Erro ao carregar OrderProjectStatus para o fluxograma:', err);
+    }
+
+    renderWelcomeFlowLegend(steps);
+    container.innerHTML = steps
+        .map((step, index) => renderWelcomeFlowStep(step, index, steps.length))
         .join('');
 }
 
@@ -80,7 +128,6 @@ function showWelcome() {
     updateMainNavActive('home');
     updateAdminNav();
     updateWelcomeActions();
-    renderWelcomeFlowLegend();
     renderWelcomeFlowchart();
     if (typeof saveAppNavState === 'function') {
         saveAppNavState({
