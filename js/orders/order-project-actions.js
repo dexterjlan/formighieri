@@ -375,7 +375,7 @@ async function handleOrderProjectAction(button) {
             break;
         case 'revision':
             if (typeof openCommercialRevisionModal === 'function' && approvalId) {
-                await openCommercialRevisionModal(approvalId, 'tecnica');
+                await openCommercialRevisionModal(approvalId, 'tecnica', { forceNew: true });
             }
             break;
         case 'commercial-revision':

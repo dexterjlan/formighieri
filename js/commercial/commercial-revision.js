@@ -129,14 +129,17 @@ let currentRevisionType = 'tecnica';
 function renderRevisionActivityRow(activity) {
     const approval = getCurrentApproval();
     const isComercial = currentRevisionType === 'comercial';
-    const isNewRevision = approval?.status === 'Aguardando Aprovação';
+    const isCreatingNewTecnicaRevision = currentRevisionType === 'tecnica'
+        && (!editingRevisionId || approval?.status === 'Em Revisão Comercial' || approval?.status === 'Aguardando Aprovação');
+
     const consultorCanEdit = !revisionModalViewOnly
         && canEditRevisionActivitiesConsultor(approval)
-        && (isComercial || isNewRevision || approval?.status === 'Em revisão');
+        && (isComercial || isCreatingNewTecnicaRevision);
+
     const completionCanEdit = !revisionModalViewOnly && (
         isComercial
             ? consultorCanEdit
-            : canEditRevisionActivityCompletionFields(approval)
+            : (!isCreatingNewTecnicaRevision && canEditRevisionActivityCompletionFields(approval))
     );
     const rowId = activity.id || activity.tempId;
 
@@ -247,17 +250,27 @@ function updateRevisionModalControls(approval) {
         return;
     }
 
-    const isNewRevision = approval.status === 'Aguardando Aprovação';
+    const isCreatingNewTecnica = !editingRevisionId || approval?.status === 'Em Revisão Comercial' || approval?.status === 'Aguardando Aprovação';
+    const canConsultorCreate = canEditRevisionActivitiesConsultor(approval) && isCreatingNewTecnica;
+
+    if (isCreatingNewTecnica) {
+        addBtn.classList.toggle('hidden', !canConsultorCreate);
+        saveBtn.classList.toggle('hidden', !canConsultorCreate);
+        sendBackBtn.classList.add('hidden');
+        saveBtn.textContent = 'Criar Revisão Técnica';
+        return;
+    }
+
     const canSend = canSendBackToApproval(approval);
     const allComplete = allRevisionActivitiesCompleted();
 
-    addBtn.classList.toggle('hidden', !canEditRevisionActivitiesConsultor(approval));
+    addBtn.classList.add('hidden');
     saveBtn.classList.toggle('hidden', !canOpenRevisionModal(approval));
     sendBackBtn.classList.toggle('hidden', !canSend);
     sendBackBtn.disabled = !canSend || !allComplete;
     sendBackBtn.classList.toggle('opacity-50', !allComplete);
     sendBackBtn.classList.toggle('cursor-not-allowed', !allComplete);
-    saveBtn.textContent = isNewRevision ? 'Criar Revisão Técnica' : 'Salvar Revisão Técnica';
+    saveBtn.textContent = 'Salvar Revisão Técnica';
 }
 
 async function loadRevisionActivities(revisionId) {
@@ -289,8 +302,10 @@ async function loadRevisionActivities(revisionId) {
     updateRevisionModalControls(getCurrentApproval());
 }
 
-async function ensureApprovalInCache(approvalId) {
-    let approval = commercialApprovalsCache.find(a => a.id === approvalId);
+async function ensureApprovalInCache(approvalId, forceRefresh = false) {
+    let approval = !forceRefresh
+        ? commercialApprovalsCache.find(a => Number(a.id) === Number(approvalId))
+        : null;
 
     if (!approval) {
         let { data, error } = await supabaseClient
@@ -319,10 +334,16 @@ async function ensureApprovalInCache(approvalId) {
             ...data,
             orderConsultantName: orderInfo?.consultantName || null
         });
-        commercialApprovalsCache.push(approval);
+
+        const idx = commercialApprovalsCache.findIndex(a => Number(a.id) === Number(approvalId));
+        if (idx !== -1) {
+            commercialApprovalsCache[idx] = approval;
+        } else {
+            commercialApprovalsCache.push(approval);
+        }
     }
 
-    if (approval && approval.orderProjectId && !approval.projectStatus) {
+    if (approval && approval.orderProjectId && (!approval.projectStatus || forceRefresh)) {
         const { data: proj } = await supabaseClient
             .from('OrderProject')
             .select('id, projectStatus:OrderProjectStatus(name)')
@@ -376,7 +397,16 @@ async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica',
     const approval = await ensureApprovalInCache(approvalId);
     if (!approval) return;
 
-    if (revisionType === 'tecnica' && !canOpenRevisionModal(approval)) return;
+    const forceNew = Boolean(options?.forceNew);
+
+    if (revisionType === 'tecnica') {
+        if (forceNew) {
+            if (!canRequestNewRevision(approval)) return;
+        } else if (!canOpenRevisionModal(approval)) {
+            return;
+        }
+    }
+
     if (revisionType === 'comercial') {
         const canAccessComercial = (typeof canAccessCommercialRevision === 'function' && canAccessCommercialRevision(approval))
             || canEditRevisionActivitiesConsultor(approval);
@@ -392,13 +422,18 @@ async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica',
 
     document.getElementById('revision-activities-list').innerHTML = '';
     document.getElementById('revision-empty-msg').classList.add('hidden');
-    setupCommercialRevisionModalHeader(approval);
 
     const targetRevisionId = options?.revisionId || null;
 
     if (targetRevisionId) {
         editingRevisionId = targetRevisionId;
+        setupCommercialRevisionModalHeader(approval);
         await loadRevisionActivities(targetRevisionId);
+    } else if (forceNew) {
+        editingRevisionId = null;
+        setupCommercialRevisionModalHeader(approval);
+        updateRevisionModalControls(approval);
+        addRevisionActivityRow();
     } else if (revisionType === 'comercial') {
         let { data: revision } = await supabaseClient
             .from('CommercialRevision')
@@ -411,8 +446,10 @@ async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica',
 
         if (revision) {
             editingRevisionId = revision.id;
+            setupCommercialRevisionModalHeader(approval);
             await loadRevisionActivities(revision.id);
         } else {
+            setupCommercialRevisionModalHeader(approval);
             updateRevisionModalControls(approval);
             addRevisionActivityRow();
         }
@@ -428,12 +465,15 @@ async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica',
 
         if (revision) {
             editingRevisionId = revision.id;
+            setupCommercialRevisionModalHeader(approval);
             await loadRevisionActivities(revision.id);
         } else {
+            setupCommercialRevisionModalHeader(approval);
             updateRevisionModalControls(approval);
             addRevisionActivityRow();
         }
     } else {
+        setupCommercialRevisionModalHeader(approval);
         updateRevisionModalControls(approval);
         addRevisionActivityRow();
     }
@@ -447,11 +487,14 @@ function closeCommercialRevisionsHistoryModal() {
     toggleModal('commercial-revisions-history-modal', false);
 }
 
-async function openCommercialRevisionsHistoryView(approvalId, prefetched = null) {
-    const approval = prefetched?.approval || await ensureApprovalInCache(approvalId);
+async function openCommercialRevisionsHistoryView(approvalId, prefetched = null, options = {}) {
+    const forceRefresh = Boolean(options?.forceRefresh);
+    const approval = (prefetched?.approval && !forceRefresh)
+        ? prefetched.approval
+        : await ensureApprovalInCache(approvalId, forceRefresh);
     if (!approval || !canViewCommercialRevision(approval)) return;
 
-    let revisions = prefetched?.revisions || null;
+    let revisions = (prefetched?.revisions && !forceRefresh) ? prefetched.revisions : null;
     if (!revisions && typeof fetchCommercialRevisionsByApprovalIds === 'function') {
         const revisionsByApproval = await fetchCommercialRevisionsByApprovalIds([approvalId]);
         revisions = revisionsByApproval[approvalId] || [];
@@ -519,23 +562,17 @@ async function openCommercialRevisionView(approvalId) {
     toggleModal('commercial-revision-modal', true);
 }
 
-async function openCommercialRevisionForRevision(approvalId, revisionId) {
+async function openCommercialRevisionForRevision(approvalId, revisionId, viewOnly = true) {
     const approval = await ensureApprovalInCache(approvalId);
     if (!approval || !canViewCommercialRevision(approval)) return;
 
-    const { data: latest } = await supabaseClient
-        .from('CommercialRevision')
-        .select('id')
-        .eq('commercialApprovalId', approvalId)
-        .order('createdAt', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+    const isAuthorized = currentUser?.role === 'Admin' || (currentUser?.role === 'Projetista' && Number(approval.designerId) === Number(currentUser.id));
 
-    if (approval.status === 'Em revisão' && latest?.id === revisionId && canOpenRevisionModal(approval)) {
-        return openCommercialRevisionModal(approvalId);
+    if (!viewOnly && isAuthorized) {
+        return openCommercialRevisionModal(approvalId, 'tecnica', { revisionId });
     }
 
-    revisionModalViewOnly = true;
+    revisionModalViewOnly = viewOnly;
     currentRevisionApprovalId = approvalId;
     editingRevisionId = revisionId;
     revisionActivityRowCounter = 0;
@@ -798,6 +835,37 @@ async function sendRevisionBackToApproval() {
         const result = await persistCommercialRevision();
         if (!result.ok) return;
 
+        setCommercialRevisionModalLoading(true, 'Concluindo revisão...');
+        const now = new Date().toISOString();
+        if (editingRevisionId) {
+            let { error: revErr } = await supabaseClient
+                .from('CommercialRevision')
+                .update({
+                    status: 'concluido',
+                    concludedAt: now,
+                    completedAt: now,
+                    updatedAt: now
+                })
+                .eq('id', editingRevisionId);
+
+            if (revErr) {
+                ({ error: revErr } = await supabaseClient
+                    .from('CommercialRevision')
+                    .update({
+                        completedAt: now,
+                        updatedAt: now
+                    })
+                    .eq('id', editingRevisionId));
+            }
+
+            if (revErr) {
+                await supabaseClient
+                    .from('CommercialRevision')
+                    .update({ updatedAt: now })
+                    .eq('id', editingRevisionId);
+            }
+        }
+
         setCommercialRevisionModalLoading(true, 'Atualizando aprovação...');
 
         let { error } = await supabaseClient
@@ -822,6 +890,20 @@ async function sendRevisionBackToApproval() {
             return;
         }
 
+        approval.status = 'Em Revisão Comercial';
+        approval.approved = false;
+        approval.approvedAt = null;
+
+        const cacheIdx = commercialApprovalsCache.findIndex(a => Number(a.id) === Number(approval.id));
+        if (cacheIdx !== -1) {
+            commercialApprovalsCache[cacheIdx] = {
+                ...commercialApprovalsCache[cacheIdx],
+                status: 'Em Revisão Comercial',
+                approved: false,
+                approvedAt: null
+            };
+        }
+
         if (typeof applyEmRevisaoComercialStatusForCommercialApproval === 'function') {
             setCommercialRevisionModalLoading(true, 'Atualizando status do projeto...');
             await applyEmRevisaoComercialStatusForCommercialApproval(approval);
@@ -842,6 +924,11 @@ async function sendRevisionBackToApproval() {
         refreshCommercialApprovalViews();
         if (typeof loadOrderProjects === 'function' && activeOrderId) {
             await loadOrderProjects(activeOrderId);
+        }
+
+        const historyModal = document.getElementById('commercial-revisions-history-modal');
+        if (historyModal && !historyModal.classList.contains('hidden')) {
+            await openCommercialRevisionsHistoryView(approval.id, null, { forceRefresh: true });
         }
 
         setCommercialRevisionModalLoading(true, 'Reenviado para aprovação com sucesso!', 'success');
@@ -905,7 +992,12 @@ async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
         : {};
 
     const byApproval = {};
-    revisions.forEach(revision => {
+    const seenRevisionIds = new Set();
+
+    (revisions || []).forEach(revision => {
+        if (!revision.id || seenRevisionIds.has(revision.id)) return;
+        seenRevisionIds.add(revision.id);
+
         if (!byApproval[revision.commercialApprovalId]) {
             byApproval[revision.commercialApprovalId] = [];
         }
@@ -938,17 +1030,22 @@ function sortCommercialRevisionsChronologically(revisions) {
     });
 }
 
+function sortCommercialRevisionsDescending(revisions) {
+    return [...revisions].sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (dateA !== dateB) return dateB - dateA;
+        return (b.id || 0) - (a.id || 0);
+    });
+}
+
 function sortRevisionsWithCommercialFirst(revisions) {
-    const commercial = revisions.filter(r => r.type === 'comercial');
-    const technical = sortCommercialRevisionsChronologically(
-        revisions.filter(r => r.type !== 'comercial')
-    );
-    return [...commercial, ...technical];
+    return sortCommercialRevisionsDescending(revisions);
 }
 
 function getCurrentCommercialRevision(revisions) {
-    const sorted = sortCommercialRevisionsChronologically(revisions);
-    return sorted[sorted.length - 1] || null;
+    const sorted = sortCommercialRevisionsDescending(revisions);
+    return sorted[0] || null;
 }
 
 function isCommercialRevisionAwaitingResponse(approval) {
@@ -979,11 +1076,28 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
     revisions = filterRevisionsForCurrentUser(revisions);
     if (!revisions || revisions.length === 0) return '';
 
-    const showInHistoryModal = Boolean(options.showInHistoryModal);
-    const sortedRevisions = sortRevisionsWithCommercialFirst(revisions);
-    const currentRevision = getCurrentCommercialRevision(revisions);
+    const seenRevisionIds = new Set();
+    revisions = (revisions || []).filter(r => {
+        if (!r.id) return true;
+        if (seenRevisionIds.has(r.id)) return false;
+        seenRevisionIds.add(r.id);
+        return true;
+    });
 
-    let tecnicaCounter = 0;
+    const chronologicalTechnical = sortCommercialRevisionsChronologically(
+        revisions.filter(r => r.type !== 'comercial')
+    );
+    const techNumberMap = new Map();
+    chronologicalTechnical.forEach((r, idx) => {
+        techNumberMap.set(r.id, idx + 1);
+    });
+
+    const showInHistoryModal = Boolean(options.showInHistoryModal);
+    const sortedRevisions = sortCommercialRevisionsDescending(revisions);
+    const currentRevision = sortedRevisions[0] || null;
+
+    const isAuthorizedUser = currentUser?.role === 'Admin'
+        || (currentUser?.role === 'Projetista' && Number(approval?.designerId) === Number(currentUser?.id));
 
     const blocks = sortedRevisions.map((revision) => {
         const isCurrentRevision = currentRevision && revision.id === currentRevision.id;
@@ -993,8 +1107,8 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
         if (isComercial) {
             titleText = 'Revisão Comercial';
         } else {
-            tecnicaCounter += 1;
-            titleText = `Revisão Técnica ${tecnicaCounter}`;
+            const num = techNumberMap.get(revision.id) || 1;
+            titleText = `Revisão Técnica ${num}`;
         }
 
         const typeBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${isComercial ? 'bg-purple-100 text-purple-800' : 'bg-sky-100 text-sky-800'}">${isComercial ? 'Comercial' : 'Técnica'}</span>`;
@@ -1019,10 +1133,25 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
             `).join('')
             : `<tr><td colspan="4" class="py-2 text-xs text-slate-400">Nenhuma atividade registrada.</td></tr>`;
 
-        const viewButton = shouldShowRevisionActionButton(approval, isCurrentRevision)
-            ? `<button type="button" onclick="openCommercialRevisionForRevision(${approval.id}, ${revision.id})"
-                class="fm-revision-block__action text-xs bg-sky-700 text-white hover:bg-sky-800 px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap">${getRevisionActionButtonLabel(approval, showInHistoryModal)}</button>`
+        const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
+            ? getCommercialApprovalProjectStatusName(approval)
             : '';
+        const isEmRevisao = approval?.status === 'Em revisão'
+            || projectStatusName === 'Em Revisão Técnica'
+            || projectStatusName === 'Em Revisão'
+            || projectStatusName === 'Em revisão';
+
+        const canEditThisRevision = isCurrentRevision && isAuthorizedUser && isEmRevisao;
+
+        let editButtonHtml = '';
+        if (canEditThisRevision) {
+            editButtonHtml = `<button type="button" onclick="openCommercialRevisionForRevision(${approval.id}, ${revision.id}, false)"
+                class="fm-revision-block__action text-xs bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap cursor-pointer">Editar</button>`;
+        } else {
+            editButtonHtml = `<button type="button" disabled
+                class="fm-revision-block__action text-xs bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap opacity-50 cursor-not-allowed"
+                title="${!isCurrentRevision ? 'Disponível apenas para a revisão corrente em aberto' : 'Habilitado apenas para o projetista responsável ou admin'}">Editar</button>`;
+        }
 
         const activityCount = revision.activities.length;
         const completedCount = revision.activities.filter(a => a.completed).length;
@@ -1041,7 +1170,7 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
                             <span>${completedCount}/${activityCount} atividades concluídas</span>
                         </p>
                     </div>
-                    ${viewButton}
+                    ${editButtonHtml}
                 </header>
                 <div class="fm-revision-block__table-wrap overflow-x-auto">
                     <table class="revision-history-table min-w-[480px] w-full text-xs">

@@ -1432,23 +1432,50 @@ async function openProjectRelationPickerModal(target = 'parent') {
 
     let { data: projects, error } = await supabaseClient
         .from('OrderProject')
-        .select('id, projectCode, name, orderId, isComplementar, projectStatus:OrderProjectStatus(name), order:salesOrders(orderCode, clientName)')
+        .select('id, projectCode, name, orderId, isComplementar, isSubstituido, projectStatus:OrderProjectStatus(name, sortOrder), order:salesOrders(orderCode, clientName)')
         .in('orderId', orderIds)
         .order('createdAt', { ascending: false });
 
     if (error?.message?.includes('projectStatus')) {
         ({ data: projects } = await supabaseClient
             .from('OrderProject')
-            .select('id, projectCode, name, orderId, isComplementar, order:salesOrders(orderCode, clientName)')
+            .select('id, projectCode, name, orderId, isComplementar, isSubstituido, order:salesOrders(orderCode, clientName)')
             .in('orderId', orderIds)
             .order('createdAt', { ascending: false }));
     }
 
+    const BLOCKED_STATUSES_AFTER_AGUARDANDO_PT = new Set([
+        'Projeto Técnico',
+        'Em Revisão Comercial',
+        'Em Revisão Técnica',
+        'Aguardando Aprovação',
+        'Em Revisão',
+        'Em revisão',
+        'Nomear',
+        'Aguardando PPCP',
+        'Implantação',
+        'Em Produção',
+        'Montagem Interna',
+        'Expedição',
+        'Projeto Substituído'
+    ]);
+
     const currentProjectDraftCode = document.getElementById('gestao-project-code')?.value.trim();
     const availableProjects = (projects || []).filter(p => {
         if (p.isComplementar) return false;
+        if (p.isSubstituido) return false;
         if (currentOrderId && Number(p.orderId) === currentOrderId) return false;
         if (currentProjectDraftCode && String(p.projectCode) === String(currentProjectDraftCode)) return false;
+
+        const sortOrder = p.projectStatus?.sortOrder ?? null;
+        const statusName = p.projectStatus?.name || '';
+
+        if (sortOrder != null) {
+            if (Number(sortOrder) > 8) return false;
+        } else if (statusName) {
+            if (BLOCKED_STATUSES_AFTER_AGUARDANDO_PT.has(statusName)) return false;
+        }
+
         return true;
     });
 
@@ -1457,7 +1484,7 @@ async function openProjectRelationPickerModal(target = 'parent') {
     if (!availableProjects.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" class="p-4 text-center text-slate-400">Nenhum projeto pai disponível em outros pedidos deste cliente.</td>
+                <td colspan="5" class="p-4 text-center text-slate-400">Nenhum projeto disponível até "Aguardando Projeto Técnico" em outros pedidos deste cliente.</td>
             </tr>
         `;
         return;

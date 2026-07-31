@@ -86,17 +86,27 @@ function buildGestaoKanbanCardsForStatus(statusId, orders) {
 }
 
 function renderGestaoKanbanProjectRow(project, options = {}) {
-    const { nested = false, labelPrefix = '' } = options;
-    const name = `${labelPrefix}${project.name || 'Projeto'}`;
+    const { nested = false, isComplementar = false, orderCode = '' } = options;
+
+    let displayName = project.name || 'Projeto';
+    if (isComplementar || nested || project.isComplementar) {
+        const orderLabel = project.order?.orderCode || orderCode || '';
+        const orderPart = orderLabel ? `${orderLabel} - ` : '';
+        displayName = `Proj. Compl. ${orderPart}${project.name || 'Projeto'}`;
+    }
+
+    const showHistoryBtn = !isComplementar && !nested && !project.isComplementar;
 
     return `
         <div class="flex items-start justify-between gap-2 ${nested ? 'ml-4 pl-2 border-l border-indigo-100' : ''}">
-            <span class="text-[11px] leading-snug min-w-0 ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(name)}</span>
+            <span class="text-[11px] leading-snug min-w-0 ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(displayName)}</span>
+            ${showHistoryBtn ? `
             <button type="button"
                 class="gestao-kanban-history-btn shrink-0 text-[10px] bg-white border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-medium hover:bg-indigo-50"
                 data-order-project-id="${project.id}">
                 Histórico
             </button>
+            ` : ''}
         </div>
     `;
 }
@@ -107,12 +117,16 @@ function renderGestaoKanbanCard(order, projectTree, phase = null) {
 
     const projectsHtml = projectTree.map(({ project, children }) => {
         const childrenHtml = (children || [])
-            .map(child => renderGestaoKanbanProjectRow(child, { nested: true, labelPrefix: 'Projeto Complementar — ' }))
+            .map(child => renderGestaoKanbanProjectRow(child, {
+                nested: true,
+                isComplementar: true,
+                orderCode: child.order?.orderCode || order.orderCode || ''
+            }))
             .join('');
 
         return `
             <li class="space-y-1.5 list-none">
-                ${renderGestaoKanbanProjectRow(project)}
+                ${renderGestaoKanbanProjectRow(project, { orderCode: order.orderCode })}
                 ${childrenHtml}
             </li>
         `;
