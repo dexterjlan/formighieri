@@ -2,6 +2,7 @@ async function fetchEmRevisaoStatusChangedAtByProjectIds(projectIds) {
     if (!projectIds.length) return {};
 
     const statusIds = await getPendenciasStatusIdsByNames([
+        PENDENCIAS_STATUS_EM_REVISAO_TECNICA,
         PENDENCIAS_STATUS_EM_REVISAO,
         'Em revisão'
     ]);
@@ -109,13 +110,14 @@ async function fetchPendenciasEmRevisaoProjects() {
     }
 
     const statusIds = await getPendenciasStatusIdsByNames([
+        PENDENCIAS_STATUS_EM_REVISAO_TECNICA,
         PENDENCIAS_STATUS_EM_REVISAO,
         'Em revisão'
     ]);
 
     if (!statusIds.length) {
         return {
-            error: new Error(`Status "${PENDENCIAS_STATUS_EM_REVISAO}" não encontrado.`),
+            error: new Error(`Status "${PENDENCIAS_STATUS_EM_REVISAO_TECNICA}" não encontrado.`),
             overviewMode,
             projects: [],
             statusChangedAtByProject: {},
