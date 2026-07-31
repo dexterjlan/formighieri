@@ -755,3 +755,168 @@ async function addGestaoProjectCharacteristic(event) {
     document.getElementById('gestao-new-characteristic-sort').value = '0';
     await loadGestaoProjectCharacteristicsList();
 }
+
+let gestaoClientesCache = [];
+
+async function loadGestaoClientesList() {
+    const tbody = document.getElementById('gestao-clientes-list');
+    if (!tbody) return;
+
+    let { data: clientes, error } = await supabaseClient
+        .from('Cliente')
+        .select('id, nome, ativo')
+        .order('nome', { ascending: true });
+
+    if (error && error.message?.includes('Cliente')) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="p-6 text-center text-xs text-amber-700">
+                    Tabela Cliente não encontrada. Execute <code>supabase/create-cliente-table-and-migrate-sales-orders.sql</code> no Supabase.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    if (error || !clientes) {
+        clientes = [];
+    }
+
+    gestaoClientesCache = clientes;
+
+    if (!clientes.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="p-6 text-center text-xs text-slate-400">
+                    Nenhum cliente cadastrado.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    clientes.forEach(cliente => {
+        const tr = document.createElement('tr');
+        tr.dataset.clienteId = String(cliente.id);
+        tr.innerHTML = `
+            <td class="p-3 text-xs text-slate-400 font-mono">#${cliente.id}</td>
+            <td class="p-3">
+                <input type="text" class="gestao-cliente-nome w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                    value="${escapeHtml(cliente.nome)}" required>
+            </td>
+            <td class="p-3 text-center">
+                <input type="checkbox" class="gestao-cliente-ativo h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    ${cliente.ativo !== false ? 'checked' : ''}>
+            </td>
+            <td class="p-3">
+                <div class="flex flex-wrap gap-1.5">
+                    <button type="button" class="gestao-save-cliente text-xs bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1 rounded-lg font-medium">
+                        Salvar
+                    </button>
+                    <button type="button" class="gestao-delete-cliente text-xs bg-white border border-red-200 text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg font-medium">
+                        Excluir
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function addGestaoCliente(event) {
+    event.preventDefault();
+    if (!canAccessGestao()) return;
+
+    const nome = document.getElementById('gestao-new-cliente-nome')?.value.trim();
+    if (!nome) {
+        alertAppDialog('Informe o nome do cliente.');
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('Cliente')
+        .insert({
+            nome,
+            ativo: true,
+            updatedAt: now
+        });
+
+    if (error) {
+        alertAppDialog('Erro ao adicionar cliente: ' + error.message);
+        return;
+    }
+
+    document.getElementById('gestao-new-cliente-form')?.reset();
+    await loadGestaoClientesList();
+}
+
+async function saveGestaoClienteRow(tr, button) {
+    if (!canAccessGestao()) return;
+
+    const clienteId = Number(tr.dataset.clienteId);
+    const nomeInput = tr.querySelector('.gestao-cliente-nome');
+    const ativoCheck = tr.querySelector('.gestao-cliente-ativo');
+
+    const nome = nomeInput?.value.trim();
+    const ativo = Boolean(ativoCheck?.checked);
+
+    if (!nome) {
+        alertAppDialog('Informe o nome do cliente.');
+        nomeInput?.focus();
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('Cliente')
+        .update({
+            nome,
+            ativo,
+            updatedAt: now
+        })
+        .eq('id', clienteId);
+
+    if (error) {
+        alertAppDialog('Erro ao salvar cliente: ' + error.message);
+        return;
+    }
+
+    if (button) {
+        const orig = button.textContent;
+        button.textContent = 'Salvo!';
+        setTimeout(() => { button.textContent = orig; }, 1200);
+    }
+}
+
+async function deleteGestaoClienteRow(tr) {
+    if (!canAccessGestao()) return;
+
+    const clienteId = Number(tr.dataset.clienteId);
+    const nome = tr.querySelector('.gestao-cliente-nome')?.value.trim() || 'o cliente';
+
+    const { count, error: countError } = await supabaseClient
+        .from('salesOrders')
+        .select('id', { count: 'exact', head: true })
+        .eq('clientId', clienteId);
+
+    if (!countError && count > 0) {
+        alertAppDialog(`O cliente "${nome}" possui ${count} pedido(s) vinculado(s). Desative-o em vez de excluir.`);
+        return;
+    }
+
+    if (!(await confirmAppDialog(`Excluir o cliente "${nome}"?`))) return;
+
+    const { error } = await supabaseClient
+        .from('Cliente')
+        .delete()
+        .eq('id', clienteId);
+
+    if (error) {
+        alertAppDialog('Erro ao excluir cliente: ' + error.message);
+        return;
+    }
+
+    await loadGestaoClientesList();
+}

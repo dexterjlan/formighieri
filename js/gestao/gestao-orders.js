@@ -3,6 +3,7 @@ async function openGestaoCreateOrderForm() {
 
     editingGestaoOrderId = null;
     document.getElementById('gestao-order-form')?.reset();
+    if (document.getElementById('gestao-ord-client-id')) document.getElementById('gestao-ord-client-id').value = '';
     document.getElementById('gestao-order-form-title').textContent = 'Criar Pedido';
     document.getElementById('gestao-order-form-submit').textContent = 'Salvar Pedido';
     document.getElementById('gestao-ord-code').disabled = false;
@@ -26,7 +27,10 @@ async function openGestaoEditOrderForm(orderId) {
     document.getElementById('gestao-order-form-submit').textContent = 'Atualizar Pedido';
     document.getElementById('gestao-ord-code').value = order.orderCode || '';
     document.getElementById('gestao-ord-code').disabled = true;
-    document.getElementById('gestao-ord-client').value = order.clientName || '';
+    document.getElementById('gestao-ord-client').value = order.cliente?.nome || order.clientName || '';
+    if (document.getElementById('gestao-ord-client-id')) {
+        document.getElementById('gestao-ord-client-id').value = order.clientId || order.cliente?.id || '';
+    }
     document.getElementById('gestao-ord-client-delivery').value = toGestaoInputDate(order.clientDeliveryDate);
 
     await loadGestaoFormOptions();
@@ -952,13 +956,18 @@ async function saveGestaoOrder(event) {
     const consultantUserId = await resolveConsultantUserIdByNameAsync(consultantName);
 
     try {
-        let orderId = editingGestaoOrderId;
+        const clientIdInput = document.getElementById('gestao-ord-client-id')?.value;
+        let clientId = clientIdInput ? Number(clientIdInput) : null;
+        if (!clientId && clientName && typeof resolveOrCreateClienteId === 'function') {
+            clientId = await resolveOrCreateClienteId(clientName);
+        }
 
         if (editingGestaoOrderId) {
             let { error } = await supabaseClient
                 .from('salesOrders')
                 .update({
                     clientName,
+                    clientId: clientId || null,
                     consultantName,
                     consultantUserId: consultantUserId || null,
                     clientDeliveryDate,
@@ -994,6 +1003,7 @@ async function saveGestaoOrder(event) {
             const orderPayload = {
                 orderCode,
                 clientName,
+                clientId: clientId || undefined,
                 consultantName,
                 consultantUserId: consultantUserId || undefined,
                 clientDeliveryDate,

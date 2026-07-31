@@ -1070,22 +1070,24 @@ function bindMontagemProgWeekInteractions(grid) {
             openMontagemProgModal(null, slot.dataset.date);
             return;
         }
-
-        const button = event.target.closest('.montagem-prog-bar-body');
-        if (!button) return;
-
-        event.stopPropagation();
-        const prog = montagemProgCache.find(item => Number(item.id) === Number(button.dataset.programacaoId));
-        if (prog) openMontagemProgModal(prog);
     });
 
     grid.addEventListener('pointerdown', event => {
         const handle = event.target.closest('.montagem-prog-bar-resize');
-        if (!handle) return;
+        if (handle) {
+            event.preventDefault();
+            event.stopPropagation();
+            startMontagemProgResize(handle, event);
+            return;
+        }
 
-        event.preventDefault();
-        event.stopPropagation();
-        startMontagemProgResize(handle, event);
+        const barBody = event.target.closest('.montagem-prog-bar-body');
+        if (barBody) {
+            event.preventDefault();
+            event.stopPropagation();
+            startMontagemProgMoveBar(barBody, event);
+            return;
+        }
     });
 
     document.getElementById('montagem-prog-week-grid')?.closest('.montagem-prog-calendar')?.addEventListener('dragover', event => {
@@ -1257,6 +1259,114 @@ function updateMontagemProgResizePreview() {
         if (montagemProgResizeState.edge === 'start') previewProg.endDate = previewProg.startDate;
         else previewProg.startDate = previewProg.endDate;
     }
+
+    const index = montagemProgCache.findIndex(item => Number(item.id) === Number(prog.id));
+    if (index >= 0) {
+        montagemProgCache[index] = previewProg;
+        renderMontagemProgWeekGrid();
+    }
+}
+
+let montagemProgMoveState = null;
+
+function startMontagemProgMoveBar(button, event) {
+    const programacaoId = Number(button.dataset.programacaoId);
+    const prog = montagemProgCache.find(item => Number(item.id) === programacaoId);
+    if (!prog) return;
+
+    const startDt = new Date(prog.startDate + 'T00:00:00');
+    const endDt = new Date(prog.endDate + 'T00:00:00');
+    const durationDays = Math.max(1, Math.round((endDt - startDt) / (1000 * 60 * 60 * 24)) + 1);
+
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let isDragging = false;
+
+    montagemProgMoveState = {
+        programacaoId,
+        durationDays,
+        originalStartDate: prog.startDate,
+        originalEndDate: prog.endDate,
+        previewStartDate: prog.startDate,
+        previewEndDate: prog.endDate
+    };
+
+    try {
+        button.setPointerCapture(event.pointerId);
+    } catch (_) {}
+
+    const onPointerMove = moveEvent => {
+        const deltaX = Math.abs(moveEvent.clientX - startX);
+        const deltaY = Math.abs(moveEvent.clientY - startY);
+
+        if (!isDragging && (deltaX > 4 || deltaY > 4)) {
+            isDragging = true;
+            document.body.classList.add('montagem-prog-resizing');
+        }
+
+        if (!isDragging || !montagemProgMoveState) return;
+
+        const grid = document.getElementById('montagem-prog-week-grid');
+        const targetDateKey = getMontagemProgDateFromPointer(moveEvent.clientX, grid);
+        if (!targetDateKey) return;
+
+        const newStart = new Date(targetDateKey + 'T00:00:00');
+        const newEnd = new Date(newStart);
+        newEnd.setDate(newEnd.getDate() + (durationDays - 1));
+
+        const previewStartStr = toDateKey(newStart);
+        const previewEndStr = toDateKey(newEnd);
+
+        if (montagemProgMoveState.previewStartDate !== previewStartStr) {
+            montagemProgMoveState.previewStartDate = previewStartStr;
+            montagemProgMoveState.previewEndDate = previewEndStr;
+            updateMontagemProgMovePreview();
+        }
+    };
+
+    const onPointerUp = async upEvent => {
+        try {
+            button.releasePointerCapture(upEvent.pointerId);
+        } catch (_) {}
+
+        document.body.classList.remove('montagem-prog-resizing');
+        document.removeEventListener('pointermove', onPointerMove);
+        document.removeEventListener('pointerup', onPointerUp);
+
+        if (!isDragging) {
+            openMontagemProgModal(prog);
+            montagemProgMoveState = null;
+            return;
+        }
+
+        if (!montagemProgMoveState) return;
+
+        const { programacaoId: id, originalStartDate, originalEndDate, previewStartDate, previewEndDate } = montagemProgMoveState;
+        montagemProgMoveState = null;
+
+        if (previewStartDate === originalStartDate && previewEndDate === originalEndDate) {
+            await loadMontagemProgramacaoView();
+            return;
+        }
+
+        await updateMontagemProgDates(id, previewStartDate, previewEndDate);
+    };
+
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp);
+}
+
+function updateMontagemProgMovePreview() {
+    if (!montagemProgMoveState) return;
+
+    const prog = montagemProgCache.find(item => Number(item.id) === montagemProgMoveState.programacaoId);
+    if (!prog) return;
+
+    const previewProg = {
+        ...prog,
+        startDate: montagemProgMoveState.previewStartDate,
+        endDate: montagemProgMoveState.previewEndDate
+    };
 
     const index = montagemProgCache.findIndex(item => Number(item.id) === Number(prog.id));
     if (index >= 0) {
@@ -1526,7 +1636,46 @@ function populateMontagemProgCrewSelects(options = {}) {
 function syncMontagemProgClientRequired() {
     const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
     const requiredMarker = document.getElementById('montagem-prog-client-required');
-    requiredMarker?.classList.toggle('hidden', Boolean(orderCode));
+    const clientBtn = document.getElementById('btn-montagem-prog-client-picker');
+    const hasOrder = Boolean(orderCode);
+
+    requiredMarker?.classList.toggle('hidden', hasOrder);
+    if (clientBtn) {
+        clientBtn.disabled = hasOrder;
+    }
+}
+
+function syncMontagemProgCrewExclusivity() {
+    const m1 = document.getElementById('montagem-prog-montador-1');
+    const m2 = document.getElementById('montagem-prog-montador-2');
+    const c1 = document.getElementById('montagem-prog-marceneiro-1');
+    const c2 = document.getElementById('montagem-prog-marceneiro-2');
+
+    if (!m1 || !m2 || !c1 || !c2) return;
+
+    const hasMontador = Boolean(m1.value || m2.value);
+    const hasMarceneiro = Boolean(c1.value || c2.value);
+
+    if (hasMontador) {
+        c1.value = '';
+        c2.value = '';
+        c1.disabled = true;
+        c2.disabled = true;
+        m1.disabled = false;
+        m2.disabled = false;
+    } else if (hasMarceneiro) {
+        m1.value = '';
+        m2.value = '';
+        m1.disabled = true;
+        m2.disabled = true;
+        c1.disabled = false;
+        c2.disabled = false;
+    } else {
+        m1.disabled = false;
+        m2.disabled = false;
+        c1.disabled = false;
+        c2.disabled = false;
+    }
 }
 
 async function openMontagemProgModal(prog = null, presetDate = null, presetWorker = null) {
@@ -1566,6 +1715,8 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetWorke
         selectedMontadores: prog ? getMontagemProgMontadores(prog) : [],
         selectedMarceneiros: prog ? getMontagemProgMarceneiros(prog) : []
     });
+
+    syncMontagemProgCrewExclusivity();
 
     const defaultDate = presetDate || getMontagemProgWeekStartKey();
     document.getElementById('montagem-prog-start-date').value = prog?.startDate || defaultDate;
@@ -1611,7 +1762,7 @@ async function saveMontagemProg(event) {
     }
 
     if (montadorIds.length && marceneiroIds.length) {
-        alertAppDialog('Marceneiro e montador não podem ser agendados juntos na mesma montagem.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Ou é marceneiro ou é montador na montagem. Não é permitido misturar os dois.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -1879,17 +2030,42 @@ function bindMontagemProgramacaoEvents() {
     document.getElementById('montagem-prog-form')?.addEventListener('submit', saveMontagemProg);
     document.getElementById('btn-montagem-prog-delete')?.addEventListener('click', deleteMontagemProg);
 
-    document.getElementById('montagem-prog-order-code')?.addEventListener('input', syncMontagemProgClientRequired);
+    ['montagem-prog-montador-1', 'montagem-prog-montador-2', 'montagem-prog-marceneiro-1', 'montagem-prog-marceneiro-2'].forEach(id => {
+        document.getElementById(id)?.addEventListener('change', syncMontagemProgCrewExclusivity);
+    });
+
+    const triggerMontagemProgClientPicker = () => {
+        const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
+        if (orderCode) return;
+        if (typeof openClientePickerModal === 'function') {
+            openClientePickerModal(cliente => {
+                const input = document.getElementById('montagem-prog-client-name');
+                const idInput = document.getElementById('montagem-prog-client-id');
+                if (input) input.value = cliente.nome;
+                if (idInput) idInput.value = cliente.id;
+            });
+        }
+    };
+    document.getElementById('btn-montagem-prog-client-picker')?.addEventListener('click', triggerMontagemProgClientPicker);
+    document.getElementById('montagem-prog-client-name')?.addEventListener('click', triggerMontagemProgClientPicker);
+
+    document.getElementById('montagem-prog-order-code')?.addEventListener('input', async function () {
+        syncMontagemProgClientRequired();
+        const orderCode = this.value.trim();
+        if (orderCode) {
+            const order = await lookupMontagemProgOrderByCode(orderCode);
+            if (order?.clientName) {
+                document.getElementById('montagem-prog-client-name').value = order.clientName;
+            }
+        }
+    });
     document.getElementById('montagem-prog-order-code')?.addEventListener('blur', async () => {
         const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
-        if (!orderCode) {
-            syncMontagemProgClientRequired();
-            return;
-        }
-
-        const order = await lookupMontagemProgOrderByCode(orderCode);
-        if (order?.clientName) {
-            document.getElementById('montagem-prog-client-name').value = order.clientName;
+        if (orderCode) {
+            const order = await lookupMontagemProgOrderByCode(orderCode);
+            if (order?.clientName) {
+                document.getElementById('montagem-prog-client-name').value = order.clientName;
+            }
         }
         syncMontagemProgClientRequired();
     });

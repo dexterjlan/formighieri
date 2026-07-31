@@ -200,20 +200,71 @@ function setupOrderConsultantFilter() {
 function initApp() {
     setupOrderConsultantFilter();
     loadOrders();
+    loadClientesDatalist();
     loadConsultants();
     loadProjetistas();
 }
 
+async function loadClientesDatalist() {
+    const { data, error } = await supabaseClient
+        .from('Cliente')
+        .select('id, nome')
+        .eq('ativo', true)
+        .order('nome', { ascending: true });
+
+    if (error || !data) return;
+
+    const listEl = document.getElementById('ord-client-list');
+    if (listEl) {
+        listEl.innerHTML = data.map(c => `<option value="${escapeHtml(c.nome)}"></option>`).join('');
+    }
+}
+
+async function resolveOrCreateClienteId(clientName) {
+    const trimmed = (clientName || '').trim();
+    if (!trimmed) return null;
+
+    let { data: existing, error: searchErr } = await supabaseClient
+        .from('Cliente')
+        .select('id, nome')
+        .ilike('nome', trimmed)
+        .maybeSingle();
+
+    if (searchErr && searchErr.message?.includes('Cliente')) return null;
+
+    if (existing?.id) return existing.id;
+
+    let { data: created, error: insertErr } = await supabaseClient
+        .from('Cliente')
+        .insert([{ nome: trimmed, ativo: true }])
+        .select('id')
+        .single();
+
+    if (insertErr && insertErr.message?.includes('Cliente')) return null;
+
+    return created?.id || null;
+}
+
 async function loadOrders() {
-    const { data: orders, error } = await supabaseClient
+    let result = await supabaseClient
         .from('salesOrders')
-        .select('*')
+        .select('*, cliente:Cliente(id, nome, ativo)')
         .order('createdAt', { ascending: false });
 
-    if (error || !orders) {
+    if (result.error?.message?.includes('Cliente') || result.error?.message?.includes('salesOrders')) {
+        result = await supabaseClient
+            .from('salesOrders')
+            .select('*')
+            .order('createdAt', { ascending: false });
+    }
+
+    if (result.error || !result.data) {
         ordersCache = [];
     } else {
-        ordersCache = orders;
+        ordersCache = result.data.map(order => ({
+            ...order,
+            clientName: order.cliente?.nome || order.clientName || ''
+        }));
     }
 
     await loadOrderPhasesForOrders(ordersCache);
@@ -463,6 +514,8 @@ function switchOrderDetailTab(tab) {
 }
 
 async function openOrderModal() {
+    document.getElementById('order-form')?.reset();
+    if (document.getElementById('ord-client-id')) document.getElementById('ord-client-id').value = '';
     await loadConsultants();
     toggleModal('order-modal', true);
 }
@@ -565,6 +618,8 @@ function bindOrderEvents() {
         }
 
         const consultantUserId = await resolveConsultantUserIdByNameAsync(consultantName);
+        const clientIdInput = document.getElementById("ord-client-id")?.value;
+        const clientId = clientIdInput ? Number(clientIdInput) : (await resolveOrCreateClienteId(clientName));
 
         const { data: existing } = await supabaseClient
             .from('salesOrders')
@@ -580,6 +635,7 @@ function bindOrderEvents() {
         const payload = {
             orderCode,
             clientName,
+            clientId: clientId || undefined,
             consultantName,
             consultantUserId: consultantUserId || undefined,
             createdById: currentUser.id,
@@ -587,14 +643,13 @@ function bindOrderEvents() {
         };
 
         let { error } = await supabaseClient.from('salesOrders').insert([payload]);
+        if (error?.message?.includes('clientId')) {
+            delete payload.clientId;
+            ({ error } = await supabaseClient.from('salesOrders').insert([payload]));
+        }
         if (error?.message?.includes('consultantUserId')) {
-            ({ error } = await supabaseClient.from('salesOrders').insert([{
-                orderCode,
-                clientName,
-                consultantName,
-                createdById: currentUser.id,
-                updatedById: currentUser.id
-            }]));
+            delete payload.consultantUserId;
+            ({ error } = await supabaseClient.from('salesOrders').insert([payload]));
         }
         if (error) {
             alertAppDialog("Erro ao salvar pedido: " + error.message);
@@ -602,6 +657,7 @@ function bindOrderEvents() {
         }
         toggleModal('order-modal', false);
         document.getElementById("order-form").reset();
+        await loadClientesDatalist();
         await loadConsultants();
         loadOrders();
     });

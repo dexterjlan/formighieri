@@ -526,18 +526,15 @@ function populateCalendarResponsibleSelect(selectedId = '') {
 function syncCalendarClientNameField() {
     const orderCodeInput = document.getElementById('cal-event-order-code');
     const clientInput = document.getElementById('cal-event-client-name');
+    const clientBtn = document.getElementById('btn-cal-event-client-picker');
     const requiredMark = document.getElementById('cal-event-client-required');
     if (!orderCodeInput || !clientInput) return;
 
     const hasOrderCode = Boolean(orderCodeInput.value.trim());
-    clientInput.disabled = hasOrderCode;
-    clientInput.classList.toggle('opacity-60', hasOrderCode);
     requiredMark?.classList.toggle('hidden', hasOrderCode);
 
-    if (hasOrderCode) {
-        clientInput.removeAttribute('required');
-    } else {
-        clientInput.setAttribute('required', 'required');
+    if (clientBtn) {
+        clientBtn.disabled = hasOrderCode;
     }
 }
 
@@ -1042,15 +1039,40 @@ function bindCalendarEvents() {
     document.getElementById('calendar-event-form')?.addEventListener('submit', saveCalendarEvent);
     document.getElementById('btn-cal-event-delete')?.addEventListener('click', deleteCalendarEvent);
 
-    document.getElementById('cal-event-order-code')?.addEventListener('input', syncCalendarClientNameField);
+    const triggerCalendarClientPicker = () => {
+        const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
+        if (orderCode) return;
+        if (typeof openClientePickerModal === 'function') {
+            openClientePickerModal(cliente => {
+                const input = document.getElementById('cal-event-client-name');
+                const idInput = document.getElementById('cal-event-client-id');
+                if (input) input.value = cliente.nome;
+                if (idInput) idInput.value = cliente.id;
+            });
+        }
+    };
+    document.getElementById('btn-cal-event-client-picker')?.addEventListener('click', triggerCalendarClientPicker);
+    document.getElementById('cal-event-client-name')?.addEventListener('click', triggerCalendarClientPicker);
+
+    document.getElementById('cal-event-order-code')?.addEventListener('input', async function () {
+        syncCalendarClientNameField();
+        const orderCode = this.value.trim();
+        if (orderCode) {
+            const order = await lookupCalendarOrderByCode(orderCode);
+            const clientInput = document.getElementById('cal-event-client-name');
+            if (order && clientInput) {
+                clientInput.value = order.clientName || '';
+            }
+        }
+    });
     document.getElementById('cal-event-order-code')?.addEventListener('blur', async () => {
         const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
-        if (!orderCode) return;
-
-        const order = await lookupCalendarOrderByCode(orderCode);
-        const clientInput = document.getElementById('cal-event-client-name');
-        if (order && clientInput) {
-            clientInput.value = order.clientName || '';
+        if (orderCode) {
+            const order = await lookupCalendarOrderByCode(orderCode);
+            const clientInput = document.getElementById('cal-event-client-name');
+            if (order && clientInput) {
+                clientInput.value = order.clientName || '';
+            }
         }
         syncCalendarClientNameField();
     });

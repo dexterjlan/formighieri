@@ -627,6 +627,14 @@
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100">
                                     Pedido
                                 </button>
+                                <button type="button" id="gestao-nav-clientes"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Clientes
+                                </button>
+                                <button type="button" id="gestao-nav-marceneiros"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Marceneiros
+                                </button>
                                 <button type="button" id="gestao-nav-project-status"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Status de Projeto
@@ -634,10 +642,6 @@
                                 <button type="button" id="gestao-nav-alterar-status-projeto"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Alterar Status Projeto
-                                </button>
-                                <button type="button" id="gestao-nav-marceneiros"
-                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
-                                    Marceneiros
                                 </button>
                                 <button type="button" id="gestao-nav-montadores"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
@@ -815,8 +819,15 @@
                                 </div>
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-500 mb-1">Nome do cliente <span class="text-red-500">*</span></label>
-                                    <input type="text" id="gestao-ord-client" required
-                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                    <div class="flex gap-2">
+                                        <input type="text" id="gestao-ord-client" readonly placeholder="Clique em ... para buscar" required
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 bg-slate-50 cursor-pointer">
+                                        <input type="hidden" id="gestao-ord-client-id">
+                                        <button type="button" id="gestao-ord-client-picker-btn" title="Buscar cliente no cadastro"
+                                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">
+                                            ...
+                                        </button>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-500 mb-1">Consultor <span class="text-red-500">*</span></label>
@@ -945,9 +956,15 @@
                                 <p class="text-[10px] text-slate-400">Projetos complementares acompanham o status do projeto original informado abaixo.</p>
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-500 mb-1">Código do projeto pai</label>
-                                    <input type="text" id="gestao-project-parent-code" inputmode="numeric" pattern="[0-9]+"
-                                        class="w-full max-w-xs px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 disabled:bg-slate-100"
-                                        placeholder="Somente números" disabled>
+                                    <div class="flex gap-2 max-w-xs">
+                                        <input type="text" id="gestao-project-parent-code" inputmode="numeric" pattern="[0-9]+"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 disabled:bg-slate-100"
+                                            placeholder="Somente números" disabled>
+                                        <button type="button" id="gestao-project-parent-picker-btn" title="Buscar projetos do mesmo cliente"
+                                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                                            ...
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1086,6 +1103,40 @@
                                             </td>
                                         </tr>
                                     </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-clientes-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Clientes</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastre e edite os clientes para os pedidos de venda. Desative em vez de excluir se houver pedidos vinculados.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-cliente-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[200px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo cliente</label>
+                                    <input type="text" id="gestao-new-cliente-nome" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Nome do cliente">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">ID</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-24">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-clientes-list" class="divide-y divide-slate-100"></tbody>
                                 </table>
                             </div>
                         </div>

@@ -2,7 +2,17 @@ let medicoesCache = [];
 let editingMedicaoId = null;
 let medicaoPickerPreselectProjectId = null;
 
-const MEDICAO_NEW_PICKER_STATUS_NAME = 'Aguardando Medição';
+const MEDICAO_ELIGIBLE_STATUSES_UP_TO_PT = [
+    'Vendido',
+    'Aguardando Obra',
+    'Aguardando Medição',
+    'Medição Realizada',
+    'Planta Levantada',
+    'Conferência Enviada',
+    'Conferência Realizada',
+    'Aguardando Projeto Técnico',
+    'Projeto Técnico'
+];
 const MEDICAO_EDITABLE_PROJECT_STATUSES = ['Medição Realizada', 'Planta Levantada'];
 
 function getProjectStatusName(project) {
@@ -10,7 +20,15 @@ function getProjectStatusName(project) {
 }
 
 function isProjectEligibleForNewMedicaoPicker(project) {
-    return getProjectStatusName(project) === MEDICAO_NEW_PICKER_STATUS_NAME;
+    const statusName = getProjectStatusName(project);
+    if (statusName) {
+        return MEDICAO_ELIGIBLE_STATUSES_UP_TO_PT.includes(statusName);
+    }
+    const sortOrder = Number(project?.projectStatus?.sortOrder);
+    if (sortOrder > 0) {
+        return sortOrder <= 9;
+    }
+    return true;
 }
 
 function filterProjectsForMedicaoPicker(projects) {
@@ -111,6 +129,21 @@ async function applyMedicaoRealizadaStatusToProjects(orderProjectIds) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
+    let { data: projectsToFilter } = await supabaseClient
+        .from('OrderProject')
+        .select('id, projectStatus:OrderProjectStatus(name)')
+        .in('id', uniqueIds);
+
+    if (projectsToFilter?.some(p => p.statusId && !p.projectStatus)) {
+        projectsToFilter = await enrichProjectsWithStatus(projectsToFilter);
+    }
+
+    const eligibleIds = (projectsToFilter || [])
+        .filter(p => (p.projectStatus?.name || getProjectStatusName(p)) === 'Aguardando Medição')
+        .map(p => p.id);
+
+    if (!eligibleIds.length) return;
+
     const statusId = await getMedicaoRealizadaStatusId();
     if (!statusId) {
         throw new Error('Status "Medição Realizada" não encontrado. Cadastre em Gestão → Status de Projeto.');
@@ -124,7 +157,7 @@ async function applyMedicaoRealizadaStatusToProjects(orderProjectIds) {
             updatedById: currentUser.id,
             updatedAt: now
         })
-        .in('id', uniqueIds);
+        .in('id', eligibleIds);
 
     if (error) throw error;
 }
@@ -601,7 +634,7 @@ async function populateMedicaoProjectsPicker(medicao = null) {
     if (!projects.length) {
         emptyMsg?.classList.remove('hidden');
         if (emptyMsg) {
-            emptyMsg.textContent = 'Nenhum projeto com status Aguardando Medição neste pedido.';
+            emptyMsg.textContent = 'Nenhum projeto com status até Projeto Técnico neste pedido.';
         }
         return;
     }
@@ -718,7 +751,7 @@ async function openMedicaoModal(medicaoId = null, options = {}) {
     if (hintEl) {
         hintEl.textContent = medicao
             ? 'Altere a observação e marque planta levantada nos projetos já medidos nesta medição.'
-            : 'Marque os projetos com status Aguardando Medição e informe a data da medição de cada um.';
+            : 'Marque os projetos com status até Projeto Técnico e informe a data da medição de cada um.';
     }
 
     toggleModal('medicao-modal', true);

@@ -2816,7 +2816,13 @@ body.montagem-prog-dragging .montagem-prog-day-slot {
     background: transparent;
     color: inherit;
     text-align: left;
-    cursor: pointer;
+    cursor: grab;
+}
+
+.montagem-prog-resizing,
+.montagem-prog-resizing * {
+    cursor: grabbing !important;
+    user-select: none !important;
 }
 
 .montagem-prog-bar-montadores {

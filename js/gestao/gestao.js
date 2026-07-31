@@ -13,7 +13,7 @@ const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 roun
 const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
 const GESTAO_NAV_SUB_ACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
 const GESTAO_NAV_SUB_INACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'marceneiros', 'montadores', 'characteristics', 'usuarios'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'clientes', 'marceneiros', 'montadores', 'characteristics', 'usuarios'];
 const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
 const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
@@ -51,6 +51,7 @@ function setGestaoNavActive(navKey) {
         pedido: document.getElementById('gestao-nav-pedido'),
         'project-status': document.getElementById('gestao-nav-project-status'),
         'alterar-status-projeto': document.getElementById('gestao-nav-alterar-status-projeto'),
+        clientes: document.getElementById('gestao-nav-clientes'),
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
         montadores: document.getElementById('gestao-nav-montadores'),
         characteristics: document.getElementById('gestao-nav-characteristics'),
@@ -91,6 +92,11 @@ function setGestaoNavActive(navKey) {
 }
 
 function updateGestaoCadastrosNavVisibility() {
+    const clientesBtn = document.getElementById('gestao-nav-clientes');
+    if (clientesBtn) {
+        clientesBtn.classList.remove('hidden');
+        clientesBtn.style.display = '';
+    }
     document.getElementById('gestao-nav-usuarios')?.classList.toggle('hidden', !isAdmin());
     if (typeof updateMontagemProgramacaoNavVisibility === 'function') {
         updateMontagemProgramacaoNavVisibility();
@@ -103,6 +109,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-project-form-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-alterar-status-projeto-panel')?.classList.add('hidden');
+    document.getElementById('gestao-clientes-panel')?.classList.add('hidden');
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-montadores-panel')?.classList.add('hidden');
     document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
@@ -291,11 +298,15 @@ function applyGestaoProjectStatusReadonly() {
 function bindGestaoComplementarToggle() {
     const checkbox = document.getElementById('gestao-project-complementar');
     const parentInput = document.getElementById('gestao-project-parent-code');
+    const parentPickerBtn = document.getElementById('gestao-project-parent-picker-btn');
     const statusSelect = document.getElementById('gestao-project-status');
     if (!checkbox || !parentInput || !statusSelect) return;
 
     const isComplementar = checkbox.checked;
     parentInput.disabled = !isComplementar;
+    if (parentPickerBtn) {
+        parentPickerBtn.disabled = !isComplementar;
+    }
     if (!isComplementar) {
         parentInput.value = '';
     }
@@ -386,8 +397,15 @@ function populateGestaoProjectFormSelects(project = {}) {
 function resetGestaoProjectForm() {
     document.getElementById('gestao-project-form')?.reset();
     populateGestaoProjectFormSelects();
-    document.getElementById('gestao-project-parent-code').disabled = true;
-    document.getElementById('gestao-project-parent-code').required = false;
+    const parentCodeInput = document.getElementById('gestao-project-parent-code');
+    const parentPickerBtn = document.getElementById('gestao-project-parent-picker-btn');
+    if (parentCodeInput) {
+        parentCodeInput.disabled = true;
+        parentCodeInput.required = false;
+    }
+    if (parentPickerBtn) {
+        parentPickerBtn.disabled = true;
+    }
     document.getElementById('gestao-project-substituido-por-code').disabled = true;
     document.getElementById('gestao-project-substituido-por-code').required = false;
     document.getElementById('gestao-project-substituido').checked = false;
@@ -797,6 +815,12 @@ function showGestaoAlterarStatusProjetoPanel() {
     }
 }
 
+function showGestaoClientesPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-clientes-panel')?.classList.remove('hidden');
+    setGestaoNavActive('clientes');
+}
+
 function showGestaoMarceneirosPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-marceneiros-panel')?.classList.remove('hidden');
@@ -884,6 +908,7 @@ function showGestao() {
     if (typeof updateMainNavActive === 'function') updateMainNavActive('gestao');
     if (typeof updateAdminNav === 'function') updateAdminNav();
     updateGestaoCadastrosNavVisibility();
+    setGestaoCadastrosNavExpanded(true);
 
     showGestaoPedidoListPanel();
     loadGestaoOrdersList();
@@ -928,6 +953,28 @@ function bindGestaoEvents() {
     document.getElementById('gestao-ord-code')?.addEventListener('input', async function () {
         this.value = this.value.replace(/\D/g, '');
     });
+
+    const triggerOrdClientPicker = () => {
+        openClientePickerModal(cliente => {
+            const input = document.getElementById('ord-client');
+            const idInput = document.getElementById('ord-client-id');
+            if (input) input.value = cliente.nome;
+            if (idInput) idInput.value = cliente.id;
+        });
+    };
+    document.getElementById('ord-client-picker-btn')?.addEventListener('click', triggerOrdClientPicker);
+    document.getElementById('ord-client')?.addEventListener('click', triggerOrdClientPicker);
+
+    const triggerGestaoOrdClientPicker = () => {
+        openClientePickerModal(cliente => {
+            const input = document.getElementById('gestao-ord-client');
+            const idInput = document.getElementById('gestao-ord-client-id');
+            if (input) input.value = cliente.nome;
+            if (idInput) idInput.value = cliente.id;
+        });
+    };
+    document.getElementById('gestao-ord-client-picker-btn')?.addEventListener('click', triggerGestaoOrdClientPicker);
+    document.getElementById('gestao-ord-client')?.addEventListener('click', triggerGestaoOrdClientPicker);
     document.getElementById('gestao-nav-cadastros-toggle')?.addEventListener('click', async () => {
         const items = document.getElementById('gestao-nav-cadastros-items');
         if (!items) return;
@@ -947,6 +994,13 @@ function bindGestaoEvents() {
         editingGestaoOrderId = null;
         showGestaoAlterarStatusProjetoPanel();
     });
+    document.getElementById('gestao-nav-clientes')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoClientesPanel();
+        if (typeof loadGestaoClientesList === 'function') {
+            loadGestaoClientesList();
+        }
+    });
     document.getElementById('gestao-nav-marceneiros')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoMarceneirosPanel();
@@ -963,6 +1017,24 @@ function bindGestaoEvents() {
         loadGestaoProjectCharacteristicsList();
     });
     document.getElementById('gestao-new-characteristic-form')?.addEventListener('submit', addGestaoProjectCharacteristic);
+    document.getElementById('gestao-project-parent-picker-btn')?.addEventListener('click', openParentProjectPickerModal);
+    document.getElementById('gestao-new-cliente-form')?.addEventListener('submit', (e) => {
+        if (typeof addGestaoCliente === 'function') addGestaoCliente(e);
+    });
+    document.getElementById('gestao-clientes-list')?.addEventListener('click', (event) => {
+        const saveBtn = event.target.closest('.gestao-save-cliente');
+        if (saveBtn && typeof saveGestaoClienteRow === 'function') {
+            event.preventDefault();
+            saveGestaoClienteRow(saveBtn.closest('tr'), saveBtn);
+            return;
+        }
+
+        const deleteBtn = event.target.closest('.gestao-delete-cliente');
+        if (deleteBtn && typeof deleteGestaoClienteRow === 'function') {
+            event.preventDefault();
+            deleteGestaoClienteRow(deleteBtn.closest('tr'));
+        }
+    });
     document.getElementById('gestao-nav-usuarios')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoUsuariosPanel();
@@ -1036,4 +1108,277 @@ function bindGestaoEvents() {
     if (typeof bindMontagemProgramacaoEvents === 'function') {
         bindMontagemProgramacaoEvents();
     }
+}
+
+let parentProjectPickerCache = [];
+
+function renderParentProjectPickerList(projects = parentProjectPickerCache) {
+    const tbody = document.getElementById('parent-project-picker-list');
+    const searchInput = document.getElementById('parent-project-picker-search');
+    const filterText = (searchInput?.value || '').trim().toLowerCase();
+
+    if (!tbody) return;
+
+    const filtered = (projects || []).filter(proj => {
+        if (!filterText) return true;
+        const orderCode = String(proj.order?.orderCode || '').toLowerCase();
+        const projectCode = String(proj.projectCode || '').toLowerCase();
+        const name = String(proj.name || '').toLowerCase();
+        return orderCode.includes(filterText) || projectCode.includes(filterText) || name.includes(filterText);
+    });
+
+    if (!filtered.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="p-4 text-center text-slate-400">Nenhum projeto encontrado.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    filtered.forEach(proj => {
+        const tr = document.createElement('tr');
+        const orderCode = proj.order?.orderCode || '—';
+        const projectCode = proj.projectCode || '—';
+        const name = proj.name || '—';
+        const status = proj.projectStatus?.name || '—';
+
+        tr.innerHTML = `
+            <td class="p-2.5 font-mono font-medium text-slate-900">${escapeHtml(orderCode)}</td>
+            <td class="p-2.5 font-mono font-semibold text-indigo-700">${escapeHtml(projectCode)}</td>
+            <td class="p-2.5">${escapeHtml(name)}</td>
+            <td class="p-2.5 text-slate-500">${escapeHtml(status)}</td>
+            <td class="p-2.5 text-center">
+                <button type="button" class="select-parent-project-btn px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg text-xs font-medium transition-colors"
+                    data-project-code="${escapeHtml(projectCode)}">
+                    Selecionar
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('.select-parent-project-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const code = e.currentTarget.dataset.projectCode;
+            if (code) {
+                const parentInput = document.getElementById('gestao-project-parent-code');
+                if (parentInput) {
+                    parentInput.value = code;
+                }
+            }
+            toggleModal('parent-project-picker-modal', false);
+        });
+    });
+}
+
+async function openParentProjectPickerModal() {
+    let clientId = null;
+    let clientName = '';
+    let currentOrderId = null;
+
+    let activeOrder = null;
+    if (typeof editingGestaoOrderId !== 'undefined' && editingGestaoOrderId) {
+        activeOrder = gestaoOrdersCache.find(o => Number(o.id) === Number(editingGestaoOrderId));
+    }
+
+    if (activeOrder) {
+        currentOrderId = Number(activeOrder.id);
+        clientId = activeOrder.clientId;
+        clientName = activeOrder.cliente?.nome || activeOrder.clientName || '';
+    } else {
+        clientName = document.getElementById('gestao-order-client-name')?.value.trim()
+            || document.getElementById('ord-client')?.value.trim()
+            || '';
+    }
+
+    const titleEl = document.getElementById('parent-project-picker-client-title');
+    const tbody = document.getElementById('parent-project-picker-list');
+    const searchInput = document.getElementById('parent-project-picker-search');
+
+    if (searchInput) {
+        searchInput.value = '';
+    }
+
+    if (!tbody) return;
+
+    if (titleEl) {
+        titleEl.textContent = clientName ? `Cliente: ${clientName}` : 'Projetos do mesmo cliente';
+    }
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="5" class="p-4 text-center text-slate-400">Carregando projetos do cliente...</td>
+        </tr>
+    `;
+    toggleModal('parent-project-picker-modal', true);
+
+    let orderIds = [];
+
+    if (clientId) {
+        const { data: clientOrders } = await supabaseClient
+            .from('salesOrders')
+            .select('id')
+            .eq('clientId', clientId);
+        if (clientOrders?.length) {
+            orderIds = clientOrders.map(o => o.id);
+        }
+    }
+
+    if (!orderIds.length && clientName) {
+        const { data: nameOrders } = await supabaseClient
+            .from('salesOrders')
+            .select('id')
+            .ilike('clientName', clientName.trim());
+        if (nameOrders?.length) {
+            orderIds = nameOrders.map(o => o.id);
+        }
+    }
+
+    // Remover o ID do próprio pedido dos orderIds elegíveis para projeto pai
+    if (currentOrderId) {
+        orderIds = orderIds.filter(id => Number(id) !== currentOrderId);
+    }
+
+    if (!orderIds.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="p-4 text-center text-slate-400">Nenhum outro pedido encontrado para este cliente.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    let { data: projects, error } = await supabaseClient
+        .from('OrderProject')
+        .select('id, projectCode, name, orderId, isComplementar, projectStatus:OrderProjectStatus(name), order:salesOrders(orderCode, clientName)')
+        .in('orderId', orderIds)
+        .order('createdAt', { ascending: false });
+
+    if (error?.message?.includes('projectStatus')) {
+        ({ data: projects } = await supabaseClient
+            .from('OrderProject')
+            .select('id, projectCode, name, orderId, isComplementar, order:salesOrders(orderCode, clientName)')
+            .in('orderId', orderIds)
+            .order('createdAt', { ascending: false }));
+    }
+
+    const currentProjectDraftCode = document.getElementById('gestao-project-code')?.value.trim();
+    const availableProjects = (projects || []).filter(p => {
+        if (p.isComplementar) return false;
+        if (currentOrderId && Number(p.orderId) === currentOrderId) return false;
+        if (currentProjectDraftCode && String(p.projectCode) === String(currentProjectDraftCode)) return false;
+        return true;
+    });
+
+    parentProjectPickerCache = availableProjects;
+
+    if (!availableProjects.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" class="p-4 text-center text-slate-400">Nenhum projeto pai disponível em outros pedidos deste cliente.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    renderParentProjectPickerList(parentProjectPickerCache);
+
+    if (searchInput) {
+        searchInput.oninput = () => renderParentProjectPickerList(parentProjectPickerCache);
+    }
+}
+
+let clientePickerCache = [];
+let activeClientePickerCallback = null;
+
+async function openClientePickerModal(onSelectCallback) {
+    activeClientePickerCallback = onSelectCallback;
+    const searchInput = document.getElementById('cliente-picker-search');
+    const tbody = document.getElementById('cliente-picker-list');
+
+    if (searchInput) searchInput.value = '';
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="3" class="p-4 text-center text-slate-400">Carregando clientes ativos...</td>
+        </tr>
+    `;
+    toggleModal('cliente-picker-modal', true);
+
+    const { data: clientes, error } = await supabaseClient
+        .from('Cliente')
+        .select('id, nome, ativo')
+        .eq('ativo', true)
+        .order('nome', { ascending: true });
+
+    if (error || !clientes || !clientes.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="3" class="p-4 text-center text-slate-400">Nenhum cliente ativo cadastrado. Cadastre em Gestão → Cadastros → Clientes.</td>
+            </tr>
+        `;
+        clientePickerCache = [];
+        return;
+    }
+
+    clientePickerCache = clientes;
+    renderClientePickerList();
+
+    if (searchInput) {
+        searchInput.oninput = () => renderClientePickerList();
+    }
+}
+
+window.openClientePickerModal = openClientePickerModal;
+
+function renderClientePickerList() {
+    const tbody = document.getElementById('cliente-picker-list');
+    const searchInput = document.getElementById('cliente-picker-search');
+    const filterText = (searchInput?.value || '').trim().toLowerCase();
+
+    if (!tbody) return;
+
+    const filtered = (clientePickerCache || []).filter(c => {
+        if (!filterText) return true;
+        return (c.nome || '').toLowerCase().includes(filterText);
+    });
+
+    if (!filtered.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="3" class="p-4 text-center text-slate-400">Nenhum cliente ativo encontrado com o filtro informado.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = '';
+    filtered.forEach(cliente => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="p-2.5 font-mono text-slate-400">#${cliente.id}</td>
+            <td class="p-2.5 font-medium text-slate-900">${escapeHtml(cliente.nome)}</td>
+            <td class="p-2.5 text-center">
+                <button type="button" class="select-cliente-btn px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg text-xs font-medium transition-colors"
+                    data-cliente-id="${cliente.id}" data-cliente-nome="${escapeHtml(cliente.nome)}">
+                    Selecionar
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('.select-cliente-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const id = Number(e.currentTarget.dataset.clienteId);
+            const nome = e.currentTarget.dataset.clienteNome;
+            if (typeof activeClientePickerCallback === 'function') {
+                activeClientePickerCallback({ id, nome });
+            }
+            toggleModal('cliente-picker-modal', false);
+        });
+    });
 }
