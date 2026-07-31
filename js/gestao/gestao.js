@@ -297,44 +297,61 @@ function applyGestaoProjectStatusReadonly() {
 
 function bindGestaoComplementarToggle() {
     const checkbox = document.getElementById('gestao-project-complementar');
-    const parentInput = document.getElementById('gestao-project-parent-code');
+    const parentCodeInput = document.getElementById('gestao-project-parent-code');
+    const parentDisplayInput = document.getElementById('gestao-project-parent-display');
     const parentPickerBtn = document.getElementById('gestao-project-parent-picker-btn');
     const statusSelect = document.getElementById('gestao-project-status');
-    if (!checkbox || !parentInput || !statusSelect) return;
+    const substituidoCheckbox = document.getElementById('gestao-project-substituido');
+    if (!checkbox || !statusSelect) return;
 
     const isComplementar = checkbox.checked;
-    parentInput.disabled = !isComplementar;
-    if (parentPickerBtn) {
-        parentPickerBtn.disabled = !isComplementar;
+
+    if (isComplementar && substituidoCheckbox?.checked) {
+        substituidoCheckbox.checked = false;
+        bindGestaoSubstituidoToggle();
     }
+
+    if (parentCodeInput) parentCodeInput.disabled = !isComplementar;
+    if (parentDisplayInput) parentDisplayInput.disabled = !isComplementar;
+    if (parentPickerBtn) parentPickerBtn.disabled = !isComplementar;
+
     if (!isComplementar) {
-        parentInput.value = '';
+        if (parentCodeInput) parentCodeInput.value = '';
+        if (parentDisplayInput) parentDisplayInput.value = '';
     }
-    parentInput.required = isComplementar;
     applyGestaoProjectStatusReadonly();
 }
 
 function bindGestaoSubstituidoToggle() {
     const checkbox = document.getElementById('gestao-project-substituido');
-    const replacementInput = document.getElementById('gestao-project-substituido-por-code');
+    const replacementCodeInput = document.getElementById('gestao-project-substituido-por-code');
+    const replacementDisplayInput = document.getElementById('gestao-project-substituido-por-display');
+    const replacementPickerBtn = document.getElementById('gestao-project-substituido-por-picker-btn');
     const statusSelect = document.getElementById('gestao-project-status');
     const complementarCheckbox = document.getElementById('gestao-project-complementar');
-    if (!checkbox || !replacementInput || !statusSelect) return;
+    if (!checkbox || !statusSelect) return;
 
     const isSubstituido = checkbox.checked;
-    replacementInput.disabled = !isSubstituido;
-    if (!isSubstituido) {
-        replacementInput.value = '';
+
+    if (isSubstituido && complementarCheckbox?.checked) {
+        complementarCheckbox.checked = false;
+        bindGestaoComplementarToggle();
     }
-    replacementInput.required = isSubstituido;
+
+    if (replacementCodeInput) replacementCodeInput.disabled = !isSubstituido;
+    if (replacementDisplayInput) replacementDisplayInput.disabled = !isSubstituido;
+    if (replacementPickerBtn) replacementPickerBtn.disabled = !isSubstituido;
+
+    if (!isSubstituido) {
+        if (replacementCodeInput) replacementCodeInput.value = '';
+        if (replacementDisplayInput) replacementDisplayInput.value = '';
+    }
 
     if (isSubstituido) {
         const substituidoStatusId = getSubstituidoStatusId(gestaoProjectStatusesCache);
         if (substituidoStatusId) {
             statusSelect.value = String(substituidoStatusId);
         }
-        if (complementarCheckbox) complementarCheckbox.checked = false;
-        bindGestaoComplementarToggle();
     }
     applyGestaoProjectStatusReadonly();
 }
@@ -398,16 +415,35 @@ function resetGestaoProjectForm() {
     document.getElementById('gestao-project-form')?.reset();
     populateGestaoProjectFormSelects();
     const parentCodeInput = document.getElementById('gestao-project-parent-code');
+    const parentDisplayInput = document.getElementById('gestao-project-parent-display');
     const parentPickerBtn = document.getElementById('gestao-project-parent-picker-btn');
     if (parentCodeInput) {
+        parentCodeInput.value = '';
         parentCodeInput.disabled = true;
-        parentCodeInput.required = false;
+    }
+    if (parentDisplayInput) {
+        parentDisplayInput.value = '';
+        parentDisplayInput.disabled = true;
     }
     if (parentPickerBtn) {
         parentPickerBtn.disabled = true;
     }
-    document.getElementById('gestao-project-substituido-por-code').disabled = true;
-    document.getElementById('gestao-project-substituido-por-code').required = false;
+
+    const replacementCodeInput = document.getElementById('gestao-project-substituido-por-code');
+    const replacementDisplayInput = document.getElementById('gestao-project-substituido-por-display');
+    const replacementPickerBtn = document.getElementById('gestao-project-substituido-por-picker-btn');
+    if (replacementCodeInput) {
+        replacementCodeInput.value = '';
+        replacementCodeInput.disabled = true;
+    }
+    if (replacementDisplayInput) {
+        replacementDisplayInput.value = '';
+        replacementDisplayInput.disabled = true;
+    }
+    if (replacementPickerBtn) {
+        replacementPickerBtn.disabled = true;
+    }
+
     document.getElementById('gestao-project-substituido').checked = false;
     document.getElementById('btn-gestao-remove-project')?.classList.add('hidden');
     if (typeof resetGestaoProjectCharacteristicsForm === 'function') {
@@ -418,6 +454,42 @@ function resetGestaoProjectForm() {
     syncGestaoProjectPhaseFieldVisibility();
 }
 
+async function lookupAndSetParentProjectDisplay(parentCode) {
+    if (!parentCode) return;
+    const { data: parentProj } = await supabaseClient
+        .from('OrderProject')
+        .select('id, projectCode, name, order:salesOrders(orderCode)')
+        .eq('projectCode', parentCode)
+        .maybeSingle();
+
+    if (parentProj) {
+        const orderCode = parentProj.order?.orderCode || '';
+        const name = parentProj.name || '';
+        const displayEl = document.getElementById('gestao-project-parent-display');
+        if (displayEl && document.getElementById('gestao-project-parent-code')?.value === parentCode) {
+            displayEl.value = (orderCode && name) ? `${orderCode} - ${name}` : (name || parentCode);
+        }
+    }
+}
+
+async function lookupAndSetSubstituidoPorProjectDisplay(code) {
+    if (!code) return;
+    const { data: proj } = await supabaseClient
+        .from('OrderProject')
+        .select('id, projectCode, name, order:salesOrders(orderCode)')
+        .eq('projectCode', code)
+        .maybeSingle();
+
+    if (proj) {
+        const orderCode = proj.order?.orderCode || '';
+        const name = proj.name || '';
+        const displayEl = document.getElementById('gestao-project-substituido-por-display');
+        if (displayEl && document.getElementById('gestao-project-substituido-por-code')?.value === code) {
+            displayEl.value = (orderCode && name) ? `${orderCode} - ${name}` : (name || code);
+        }
+    }
+}
+
 function fillGestaoProjectForm(project = {}) {
     document.getElementById('gestao-project-code').value = normalizeProjectCodeInput(project.projectCode || '');
     document.getElementById('gestao-project-name').value = project.name || '';
@@ -425,13 +497,61 @@ function fillGestaoProjectForm(project = {}) {
     document.getElementById('gestao-project-delivery').value = toGestaoInputDate(project.deliveryDate);
     document.getElementById('gestao-project-caminho-rede-aprovacao').value = project.caminhoRedeAprovacao || '';
     document.getElementById('gestao-project-complementar').checked = Boolean(project.isComplementar);
-    document.getElementById('gestao-project-parent-code').value = normalizeProjectCodeInput(
+    
+    const parentCode = normalizeProjectCodeInput(
         project.parentProject?.projectCode || project.parentProjectCode || ''
     );
+    const parentOrderCode = project.parentProject?.order?.orderCode || project.parentOrderCode || '';
+    const parentName = project.parentProject?.name || project.parentName || '';
+
+    if (document.getElementById('gestao-project-parent-code')) {
+        document.getElementById('gestao-project-parent-code').value = parentCode;
+    }
+
+    const parentDisplayEl = document.getElementById('gestao-project-parent-display');
+    if (parentDisplayEl) {
+        if (!parentCode) {
+            parentDisplayEl.value = '';
+        } else if (parentOrderCode && parentName) {
+            parentDisplayEl.value = `${parentOrderCode} - ${parentName}`;
+        } else if (parentName) {
+            parentDisplayEl.value = parentName;
+        } else {
+            parentDisplayEl.value = parentCode;
+        }
+    }
+
+    if (parentCode && (!parentOrderCode || !parentName)) {
+        lookupAndSetParentProjectDisplay(parentCode);
+    }
+
     document.getElementById('gestao-project-substituido').checked = Boolean(project.isSubstituido);
-    document.getElementById('gestao-project-substituido-por-code').value = normalizeProjectCodeInput(
+    const replacementCode = normalizeProjectCodeInput(
         project.substituidoPorProject?.projectCode || project.substituidoPorProjectCode || ''
     );
+    const replacementOrderCode = project.substituidoPorProject?.order?.orderCode || project.substituidoPorOrderCode || '';
+    const replacementName = project.substituidoPorProject?.name || project.substituidoPorName || '';
+
+    if (document.getElementById('gestao-project-substituido-por-code')) {
+        document.getElementById('gestao-project-substituido-por-code').value = replacementCode;
+    }
+
+    const replacementDisplayEl = document.getElementById('gestao-project-substituido-por-display');
+    if (replacementDisplayEl) {
+        if (!replacementCode) {
+            replacementDisplayEl.value = '';
+        } else if (replacementOrderCode && replacementName) {
+            replacementDisplayEl.value = `${replacementOrderCode} - ${replacementName}`;
+        } else if (replacementName) {
+            replacementDisplayEl.value = replacementName;
+        } else {
+            replacementDisplayEl.value = replacementCode;
+        }
+    }
+
+    if (replacementCode && (!replacementOrderCode || !replacementName)) {
+        lookupAndSetSubstituidoPorProjectDisplay(replacementCode);
+    }
 
     populateGestaoProjectFormSelects(project);
     populateGestaoProjectPhaseSelect(project.deliveryPhaseId || '');
@@ -702,20 +822,24 @@ async function saveGestaoProjectDraftAsync() {
     }
 
     try {
-        if (project.id
-            && editingGestaoOrderId
-            && typeof applyGestaoProjectDeliveryPhaseUpdate === 'function'
-            && hasGestaoOrderMultiplePhases()) {
-            await applyGestaoProjectDeliveryPhaseUpdate(project.id, project.deliveryPhaseId);
-        }
-
-        if (project.id
-            && Array.isArray(project.characteristicIds)
-            && typeof replaceOrderProjectCharacteristics === 'function') {
-            await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
+        if (editingGestaoOrderId && typeof persistGestaoProjects === 'function') {
+            await persistGestaoProjects(editingGestaoOrderId, gestaoOrderProjectsDraft);
+            if (typeof fetchGestaoOrderProjects === 'function') {
+                const map = await fetchGestaoOrderProjects([editingGestaoOrderId]);
+                const freshProjects = map[editingGestaoOrderId] || [];
+                if (freshProjects.length && typeof setGestaoOrderProjectsDraft === 'function') {
+                    setGestaoOrderProjectsDraft(freshProjects);
+                }
+            }
+        } else {
+            if (project.id
+                && Array.isArray(project.characteristicIds)
+                && typeof replaceOrderProjectCharacteristics === 'function') {
+                await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
+            }
         }
     } catch (error) {
-        alertAppDialog(`Erro ao salvar projeto: ${error.message}`);
+        alertAppDialog(`Erro ao salvar projeto no banco: ${error.message}`);
         return;
     }
 
@@ -735,6 +859,23 @@ async function removeGestaoProjectDraft() {
     if (!confirmed) return;
 
     gestaoOrderProjectsDraft.splice(editingGestaoProjectDraftIndex, 1);
+
+    if (editingGestaoOrderId && typeof persistGestaoProjects === 'function') {
+        try {
+            await persistGestaoProjects(editingGestaoOrderId, gestaoOrderProjectsDraft);
+            if (typeof fetchGestaoOrderProjects === 'function') {
+                const map = await fetchGestaoOrderProjects([editingGestaoOrderId]);
+                const freshProjects = map[editingGestaoOrderId] || [];
+                if (typeof setGestaoOrderProjectsDraft === 'function') {
+                    setGestaoOrderProjectsDraft(freshProjects);
+                }
+            }
+        } catch (error) {
+            alertAppDialog(`Erro ao remover projeto no banco: ${error.message}`);
+            return;
+        }
+    }
+
     editingGestaoProjectDraftIndex = null;
     renderGestaoProjectsSummaryList();
     showGestaoPedidoFormPanel();
@@ -1017,7 +1158,18 @@ function bindGestaoEvents() {
         loadGestaoProjectCharacteristicsList();
     });
     document.getElementById('gestao-new-characteristic-form')?.addEventListener('submit', addGestaoProjectCharacteristic);
-    document.getElementById('gestao-project-parent-picker-btn')?.addEventListener('click', openParentProjectPickerModal);
+    document.getElementById('gestao-project-parent-picker-btn')?.addEventListener('click', () => openProjectRelationPickerModal('parent'));
+    document.getElementById('gestao-project-parent-display')?.addEventListener('click', () => {
+        if (!document.getElementById('gestao-project-parent-display')?.disabled) {
+            openProjectRelationPickerModal('parent');
+        }
+    });
+    document.getElementById('gestao-project-substituido-por-picker-btn')?.addEventListener('click', () => openProjectRelationPickerModal('substituido'));
+    document.getElementById('gestao-project-substituido-por-display')?.addEventListener('click', () => {
+        if (!document.getElementById('gestao-project-substituido-por-display')?.disabled) {
+            openProjectRelationPickerModal('substituido');
+        }
+    });
     document.getElementById('gestao-new-cliente-form')?.addEventListener('submit', (e) => {
         if (typeof addGestaoCliente === 'function') addGestaoCliente(e);
     });
@@ -1151,7 +1303,9 @@ function renderParentProjectPickerList(projects = parentProjectPickerCache) {
             <td class="p-2.5 text-slate-500">${escapeHtml(status)}</td>
             <td class="p-2.5 text-center">
                 <button type="button" class="select-parent-project-btn px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg text-xs font-medium transition-colors"
-                    data-project-code="${escapeHtml(projectCode)}">
+                    data-project-code="${escapeHtml(projectCode)}"
+                    data-order-code="${escapeHtml(orderCode)}"
+                    data-project-name="${escapeHtml(name)}">
                     Selecionar
                 </button>
             </td>
@@ -1162,18 +1316,44 @@ function renderParentProjectPickerList(projects = parentProjectPickerCache) {
     tbody.querySelectorAll('.select-parent-project-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const code = e.currentTarget.dataset.projectCode;
-            if (code) {
-                const parentInput = document.getElementById('gestao-project-parent-code');
-                if (parentInput) {
-                    parentInput.value = code;
-                }
+            const orderCode = e.currentTarget.dataset.orderCode;
+            const name = e.currentTarget.dataset.projectName;
+            const displayVal = (orderCode && name) ? `${orderCode} - ${name}` : (name || code || '');
+
+            if (currentProjectPickerTarget === 'substituido') {
+                const codeInput = document.getElementById('gestao-project-substituido-por-code');
+                const displayInput = document.getElementById('gestao-project-substituido-por-display');
+                if (codeInput) codeInput.value = code || '';
+                if (displayInput) displayInput.value = displayVal;
+            } else {
+                const parentCodeInput = document.getElementById('gestao-project-parent-code');
+                const parentDisplayInput = document.getElementById('gestao-project-parent-display');
+                if (parentCodeInput) parentCodeInput.value = code || '';
+                if (parentDisplayInput) parentDisplayInput.value = displayVal;
             }
             toggleModal('parent-project-picker-modal', false);
         });
     });
 }
 
+let currentProjectPickerTarget = 'parent';
+
 async function openParentProjectPickerModal() {
+    return openProjectRelationPickerModal('parent');
+}
+
+async function openSubstituidoProjectPickerModal() {
+    return openProjectRelationPickerModal('substituido');
+}
+
+async function openProjectRelationPickerModal(target = 'parent') {
+    currentProjectPickerTarget = target;
+    const modalTitleHeader = document.querySelector('#parent-project-picker-modal h3');
+    if (modalTitleHeader) {
+        modalTitleHeader.textContent = target === 'substituido'
+            ? 'Selecionar Projeto Substituto'
+            : 'Selecionar Projeto Pai';
+    }
     let clientId = null;
     let clientName = '';
     let currentOrderId = null;
