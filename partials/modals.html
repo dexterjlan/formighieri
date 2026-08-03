@@ -382,10 +382,6 @@
                     <span id="anteprojeto-modal-consultant-name">—</span>
                 </p>
             </div>
-            <div id="anteprojeto-modal-history-wrap" class="hidden mb-4 pb-3 border-b border-slate-100 space-y-2">
-                <p class="text-xs font-semibold text-slate-500 uppercase">Histórico de devoluções ao consultor</p>
-                <div id="anteprojeto-modal-history-list" class="space-y-2 max-h-40 overflow-y-auto"></div>
-            </div>
             <form id="anteprojeto-form" class="space-y-4">
                 <div id="anteprojeto-designer-wrap">
                     <label class="block text-xs font-semibold text-slate-500 mb-1">Projetista <span class="text-red-500">*</span></label>
@@ -404,6 +400,20 @@
                     <textarea id="anteprojeto-conference-observation" rows="3"
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-sky-600 resize-y"
                         placeholder="Observações gerais sobre esta conferência de anteprojeto"></textarea>
+                </div>
+                <div id="anteprojeto-gestor-observation-wrap" class="hidden">
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-xs font-semibold text-amber-800" for="anteprojeto-gestor-observation">
+                            Última Observação do Gestor
+                        </label>
+                        <button type="button" id="btn-anteprojeto-view-history"
+                            class="text-[11px] font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 border border-amber-300 px-2.5 py-0.5 rounded-md transition-colors">
+                            Histórico
+                        </button>
+                    </div>
+                    <textarea id="anteprojeto-gestor-observation" rows="3" readonly
+                        class="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg bg-amber-50/60 text-slate-700 font-medium resize-none cursor-not-allowed"
+                        placeholder="Nenhuma observação do gestor"></textarea>
                 </div>
                 <div class="space-y-3">
                     <div class="flex flex-wrap justify-between items-center gap-2">
@@ -451,18 +461,45 @@
 
     </div>
 
+    <!-- MODAL: HISTÓRICO DE DEVOLUÇÕES AO CONSULTOR -->
+    <div id="anteprojeto-history-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[75]">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl relative max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center pb-3 mb-3 border-b border-slate-100">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900">Histórico de devoluções ao consultor</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Histórico completo de observações enviadas pelo gestor.</p>
+                </div>
+                <button type="button" onclick="toggleModal('anteprojeto-history-modal', false)"
+                    class="text-slate-400 hover:text-slate-600 text-lg font-bold p-1">✕</button>
+            </div>
+            <div id="anteprojeto-history-modal-list" class="overflow-y-auto space-y-2 flex-1 pr-1"></div>
+            <div class="pt-3 mt-3 border-t border-slate-100 flex justify-end">
+                <button type="button" onclick="toggleModal('anteprojeto-history-modal', false)"
+                    class="bg-slate-100 text-slate-600 px-4 py-1.5 rounded-lg text-xs font-medium hover:bg-slate-200">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: CARACTERÍSTICAS DO PROJETO (CONFERÊNCIA) -->
     <div id="project-characteristics-modal"
-        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] flex flex-col">
-            <h3 class="font-bold text-base text-slate-900 mb-1">Características dos projetos</h3>
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[75]">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] flex flex-col relative">
+            <div class="flex justify-between items-start mb-1">
+                <h3 class="font-bold text-base text-slate-900">Características dos projetos</h3>
+                <button type="button" onclick="closeProjectCharacteristicsModal()"
+                    class="text-slate-400 hover:text-slate-600 text-lg font-bold p-1">✕</button>
+            </div>
             <p id="project-characteristics-modal-subtitle" class="text-xs text-slate-500 mb-4"></p>
             <form id="project-characteristics-form" class="flex flex-col min-h-0 flex-1">
                 <div id="project-characteristics-modal-content"
                     class="project-characteristics-modal-content overflow-y-auto space-y-4 pr-1"></div>
                 <div class="flex gap-2 pt-4 mt-4 border-t border-slate-100 shrink-0">
                     <button type="button" id="btn-project-characteristics-cancel"
-                        class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
+                        onclick="closeProjectCharacteristicsModal()"
+                        class="flex-1 bg-slate-100 text-slate-600 hover:bg-slate-200 py-2 rounded-lg text-xs font-medium">Cancelar</button>
                     <button type="submit"
                         class="flex-1 bg-indigo-700 text-white py-2 rounded-lg text-xs font-medium hover:bg-indigo-800">
                         Salvar e continuar

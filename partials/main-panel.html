@@ -141,10 +141,32 @@
             <!-- 2. TELA / COLUNA DE PEDIDOS -->
             <section
                 class="fm-orders-panel app-panel-height bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50 space-y-3">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 space-y-2.5">
                     <h2 class="font-bold text-sm text-slate-900">Pedidos de Venda</h2>
                     <input type="text" id="filter-order-client" placeholder="Filtrar por cliente..."
                         class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                    <div class="flex items-center gap-2">
+                        <select id="sort-order-field"
+                            class="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:border-amber-600 font-medium">
+                            <option value="orderCode" selected>Código</option>
+                            <option value="clientName">Nome</option>
+                            <option value="clientDeliveryDate">Data Entrega</option>
+                        </select>
+                        <div class="flex border border-slate-200 rounded-lg overflow-hidden bg-white shrink-0 shadow-xs">
+                            <button type="button" id="btn-sort-order-asc" title="Ordenar Ascendente (↑)"
+                                class="p-1.5 bg-amber-100 text-amber-800 focus:outline-none border-r border-slate-200 transition-colors">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/>
+                                </svg>
+                            </button>
+                            <button type="button" id="btn-sort-order-desc" title="Ordenar Descendente (↓)"
+                                class="p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none transition-colors">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
                     <label id="filter-order-mine-wrap"
                         class="hidden flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
                         <input type="checkbox" id="filter-order-mine"

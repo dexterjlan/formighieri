@@ -55,6 +55,7 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
             : 'bg-sky-100 text-sky-800';
     const sketchUpPath = getConferenceSketchUpPath(conference);
     const conferenceObservation = conference.conferenceObservation || '';
+    const gestorObservation = conference.gestorObservation || '';
     const projectCount = (conference.conferenceProjects || []).length;
     const moduleCount = getConferenceModules(conference).length;
 
@@ -68,7 +69,9 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
             <div class="flex-1 min-w-0 space-y-0.5">
                 <div class="flex flex-wrap items-center gap-2">
                     <span class="text-xs font-bold text-slate-800">👤 ${escapeHtml(projetistaName)}</span>
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(conference.status)}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
+                        ${escapeHtml(conference.status || '—')}
+                    </span>
                 </div>
                 <div class="text-[10px] text-slate-500">
                     Conferidas: ${checkedCount}/${moduleObservations.length}
@@ -85,6 +88,12 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
             <div class="text-[10px] font-semibold text-slate-500 uppercase mb-1">Observação da conferência</div>
             <div class="text-xs text-slate-700 whitespace-pre-wrap">${escapeHtml(conferenceObservation || '—')}</div>
         </div>
+        ${gestorObservation ? `
+        <div class="text-left border border-amber-200 rounded-lg px-3 py-2 bg-amber-50/70">
+            <div class="text-[10px] font-semibold text-amber-800 uppercase mb-1">Última Observação do Gestor</div>
+            <div class="text-xs text-slate-700 whitespace-pre-wrap">${escapeHtml(gestorObservation)}</div>
+        </div>
+        ` : ''}
         <div class="text-xs text-slate-600 text-left">
             <span class="font-semibold text-slate-500">SketchUp:</span> ${escapeHtml(sketchUpPath || '—')}
         </div>

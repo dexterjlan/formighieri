@@ -272,6 +272,60 @@ async function loadOrders() {
     renderOrdersList();
 }
 
+let currentOrdersSortField = 'orderCode';
+let currentOrdersSortDirection = 'desc';
+
+function getOrdersSortPrefKey(keyName) {
+    const userId = currentUser?.id || 'guest';
+    return `fgp_orders_sort_${keyName}_${userId}`;
+}
+
+function loadOrdersSortPreferences() {
+    try {
+        const savedField = localStorage.getItem(getOrdersSortPrefKey('field'));
+        const savedDir = localStorage.getItem(getOrdersSortPrefKey('direction'));
+        if (savedField && ['orderCode', 'clientName', 'clientDeliveryDate'].includes(savedField)) {
+            currentOrdersSortField = savedField;
+        }
+        if (savedDir && ['asc', 'desc'].includes(savedDir)) {
+            currentOrdersSortDirection = savedDir;
+        }
+    } catch (e) {
+        console.warn('loadOrdersSortPreferences error:', e);
+    }
+}
+
+function saveOrdersSortPreferences() {
+    try {
+        localStorage.setItem(getOrdersSortPrefKey('field'), currentOrdersSortField);
+        localStorage.setItem(getOrdersSortPrefKey('direction'), currentOrdersSortDirection);
+    } catch (e) {
+        console.warn('saveOrdersSortPreferences error:', e);
+    }
+}
+
+function setOrdersSortDirection(direction) {
+    if (direction !== 'asc' && direction !== 'desc') return;
+    currentOrdersSortDirection = direction;
+    saveOrdersSortPreferences();
+    updateOrdersSortButtonsUI();
+    renderOrdersList();
+}
+
+function updateOrdersSortButtonsUI() {
+    const btnAsc = document.getElementById('btn-sort-order-asc');
+    const btnDesc = document.getElementById('btn-sort-order-desc');
+    if (!btnAsc || !btnDesc) return;
+
+    if (currentOrdersSortDirection === 'asc') {
+        btnAsc.className = 'p-1.5 bg-amber-100 text-amber-800 focus:outline-none border-r border-slate-200 transition-colors';
+        btnDesc.className = 'p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none transition-colors';
+    } else {
+        btnAsc.className = 'p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none border-r border-slate-200 transition-colors';
+        btnDesc.className = 'p-1.5 bg-amber-100 text-amber-800 focus:outline-none transition-colors';
+    }
+}
+
 function renderOrdersList() {
     const list = document.getElementById("orders-list");
     list.innerHTML = "";
@@ -280,13 +334,42 @@ function renderOrdersList() {
     const filterMine = document.getElementById('filter-order-mine')?.checked
         && currentUser?.role === 'Consultor';
 
-    let orders = ordersCache;
+    loadOrdersSortPreferences();
+    const sortFieldEl = document.getElementById('sort-order-field');
+    if (sortFieldEl && sortFieldEl.value !== currentOrdersSortField) {
+        sortFieldEl.value = currentOrdersSortField;
+    }
+    updateOrdersSortButtonsUI();
+
+    let orders = [...ordersCache];
     if (filterMine) {
         orders = orders.filter(o => isCurrentUserOrderConsultor(o.consultantName, o.consultantUserId));
     }
     if (filter) {
         orders = orders.filter(o => (o.clientName || '').toLowerCase().includes(filter));
     }
+
+    orders.sort((a, b) => {
+        let cmp = 0;
+        if (currentOrdersSortField === 'clientName') {
+            cmp = (a.clientName || '').localeCompare(b.clientName || '', 'pt-BR', { sensitivity: 'base' });
+        } else if (currentOrdersSortField === 'clientDeliveryDate') {
+            const hasA = Boolean(a.clientDeliveryDate);
+            const hasB = Boolean(b.clientDeliveryDate);
+            if (hasA && hasB) {
+                cmp = new Date(a.clientDeliveryDate).getTime() - new Date(b.clientDeliveryDate).getTime();
+            } else if (hasA) {
+                cmp = -1;
+            } else if (hasB) {
+                cmp = 1;
+            } else {
+                cmp = 0;
+            }
+        } else if (currentOrdersSortField === 'orderCode') {
+            cmp = (a.orderCode || '').localeCompare(b.orderCode || '', 'pt-BR', { numeric: true });
+        }
+        return currentOrdersSortDirection === 'asc' ? cmp : -cmp;
+    });
 
     if (orders.length === 0) {
         const hasFilter = filter || filterMine;
@@ -590,6 +673,13 @@ function bindOrderEvents() {
 
     document.getElementById('filter-order-client').addEventListener('input', renderOrdersList);
     document.getElementById('filter-order-mine')?.addEventListener('change', renderOrdersList);
+    document.getElementById('sort-order-field')?.addEventListener('change', function () {
+        currentOrdersSortField = this.value || 'orderCode';
+        saveOrdersSortPreferences();
+        renderOrdersList();
+    });
+    document.getElementById('btn-sort-order-asc')?.addEventListener('click', () => setOrdersSortDirection('asc'));
+    document.getElementById('btn-sort-order-desc')?.addEventListener('click', () => setOrdersSortDirection('desc'));
 
     document.getElementById("ord-code").addEventListener("input", async function () {
         this.value = this.value.replace(/\D/g, '');

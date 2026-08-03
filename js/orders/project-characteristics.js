@@ -258,10 +258,25 @@ async function renderProjectViewCharacteristics(projectId) {
     wrapEl.classList.remove('hidden');
 }
 
-function getConferenceProjectsForCharacteristics(conference) {
-    return (conference?.conferenceProjects || [])
-        .map(entry => entry.orderProject || { id: entry.orderProjectId })
-        .filter(project => project?.id);
+async function getConferenceProjectsForCharacteristics(conference) {
+    if (!conference) return [];
+
+    let projects = [];
+    if (Array.isArray(conference.conferenceProjects) && conference.conferenceProjects.length) {
+        projects = conference.conferenceProjects
+            .map(entry => entry.orderProject || { id: entry.orderProjectId || entry.orderProject?.id })
+            .filter(p => p && p.id);
+    }
+
+    if (!projects.length && Array.isArray(conference.projects) && conference.projects.length) {
+        projects = conference.projects.filter(p => p && p.id);
+    }
+
+    if (!projects.length && conference.orderId && typeof resolveOrderProjectsForOrder === 'function') {
+        projects = await resolveOrderProjectsForOrder(conference.orderId);
+    }
+
+    return projects;
 }
 
 function getProjectCharacteristicLabel(project) {
@@ -269,16 +284,21 @@ function getProjectCharacteristicLabel(project) {
     return project.name || `Projeto #${project.id}`;
 }
 
-function renderProjectCharacteristicsModalContent(conference, characteristics, existingByProjectId) {
-    const projects = getConferenceProjectsForCharacteristics(conference);
-    if (!projects.length) {
+function renderProjectCharacteristicsModalContent(projects, characteristics, existingByProjectId) {
+    if (!projects || !projects.length) {
         return '<p class="text-xs text-slate-500">Nenhum projeto na conferência.</p>';
     }
 
     return projects.map(project => {
         const projectId = Number(project.id);
         const existingRows = existingByProjectId.get(projectId) || [];
-        const existingIds = new Set(existingRows.map(row => Number(row.characteristicId)));
+        let existingIds = new Set(existingRows.map(row => Number(row.characteristicId)));
+
+        if (!existingIds.size && Array.isArray(project.characteristicIds) && project.characteristicIds.length > 0) {
+            existingIds = new Set(project.characteristicIds.map(id => Number(id)));
+        }
+
+        const isNoneSelected = existingByProjectId.has(projectId) && existingIds.size === 0;
 
         const optionsHtml = characteristics.map(characteristic => `
             <label class="project-characteristic-option">
@@ -296,7 +316,8 @@ function renderProjectCharacteristicsModalContent(conference, characteristics, e
                 <input type="checkbox"
                     class="project-characteristic-none h-4 w-4 rounded border-slate-300 text-slate-500 focus:ring-slate-400"
                     data-project-id="${projectId}"
-                    value="${PROJECT_CHARACTERISTIC_NONE_VALUE}">
+                    value="${PROJECT_CHARACTERISTIC_NONE_VALUE}"
+                    ${isNoneSelected ? 'checked' : ''}>
                 <span>Nenhuma</span>
             </label>
         `;
@@ -385,7 +406,8 @@ async function openProjectCharacteristicsModalForConference(conference, onComple
         return false;
     }
 
-    const projectIds = getConferenceProjectsForCharacteristics(conference).map(project => Number(project.id));
+    const projects = await getConferenceProjectsForCharacteristics(conference);
+    const projectIds = projects.map(project => Number(project.id)).filter(Boolean);
     const existingByProjectId = await fetchOrderProjectCharacteristicsMap(projectIds);
     const content = document.getElementById('project-characteristics-modal-content');
     const subtitle = document.getElementById('project-characteristics-modal-subtitle');
@@ -395,7 +417,7 @@ async function openProjectCharacteristicsModalForConference(conference, onComple
     }
 
     if (content) {
-        content.innerHTML = renderProjectCharacteristicsModalContent(conference, characteristics, existingByProjectId);
+        content.innerHTML = renderProjectCharacteristicsModalContent(projects, characteristics, existingByProjectId);
         bindProjectCharacteristicsModalInteractions();
     }
 
@@ -429,14 +451,23 @@ async function saveProjectCharacteristicsModal(event) {
     }
 }
 
-function bindProjectCharacteristicsEvents() {
-    document.getElementById('project-characteristics-form')?.addEventListener('submit', saveProjectCharacteristicsModal);
-    document.getElementById('btn-project-characteristics-cancel')?.addEventListener('click', () => {
-        pendingConferenceCharacteristicsConfirm = null;
-        toggleModal('project-characteristics-modal', false);
-    });
+function closeProjectCharacteristicsModal() {
+    pendingConferenceCharacteristicsConfirm = null;
+    toggleModal('project-characteristics-modal', false);
+    if (typeof setAnteprojetoConferenceActionLoading === 'function') {
+        setAnteprojetoConferenceActionLoading(false);
+    }
+    if (typeof refreshAnteprojetoModalConfirmButton === 'function') {
+        refreshAnteprojetoModalConfirmButton();
+    }
 }
 
+function bindProjectCharacteristicsEvents() {
+    document.getElementById('project-characteristics-form')?.addEventListener('submit', saveProjectCharacteristicsModal);
+    document.getElementById('btn-project-characteristics-cancel')?.addEventListener('click', closeProjectCharacteristicsModal);
+}
+
+window.closeProjectCharacteristicsModal = closeProjectCharacteristicsModal;
 window.openProjectCharacteristicsModalForConference = openProjectCharacteristicsModalForConference;
 window.fetchOrderProjectCharacteristicsMap = fetchOrderProjectCharacteristicsMap;
 window.renderProjectViewCharacteristics = renderProjectViewCharacteristics;

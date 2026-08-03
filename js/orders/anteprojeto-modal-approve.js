@@ -171,7 +171,7 @@ async function showAnteprojetoApproveDeliveryModal(conferenceId) {
     }
 
     if (!canApproveAnteprojetoConference(conference)) {
-        alertAppDialog('Somente o gestor comercial pode aprovar a conferência.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente o gestor comercial ou admin pode aprovar a conferência.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -378,7 +378,7 @@ async function approveAnteprojetoConference(conferenceId) {
     if (!conference) return;
 
     if (!canApproveAnteprojetoConference(conference)) {
-        alertAppDialog('Somente Admin com flag Gestor comercial pode aprovar a conferência.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente o gestor comercial ou admin pode aprovar a conferência.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -421,7 +421,7 @@ async function approveAnteprojetoConference(conferenceId) {
             await notifyConferenciaAprovadaEmail({
                 orderId: conference.orderId,
                 orderProjectIds: getConferenceOrderProjectIds(conference),
-                caminhoRede: selections?.conferencePath || conference?.caminhoRede || ''
+                caminhoRede: conference?.caminhoRede || ''
             });
         }
 

@@ -54,12 +54,14 @@ function canConfirmAnteprojetoConference(conference) {
 
 function canApproveAnteprojetoConference(conference) {
     if (!conference || conference.status !== 'Confirmada') return false;
-    if (!isGestorComercial()) return false;
-    return true;
+    if (currentUser?.role === 'Admin') return true;
+    return isGestorComercial();
 }
 
 function canReturnAnteprojetoConferenceToConsultor(conference) {
-    return canApproveAnteprojetoConference(conference);
+    if (!conference || conference.status !== 'Confirmada') return false;
+    if (currentUser?.role === 'Admin') return true;
+    return isGestorComercial();
 }
 
 function getConferenceModules(conference) {

@@ -1248,10 +1248,17 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 <td class="p-3">
-                    <select class="pendencias-fabrica-marceneiro w-full min-w-[140px] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-orange-600"
-                        ${canAct ? '' : 'disabled'}>
-                        ${getPendenciasFabricaMarceneiroOptionsHtml(project.marceneiroId)}
-                    </select>
+                    <div class="flex items-center gap-1.5 min-w-[210px]">
+                        <select class="pendencias-fabrica-marceneiro flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-orange-600"
+                            data-project-id="${project.id}" ${canAct ? '' : 'disabled'}>
+                            ${getPendenciasFabricaMarceneiroOptionsHtml(project.marceneiroId)}
+                        </select>
+                        ${canAct ? `<button type="button"
+                            class="pendencias-trocar-marceneiro-btn text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-300 px-2 py-1.5 rounded-lg font-medium border border-slate-200 transition shrink-0"
+                            data-project-id="${project.id}">
+                            Trocar
+                        </button>` : ''}
+                    </div>
                 </td>
                 <td class="p-3">
                     <input type="date" class="pendencias-fabrica-inicio w-full min-w-[130px] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-orange-600"
@@ -1298,6 +1305,12 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
     content.querySelector('#btn-pendencias-refresh-aguardando-montagem-interna')
         ?.addEventListener('click', () => loadPendenciasAguardandoMontagemInterna());
 
+    content.querySelectorAll('.pendencias-trocar-marceneiro-btn').forEach(button => {
+        button.addEventListener('click', async () => {
+            changePendenciasProjectMarceneiro(Number(button.dataset.projectId));
+        });
+    });
+
     content.querySelectorAll('.pendencias-fabrica-inicio-btn').forEach(button => {
         button.addEventListener('click', async () => {
             savePendenciasFabricaInicioMontagem(Number(button.dataset.projectId));
@@ -1319,7 +1332,6 @@ function renderPendenciasEmMontagemList(projects) {
         const orderCode = project.order?.orderCode || '—';
         const clientName = project.order?.clientName || '—';
         const projectLabel = getPendenciasFabricaProjectLabel(project);
-        const marceneiroName = getPendenciasFabricaMarceneiroName(project);
         const inicioDisplay = formatPendenciasFabricaDisplayDate(project.inicioMontagemInterna);
         const fimValue = project.fimMontagemInterna
             ? String(project.fimMontagemInterna).split('T')[0]
@@ -1337,7 +1349,19 @@ function renderPendenciasEmMontagemList(projects) {
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(marceneiroName)}</td>
+                <td class="p-3">
+                    <div class="flex items-center gap-1.5 min-w-[210px]">
+                        <select class="pendencias-fabrica-marceneiro flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
+                            data-project-id="${project.id}" ${canAct ? '' : 'disabled'}>
+                            ${getPendenciasFabricaMarceneiroOptionsHtml(project.marceneiroId)}
+                        </select>
+                        ${canAct ? `<button type="button"
+                            class="pendencias-trocar-marceneiro-btn text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-300 px-2 py-1.5 rounded-lg font-medium border border-slate-200 transition shrink-0"
+                            data-project-id="${project.id}">
+                            Trocar
+                        </button>` : ''}
+                    </div>
+                </td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(inicioDisplay)}</td>
                 <td class="p-3">
                     <input type="date" class="pendencias-fabrica-fim w-full min-w-[130px] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
@@ -1362,7 +1386,7 @@ function renderPendenciasEmMontagemList(projects) {
             </div>
             ${projects.length
                 ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[980px]">
+                    <table class="w-full text-sm min-w-[1020px]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
@@ -1384,11 +1408,68 @@ function renderPendenciasEmMontagemList(projects) {
     content.querySelector('#btn-pendencias-refresh-em-montagem')
         ?.addEventListener('click', () => loadPendenciasEmMontagem());
 
+    content.querySelectorAll('.pendencias-trocar-marceneiro-btn').forEach(button => {
+        button.addEventListener('click', async () => {
+            changePendenciasProjectMarceneiro(Number(button.dataset.projectId));
+        });
+    });
+
     content.querySelectorAll('.pendencias-fabrica-fim-btn').forEach(button => {
         button.addEventListener('click', async () => {
             savePendenciasFabricaFimMontagem(Number(button.dataset.projectId));
         });
     });
+}
+
+async function changePendenciasProjectMarceneiro(projectId) {
+    if (!projectId) return;
+
+    if (!canActPendenciasGestorFabrica()) {
+        alertAppDialog('Sem permissão para alterar marceneiro.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const row = document.querySelector(`tr[data-pendencias-fabrica-project-id="${projectId}"]`);
+    const select = row?.querySelector('.pendencias-fabrica-marceneiro');
+    if (!select) return;
+
+    const newMarceneiroId = select.value ? Number(select.value) : null;
+
+    try {
+        setPendenciasActionLoading(true, 'Atualizando marceneiro do projeto...');
+        const { error } = await supabaseClient
+            .from('OrderProject')
+            .update({
+                marceneiroId: newMarceneiroId,
+                updatedAt: new Date().toISOString(),
+                updatedById: currentUser?.id || null
+            })
+            .eq('id', projectId);
+
+        if (error) throw error;
+
+        if (typeof gestaoOrdersCache !== 'undefined') {
+            const cachedProject = gestaoOrdersCache.flatMap(o => o.projects || []).find(p => Number(p.id) === Number(projectId));
+            if (cachedProject) {
+                cachedProject.marceneiroId = newMarceneiroId;
+            }
+        }
+
+        setPendenciasActionLoading(true, 'Marceneiro atualizado com sucesso!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setPendenciasActionLoading(false);
+
+        if (typeof loadPendenciasEmMontagem === 'function' && pendenciasActiveItem === 'em-montagem') {
+            await loadPendenciasEmMontagem();
+        } else if (typeof loadPendenciasAguardandoMontagemInterna === 'function' && pendenciasActiveItem === 'aguardando-montagem-interna') {
+            await loadPendenciasAguardandoMontagemInterna();
+        }
+    } catch (err) {
+        console.error('changePendenciasProjectMarceneiro:', err);
+        setPendenciasActionLoading(true, `Erro ao atualizar marceneiro: ${err.message}`, 'error');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        setPendenciasActionLoading(false);
+    }
 }
 
 async function savePendenciasFabricaInicioMontagem(projectId) {

@@ -107,7 +107,7 @@ function setAnteprojetoModalFields(conference, options = {}) {
 
 function areAllAnteprojetoModalObservationsChecked() {
     const checkboxes = document.querySelectorAll(
-        '#anteprojeto-projects-structure .anteprojeto-observation-checked:not(:disabled)'
+        '#anteprojeto-projects-structure .anteprojeto-observation-checked'
     );
     if (!checkboxes.length) return false;
     return [...checkboxes].every(checkbox => checkbox.checked);
@@ -275,7 +275,7 @@ async function openAnteprojetoModal(conferenceId = null) {
 
     editingAnteprojetoConferenceId = conferenceId;
     const conference = conferenceId
-        ? anteprojetoConferencesCache.find(c => c.id === conferenceId)
+        ? anteprojetoConferencesCache.find(c => Number(c.id) === Number(conferenceId))
         : null;
 
     const readOnly = isAnteprojetoConferenceConfirmed(conference);
@@ -301,6 +301,26 @@ async function openAnteprojetoModal(conferenceId = null) {
         conferenceObservationEl.value = conference?.conferenceObservation || '';
     }
 
+    const gestorObservationWrap = document.getElementById('anteprojeto-gestor-observation-wrap');
+    const gestorObservationEl = document.getElementById('anteprojeto-gestor-observation');
+    const btnViewHistory = document.getElementById('btn-anteprojeto-view-history');
+    if (btnViewHistory) {
+        btnViewHistory.onclick = () => {
+            if (conference?.id && typeof openAnteprojetoHistoryModal === 'function') {
+                openAnteprojetoHistoryModal(conference.id);
+            }
+        };
+    }
+    if (gestorObservationWrap && gestorObservationEl) {
+        if (conference?.gestorObservation) {
+            gestorObservationEl.value = conference.gestorObservation;
+            gestorObservationWrap.classList.remove('hidden');
+        } else {
+            gestorObservationEl.value = '';
+            gestorObservationWrap.classList.add('hidden');
+        }
+    }
+
     const title = document.getElementById('anteprojeto-modal-title');
     const submitBtn = document.getElementById('anteprojeto-form-submit');
 
@@ -319,7 +339,6 @@ async function openAnteprojetoModal(conferenceId = null) {
     updateAnteprojetoModalConfirmControls(conference);
     updateAnteprojetoModalApproveControls(conference);
     await updateAnteprojetoModalOrderContext(conference?.orderId || activeOrderId);
-    await refreshAnteprojetoModalHistory(conferenceId);
     toggleModal('anteprojeto-modal', true);
 }
 
@@ -330,7 +349,6 @@ function closeAnteprojetoModal() {
     editingAnteprojetoConferenceId = null;
     updateAnteprojetoModalConfirmControls(null);
     updateAnteprojetoModalApproveControls(null);
-    refreshAnteprojetoModalHistory(null);
     toggleModal('anteprojeto-modal', false);
 }
 
@@ -491,7 +509,13 @@ const ANTEPROJETO_MODAL_OVERLAY = createModalOverlayConfig('anteprojeto-modal', 
         'btn-anteprojeto-modal-approve',
         'btn-anteprojeto-modal-return'
     ],
-    reenableElementIdsOnHide: ['anteprojeto-form-submit'],
+    reenableElementIdsOnHide: [
+        'anteprojeto-form-submit',
+        'btn-add-anteprojeto-project',
+        'btn-anteprojeto-modal-confirm',
+        'btn-anteprojeto-modal-approve',
+        'btn-anteprojeto-modal-return'
+    ],
     closeButtonSelector: '#anteprojeto-modal button[onclick="closeAnteprojetoModal()"]',
     disableFormSelector: '#anteprojeto-modal input:not([disabled]), #anteprojeto-modal textarea:not([disabled]), #anteprojeto-modal select:not([disabled])',
     disableDatasetKey: 'anteprojetoLoadingDisabled',
@@ -579,13 +603,27 @@ async function confirmAnteprojetoConferenceFromModal() {
     const conferenceId = editingAnteprojetoConferenceId;
     if (!conferenceId) return;
 
-    const conference = anteprojetoConferencesCache.find(c => c.id === conferenceId);
+    const conference = anteprojetoConferencesCache.find(c => Number(c.id) === Number(conferenceId));
     if (!conference || !canConfirmAnteprojetoConference(conference)) return;
 
     if (!areAllAnteprojetoModalObservationsChecked()) {
         alertAppDialog('Marque todas as observações como conferidas antes de confirmar.');
         return;
     }
+
+    if (typeof openProjectCharacteristicsModalForConference === 'function') {
+        const opened = await openProjectCharacteristicsModalForConference(conference, async () => {
+            await executeAnteprojetoConferenceConfirmationFromModal(conferenceId);
+        });
+        if (opened) return;
+    }
+
+    await executeAnteprojetoConferenceConfirmationFromModal(conferenceId);
+}
+
+async function executeAnteprojetoConferenceConfirmationFromModal(conferenceId) {
+    const conference = anteprojetoConferencesCache.find(c => Number(c.id) === Number(conferenceId));
+    if (!conference) return;
 
     try {
         setAnteprojetoConferenceActionLoading(true, 'Salvando alterações da conferência...');
@@ -609,7 +647,7 @@ async function confirmAnteprojetoConferenceFromModal() {
             }
         }
 
-        await confirmAnteprojetoConference(conferenceId);
+        await confirmAnteprojetoConference(conferenceId, { skipCharacteristicsCheck: true });
     } catch (error) {
         setAnteprojetoConferenceActionLoading(true, `Erro ao confirmar conferência: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));
@@ -643,3 +681,4 @@ window.confirmAnteprojetoConference = confirmAnteprojetoConference;
 window.confirmAnteprojetoConferenceFromModal = confirmAnteprojetoConferenceFromModal;
 window.confirmAnteprojetoConferenceFromPendencias = confirmAnteprojetoConferenceFromPendencias;
 window.fetchAnteprojetoConferenceById = fetchAnteprojetoConferenceById;
+window.refreshAnteprojetoModalConfirmButton = refreshAnteprojetoModalConfirmButton;

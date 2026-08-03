@@ -44,25 +44,19 @@ async function fetchAnteprojetoConferenceHistory(conferenceId) {
     return data || [];
 }
 
-async function refreshAnteprojetoModalHistory(conferenceId) {
-    const wrap = document.getElementById('anteprojeto-modal-history-wrap');
-    const list = document.getElementById('anteprojeto-modal-history-list');
-    if (!wrap || !list) return;
+async function openAnteprojetoHistoryModal(conferenceId) {
+    const list = document.getElementById('anteprojeto-history-modal-list');
+    if (!list) return;
 
-    if (!conferenceId) {
-        wrap.classList.add('hidden');
-        list.innerHTML = '';
-        return;
-    }
+    list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Carregando histórico...</p>';
+    toggleModal('anteprojeto-history-modal', true);
 
     const history = await fetchAnteprojetoConferenceHistory(conferenceId);
     if (!history.length) {
-        wrap.classList.add('hidden');
-        list.innerHTML = '';
+        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhum histórico de devolução registrado.</p>';
         return;
     }
 
-    wrap.classList.remove('hidden');
     list.innerHTML = history.map(renderAnteprojetoConferenceHistoryEntry).join('');
 }
 
@@ -97,7 +91,7 @@ async function showAnteprojetoReturnObservationForm(conferenceId) {
     }
 
     if (!canReturnAnteprojetoConferenceToConsultor(conference)) {
-        alertAppDialog('Somente o gestor comercial pode devolver conferências confirmadas ao consultor.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente o gestor comercial ou admin pode devolver conferências confirmadas ao consultor.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -131,7 +125,9 @@ async function showAnteprojetoReturnObservationForm(conferenceId) {
     }
 
     const observationEl = document.getElementById('anteprojeto-return-modal-observation');
-    if (observationEl) observationEl.value = '';
+    if (observationEl) {
+        observationEl.value = conference.gestorObservation || '';
+    }
 
     toggleModal('anteprojeto-return-modal', true);
     observationEl?.focus();
@@ -160,7 +156,7 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
     }
 
     if (!canReturnAnteprojetoConferenceToConsultor(conference)) {
-        alertAppDialog('Somente o gestor comercial pode devolver conferências confirmadas ao consultor.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente o gestor comercial ou admin pode devolver conferências confirmadas ao consultor.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -186,10 +182,11 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
         }
 
         const now = new Date().toISOString();
-        const { error: conferenceError } = await supabaseClient
+        let { error: conferenceError } = await supabaseClient
             .from('AnteprojetoConference')
             .update({
                 status: 'Em andamento',
+                gestorObservation: trimmedObservation,
                 confirmedAt: null,
                 confirmedById: null,
                 updatedAt: now,
@@ -197,7 +194,22 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
             })
             .eq('id', normalizedId);
 
+        if (conferenceError?.message?.includes('gestorObservation')) {
+            ({ error: conferenceError } = await supabaseClient
+                .from('AnteprojetoConference')
+                .update({
+                    status: 'Em andamento',
+                    confirmedAt: null,
+                    confirmedById: null,
+                    updatedAt: now,
+                    updatedById: currentUser.id
+                })
+                .eq('id', normalizedId));
+        }
+
         if (conferenceError) throw conferenceError;
+
+        conference.gestorObservation = trimmedObservation;
 
         setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
         await applyConferenciaEnviadaStatusToProjects(getConferenceOrderProjectIds(conference));
