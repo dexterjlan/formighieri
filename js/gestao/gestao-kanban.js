@@ -731,8 +731,16 @@ let gestaoKanbanFullscreen = false;
 let gestaoKanbanStatusesCache = [];
 
 function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplementar = false) {
-    const deliveryDate = phase?.deliveryDate || order.clientDeliveryDate || project.deliveryDate || '';
+    const orderDeliveryDate = phase?.deliveryDate || order.clientDeliveryDate || '';
+    const projectDeliveryDate = project.deliveryDate || '';
     const designerName = project.designer?.name || '';
+
+    const formattedOrderDate = typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(orderDeliveryDate)
+        : (orderDeliveryDate || '');
+    const formattedProjectDate = typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(projectDeliveryDate)
+        : (projectDeliveryDate || '');
 
     return [
         statusName,
@@ -740,7 +748,8 @@ function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplem
         order.clientName || '',
         order.consultantName || '',
         phase?.name || '',
-        typeof formatGestaoDate === 'function' ? formatGestaoDate(deliveryDate) : (deliveryDate || ''),
+        formattedOrderDate,
+        formattedProjectDate,
         project.name || '',
         project.projectCode || '',
         isComplementar ? 'Complementar' : 'Principal',
@@ -837,7 +846,8 @@ async function exportGestaoKanbanToExcel() {
             'Cliente',
             'Consultor',
             'Fase',
-            'Entrega',
+            'Data Entrega',
+            'Data Entrega Projeto',
             'Projeto',
             'Código Projeto',
             'Tipo',
@@ -852,7 +862,8 @@ async function exportGestaoKanbanToExcel() {
             { wch: 28 },
             { wch: 22 },
             { wch: 16 },
-            { wch: 12 },
+            { wch: 14 },
+            { wch: 20 },
             { wch: 28 },
             { wch: 14 },
             { wch: 14 },
