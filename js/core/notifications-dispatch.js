@@ -518,11 +518,15 @@ async function notifyConferenciaConfirmadaEmail(options = {}) {
 window.notifyConferenciaConfirmadaEmail = notifyConferenciaConfirmadaEmail;
 
 async function notifyConferenciaAprovadaEmail(options = {}) {
-    const { orderId, orderProjectIds = [] } = options;
+    const { orderId, orderProjectIds = [], caminhoRede = null } = options;
     if (!orderId || !orderProjectIds.length) return;
 
     try {
         const recipientEmails = await fetchConferenciaAprovadaRecipientEmails();
+        const extraFields = [];
+        if (caminhoRede) {
+            extraFields.push({ label: 'Pasta / Caminho da rede da conferência', value: caminhoRede });
+        }
 
         await sendProcessNotificationEmail('conferencia_aprovada', {
             orderId,
@@ -530,7 +534,8 @@ async function notifyConferenciaAprovadaEmail(options = {}) {
             recipientEmails,
             showProjectDetails: false,
             projectSectionTitle: 'Projetos da conferência aprovada',
-            accentColor: '#6366f1'
+            accentColor: '#6366f1',
+            extraFields
         });
     } catch (err) {
         console.warn('notifyConferenciaAprovadaEmail:', err);

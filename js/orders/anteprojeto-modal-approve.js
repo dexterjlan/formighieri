@@ -29,7 +29,8 @@ const ANTEPROJETO_APPROVE_MODAL_OVERLAY = createModalOverlayConfig('anteprojeto-
     disableElementIds: [
         'btn-anteprojeto-approve-modal-cancel',
         'btn-anteprojeto-approve-modal-submit',
-        'anteprojeto-approve-order-delivery'
+        'anteprojeto-approve-order-delivery',
+        'anteprojeto-approve-conference-path'
     ],
     disableFormSelector: '.anteprojeto-approve-project-delivery',
     disableDatasetKey: 'approveModalLoadingDisabled'
@@ -43,8 +44,10 @@ function closeAnteprojetoApproveDeliveryModal() {
     setAnteprojetoApproveModalLoading(false);
     pendingAnteprojetoApproveConferenceId = null;
     const orderDeliveryEl = document.getElementById('anteprojeto-approve-order-delivery');
+    const pathEl = document.getElementById('anteprojeto-approve-conference-path');
     const projectsWrap = document.getElementById('anteprojeto-approve-projects-wrap');
     if (orderDeliveryEl) orderDeliveryEl.value = '';
+    if (pathEl) pathEl.value = '';
     if (projectsWrap) projectsWrap.innerHTML = '';
     toggleModal('anteprojeto-approve-modal', false);
 }
@@ -81,26 +84,33 @@ async function fetchAnteprojetoApprovalDeliveryContext(conference) {
         .map(entry => ({
             id: Number(entry.orderProjectId),
             name: entry.orderProject?.name || 'Projeto',
-            deliveryDate: entry.orderProject?.deliveryDate || null
+            deliveryDate: entry.orderProject?.deliveryDate || null,
+            caminhoRedeAprovacao: entry.orderProject?.caminhoRedeAprovacao || ''
         }))
         .filter(project => project.id);
 
-    const missingDeliveryIds = projects
-        .filter(project => !project.deliveryDate)
-        .map(project => project.id);
+    const missingIds = projects.map(project => project.id);
 
-    if (missingDeliveryIds.length) {
-        const { data: projectRows, error } = await supabaseClient
+    if (missingIds.length) {
+        let result = await supabaseClient
             .from('OrderProject')
-            .select('id, name, deliveryDate')
-            .in('id', missingDeliveryIds);
+            .select('id, name, deliveryDate, caminhoRedeAprovacao')
+            .in('id', missingIds);
 
-        if (!error && projectRows?.length) {
-            const projectById = Object.fromEntries(projectRows.map(row => [Number(row.id), row]));
+        if (result.error?.message?.includes('caminhoRedeAprovacao')) {
+            result = await supabaseClient
+                .from('OrderProject')
+                .select('id, name, deliveryDate')
+                .in('id', missingIds);
+        }
+
+        if (!result.error && result.data?.length) {
+            const projectById = Object.fromEntries(result.data.map(row => [Number(row.id), row]));
             projects = projects.map(project => ({
                 ...project,
                 name: projectById[project.id]?.name || project.name,
-                deliveryDate: project.deliveryDate || projectById[project.id]?.deliveryDate || null
+                deliveryDate: project.deliveryDate || projectById[project.id]?.deliveryDate || null,
+                caminhoRedeAprovacao: project.caminhoRedeAprovacao || projectById[project.id]?.caminhoRedeAprovacao || ''
             }));
         }
     }
@@ -171,12 +181,17 @@ async function showAnteprojetoApproveDeliveryModal(conferenceId) {
     const context = await fetchAnteprojetoApprovalDeliveryContext(conference);
     const contextEl = document.getElementById('anteprojeto-approve-modal-context');
     if (contextEl) {
-        contextEl.textContent = `Pedido ${context.orderCode} — ${context.clientName}. Confirme a data de entrega do pedido e dos projetos antes de aprovar.`;
+        contextEl.textContent = `Pedido ${context.orderCode} — ${context.clientName}. Confirme a data de entrega do pedido, o endereço da pasta e a data de entrega dos projetos antes de aprovar.`;
     }
 
     const orderDeliveryEl = document.getElementById('anteprojeto-approve-order-delivery');
     if (orderDeliveryEl) {
         orderDeliveryEl.value = toGestaoInputDate(context.clientDeliveryDate);
+    }
+
+    const pathEl = document.getElementById('anteprojeto-approve-conference-path');
+    if (pathEl) {
+        pathEl.value = conference.caminhoRede || '';
     }
 
     renderAnteprojetoApproveProjectsFields(context.projects);
@@ -188,6 +203,7 @@ async function showAnteprojetoApproveDeliveryModal(conferenceId) {
 
 function collectAnteprojetoApproveDeliverySelections() {
     const orderDeliveryDate = document.getElementById('anteprojeto-approve-order-delivery')?.value || '';
+    const conferencePath = document.getElementById('anteprojeto-approve-conference-path')?.value?.trim() || '';
     const projectDeliveries = [...document.querySelectorAll('.anteprojeto-approve-project-delivery')]
         .map(input => ({
             projectId: Number(input.dataset.projectId),
@@ -195,12 +211,17 @@ function collectAnteprojetoApproveDeliverySelections() {
         }))
         .filter(item => item.projectId);
 
-    return { orderDeliveryDate, projectDeliveries };
+    return { orderDeliveryDate, conferencePath, projectDeliveries };
 }
 
 function validateAnteprojetoApproveDeliverySelections(selections) {
     if (!selections.orderDeliveryDate) {
         alertAppDialog('Informe a data de entrega do pedido.', { variant: 'warning', title: 'Aviso' });
+        return false;
+    }
+
+    if (!selections.conferencePath) {
+        alertAppDialog('Informe a pasta / endereço da rede da conferência.', { variant: 'warning', title: 'Aviso' });
         return false;
     }
 
@@ -268,15 +289,58 @@ async function saveAnteprojetoApprovalDeliveryDates(conference, selections) {
         }
     }
 
-    await Promise.all(selections.projectDeliveries.map(async project => {
-        const { error } = await supabaseClient
-            .from('OrderProject')
+    // Salvar o novo caminho da rede na nova coluna caminhoRede da AnteprojetoConference
+    // sem alterar a coluna sketchUpPath original informada pelo conferente.
+    let { error: conferencePathError } = await supabaseClient
+        .from('AnteprojetoConference')
+        .update({
+            caminhoRede: selections.conferencePath,
+            updatedAt: now,
+            updatedById: currentUser.id
+        })
+        .eq('id', conference.id);
+
+    if (conferencePathError?.message?.includes('caminhoRede')) {
+        ({ error: conferencePathError } = await supabaseClient
+            .from('AnteprojetoConference')
             .update({
+                caminhoRede: selections.conferencePath
+            })
+            .eq('id', conference.id));
+    }
+
+    if (conferencePathError) {
+        console.warn('Erro ao salvar caminhoRede na AnteprojetoConference (verifique se a migração SQL foi executada):', conferencePathError);
+    }
+
+    // Atualizar no objeto da conferência em memória
+    conference.caminhoRede = selections.conferencePath;
+
+    // Replicar o caminhoRede e deliveryDate nos projetos (OrderProject.caminhoRedeAprovacao)
+    await Promise.all(selections.projectDeliveries.map(async project => {
+        let updatePayload = {
+            deliveryDate: project.deliveryDate,
+            caminhoRedeAprovacao: selections.conferencePath,
+            updatedAt: now,
+            updatedById: currentUser.id
+        };
+
+        let { error } = await supabaseClient
+            .from('OrderProject')
+            .update(updatePayload)
+            .eq('id', project.projectId);
+
+        if (error?.message?.includes('caminhoRedeAprovacao')) {
+            updatePayload = {
                 deliveryDate: project.deliveryDate,
                 updatedAt: now,
                 updatedById: currentUser.id
-            })
-            .eq('id', project.projectId);
+            };
+            ({ error } = await supabaseClient
+                .from('OrderProject')
+                .update(updatePayload)
+                .eq('id', project.projectId));
+        }
 
         if (error) throw error;
     }));
@@ -297,13 +361,13 @@ async function submitAnteprojetoApproveDeliveryModal() {
     if (!validateAnteprojetoApproveDeliverySelections(selections)) return;
 
     try {
-        setAnteprojetoApproveModalLoading(true, 'Salvando datas de entrega...');
+        setAnteprojetoApproveModalLoading(true, 'Salvando datas de entrega e pasta...');
         await saveAnteprojetoApprovalDeliveryDates(conference, selections);
 
         closeAnteprojetoApproveDeliveryModal();
         await approveAnteprojetoConference(conferenceId);
     } catch (error) {
-        setAnteprojetoApproveModalLoading(true, `Erro ao salvar datas: ${error.message}`, 'error');
+        setAnteprojetoApproveModalLoading(true, `Erro ao salvar dados: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));
         setAnteprojetoApproveModalLoading(false);
     }
@@ -356,7 +420,8 @@ async function approveAnteprojetoConference(conferenceId) {
             setAnteprojetoConferenceActionLoading(true, 'Enviando e-mail de notificação...');
             await notifyConferenciaAprovadaEmail({
                 orderId: conference.orderId,
-                orderProjectIds: getConferenceOrderProjectIds(conference)
+                orderProjectIds: getConferenceOrderProjectIds(conference),
+                caminhoRede: selections?.conferencePath || conference?.caminhoRede || ''
             });
         }
 

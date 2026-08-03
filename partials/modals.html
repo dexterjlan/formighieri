@@ -518,7 +518,7 @@
                 <p id="anteprojeto-approve-modal-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
             </div>
             <h3 class="font-bold text-base text-slate-900 mb-1">Aprovar Conferência</h3>
-            <p id="anteprojeto-approve-modal-context" class="text-xs text-slate-500 mb-4">Confirme as datas de entrega antes de aprovar a conferência.</p>
+            <p id="anteprojeto-approve-modal-context" class="text-xs text-slate-500 mb-4">Confirme as datas de entrega e o endereço da pasta da conferência antes de aprovar.</p>
             <div class="overflow-y-auto space-y-4 pr-1 flex-1 min-h-0">
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="anteprojeto-approve-order-delivery">
@@ -526,6 +526,14 @@
                     </label>
                     <input type="date" id="anteprojeto-approve-order-delivery" required
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="anteprojeto-approve-conference-path">
+                        Pasta / Endereço da rede da conferência <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="anteprojeto-approve-conference-path" required
+                        class="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                        placeholder="Ex: \\\\servidor\\projetos\\1050-Cozinha">
                 </div>
                 <div>
                     <div class="text-xs font-semibold text-slate-500 mb-2">Datas de entrega dos projetos</div>
