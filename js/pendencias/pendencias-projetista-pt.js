@@ -807,6 +807,20 @@ async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, curren
             return;
         }
 
+        if (typeof syncOpenCommercialApprovalDesignerForProject === 'function') {
+            const { error: approvalError } = await syncOpenCommercialApprovalDesignerForProject(
+                projectId,
+                newDesignerId
+            );
+            if (approvalError) {
+                alertAppDialog(
+                    'Projetista alterado no projeto, mas não foi possível atualizar a aprovação comercial: '
+                    + approvalError.message,
+                    { variant: 'warning', title: 'Aviso' }
+                );
+            }
+        }
+
         await loadPendenciasProjetosSemProjetistas();
     } finally {
         setPendenciasActionLoading(false);

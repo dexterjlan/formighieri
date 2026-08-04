@@ -643,7 +643,7 @@ async function getOpenCommercialApprovalsForProject(orderId, orderProjectId) {
 
     let { data, error } = await supabaseClient
         .from('CommercialApproval')
-        .select('id, projectName, status, approved, orderProjectId')
+        .select('id, projectName, status, approved, orderProjectId, designerId')
         .eq('orderId', orderId)
         .eq('orderProjectId', orderProjectId);
 
@@ -656,7 +656,7 @@ async function getOpenCommercialApprovalsForProject(orderId, orderProjectId) {
 
         ({ data, error } = await supabaseClient
             .from('CommercialApproval')
-            .select('id, projectName, status, approved')
+            .select('id, projectName, status, approved, designerId')
             .eq('orderId', orderId)
             .eq('projectName', project.name));
     }
@@ -668,6 +668,48 @@ async function getOpenCommercialApprovalsForProject(orderId, orderProjectId) {
 
     return (data || []).filter(a => normalizeCommercialApproval(a).status !== 'Aprovado');
 }
+
+async function syncOpenCommercialApprovalDesignerForProject(orderProjectId, newDesignerId) {
+    const projectId = Number(orderProjectId);
+    const designerId = Number(newDesignerId);
+    if (!projectId || !designerId) {
+        return { updated: 0, error: null };
+    }
+
+    const { data: project, error: projectError } = await supabaseClient
+        .from('OrderProject')
+        .select('orderId')
+        .eq('id', projectId)
+        .maybeSingle();
+
+    if (projectError) {
+        return { updated: 0, error: projectError };
+    }
+
+    const orderId = project?.orderId;
+    if (!orderId) {
+        return { updated: 0, error: null };
+    }
+
+    const openApprovals = await getOpenCommercialApprovalsForProject(orderId, projectId);
+    const approvalIds = openApprovals
+        .filter(approval => Number(approval.designerId) !== designerId)
+        .map(approval => approval.id)
+        .filter(Boolean);
+
+    if (!approvalIds.length) {
+        return { updated: 0, error: null };
+    }
+
+    const { error } = await supabaseClient
+        .from('CommercialApproval')
+        .update({ designerId })
+        .in('id', approvalIds);
+
+    return { updated: approvalIds.length, error: error || null };
+}
+
+window.syncOpenCommercialApprovalDesignerForProject = syncOpenCommercialApprovalDesignerForProject;
 
 async function validateConsultorRequestAgainstOpenApproval(orderProjectId, existingRequest) {
     if (currentUser?.role !== 'Consultor' || !orderProjectId || !activeOrderId) {
