@@ -522,38 +522,63 @@ function sumGestaoRelatorioSaleValues(projects) {
     }, 0);
 }
 
-function groupGestaoRelatorioFechamentoProducaoByMonth(projects) {
-    const groups = {};
+function sortGestaoRelatorioFechamentoProducaoProjects(projects) {
+    return [...projects].sort((a, b) => {
+        const fimA = a.fimMontagemInterna || '';
+        const fimB = b.fimMontagemInterna || '';
+        return String(fimB).localeCompare(String(fimA))
+            || String(a.order?.orderCode || '').localeCompare(String(b.order?.orderCode || ''), 'pt-BR', { numeric: true })
+            || String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+    });
+}
+
+function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects) {
+    const monthGroups = {};
 
     projects.forEach(project => {
         const monthKey = getGestaoRelatorioMonthKey(project.fimMontagemInterna);
-        if (!groups[monthKey]) {
-            groups[monthKey] = { monthKey, projects: [] };
+        const clientName = project.order?.clientName?.trim() || 'Sem cliente';
+        const clientKey = clientName.toLocaleLowerCase('pt-BR');
+
+        if (!monthGroups[monthKey]) {
+            monthGroups[monthKey] = { monthKey, clientsByKey: {} };
         }
-        groups[monthKey].projects.push(project);
+
+        if (!monthGroups[monthKey].clientsByKey[clientKey]) {
+            monthGroups[monthKey].clientsByKey[clientKey] = { clientName, projects: [] };
+        }
+
+        monthGroups[monthKey].clientsByKey[clientKey].projects.push(project);
     });
 
-    return Object.values(groups)
+    return Object.values(monthGroups)
         .sort((a, b) => {
             if (a.monthKey === 'sem-data') return 1;
             if (b.monthKey === 'sem-data') return -1;
             return b.monthKey.localeCompare(a.monthKey);
         })
-        .map(group => ({
-            ...group,
-            totalSaleValue: sumGestaoRelatorioSaleValues(group.projects),
-            projects: [...group.projects].sort((a, b) => {
-                const orderA = a.order?.orderCode || '';
-                const orderB = b.order?.orderCode || '';
-                return String(orderA).localeCompare(String(orderB), 'pt-BR', { numeric: true })
-                    || String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
-            })
-        }));
+        .map(monthGroup => {
+            const clients = Object.values(monthGroup.clientsByKey)
+                .sort((a, b) => a.clientName.localeCompare(b.clientName, 'pt-BR'))
+                .map(clientGroup => ({
+                    ...clientGroup,
+                    projects: sortGestaoRelatorioFechamentoProducaoProjects(clientGroup.projects),
+                    totalSaleValue: sumGestaoRelatorioSaleValues(clientGroup.projects)
+                }));
+
+            const projects = clients.flatMap(client => client.projects);
+
+            return {
+                monthKey: monthGroup.monthKey,
+                clients,
+                projectCount: projects.length,
+                totalSaleValue: sumGestaoRelatorioSaleValues(projects)
+            };
+        });
 }
 
 function renderGestaoRelatorioFechamentoProducaoProjectRow(project) {
     const orderCode = project.order?.orderCode || '—';
-    const clientName = project.order?.clientName || '—';
     const fimMontagem = typeof formatGestaoDate === 'function'
         ? formatGestaoDate(project.fimMontagemInterna)
         : (project.fimMontagemInterna || '—');
@@ -564,11 +589,45 @@ function renderGestaoRelatorioFechamentoProducaoProjectRow(project) {
     return `
         <tr class="border-b border-slate-100 last:border-0">
             <td class="p-2.5 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-            <td class="p-2.5 text-xs text-slate-600">${escapeHtml(clientName)}</td>
             <td class="p-2.5 text-xs font-medium text-slate-800">${escapeHtml(getGestaoRelatorioProjectLabel(project))}</td>
             <td class="p-2.5 text-xs text-slate-500 whitespace-nowrap">${escapeHtml(fimMontagem)}</td>
             <td class="p-2.5 text-xs text-slate-700 whitespace-nowrap text-right font-medium">${escapeHtml(saleValue)}</td>
         </tr>
+    `;
+}
+
+function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup) {
+    const totalLabel = typeof formatSaleValue === 'function'
+        ? formatSaleValue(clientGroup.totalSaleValue)
+        : clientGroup.totalSaleValue;
+
+    return `
+        <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
+            <div class="collapsible-list-header px-3 py-2 bg-white border-b border-slate-100 cursor-pointer flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                    <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
+                        aria-label="Expandir">▶</button>
+                    <span class="text-xs font-medium text-slate-800 truncate">${escapeHtml(clientGroup.clientName)}</span>
+                    <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.projects.length} projeto${clientGroup.projects.length === 1 ? '' : 's'}</span>
+                </div>
+                <span class="text-xs font-semibold text-emerald-700 shrink-0">${escapeHtml(totalLabel)}</span>
+            </div>
+            <div class="collapsible-list-body hidden p-2">
+                <div class="overflow-x-auto">
+                    <table class="gestao-relatorios-table w-full text-xs min-w-[32rem]">
+                        <thead class="bg-slate-50 text-[10px] uppercase text-slate-400">
+                            <tr>
+                                <th class="text-left p-2.5 font-semibold">Pedido</th>
+                                <th class="text-left p-2.5 font-semibold">Projeto</th>
+                                <th class="text-left p-2.5 font-semibold">Fim mont. interna</th>
+                                <th class="text-right p-2.5 font-semibold">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>${clientGroup.projects.map(renderGestaoRelatorioFechamentoProducaoProjectRow).join('')}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     `;
 }
 
@@ -577,37 +636,25 @@ function renderGestaoRelatorioFechamentoProducaoGroups(groups) {
         return '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto em expedição para fechamento.</p>';
     }
 
-    return groups.map(group => {
+    return groups.map(monthGroup => {
         const totalLabel = typeof formatSaleValue === 'function'
-            ? formatSaleValue(group.totalSaleValue)
-            : group.totalSaleValue;
+            ? formatSaleValue(monthGroup.totalSaleValue)
+            : monthGroup.totalSaleValue;
 
         return `
-            <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
-                <div class="collapsible-list-header px-3 py-2.5 bg-slate-50/80 border-b border-slate-100 cursor-pointer flex items-center justify-between gap-2">
+            <div class="collapsible-list-card border border-emerald-100 rounded-lg overflow-hidden bg-emerald-50/20">
+                <div class="collapsible-list-header px-3 py-2.5 bg-emerald-50/80 border-b border-emerald-100 cursor-pointer flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2 min-w-0">
-                        <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
+                        <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-emerald-700 hover:text-emerald-900 text-[10px]"
                             aria-label="Expandir">▶</button>
-                        <span class="text-xs font-semibold text-slate-800 truncate">${escapeHtml(formatGestaoRelatorioMonthLabel(group.monthKey))}</span>
-                        <span class="text-[10px] text-slate-500 shrink-0">${group.projects.length} projeto${group.projects.length === 1 ? '' : 's'}</span>
+                        <span class="text-xs font-semibold text-slate-900">${escapeHtml(formatGestaoRelatorioMonthLabel(monthGroup.monthKey))}</span>
+                        <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.clients.length} cliente${monthGroup.clients.length === 1 ? '' : 's'}</span>
+                        <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.projectCount} projeto${monthGroup.projectCount === 1 ? '' : 's'}</span>
                     </div>
                     <span class="text-xs font-bold text-emerald-700 shrink-0">${escapeHtml(totalLabel)}</span>
                 </div>
-                <div class="collapsible-list-body hidden">
-                    <div class="overflow-x-auto">
-                        <table class="gestao-relatorios-table w-full text-xs min-w-[40rem]">
-                            <thead class="bg-white text-[10px] uppercase text-slate-400">
-                                <tr>
-                                    <th class="text-left p-2.5 font-semibold">Pedido</th>
-                                    <th class="text-left p-2.5 font-semibold">Cliente</th>
-                                    <th class="text-left p-2.5 font-semibold">Projeto</th>
-                                    <th class="text-left p-2.5 font-semibold">Fim mont. interna</th>
-                                    <th class="text-right p-2.5 font-semibold">Valor</th>
-                                </tr>
-                            </thead>
-                            <tbody>${group.projects.map(renderGestaoRelatorioFechamentoProducaoProjectRow).join('')}</tbody>
-                        </table>
-                    </div>
+                <div class="collapsible-list-body hidden p-2 space-y-2">
+                    ${monthGroup.clients.map(renderGestaoRelatorioFechamentoProducaoClientGroup).join('')}
                 </div>
             </div>
         `;
@@ -625,7 +672,7 @@ function renderGestaoRelatoriosPanel(projects, statuses) {
     const fechamentoProjects = projects.filter(project =>
         getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
     );
-    const fechamentoGroups = groupGestaoRelatorioFechamentoProducaoByMonth(fechamentoProjects);
+    const fechamentoGroups = groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects);
     const fechamentoGrandTotal = sumGestaoRelatorioSaleValues(fechamentoProjects);
     const fechamentoGrandTotalLabel = typeof formatSaleValue === 'function'
         ? formatSaleValue(fechamentoGrandTotal)
@@ -654,7 +701,7 @@ function renderGestaoRelatoriosPanel(projects, statuses) {
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Fechamento Produção</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} agrupados pelo mês do fim da montagem interna.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} agrupados pelo mês do fim da montagem interna e, dentro de cada mês, por cliente.</p>
                 </div>
                 <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg">
                     Total: ${escapeHtml(fechamentoGrandTotalLabel)}

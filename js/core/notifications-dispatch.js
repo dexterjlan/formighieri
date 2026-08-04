@@ -159,9 +159,9 @@ async function fetchActiveComprasRecipientEmails() {
     return emails.length ? emails : [NOTIFICATION_TEST_EMAIL];
 }
 
-function buildCompraLiberacaoEmailSubject(tipoCompra, clientName, orderCode) {
+function buildCompraLiberacaoEmailSubject(tipoCompra, clientName, orderCode, subtypeName = '') {
     const tipoLabel = typeof formatCompraTipoLabel === 'function'
-        ? formatCompraTipoLabel(tipoCompra)
+        ? formatCompraTipoLabel(tipoCompra, subtypeName)
         : (tipoCompra || '—');
     const client = clientName || '—';
     const order = orderCode || '—';
@@ -283,10 +283,11 @@ async function notifyCompraLiberacaoEmails(options = {}) {
         const toEmail = recipients.join(', ');
 
         for (const item of items) {
+            const subtypeName = item.thirdPartySubtype?.name || item.subtypeName || '';
             const tipoLabel = typeof formatCompraTipoLabel === 'function'
-                ? formatCompraTipoLabel(item.tipoCompra)
-                : (item.tipoCompra || '—');
-            const filePath = formValues?.[item.pathKey] || '';
+                ? formatCompraTipoLabel(item.purchaseType || item.tipoCompra, subtypeName)
+                : (item.purchaseType || item.tipoCompra || '—');
+            const filePath = item.folderPath || item.path || '';
             const payload = {
                 eventTitle: 'Liberação de Compra',
                 orderCode: context.orderCode || '—',
@@ -301,9 +302,10 @@ async function notifyCompraLiberacaoEmails(options = {}) {
             };
 
             const subject = buildCompraLiberacaoEmailSubject(
-                item.tipoCompra,
+                item.purchaseType || item.tipoCompra,
                 payload.clientName,
-                payload.orderCode
+                payload.orderCode,
+                subtypeName
             );
             const body = buildCompraLiberacaoEmailBody(payload);
             const html = buildCompraLiberacaoEmailHtml(payload);

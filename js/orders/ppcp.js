@@ -49,9 +49,12 @@ function hasOpenOrderProjectImplantacao(implantacao) {
 
 function canShowOrderProjectImplantacaoAction(project, implantacao) {
     if (!project || !canActOnOrderProject(project)) return false;
-    if (typeof isPpcp !== 'function' || !isPpcp()) return false;
+    if (typeof canActOrderPpcp !== 'function' || !canActOrderPpcp()) return false;
     if (hasOpenOrderProjectImplantacao(implantacao)) return true;
-    return getPpcpProjectStatusName(project) === PPCP_IMPLANTACAO_STATUS;
+    const statusName = typeof getOrderProjectStatusName === 'function'
+        ? getOrderProjectStatusName(project)
+        : getPpcpProjectStatusName(project);
+    return statusName === PPCP_IMPLANTACAO_STATUS;
 }
 
 function getPpcpProjectStatusName(project) {

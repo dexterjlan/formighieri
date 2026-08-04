@@ -1,93 +1,132 @@
 const COMPRA_STATUS_ABERTO = 'Aberto';
-const COMPRA_STATUS_ORCADO = 'Orçado';
-const COMPRA_STATUS_AGUARDANDO_ENTREGA = 'Aguardando Entrega';
 const COMPRA_STATUS_FECHADO = 'Fechado';
+
+const COMPRA_STATUS_BADGE_CLASSES = {
+    'Aberto': 'bg-amber-100 text-amber-800',
+    'Orçado': 'bg-sky-100 text-sky-800',
+    'Aguardando Entrega': 'bg-violet-100 text-violet-800',
+    'Ag. Lib. de Medição - Obra': 'bg-orange-100 text-orange-800',
+    'Ag. Lib. de Medição - Fábrica': 'bg-cyan-100 text-cyan-800',
+    'Fechado': 'bg-slate-200 text-slate-700'
+};
 
 const COMPRA_TIPO_MATERIAL = 'Material';
 const COMPRA_TIPO_FERRAGEM = 'Ferragem';
 const COMPRA_TIPO_TINTA = 'Tinta';
 const COMPRA_TIPO_TERCEIRO = 'Terceiro';
 
-const IMPLANTACAO_COMPRA_SEND_ITEMS = [
-    {
-        key: 'comprasMateriais',
-        tipoCompra: COMPRA_TIPO_MATERIAL,
-        checkedKey: 'comprasMateriaisChecked',
-        pathKey: 'comprasMateriaisPath',
-        sentKey: 'comprasMateriaisEnviadoComercial'
-    },
-    {
-        key: 'listaFerragens',
-        tipoCompra: COMPRA_TIPO_FERRAGEM,
-        checkedKey: 'listaFerragensChecked',
-        pathKey: 'listaFerragensPath',
-        sentKey: 'listaFerragensEnviadoComercial'
-    },
-    {
-        key: 'listaTintas',
-        tipoCompra: COMPRA_TIPO_TINTA,
-        checkedKey: 'listaTintasChecked',
-        pathKey: 'listaTintasPath',
-        sentKey: 'listaTintasEnviadoComercial'
-    },
-    {
-        key: 'terceiros',
-        tipoCompra: COMPRA_TIPO_TERCEIRO,
-        checkedKey: 'terceirosChecked',
-        pathKey: 'terceirosPath',
-        sentKey: 'terceirosEnviadoComercial'
-    }
-];
-
 let activeCompraRecord = null;
+let compraStatusesCache = [];
+let compraStatusesActiveOnlyCache = true;
 
-function formatCompraTipoLabel(tipoCompra) {
+async function loadCompraStatuses(activeOnly = true, forceReload = false) {
+    if (!forceReload && compraStatusesCache.length && activeOnly === compraStatusesActiveOnlyCache) {
+        return compraStatusesCache;
+    }
+
+    let query = supabaseClient
+        .from('CompraStatus')
+        .select('id, name, sortOrder, isActive, isClosed')
+        .order('sortOrder', { ascending: true })
+        .order('name', { ascending: true });
+
+    if (activeOnly) {
+        query = query.eq('isActive', true);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('loadCompraStatuses:', error);
+        compraStatusesCache = getFallbackCompraStatuses();
+        return compraStatusesCache;
+    }
+
+    compraStatusesCache = data?.length ? data : getFallbackCompraStatuses();
+    compraStatusesActiveOnlyCache = activeOnly;
+    return compraStatusesCache;
+}
+
+function getFallbackCompraStatuses() {
+    return [
+        { id: null, name: 'Aberto', sortOrder: 1, isActive: true, isClosed: false },
+        { id: null, name: 'Orçado', sortOrder: 2, isActive: true, isClosed: false },
+        { id: null, name: 'Aguardando Entrega', sortOrder: 3, isActive: true, isClosed: false },
+        { id: null, name: 'Ag. Lib. de Medição - Obra', sortOrder: 4, isActive: true, isClosed: false },
+        { id: null, name: 'Ag. Lib. de Medição - Fábrica', sortOrder: 5, isActive: true, isClosed: false },
+        { id: null, name: 'Fechado', sortOrder: 6, isActive: true, isClosed: true }
+    ];
+}
+
+function getDefaultCompraStatusName() {
+    const statuses = compraStatusesCache.length
+        ? compraStatusesCache
+        : getFallbackCompraStatuses();
+
+    const aberto = statuses.find(status => status.name === COMPRA_STATUS_ABERTO && status.isActive !== false);
+    if (aberto) return aberto.name;
+
+    const firstActive = statuses.find(status => status.isActive !== false);
+    return firstActive?.name || COMPRA_STATUS_ABERTO;
+}
+
+function getCompraClosedStatusNames() {
+    const statuses = compraStatusesCache.length
+        ? compraStatusesCache
+        : getFallbackCompraStatuses();
+
+    const closed = statuses
+        .filter(status => status.isClosed === true)
+        .map(status => status.name);
+
+    return closed.length ? closed : [COMPRA_STATUS_FECHADO];
+}
+
+function populateCompraStatusSelect(selectedStatus = '') {
+    const select = document.getElementById('compra-modal-status');
+    if (!select) return;
+
+    const statuses = compraStatusesCache.length
+        ? compraStatusesCache.filter(status => status.isActive !== false)
+        : getFallbackCompraStatuses();
+
+    const selected = selectedStatus || getDefaultCompraStatusName();
+    select.innerHTML = statuses.map(status => {
+        const isSelected = status.name === selected ? 'selected' : '';
+        return `<option value="${escapeHtml(status.name)}" ${isSelected}>${escapeHtml(status.name)}</option>`;
+    }).join('');
+
+    if (!statuses.some(status => status.name === selected) && selected) {
+        select.innerHTML += `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`;
+    }
+}
+
+async function ensureCompraStatusesLoaded(activeOnly = true) {
+    return loadCompraStatuses(activeOnly);
+}
+
+window.loadCompraStatuses = loadCompraStatuses;
+
+function formatCompraTipoLabel(tipoCompra, subtypeName = '') {
     if (tipoCompra === 'Lista de Material') return COMPRA_TIPO_MATERIAL;
+    if (tipoCompra === COMPRA_TIPO_TERCEIRO && subtypeName) {
+        return `Terceiro — ${subtypeName}`;
+    }
     return tipoCompra || '—';
 }
 
-function getCompraImplantacaoPathKey(tipoCompra) {
-    const tipo = formatCompraTipoLabel(tipoCompra);
-    if (tipo === COMPRA_TIPO_MATERIAL) return 'comprasMateriaisPath';
-    if (tipo === COMPRA_TIPO_FERRAGEM) return 'listaFerragensPath';
-    if (tipo === COMPRA_TIPO_TINTA) return 'listaTintasPath';
-    if (tipo === COMPRA_TIPO_TERCEIRO) return 'terceirosPath';
-    return null;
+function getCompraPurchaseItemLabel(purchaseItem) {
+    if (!purchaseItem) return '—';
+    const subtypeName = purchaseItem.thirdPartySubtype?.name || purchaseItem.subtypeName || '';
+    return formatCompraTipoLabel(purchaseItem.purchaseType, subtypeName);
 }
 
-function getCompraListaPathFromImplantacao(tipoCompra, implantacao) {
-    const pathKey = getCompraImplantacaoPathKey(tipoCompra);
-    if (!pathKey || !implantacao) return '';
-    return implantacao[pathKey] || '';
-}
-
-async function fetchImplantacaoPathsForCompra(implantacaoId) {
-    if (!implantacaoId) return null;
-
-    const { data, error } = await supabaseClient
-        .from('Implantacao')
-        .select('comprasMateriaisPath, listaFerragensPath, listaTintasPath, terceirosPath')
-        .eq('id', implantacaoId)
-        .maybeSingle();
-
-    if (error) throw error;
-    return data;
-}
-
-function getCompraStatusBadgeClass(status) {
-    if (status === COMPRA_STATUS_ORCADO) return 'bg-sky-100 text-sky-800';
-    if (status === COMPRA_STATUS_AGUARDANDO_ENTREGA) return 'bg-violet-100 text-violet-800';
-    if (status === COMPRA_STATUS_FECHADO) return 'bg-slate-200 text-slate-700';
-    return 'bg-amber-100 text-amber-800';
-}
-
-function getImplantacaoCompraSendItems(formValues, record = null) {
-    return IMPLANTACAO_COMPRA_SEND_ITEMS.filter(item => {
-        const isChecked = Boolean(formValues?.[item.checkedKey]);
-        const hasPath = Boolean(formValues?.[item.pathKey]);
-        const alreadySent = Boolean(record?.[item.sentKey]);
-        return isChecked && hasPath && !alreadySent;
-    });
+function getImplantacaoCompraSendItems(purchaseItems = []) {
+    return (purchaseItems || []).filter(item => (
+        Boolean(item?.isChecked)
+        && Boolean(item?.folderPath)
+        && !item?.sentToCommercial
+    ));
 }
 
 function toCompraDateInputValue(dateStr) {
@@ -147,6 +186,19 @@ async function fetchOrderProjectCodesForCompra(orderProjectId) {
     };
 }
 
+async function fetchImplantacaoPurchaseItemForCompra(implantacaoPurchaseItemId) {
+    if (!implantacaoPurchaseItemId) return null;
+
+    const { data, error } = await supabaseClient
+        .from('ImplantacaoPurchaseItem')
+        .select('id, purchaseType, folderPath, thirdPartySubtype:ThirdPartySubtype(id, name)')
+        .eq('id', implantacaoPurchaseItemId)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
+}
+
 async function enrichCompraRecord(record) {
     if (!record) return record;
 
@@ -165,12 +217,13 @@ async function enrichCompraRecord(record) {
         }
     }
 
-    if (record.implantacaoId) {
+    if (record.implantacaoPurchaseItemId) {
         try {
-            const implantacao = await fetchImplantacaoPathsForCompra(record.implantacaoId);
-            enriched.listaPath = getCompraListaPathFromImplantacao(record.tipoCompra, implantacao);
+            const purchaseItem = await fetchImplantacaoPurchaseItemForCompra(record.implantacaoPurchaseItemId);
+            enriched.listaPath = purchaseItem?.folderPath || '';
+            enriched.subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
         } catch (error) {
-            console.warn('enrichCompraRecord implantacao:', error);
+            console.warn('enrichCompraRecord purchase item:', error);
         }
     }
 
@@ -181,11 +234,10 @@ async function createComprasRecordsFromImplantacaoSend(options = {}) {
     const {
         implantacaoId,
         orderProjectId,
-        formValues,
-        record = null
+        purchaseItems = []
     } = options;
 
-    const items = getImplantacaoCompraSendItems(formValues, record);
+    const items = getImplantacaoCompraSendItems(purchaseItems);
     if (!items.length) return [];
 
     const codes = await fetchOrderProjectCodesForCompra(orderProjectId);
@@ -194,9 +246,10 @@ async function createComprasRecordsFromImplantacaoSend(options = {}) {
         orderCode: codes.orderCode,
         projectCode: codes.projectCode,
         implantacaoId,
+        implantacaoPurchaseItemId: item.id,
         orderProjectId,
-        tipoCompra: item.tipoCompra,
-        status: COMPRA_STATUS_ABERTO,
+        tipoCompra: item.purchaseType,
+        status: getDefaultCompraStatusName(),
         createdById: currentUser?.id || null,
         updatedById: currentUser?.id || null,
         updatedAt: now
@@ -254,7 +307,9 @@ async function fetchOrderComprasItems(orderId) {
     if (!compras.length) return [];
 
     const projectIds = [...new Set(compras.map(item => item.orderProjectId).filter(Boolean))];
+    const purchaseItemIds = [...new Set(compras.map(item => item.implantacaoPurchaseItemId).filter(Boolean))];
     let projectsById = {};
+    let purchaseItemsById = {};
 
     if (projectIds.length) {
         const { data, error } = await supabaseClient
@@ -266,10 +321,27 @@ async function fetchOrderComprasItems(orderId) {
         projectsById = Object.fromEntries((data || []).map(project => [project.id, project]));
     }
 
-    return compras.map(compra => ({
-        ...compra,
-        projectName: projectsById[compra.orderProjectId]?.name || ''
-    }));
+    if (purchaseItemIds.length) {
+        const { data, error } = await supabaseClient
+            .from('ImplantacaoPurchaseItem')
+            .select('id, purchaseType, thirdPartySubtype:ThirdPartySubtype(id, name)')
+            .in('id', purchaseItemIds);
+
+        if (!error && data) {
+            purchaseItemsById = Object.fromEntries(data.map(item => [item.id, item]));
+        }
+    }
+
+    return compras.map(compra => {
+        const purchaseItem = purchaseItemsById[compra.implantacaoPurchaseItemId] || null;
+        const subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
+        return {
+            ...compra,
+            projectName: projectsById[compra.orderProjectId]?.name || '',
+            subtypeName,
+            tipoLabel: formatCompraTipoLabel(compra.tipoCompra, subtypeName)
+        };
+    });
 }
 
 function renderOrderComprasList(items) {
@@ -283,7 +355,7 @@ function renderOrderComprasList(items) {
 
     const rows = items.map(item => {
         const projectName = item.projectName || '—';
-        const tipoLabel = formatCompraTipoLabel(item.tipoCompra);
+        const tipoLabel = item.tipoLabel || formatCompraTipoLabel(item.tipoCompra, item.subtypeName);
         const statusClass = getCompraStatusBadgeClass(item.status);
         const previsaoLabel = formatCompraDisplayDate(item.previsaoEntrega);
         const actionCell = item.id
@@ -353,11 +425,19 @@ async function refreshActiveOrderComprasTab() {
 }
 
 async function fetchComprasAbertas() {
-    const { data, error } = await supabaseClient
+    await ensureCompraStatusesLoaded(true);
+    const closedStatusNames = getCompraClosedStatusNames();
+
+    let query = supabaseClient
         .from('Compras')
         .select('*')
-        .neq('status', COMPRA_STATUS_FECHADO)
         .order('createdAt', { ascending: false });
+
+    closedStatusNames.forEach(statusName => {
+        query = query.neq('status', statusName);
+    });
+
+    const { data, error } = await query;
 
     if (error?.message?.includes('Compras') || error?.message?.includes('does not exist')) {
         return {
@@ -386,7 +466,7 @@ async function fetchCompraById(compraId) {
 
 function readCompraFormValues() {
     return {
-        status: document.getElementById('compra-modal-status')?.value || COMPRA_STATUS_ABERTO,
+        status: document.getElementById('compra-modal-status')?.value || getDefaultCompraStatusName(),
         previsaoEntrega: fromCompraDateInputValue(document.getElementById('compra-modal-previsao-entrega')?.value),
         observacao: document.getElementById('compra-modal-observacao')?.value?.trim() || '',
         orcamentoPath: document.getElementById('compra-modal-orcamento-path')?.value?.trim() || ''
@@ -416,19 +496,19 @@ function setCompraModalLoading(active, message = 'Processando...', status = 'loa
 }
 
 function populateCompraForm(record) {
-    const tipoLabel = formatCompraTipoLabel(record?.tipoCompra);
+    const tipoLabel = formatCompraTipoLabel(record?.tipoCompra, record?.subtypeName);
     document.getElementById('compra-modal-order-code').textContent = record?.orderCode || '—';
     document.getElementById('compra-modal-client-name').textContent = ` ${record?.clientName || '—'}`;
     document.getElementById('compra-modal-project-name').textContent = ` ${record?.projectName || '—'}`;
     document.getElementById('compra-modal-tipo').textContent = ` ${tipoLabel}`;
     document.getElementById('compra-modal-lista-path').textContent = ` ${record?.listaPath || '—'}`;
-    document.getElementById('compra-modal-status').value = record?.status || COMPRA_STATUS_ABERTO;
+    populateCompraStatusSelect(record?.status || getDefaultCompraStatusName());
     document.getElementById('compra-modal-previsao-entrega').value = toCompraDateInputValue(record?.previsaoEntrega);
     document.getElementById('compra-modal-observacao').value = record?.observacao || '';
     document.getElementById('compra-modal-orcamento-path').value = record?.orcamentoPath || '';
 
     const badge = document.getElementById('compra-modal-status-badge');
-    const status = record?.status || COMPRA_STATUS_ABERTO;
+    const status = record?.status || getDefaultCompraStatusName();
     if (badge) {
         badge.textContent = status;
         badge.className = `text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${getCompraStatusBadgeClass(status)}`;
@@ -439,6 +519,8 @@ async function openCompraModal(compraId) {
     if (!compraId) return;
 
     try {
+        await ensureCompraStatusesLoaded(true);
+
         const record = await fetchCompraById(compraId);
         if (!record) {
             alertAppDialog('Compra não encontrada.');
@@ -494,7 +576,8 @@ async function handleCompraSalvar() {
             ...data,
             clientName: activeCompraRecord?.clientName,
             projectName: activeCompraRecord?.projectName,
-            listaPath: activeCompraRecord?.listaPath
+            listaPath: activeCompraRecord?.listaPath,
+            subtypeName: activeCompraRecord?.subtypeName
         };
         populateCompraForm(activeCompraRecord);
 
@@ -520,7 +603,18 @@ async function handleCompraSalvar() {
     }
 }
 
+function getCompraStatusBadgeClass(status) {
+    if (COMPRA_STATUS_BADGE_CLASSES[status]) {
+        return COMPRA_STATUS_BADGE_CLASSES[status];
+    }
+    return 'bg-slate-100 text-slate-700';
+}
+
 function bindCompraEvents() {
+    ensureCompraStatusesLoaded(true).then(() => {
+        populateCompraStatusSelect();
+    });
+
     document.getElementById('compra-modal-status')?.addEventListener('change', async (event) => {
         const badge = document.getElementById('compra-modal-status-badge');
         if (!badge) return;

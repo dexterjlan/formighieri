@@ -35,14 +35,31 @@ async function fetchPendenciasEnviadosCompras() {
             .map(project => [project.id, project])
     );
 
+    const purchaseItemIds = [...new Set(compras.map(item => item.implantacaoPurchaseItemId).filter(Boolean))];
+    let purchaseItemsById = {};
+
+    if (purchaseItemIds.length) {
+        const purchaseResult = await supabaseClient
+            .from('ImplantacaoPurchaseItem')
+            .select('id, purchaseType, thirdPartySubtype:ThirdPartySubtype(id, name)')
+            .in('id', purchaseItemIds);
+
+        if (!purchaseResult.error && purchaseResult.data) {
+            purchaseItemsById = Object.fromEntries(purchaseResult.data.map(row => [row.id, row]));
+        }
+    }
+
     const items = compras
         .map(compra => {
             const project = projectsById[compra.orderProjectId];
+            const purchaseItem = purchaseItemsById[compra.implantacaoPurchaseItemId] || null;
+            const subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
             return {
                 ...compra,
                 project,
                 clientName: project?.order?.clientName || '',
-                projectName: project?.name || ''
+                projectName: project?.name || '',
+                subtypeName
             };
         })
         .filter(item => item.project);
@@ -82,7 +99,7 @@ function renderPendenciasEnviadosComprasList(items) {
         const clientName = item.clientName || item.project?.order?.clientName || '—';
         const projectName = item.projectName || item.project?.name || '—';
         const tipoLabel = typeof formatCompraTipoLabel === 'function'
-            ? formatCompraTipoLabel(item.tipoCompra)
+            ? formatCompraTipoLabel(item.tipoCompra, item.subtypeName)
             : (item.tipoCompra || '—');
         const statusClass = typeof getCompraStatusBadgeClass === 'function'
             ? getCompraStatusBadgeClass(item.status)

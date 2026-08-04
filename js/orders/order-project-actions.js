@@ -261,10 +261,13 @@ function getOrderProjectActions(project, context = {}) {
 
     if (typeof canShowOrderProjectImplantacaoAction === 'function'
         && canShowOrderProjectImplantacaoAction(project, implantacao)) {
+        const enabled = typeof canActOrderPpcp === 'function'
+            && canActOrderPpcp()
+            && canActOnOrderProject(project);
         actions.push({
             id: 'implantacao',
             label: 'Implantação',
-            enabled: true,
+            enabled,
             projectId: project.id,
             projectName: project.name || ''
         });

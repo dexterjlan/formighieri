@@ -13,7 +13,7 @@ const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 roun
 const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
 const GESTAO_NAV_SUB_ACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
 const GESTAO_NAV_SUB_INACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'clientes', 'marceneiros', 'montadores', 'characteristics', 'usuarios'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'clientes', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'compra-status', 'usuarios'];
 const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
 const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
@@ -55,6 +55,8 @@ function setGestaoNavActive(navKey) {
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
         montadores: document.getElementById('gestao-nav-montadores'),
         characteristics: document.getElementById('gestao-nav-characteristics'),
+        'third-party-subtypes': document.getElementById('gestao-nav-third-party-subtypes'),
+        'compra-status': document.getElementById('gestao-nav-compra-status'),
         usuarios: document.getElementById('gestao-nav-usuarios'),
         'montagem-programacao': document.getElementById('gestao-nav-montagem-programacao'),
         dashboard: document.getElementById('gestao-nav-dashboard'),
@@ -113,6 +115,8 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-montadores-panel')?.classList.add('hidden');
     document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
+    document.getElementById('gestao-third-party-subtypes-panel')?.classList.add('hidden');
+    document.getElementById('gestao-compra-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-montagem-programacao-panel')?.classList.add('hidden');
     document.getElementById('gestao-usuarios-panel')?.classList.add('hidden');
     document.getElementById('gestao-dashboard-panel')?.classList.add('hidden');
@@ -980,6 +984,18 @@ function showGestaoCharacteristicsPanel() {
     setGestaoNavActive('characteristics');
 }
 
+function showGestaoThirdPartySubtypesPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-third-party-subtypes-panel')?.classList.remove('hidden');
+    setGestaoNavActive('third-party-subtypes');
+}
+
+function showGestaoCompraStatusPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-compra-status-panel')?.classList.remove('hidden');
+    setGestaoNavActive('compra-status');
+}
+
 function showGestaoUsuariosPanel() {
     if (!isAdmin()) {
         alertAppDialog('Somente administradores podem gerenciar usuários.', { variant: 'warning', title: 'Aviso' });
@@ -1157,7 +1173,23 @@ function bindGestaoEvents() {
         showGestaoCharacteristicsPanel();
         loadGestaoProjectCharacteristicsList();
     });
+    document.getElementById('gestao-nav-third-party-subtypes')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoThirdPartySubtypesPanel();
+        if (typeof loadGestaoThirdPartySubtypesList === 'function') {
+            loadGestaoThirdPartySubtypesList();
+        }
+    });
+    document.getElementById('gestao-nav-compra-status')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoCompraStatusPanel();
+        if (typeof loadGestaoCompraStatusList === 'function') {
+            loadGestaoCompraStatusList();
+        }
+    });
     document.getElementById('gestao-new-characteristic-form')?.addEventListener('submit', addGestaoProjectCharacteristic);
+    document.getElementById('gestao-new-third-party-subtype-form')?.addEventListener('submit', addGestaoThirdPartySubtype);
+    document.getElementById('gestao-new-compra-status-form')?.addEventListener('submit', addGestaoCompraStatus);
     document.getElementById('gestao-project-parent-picker-btn')?.addEventListener('click', () => openProjectRelationPickerModal('parent'));
     document.getElementById('gestao-project-parent-display')?.addEventListener('click', () => {
         if (!document.getElementById('gestao-project-parent-display')?.disabled) {

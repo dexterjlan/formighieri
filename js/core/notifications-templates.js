@@ -395,9 +395,9 @@ function buildApprovalEmailHtml(payload) {
 </body>
 </html>`;
 }
-function buildCompraLiberacaoEmailSubject(tipoCompra, clientName, orderCode) {
+function buildCompraLiberacaoEmailSubject(tipoCompra, clientName, orderCode, subtypeName = '') {
     const tipoLabel = typeof formatCompraTipoLabel === 'function'
-        ? formatCompraTipoLabel(tipoCompra)
+        ? formatCompraTipoLabel(tipoCompra, subtypeName)
         : (tipoCompra || '—');
     const client = clientName || '—';
     const order = orderCode || '—';
