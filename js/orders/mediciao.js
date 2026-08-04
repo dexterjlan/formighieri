@@ -166,6 +166,19 @@ async function applyPlantaLevantadaStatusToProjects(orderProjectIds) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
+    const { data: fetchedProjects, error: fetchError } = await supabaseClient
+        .from('OrderProject')
+        .select('id, projectStatus:OrderProjectStatus(name)')
+        .in('id', uniqueIds);
+
+    if (fetchError) throw fetchError;
+
+    const eligibleIds = (fetchedProjects || [])
+        .filter(p => (p.projectStatus?.name || getProjectStatusName(p)) === 'Medição Realizada')
+        .map(p => Number(p.id));
+
+    if (!eligibleIds.length) return;
+
     const statusId = await getPlantaLevantadaStatusId();
     if (!statusId) {
         throw new Error('Status "Planta Levantada" não encontrado. Cadastre em Gestão → Status de Projeto.');
@@ -179,7 +192,7 @@ async function applyPlantaLevantadaStatusToProjects(orderProjectIds) {
             updatedById: currentUser.id,
             updatedAt: now
         })
-        .in('id', uniqueIds);
+        .in('id', eligibleIds);
 
     if (error) throw error;
 }
