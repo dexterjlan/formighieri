@@ -342,39 +342,117 @@ function getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, context 
         || null;
 }
 
-function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context = {}) {
+function isGestaoRelatorioPedidosPendentesComplementarProject(project) {
+    return typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project);
+}
+
+function getGestaoRelatorioPedidosPendentesOrderGroupKeys(project, context = {}, options = {}) {
+    const resolveDate = typeof options.getProjectReferenceDate === 'function'
+        ? options.getProjectReferenceDate
+        : getGestaoRelatorioPedidosPendentesProjectDeliveryDate;
+    const deliveryDate = resolveDate(project, context);
+    const clientName = project.order?.clientName?.trim() || 'Sem cliente';
+    const orderId = Number(project.orderId);
+
+    return {
+        monthKey: getGestaoRelatorioMonthKey(deliveryDate),
+        clientKey: clientName.toLocaleLowerCase('pt-BR'),
+        clientName,
+        orderId,
+        orderKey: `${orderId}::${deliveryDate || 'sem-data'}`,
+        deliveryDate
+    };
+}
+
+function getGestaoRelatorioPedidosPendentesOrderGroup(
+    monthGroups,
+    { monthKey, clientKey, clientName, orderId, orderKey, deliveryDate },
+    project
+) {
+    if (!monthGroups[monthKey]) {
+        monthGroups[monthKey] = { monthKey, clientsByKey: {} };
+    }
+
+    if (!monthGroups[monthKey].clientsByKey[clientKey]) {
+        monthGroups[monthKey].clientsByKey[clientKey] = {
+            clientName,
+            ordersById: {}
+        };
+    }
+
+    if (!monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey]) {
+        monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey] = {
+            orderId,
+            order: project.order || {},
+            clientDeliveryDate: deliveryDate,
+            projects: [],
+            complementarProjects: []
+        };
+    }
+
+    return monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey];
+}
+
+function buildGestaoRelatorioPedidosPendentesProjectTree(parentProjects, complementarProjects, projectsById = {}) {
+    const complementarByParentId = {};
+    const parentIdsInList = new Set(parentProjects.map(project => Number(project.id)));
+
+    (complementarProjects || []).forEach(project => {
+        const parentId = Number(project.parentProjectId || project.parentProject?.id);
+        if (!parentId) return;
+        if (!complementarByParentId[parentId]) complementarByParentId[parentId] = [];
+        complementarByParentId[parentId].push(project);
+    });
+
+    Object.values(complementarByParentId).forEach(children => {
+        children.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+    });
+
+    const extraParentIds = Object.keys(complementarByParentId)
+        .map(Number)
+        .filter(parentId => parentId && !parentIdsInList.has(parentId) && projectsById[parentId]);
+
+    const allParents = [...parentProjects, ...extraParentIds.map(parentId => projectsById[parentId])]
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+
+    return allParents.map(project => ({
+        project,
+        children: complementarByParentId[Number(project.id)] || [],
+        parentPending: parentIdsInList.has(Number(project.id))
+    }));
+}
+
+function countGestaoRelatorioPedidosPendentesOrderProjects(projectTree) {
+    return (projectTree || []).filter(entry => entry.parentPending || (entry.children || []).length > 0).length;
+}
+
+function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context = {}, options = {}) {
     const monthGroups = {};
+    const parentProjects = [];
+    const complementarProjects = [];
 
     (projects || []).forEach(project => {
-        const deliveryDate = getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, context);
-        const monthKey = getGestaoRelatorioMonthKey(deliveryDate);
-        const clientName = project.order?.clientName?.trim() || 'Sem cliente';
-        const clientKey = clientName.toLocaleLowerCase('pt-BR');
-        const orderId = Number(project.orderId);
-        if (!orderId) return;
-        const orderKey = `${orderId}::${deliveryDate || 'sem-data'}`;
-
-        if (!monthGroups[monthKey]) {
-            monthGroups[monthKey] = { monthKey, clientsByKey: {} };
+        if (isGestaoRelatorioPedidosPendentesComplementarProject(project)) {
+            complementarProjects.push(project);
+            return;
         }
+        parentProjects.push(project);
+    });
 
-        if (!monthGroups[monthKey].clientsByKey[clientKey]) {
-            monthGroups[monthKey].clientsByKey[clientKey] = {
-                clientName,
-                ordersById: {}
-            };
-        }
+    parentProjects.forEach(project => {
+        const keys = getGestaoRelatorioPedidosPendentesOrderGroupKeys(project, context, options);
+        if (!keys.orderId) return;
 
-        if (!monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey]) {
-            monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey] = {
-                orderId,
-                order: project.order || {},
-                clientDeliveryDate: deliveryDate,
-                projects: []
-            };
-        }
+        const orderGroup = getGestaoRelatorioPedidosPendentesOrderGroup(monthGroups, keys, project);
+        orderGroup.projects.push(project);
+    });
 
-        monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey].projects.push(project);
+    complementarProjects.forEach(project => {
+        const keys = getGestaoRelatorioPedidosPendentesOrderGroupKeys(project, context, options);
+        if (!keys.orderId) return;
+
+        const orderGroup = getGestaoRelatorioPedidosPendentesOrderGroup(monthGroups, keys, project);
+        orderGroup.complementarProjects.push(project);
     });
 
     return Object.values(monthGroups)
@@ -387,41 +465,92 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
             const clients = Object.values(monthGroup.clientsByKey)
                 .map(clientGroup => {
                     const orders = Object.values(clientGroup.ordersById)
-                        .map(orderGroup => ({
-                            ...orderGroup,
-                            projects: [...orderGroup.projects].sort((a, b) =>
-                                String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR')
-                            ),
-                            totalSaleValue: sumGestaoRelatorioSaleValues(orderGroup.projects)
-                        }))
+                        .map(orderGroup => {
+                            const projectTree = buildGestaoRelatorioPedidosPendentesProjectTree(
+                                orderGroup.projects,
+                                orderGroup.complementarProjects,
+                                context.projectsById || {}
+                            );
+                            const valueProjects = [
+                                ...orderGroup.projects,
+                                ...(orderGroup.complementarProjects || [])
+                            ];
+
+                            return {
+                                ...orderGroup,
+                                projectTree,
+                                projectCount: countGestaoRelatorioPedidosPendentesOrderProjects(projectTree),
+                                totalSaleValue: sumGestaoRelatorioSaleValues(valueProjects)
+                            };
+                        })
                         .sort((a, b) => String(a.order?.orderCode || '').localeCompare(
                             String(b.order?.orderCode || ''),
                             'pt-BR',
                             { numeric: true }
                         ));
-                    const clientProjects = orders.flatMap(order => order.projects);
 
                     return {
                         clientName: clientGroup.clientName,
                         orders,
                         orderCount: orders.length,
-                        projectCount: clientProjects.length,
+                        projectCount: orders.reduce((sum, order) => sum + order.projectCount, 0),
                         totalSaleValue: orders.reduce((sum, order) => sum + order.totalSaleValue, 0)
                     };
                 })
                 .sort((a, b) => a.clientName.localeCompare(b.clientName, 'pt-BR'));
 
             const orders = clients.flatMap(client => client.orders);
-            const projects = orders.flatMap(order => order.projects);
 
             return {
                 monthKey: monthGroup.monthKey,
                 clients,
                 orderCount: orders.length,
-                projectCount: projects.length,
+                projectCount: orders.reduce((sum, order) => sum + order.projectCount, 0),
                 totalSaleValue: orders.reduce((sum, order) => sum + order.totalSaleValue, 0)
             };
         });
+}
+
+function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) {
+    const { nested = false, parentOnly = false } = options;
+    const statusName = getGestaoRelatorioStatusName(project);
+    const statusClass = typeof getOrderProjectStatusBadgeClass === 'function'
+        ? getOrderProjectStatusBadgeClass(statusName)
+        : 'bg-slate-100 text-slate-700';
+    const saleValue = typeof formatSaleValue === 'function'
+        ? formatSaleValue(getProjectEffectiveSaleValue(project))
+        : (getProjectEffectiveSaleValue(project) ?? '—');
+    const labelPrefix = nested ? '↳ ' : '';
+    const cellPadding = nested ? 'p-2 pl-8' : 'p-2 pl-6';
+    const rowClass = nested
+        ? 'border-b border-slate-50 last:border-0 bg-slate-50/20'
+        : 'border-b border-slate-50 last:border-0 bg-slate-50/40';
+
+    return `
+        <tr class="${rowClass}">
+            <td class="${cellPadding} text-xs ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(`${labelPrefix}${getGestaoRelatorioProjectLabel(project)}`)}</td>
+            <td class="p-2">
+                ${parentOnly ? '<span class="text-[10px] text-slate-400">—</span>' : `
+                <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
+                    ${escapeHtml(statusName || '—')}
+                </span>`}
+            </td>
+            <td class="p-2 text-xs text-slate-600 text-right">${parentOnly ? '<span class="text-slate-400">—</span>' : escapeHtml(saleValue)}</td>
+        </tr>
+    `;
+}
+
+function renderGestaoRelatorioPedidosPendentesProjectTreeRows(projectTree) {
+    return (projectTree || []).map(({ project, children, parentPending }) => {
+        const parentRow = parentPending
+            ? renderGestaoRelatorioPedidosPendentesProjectRow(project)
+            : renderGestaoRelatorioPedidosPendentesProjectRow(project, { parentOnly: true });
+        const childRows = (children || [])
+            .map(child => renderGestaoRelatorioPedidosPendentesProjectRow(child, { nested: true }))
+            .join('');
+
+        return `${parentRow}${childRows}`;
+    }).join('');
 }
 
 function renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup) {
@@ -432,29 +561,8 @@ function renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup) {
     const totalLabel = typeof formatSaleValue === 'function'
         ? formatSaleValue(orderGroup.totalSaleValue)
         : orderGroup.totalSaleValue;
-    const projectCount = orderGroup.projects.length;
-
-    const projectRows = orderGroup.projects.map(project => {
-        const statusName = getGestaoRelatorioStatusName(project);
-        const statusClass = typeof getOrderProjectStatusBadgeClass === 'function'
-            ? getOrderProjectStatusBadgeClass(statusName)
-            : 'bg-slate-100 text-slate-700';
-        const saleValue = typeof formatSaleValue === 'function'
-            ? formatSaleValue(getProjectEffectiveSaleValue(project))
-            : (getProjectEffectiveSaleValue(project) ?? '—');
-
-        return `
-            <tr class="border-b border-slate-50 last:border-0 bg-slate-50/40">
-                <td class="p-2 pl-6 text-xs text-slate-700">${escapeHtml(getGestaoRelatorioProjectLabel(project))}</td>
-                <td class="p-2">
-                    <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
-                        ${escapeHtml(statusName || '—')}
-                    </span>
-                </td>
-                <td class="p-2 text-xs text-slate-600 text-right">${escapeHtml(saleValue)}</td>
-            </tr>
-        `;
-    }).join('');
+    const projectCount = orderGroup.projectCount ?? (orderGroup.projects || []).length;
+    const projectRows = renderGestaoRelatorioPedidosPendentesProjectTreeRows(orderGroup.projectTree);
 
     return `
         <tbody class="border-b border-slate-100 last:border-0">
@@ -521,7 +629,8 @@ function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup) {
     `;
 }
 
-function renderGestaoRelatorioPedidosPendentesGroups(groups) {
+function renderGestaoRelatorioPedidosPendentesGroups(groups, options = {}) {
+    const emptyMonthLabel = options.emptyMonthLabel || 'Sem data de entrega do pedido';
     if (!groups.length) {
         return '<p class="text-xs text-slate-400 text-center py-4">Nenhum pedido pendente encontrado.</p>';
     }
@@ -537,7 +646,7 @@ function renderGestaoRelatorioPedidosPendentesGroups(groups) {
                     <div class="flex items-center gap-2 min-w-0">
                         <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-indigo-700 hover:text-indigo-900 text-[10px]"
                             aria-label="Expandir">▶</button>
-                        <span class="text-xs font-semibold text-slate-900">${escapeHtml(formatGestaoRelatorioMonthLabel(monthGroup.monthKey, 'Sem data de entrega do pedido'))}</span>
+                        <span class="text-xs font-semibold text-slate-900">${escapeHtml(formatGestaoRelatorioMonthLabel(monthGroup.monthKey, emptyMonthLabel))}</span>
                         <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.clients.length} cliente${monthGroup.clients.length === 1 ? '' : 's'}</span>
                         <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.orderCount} pedido${monthGroup.orderCount === 1 ? '' : 's'}</span>
                         <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.projectCount} projeto${monthGroup.projectCount === 1 ? '' : 's'}</span>
@@ -753,7 +862,7 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Pedidos Pendentes</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos em todos os status até ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega (fase do pedido ou data do cliente) e, dentro de cada mês, por cliente. Projetos complementares usam a data do projeto pai.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos em todos os status até ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega (fase do pedido ou data do cliente) e, dentro de cada mês, por cliente. Projetos complementares aparecem como filhos do pai e não entram na contagem, mas seu valor compõe o total.</p>
                 </div>
                 <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
                     Total: ${escapeHtml(pedidosPendentesGrandTotalLabel)}
@@ -837,3 +946,13 @@ async function loadGestaoRelatorios() {
 function bindGestaoRelatoriosEvents() {
     document.getElementById('btn-gestao-relatorios-refresh')?.addEventListener('click', loadGestaoRelatorios);
 }
+
+window.filterGestaoRelatorioPedidosPendentesProjects = filterGestaoRelatorioPedidosPendentesProjects;
+window.buildGestaoRelatorioProjectsById = buildGestaoRelatorioProjectsById;
+window.groupGestaoRelatorioPedidosPendentesByMonthAndClient = groupGestaoRelatorioPedidosPendentesByMonthAndClient;
+window.renderGestaoRelatorioPedidosPendentesGroups = renderGestaoRelatorioPedidosPendentesGroups;
+window.buildGestaoRelatorioPedidosPendentesProjectTree = buildGestaoRelatorioPedidosPendentesProjectTree;
+window.getGestaoRelatorioPedidosPendentesProjectDeliveryDate = getGestaoRelatorioPedidosPendentesProjectDeliveryDate;
+window.isGestaoRelatorioPedidosPendentesComplementarProject = isGestaoRelatorioPedidosPendentesComplementarProject;
+window.getGestaoRelatorioProjectLabel = getGestaoRelatorioProjectLabel;
+window.getGestaoRelatorioStatusName = getGestaoRelatorioStatusName;

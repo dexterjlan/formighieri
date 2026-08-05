@@ -110,6 +110,9 @@ async function restoreGestaoView(state) {
         },
         'montagem-programacao': () => {
             if (typeof showGestaoMontagemProgramacaoPanel === 'function') showGestaoMontagemProgramacaoPanel();
+        },
+        'programacao-producao': () => {
+            if (typeof showGestaoProgramacaoProducaoPanel === 'function') showGestaoProgramacaoProducaoPanel();
         }
     };
 

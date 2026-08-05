@@ -59,6 +59,7 @@ function setGestaoNavActive(navKey) {
         'compra-status': document.getElementById('gestao-nav-compra-status'),
         usuarios: document.getElementById('gestao-nav-usuarios'),
         'montagem-programacao': document.getElementById('gestao-nav-montagem-programacao'),
+        'programacao-producao': document.getElementById('gestao-nav-programacao-producao'),
         dashboard: document.getElementById('gestao-nav-dashboard'),
         kanban: document.getElementById('gestao-nav-kanban'),
         gantt: document.getElementById('gestao-nav-gantt'),
@@ -118,6 +119,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-third-party-subtypes-panel')?.classList.add('hidden');
     document.getElementById('gestao-compra-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-montagem-programacao-panel')?.classList.add('hidden');
+    document.getElementById('gestao-programacao-producao-panel')?.classList.add('hidden');
     document.getElementById('gestao-usuarios-panel')?.classList.add('hidden');
     document.getElementById('gestao-dashboard-panel')?.classList.add('hidden');
     document.getElementById('gestao-kanban-panel')?.classList.add('hidden');
@@ -1368,6 +1370,9 @@ function bindGestaoEvents() {
     }
     if (typeof bindMontagemProgramacaoEvents === 'function') {
         bindMontagemProgramacaoEvents();
+    }
+    if (typeof bindProgramacaoProducaoEvents === 'function') {
+        bindProgramacaoProducaoEvents();
     }
 }
 

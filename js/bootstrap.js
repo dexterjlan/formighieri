@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '20261103';
+const APP_CACHE_VERSION = '20261107';
 
 const PARTIALS = [
     'partials/login.html',
@@ -33,6 +33,7 @@ const SCRIPTS = [
     'js/gestao/gestao-alterar-status-projeto.js',
     'js/gestao/gestao-dashboard.js',
     'js/gestao/gestao-relatorios.js',
+    'js/gestao/gestao-programacao-producao.js',
     'js/gestao/gestao-performance.js',
     'js/gestao/gestao-montagem-programacao.js',
     'js/orders/nomear.js',
