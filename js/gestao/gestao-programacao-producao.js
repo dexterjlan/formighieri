@@ -169,6 +169,74 @@ function getProgramacaoProducaoOrderMonthInputValue(projects) {
     return values.length === 1 ? values[0] : '';
 }
 
+function getProgramacaoProducaoOrderPhases(orderId, context) {
+    const phasesByOrderId = context?.phasesByOrderId || {};
+    return phasesByOrderId[orderId] || phasesByOrderId[Number(orderId)] || [];
+}
+
+function projectBelongsToProgramacaoProducaoPhase(project, phase, phases) {
+    if (!phase) return true;
+
+    const phaseId = Number(phase.id);
+    const projectPhaseId = Number(project.deliveryPhaseId);
+    const firstPhaseId = Number(phases[0]?.id);
+
+    if (projectPhaseId) return projectPhaseId === phaseId;
+    return phaseId === firstPhaseId;
+}
+
+function buildProgramacaoProducaoOrderSlice(orderGroup, context, options = {}) {
+    const { phase = null, phases = [] } = options;
+    const parentProjects = phase
+        ? (orderGroup.projects || []).filter(project =>
+            projectBelongsToProgramacaoProducaoPhase(project, phase, phases)
+        )
+        : (orderGroup.projects || []);
+
+    if (phase && !parentProjects.length) return null;
+
+    const parentIds = new Set(parentProjects.map(project => Number(project.id)));
+    const complementarProjects = (orderGroup.complementarProjects || []).filter(project => {
+        const parentId = getProgramacaoProducaoParentProjectId(project);
+        if (parentId && parentIds.has(parentId)) return true;
+        if (!phase) return true;
+        return projectBelongsToProgramacaoProducaoPhase(project, phase, phases);
+    });
+
+    const allProjects = [...parentProjects, ...complementarProjects];
+    if (!allProjects.length) return null;
+
+    const projectTree = typeof buildGestaoRelatorioPedidosPendentesProjectTree === 'function'
+        ? buildGestaoRelatorioPedidosPendentesProjectTree(
+            parentProjects,
+            complementarProjects,
+            context.projectsById
+        )
+        : parentProjects.map(project => ({ project, children: [], parentPending: true }));
+
+    const phaseLabel = phase && typeof getGestaoOrderPhaseLabel === 'function'
+        ? getGestaoOrderPhaseLabel(phase)
+        : null;
+
+    return {
+        orderId: orderGroup.orderId,
+        phaseId: phase ? Number(phase.id) : null,
+        order: orderGroup.order || {},
+        projects: parentProjects,
+        complementarProjects,
+        orderCode: orderGroup.order?.orderCode || '—',
+        clientName: orderGroup.order?.clientName || '—',
+        phaseLabel,
+        sortDeliveryDate: phase?.deliveryDate
+            || getProgramacaoProducaoOrderSortDeliveryDate(allProjects, context),
+        deliveryDatesLabel: phaseLabel
+            || getProgramacaoProducaoOrderDeliveryDatesLabel(allProjects, context),
+        monthInputValue: getProgramacaoProducaoOrderMonthInputValue(allProjects),
+        projectTree,
+        allProjectIds: allProjects.map(project => Number(project.id)).filter(Boolean)
+    };
+}
+
 function buildProgramacaoProducaoOrders() {
     const context = getProgramacaoProducaoContext();
     const filteredProjects = getProgramacaoProducaoFilteredProjects();
@@ -196,41 +264,37 @@ function buildProgramacaoProducaoOrders() {
         ordersById[orderId].projects.push(project);
     });
 
-    return Object.values(ordersById)
-        .map(orderGroup => {
-            const allProjects = [
-                ...orderGroup.projects,
-                ...orderGroup.complementarProjects
-            ];
-            const projectTree = typeof buildGestaoRelatorioPedidosPendentesProjectTree === 'function'
-                ? buildGestaoRelatorioPedidosPendentesProjectTree(
-                    orderGroup.projects,
-                    orderGroup.complementarProjects,
-                    context.projectsById
-                )
-                : orderGroup.projects.map(project => ({ project, children: [], parentPending: true }));
+    const slices = [];
 
-            return {
-                ...orderGroup,
-                orderCode: orderGroup.order?.orderCode || '—',
-                clientName: orderGroup.order?.clientName || '—',
-                sortDeliveryDate: getProgramacaoProducaoOrderSortDeliveryDate(allProjects, context),
-                deliveryDatesLabel: getProgramacaoProducaoOrderDeliveryDatesLabel(allProjects, context),
-                monthInputValue: getProgramacaoProducaoOrderMonthInputValue(allProjects),
-                projectTree,
-                allProjectIds: allProjects.map(project => Number(project.id)).filter(Boolean)
-            };
-        })
-        .sort((a, b) => {
-            if (!a.sortDeliveryDate && !b.sortDeliveryDate) {
-                return String(a.orderCode).localeCompare(String(b.orderCode), 'pt-BR', { numeric: true });
-            }
-            if (!a.sortDeliveryDate) return 1;
-            if (!b.sortDeliveryDate) return -1;
-            const dateCompare = String(a.sortDeliveryDate).localeCompare(String(b.sortDeliveryDate));
-            if (dateCompare !== 0) return dateCompare;
-            return String(a.orderCode).localeCompare(String(b.orderCode), 'pt-BR', { numeric: true });
-        });
+    Object.values(ordersById).forEach(orderGroup => {
+        const phases = getProgramacaoProducaoOrderPhases(orderGroup.orderId, context);
+
+        if (phases.length >= 2) {
+            phases.forEach(phase => {
+                const slice = buildProgramacaoProducaoOrderSlice(orderGroup, context, { phase, phases });
+                if (slice) slices.push(slice);
+            });
+            return;
+        }
+
+        const slice = buildProgramacaoProducaoOrderSlice(orderGroup, context);
+        if (slice) slices.push(slice);
+    });
+
+    return slices.sort((a, b) => {
+        if (!a.sortDeliveryDate && !b.sortDeliveryDate) {
+            const codeCompare = String(a.orderCode).localeCompare(String(b.orderCode), 'pt-BR', { numeric: true });
+            if (codeCompare !== 0) return codeCompare;
+            return Number(a.phaseId || 0) - Number(b.phaseId || 0);
+        }
+        if (!a.sortDeliveryDate) return 1;
+        if (!b.sortDeliveryDate) return -1;
+        const dateCompare = String(a.sortDeliveryDate).localeCompare(String(b.sortDeliveryDate));
+        if (dateCompare !== 0) return dateCompare;
+        const codeCompare = String(a.orderCode).localeCompare(String(b.orderCode), 'pt-BR', { numeric: true });
+        if (codeCompare !== 0) return codeCompare;
+        return Number(a.phaseId || 0) - Number(b.phaseId || 0);
+    });
 }
 
 function getProgramacaoProducaoClientFilter() {
@@ -351,8 +415,12 @@ function renderProgramacaoProducaoProjectTreeRows(projectTree) {
 }
 
 function renderProgramacaoProducaoOrderCard(orderGroup) {
+    const listKey = orderGroup.phaseId
+        ? `${orderGroup.orderId}-${orderGroup.phaseId}`
+        : String(orderGroup.orderId);
+
     return `
-        <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white" data-order-id="${orderGroup.orderId}">
+        <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white" data-order-id="${orderGroup.orderId}" data-list-key="${escapeHtml(listKey)}">
             <div class="collapsible-list-header px-3 py-2.5 bg-white border-b border-slate-100 cursor-pointer flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2 min-w-0 flex-1">
                     <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
