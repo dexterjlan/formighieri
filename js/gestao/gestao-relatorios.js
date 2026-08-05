@@ -1,4 +1,3 @@
-const GESTAO_RELATORIO_RANGE_START = 'Medição Realizada';
 const GESTAO_RELATORIO_PEDIDOS_PENDENTES_END = 'Montagem Interna';
 const GESTAO_RELATORIO_EXPEDICAO_STATUS = 'Expedição';
 
@@ -282,30 +281,21 @@ function renderGestaoRelatorioPieChart(statusCounts) {
     `;
 }
 
-function getGestaoRelatorioRangeBounds(statuses, endStatusName = GESTAO_RELATORIO_PEDIDOS_PENDENTES_END) {
-    const startStatus = statuses.find(status => status.name === GESTAO_RELATORIO_RANGE_START);
-    const endStatus = statuses.find(status => status.name === endStatusName);
-
-    const minSort = startStatus?.sortOrder ?? null;
-    const maxSort = endStatus?.sortOrder ?? null;
-
-    return { minSort, maxSort };
+function getGestaoRelatorioPedidosPendentesMaxSort(statuses) {
+    const endStatus = statuses.find(status => status.name === GESTAO_RELATORIO_PEDIDOS_PENDENTES_END);
+    return endStatus?.sortOrder != null ? Number(endStatus.sortOrder) : null;
 }
 
-function filterGestaoRelatorioRangeProjects(projects, statuses, endStatusName = GESTAO_RELATORIO_PEDIDOS_PENDENTES_END) {
-    const { minSort, maxSort } = getGestaoRelatorioRangeBounds(statuses, endStatusName);
-    if (minSort == null || maxSort == null) return [];
+function filterGestaoRelatorioPedidosPendentesProjects(projects, statuses) {
+    const maxSort = getGestaoRelatorioPedidosPendentesMaxSort(statuses);
+    if (maxSort == null) return [];
 
     const statusById = Object.fromEntries(statuses.map(status => [status.id, status]));
 
     return projects.filter(project => {
         const sortOrder = getGestaoRelatorioStatusSortOrder(project, statusById);
-        return sortOrder >= minSort && sortOrder <= maxSort;
+        return sortOrder <= maxSort;
     });
-}
-
-function filterGestaoRelatorioPedidosPendentesProjects(projects, statuses) {
-    return filterGestaoRelatorioRangeProjects(projects, statuses, GESTAO_RELATORIO_PEDIDOS_PENDENTES_END);
 }
 
 function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects) {
@@ -363,22 +353,26 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects) {
                             'pt-BR',
                             { numeric: true }
                         ));
+                    const clientProjects = orders.flatMap(order => order.projects);
 
                     return {
                         clientName: clientGroup.clientName,
                         orders,
                         orderCount: orders.length,
+                        projectCount: clientProjects.length,
                         totalSaleValue: orders.reduce((sum, order) => sum + order.totalSaleValue, 0)
                     };
                 })
                 .sort((a, b) => a.clientName.localeCompare(b.clientName, 'pt-BR'));
 
             const orders = clients.flatMap(client => client.orders);
+            const projects = orders.flatMap(order => order.projects);
 
             return {
                 monthKey: monthGroup.monthKey,
                 clients,
                 orderCount: orders.length,
+                projectCount: projects.length,
                 totalSaleValue: orders.reduce((sum, order) => sum + order.totalSaleValue, 0)
             };
         });
@@ -442,6 +436,7 @@ function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup) {
                         aria-label="Expandir">▶</button>
                     <span class="text-xs font-medium text-slate-800 truncate">${escapeHtml(clientGroup.clientName)}</span>
                     <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.orderCount} pedido${clientGroup.orderCount === 1 ? '' : 's'}</span>
+                    <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.projectCount} projeto${clientGroup.projectCount === 1 ? '' : 's'}</span>
                 </div>
                 <span class="text-xs font-semibold text-indigo-700 shrink-0">${escapeHtml(totalLabel)}</span>
             </div>
@@ -483,6 +478,7 @@ function renderGestaoRelatorioPedidosPendentesGroups(groups) {
                         <span class="text-xs font-semibold text-slate-900">${escapeHtml(formatGestaoRelatorioMonthLabel(monthGroup.monthKey, 'Sem data de entrega do pedido'))}</span>
                         <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.clients.length} cliente${monthGroup.clients.length === 1 ? '' : 's'}</span>
                         <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.orderCount} pedido${monthGroup.orderCount === 1 ? '' : 's'}</span>
+                        <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.projectCount} projeto${monthGroup.projectCount === 1 ? '' : 's'}</span>
                     </div>
                     <span class="text-xs font-bold text-indigo-700 shrink-0">${escapeHtml(totalLabel)}</span>
                 </div>
@@ -692,7 +688,7 @@ function renderGestaoRelatoriosPanel(projects, statuses) {
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Pedidos Pendentes</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos entre ${escapeHtml(GESTAO_RELATORIO_RANGE_START)} e ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega do pedido e, dentro de cada mês, por cliente.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos em todos os status até ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega do pedido e, dentro de cada mês, por cliente.</p>
                 </div>
                 <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
                     Total: ${escapeHtml(pedidosPendentesGrandTotalLabel)}
