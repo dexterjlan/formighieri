@@ -18,6 +18,11 @@ function setGestaoOrderPhasesDraft(phases = []) {
         deliveryDate: phase.deliveryDate || '',
         sortOrder: phase.sortOrder != null ? Number(phase.sortOrder) : index + 1
     }));
+
+    const orderFormPanel = document.getElementById('gestao-order-form-panel');
+    if (orderFormPanel && !orderFormPanel.classList.contains('hidden') && typeof renderGestaoProjectsSummaryList === 'function') {
+        renderGestaoProjectsSummaryList();
+    }
 }
 
 function getGestaoOrderPhasesDraft() {
@@ -579,4 +584,17 @@ window.syncGestaoOrderClientDeliveryField = syncGestaoOrderClientDeliveryField;
 window.fetchGestaoOrderPhasesByOrderIds = fetchGestaoOrderPhasesByOrderIds;
 window.orderHasGestaoDeliveryPhases = orderHasGestaoDeliveryPhases;
 window.getGestaoOrderPhaseLabel = getGestaoOrderPhaseLabel;
-window.getGestaoProjectDeliveryPhaseDate = getGestaoProjectDeliveryPhaseDate;
+function getGestaoProjectPhaseDeliveryDisplay(project, phases = gestaoOrderPhasesDraft) {
+    const phase = getGestaoProjectDeliveryPhase(project, phases);
+    if (!phase) return '—';
+
+    if (typeof getGestaoOrderPhaseLabel === 'function') {
+        return getGestaoOrderPhaseLabel(phase);
+    }
+
+    return typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(phase.deliveryDate)
+        : (phase.deliveryDate || '—');
+}
+
+window.getGestaoProjectPhaseDeliveryDisplay = getGestaoProjectPhaseDeliveryDisplay;

@@ -1,3 +1,5 @@
+const APP_CACHE_VERSION = '20261103';
+
 const PARTIALS = [
     'partials/login.html',
     'partials/register.html',
@@ -112,7 +114,7 @@ async function bootstrap() {
     const mount = document.getElementById('app-root');
 
     try {
-        const partialsVersion = '20261093';
+        const partialsVersion = APP_CACHE_VERSION;
         const htmlParts = await Promise.all(
             PARTIALS.map(url =>
                 fetch(`${url}?v=${partialsVersion}`).then(response => {
@@ -126,7 +128,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261101`);
+            await loadScript(`${src}?v=${APP_CACHE_VERSION}`);
         }
 
         initAppEvents();

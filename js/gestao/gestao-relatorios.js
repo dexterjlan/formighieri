@@ -3,16 +3,19 @@ const GESTAO_RELATORIO_EXPEDICAO_STATUS = 'Expedição';
 
 const GESTAO_RELATORIO_PROJECT_SELECT = `
     id, orderId, projectCode, name, saleValue, deliveryDate, fimMontagemInterna, statusId,
+    deliveryPhaseId, isComplementar, parentProjectId,
     isSubstituicao, substituiProjectId,
     substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)),
+    parentProject:parentProjectId(id, deliveryPhaseId),
     order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
 
 const GESTAO_RELATORIO_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, saleValue, deliveryDate, statusId,
+    deliveryPhaseId, isComplementar, parentProjectId,
     isSubstituicao, substituiProjectId,
-    order:salesOrders(id, orderCode, clientName),
+    order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
@@ -50,6 +53,10 @@ async function fetchGestaoRelatorioProjects() {
         || result.error?.message?.includes('sortOrder')
         || result.error?.message?.includes('fimMontagemInterna')
         || result.error?.message?.includes('clientDeliveryDate')
+        || result.error?.message?.includes('deliveryPhaseId')
+        || result.error?.message?.includes('isComplementar')
+        || result.error?.message?.includes('parentProjectId')
+        || result.error?.message?.includes('parentProject')
         || result.error?.message?.includes('substitui')
         || result.error?.message?.includes('isSubstituicao')
         || result.error?.message?.includes('substituiProjectId')) {
@@ -298,15 +305,54 @@ function filterGestaoRelatorioPedidosPendentesProjects(projects, statuses) {
     });
 }
 
-function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects) {
+function buildGestaoRelatorioProjectsById(projects) {
+    return Object.fromEntries((projects || []).map(project => [Number(project.id), project]));
+}
+
+function getGestaoRelatorioOrderPhases(orderId, phasesByOrderId = {}) {
+    return phasesByOrderId[Number(orderId)] || [];
+}
+
+function getGestaoRelatorioPedidosPendentesSourceProject(project, projectsById = {}) {
+    if (typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project)) {
+        const parentId = Number(project.parentProjectId || project.parentProject?.id);
+        if (parentId && projectsById[parentId]) {
+            return projectsById[parentId];
+        }
+    }
+    return project;
+}
+
+function getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, context = {}) {
+    const phasesByOrderId = context.phasesByOrderId || {};
+    const projectsById = context.projectsById || {};
+    const sourceProject = getGestaoRelatorioPedidosPendentesSourceProject(project, projectsById);
+    const phases = getGestaoRelatorioOrderPhases(sourceProject.orderId, phasesByOrderId);
+
+    if (phases.length >= 2) {
+        const projectPhaseId = Number(sourceProject.deliveryPhaseId);
+        const phase = projectPhaseId
+            ? phases.find(item => Number(item.id) === projectPhaseId)
+            : phases[0];
+        if (phase?.deliveryDate) return phase.deliveryDate;
+    }
+
+    return sourceProject.order?.clientDeliveryDate
+        || project.order?.clientDeliveryDate
+        || null;
+}
+
+function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context = {}) {
     const monthGroups = {};
 
     (projects || []).forEach(project => {
-        const monthKey = getGestaoRelatorioMonthKey(project.order?.clientDeliveryDate);
+        const deliveryDate = getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, context);
+        const monthKey = getGestaoRelatorioMonthKey(deliveryDate);
         const clientName = project.order?.clientName?.trim() || 'Sem cliente';
         const clientKey = clientName.toLocaleLowerCase('pt-BR');
         const orderId = Number(project.orderId);
         if (!orderId) return;
+        const orderKey = `${orderId}::${deliveryDate || 'sem-data'}`;
 
         if (!monthGroups[monthKey]) {
             monthGroups[monthKey] = { monthKey, clientsByKey: {} };
@@ -319,16 +365,16 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects) {
             };
         }
 
-        if (!monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderId]) {
-            monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderId] = {
+        if (!monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey]) {
+            monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey] = {
                 orderId,
                 order: project.order || {},
-                clientDeliveryDate: project.order?.clientDeliveryDate || null,
+                clientDeliveryDate: deliveryDate,
                 projects: []
             };
         }
 
-        monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderId].projects.push(project);
+        monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey].projects.push(project);
     });
 
     return Object.values(monthGroups)
@@ -671,13 +717,16 @@ function renderGestaoRelatorioFechamentoProducaoGroups(groups) {
     }).join('');
 }
 
-function renderGestaoRelatoriosPanel(projects, statuses) {
+function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext = {}) {
     const content = document.getElementById('gestao-relatorios-content');
     if (!content) return;
 
     const statusCounts = buildGestaoRelatorioStatusCounts(projects, statuses);
     const pedidosPendentesProjects = filterGestaoRelatorioPedidosPendentesProjects(projects, statuses);
-    const pedidosPendentesGroups = groupGestaoRelatorioPedidosPendentesByMonthAndClient(pedidosPendentesProjects);
+    const pedidosPendentesGroups = groupGestaoRelatorioPedidosPendentesByMonthAndClient(
+        pedidosPendentesProjects,
+        pedidosPendentesContext
+    );
     const pedidosPendentesGrandTotal = pedidosPendentesGroups.reduce((sum, group) => sum + group.totalSaleValue, 0);
     const pedidosPendentesGrandTotalLabel = typeof formatSaleValue === 'function'
         ? formatSaleValue(pedidosPendentesGrandTotal)
@@ -704,7 +753,7 @@ function renderGestaoRelatoriosPanel(projects, statuses) {
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Pedidos Pendentes</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos em todos os status até ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega do pedido e, dentro de cada mês, por cliente.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos em todos os status até ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega (fase do pedido ou data do cliente) e, dentro de cada mês, por cliente. Projetos complementares usam a data do projeto pai.</p>
                 </div>
                 <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
                     Total: ${escapeHtml(pedidosPendentesGrandTotalLabel)}
@@ -768,8 +817,21 @@ async function loadGestaoRelatorios() {
     const projectsWithSubstituicaoValues = await enrichGestaoRelatorioProjectsWithSubstituicaoValues(
         enrichedProjects
     );
+    const orderIds = [...new Set(
+        projectsWithSubstituicaoValues.map(project => Number(project.orderId)).filter(Boolean)
+    )];
+    let phasesByOrderId = {};
 
-    renderGestaoRelatoriosPanel(projectsWithSubstituicaoValues, statuses || []);
+    if (typeof fetchGestaoOrderPhasesByOrderIds === 'function' && orderIds.length) {
+        phasesByOrderId = await fetchGestaoOrderPhasesByOrderIds(orderIds);
+    }
+
+    const pedidosPendentesContext = {
+        phasesByOrderId,
+        projectsById: buildGestaoRelatorioProjectsById(projectsWithSubstituicaoValues)
+    };
+
+    renderGestaoRelatoriosPanel(projectsWithSubstituicaoValues, statuses || [], pedidosPendentesContext);
 }
 
 function bindGestaoRelatoriosEvents() {
