@@ -660,6 +660,60 @@ function renderGestaoKanbanColumn(status, orders) {
     return column;
 }
 
+let gestaoKanbanFullscreen = false;
+let gestaoKanbanStatusesCache = [];
+let gestaoKanbanClientFilterTimer = null;
+
+function getGestaoKanbanClientFilter() {
+    return document.getElementById('gestao-kanban-filter-client')?.value.trim() || '';
+}
+
+function filterGestaoKanbanOrdersByClient(orders, clientName = getGestaoKanbanClientFilter()) {
+    const term = String(clientName || '').trim();
+    if (!term) return orders || [];
+
+    const normalized = term.toLocaleLowerCase('pt-BR');
+    return (orders || []).filter(order => {
+        const name = String(order.clientName || order.cliente?.nome || '').toLocaleLowerCase('pt-BR');
+        return name.includes(normalized);
+    });
+}
+
+function getGestaoKanbanFilteredOrders() {
+    return filterGestaoKanbanOrdersByClient(gestaoOrdersCache || []);
+}
+
+function renderGestaoKanbanBoard(orders = getGestaoKanbanFilteredOrders()) {
+    const board = document.getElementById('gestao-kanban-board');
+    if (!board) return;
+
+    const visibleStatuses = gestaoKanbanStatusesCache || [];
+    if (!visibleStatuses.length) return;
+
+    const boardInner = document.createElement('div');
+    boardInner.className = 'flex gap-3 min-w-max items-start';
+
+    visibleStatuses.forEach(status => {
+        boardInner.appendChild(renderGestaoKanbanColumn(status, orders));
+    });
+
+    board.innerHTML = '';
+    board.appendChild(boardInner);
+}
+
+function scheduleGestaoKanbanClientFilterRender() {
+    clearTimeout(gestaoKanbanClientFilterTimer);
+    gestaoKanbanClientFilterTimer = setTimeout(() => {
+        renderGestaoKanbanBoard();
+    }, 250);
+}
+
+function clearGestaoKanbanClientFilter() {
+    const input = document.getElementById('gestao-kanban-filter-client');
+    if (input) input.value = '';
+    renderGestaoKanbanBoard();
+}
+
 async function loadGestaoKanban() {
     const board = document.getElementById('gestao-kanban-board');
     if (!board) return;
@@ -716,31 +770,35 @@ async function loadGestaoKanban() {
 
     gestaoKanbanStatusesCache = visibleStatuses;
 
-    const boardInner = document.createElement('div');
-    boardInner.className = 'flex gap-3 min-w-max items-start';
-
-    visibleStatuses.forEach(status => {
-        boardInner.appendChild(renderGestaoKanbanColumn(status, gestaoOrdersCache));
-    });
-
-    board.innerHTML = '';
-    board.appendChild(boardInner);
+    renderGestaoKanbanBoard();
 }
 
-let gestaoKanbanFullscreen = false;
-let gestaoKanbanStatusesCache = [];
+function parseGestaoKanbanExportExcelDate(dateStr) {
+    if (!dateStr) return null;
+    const part = String(dateStr).split('T')[0];
+    const [year, month, day] = part.split('-').map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+}
+
+function toGestaoKanbanExportExcelSerial(date) {
+    const epoch = Date.UTC(1899, 11, 30);
+    return (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - epoch) / 86400000;
+}
+
+function getGestaoKanbanExportProjectSaleValue(project) {
+    if (typeof getProjectEffectiveSaleValue === 'function') {
+        return getProjectEffectiveSaleValue(project);
+    }
+    const value = Number(project?.saleValue);
+    return Number.isFinite(value) ? value : 0;
+}
 
 function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplementar = false) {
     const orderDeliveryDate = phase?.deliveryDate || order.clientDeliveryDate || '';
     const projectDeliveryDate = project.deliveryDate || '';
     const designerName = project.designer?.name || '';
-
-    const formattedOrderDate = typeof formatGestaoDate === 'function'
-        ? formatGestaoDate(orderDeliveryDate)
-        : (orderDeliveryDate || '');
-    const formattedProjectDate = typeof formatGestaoDate === 'function'
-        ? formatGestaoDate(projectDeliveryDate)
-        : (projectDeliveryDate || '');
+    const saleValue = getGestaoKanbanExportProjectSaleValue(project);
 
     return [
         statusName,
@@ -748,13 +806,38 @@ function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplem
         order.clientName || '',
         order.consultantName || '',
         phase?.name || '',
-        formattedOrderDate,
-        formattedProjectDate,
+        parseGestaoKanbanExportExcelDate(orderDeliveryDate),
+        parseGestaoKanbanExportExcelDate(projectDeliveryDate),
         project.name || '',
         project.projectCode || '',
+        saleValue,
         isComplementar ? 'Complementar' : 'Principal',
         designerName
     ];
+}
+
+function applyGestaoKanbanExportSheetFormats(sheet, dataRowCount, XLSX) {
+    const dateColumns = [5, 6];
+    const valueColumn = 9;
+
+    for (let row = 1; row <= dataRowCount; row++) {
+        dateColumns.forEach(col => {
+            const ref = XLSX.utils.encode_cell({ r: row, c: col });
+            const cell = sheet[ref];
+            if (!cell?.v || !(cell.v instanceof Date)) return;
+
+            cell.t = 'n';
+            cell.v = toGestaoKanbanExportExcelSerial(cell.v);
+            cell.z = 'dd/mm/yyyy';
+        });
+
+        const valueRef = XLSX.utils.encode_cell({ r: row, c: valueColumn });
+        const valueCell = sheet[valueRef];
+        if (valueCell && typeof valueCell.v === 'number' && Number.isFinite(valueCell.v)) {
+            valueCell.t = 'n';
+            valueCell.z = '#,##0.00';
+        }
+    }
 }
 
 function buildGestaoKanbanExportRows(orders, statuses) {
@@ -808,7 +891,10 @@ async function resolveGestaoKanbanExportData() {
         }
     }
 
-    return { orders, statuses };
+    return {
+        orders: filterGestaoKanbanOrdersByClient(orders, getGestaoKanbanClientFilter()),
+        statuses
+    };
 }
 
 async function exportGestaoKanbanToExcel() {
@@ -850,12 +936,14 @@ async function exportGestaoKanbanToExcel() {
             'Data Entrega Projeto',
             'Projeto',
             'Código Projeto',
+            'Valor Projeto',
             'Tipo',
             'Projetista'
         ];
 
         const XLSX = await loadSheetJsLibrary();
         const sheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+        applyGestaoKanbanExportSheetFormats(sheet, dataRows.length, XLSX);
         sheet['!cols'] = [
             { wch: 24 },
             { wch: 12 },
@@ -866,6 +954,7 @@ async function exportGestaoKanbanToExcel() {
             { wch: 20 },
             { wch: 28 },
             { wch: 14 },
+            { wch: 16 },
             { wch: 14 },
             { wch: 22 }
         ];
@@ -911,6 +1000,8 @@ window.setGestaoKanbanFullscreen = setGestaoKanbanFullscreen;
 function bindGestaoKanbanEvents() {
     document.getElementById('btn-gestao-kanban-fullscreen')?.addEventListener('click', toggleGestaoKanbanFullscreen);
     document.getElementById('btn-gestao-kanban-export')?.addEventListener('click', exportGestaoKanbanToExcel);
+    document.getElementById('gestao-kanban-filter-client')?.addEventListener('input', scheduleGestaoKanbanClientFilterRender);
+    document.getElementById('btn-gestao-kanban-filter-clear')?.addEventListener('click', clearGestaoKanbanClientFilter);
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && gestaoKanbanFullscreen) {

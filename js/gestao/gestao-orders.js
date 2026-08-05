@@ -52,6 +52,7 @@ async function openGestaoEditOrderForm(orderId) {
         ensureGestaoProjectsHavePhaseDefaults();
     }
     syncGestaoOrderClientDeliveryField();
+    renderGestaoProjectsSummaryList();
     showGestaoPedidoFormPanel();
 }
 

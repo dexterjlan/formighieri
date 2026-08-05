@@ -423,10 +423,25 @@ function renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup) {
     `;
 }
 
+function getGestaoRelatorioPedidosPendentesClientDeliveryDatesLabel(clientGroup) {
+    const dates = (clientGroup.orders || [])
+        .map(orderGroup => orderGroup.clientDeliveryDate)
+        .filter(Boolean)
+        .sort((a, b) => String(a).localeCompare(String(b)));
+
+    const uniqueDates = [...new Set(dates)];
+    if (!uniqueDates.length) return '';
+
+    return uniqueDates
+        .map(date => (typeof formatGestaoDate === 'function' ? formatGestaoDate(date) : date))
+        .join(' · ');
+}
+
 function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup) {
     const totalLabel = typeof formatSaleValue === 'function'
         ? formatSaleValue(clientGroup.totalSaleValue)
         : clientGroup.totalSaleValue;
+    const orderDatesLabel = getGestaoRelatorioPedidosPendentesClientDeliveryDatesLabel(clientGroup);
 
     return `
         <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -435,6 +450,7 @@ function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup) {
                     <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                         aria-label="Expandir">▶</button>
                     <span class="text-xs font-medium text-slate-800 truncate">${escapeHtml(clientGroup.clientName)}</span>
+                    ${orderDatesLabel ? `<span class="text-[10px] text-slate-500 shrink-0 whitespace-nowrap">${escapeHtml(orderDatesLabel)}</span>` : ''}
                     <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.orderCount} pedido${clientGroup.orderCount === 1 ? '' : 's'}</span>
                     <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.projectCount} projeto${clientGroup.projectCount === 1 ? '' : 's'}</span>
                 </div>

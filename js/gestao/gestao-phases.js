@@ -32,6 +32,22 @@ function getGestaoOrderPhaseLabel(phase) {
     return `${phase.name || 'Fase'} · ${dateLabel}`;
 }
 
+function getGestaoProjectDeliveryPhase(project, phases = gestaoOrderPhasesDraft) {
+    if (!hasGestaoOrderMultiplePhases(phases)) return null;
+
+    const projectPhaseId = project?.deliveryPhaseId;
+    if (projectPhaseId != null && projectPhaseId !== '') {
+        const phase = phases.find(item => String(item.id) === String(projectPhaseId));
+        if (phase) return phase;
+    }
+
+    return phases[0] || null;
+}
+
+function getGestaoProjectDeliveryPhaseDate(project, phases = gestaoOrderPhasesDraft) {
+    return getGestaoProjectDeliveryPhase(project, phases)?.deliveryDate || null;
+}
+
 function getGestaoFirstOrderPhaseId(phases = gestaoOrderPhasesDraft) {
     return phases?.[0]?.id || null;
 }
@@ -563,3 +579,4 @@ window.syncGestaoOrderClientDeliveryField = syncGestaoOrderClientDeliveryField;
 window.fetchGestaoOrderPhasesByOrderIds = fetchGestaoOrderPhasesByOrderIds;
 window.orderHasGestaoDeliveryPhases = orderHasGestaoDeliveryPhases;
 window.getGestaoOrderPhaseLabel = getGestaoOrderPhaseLabel;
+window.getGestaoProjectDeliveryPhaseDate = getGestaoProjectDeliveryPhaseDate;

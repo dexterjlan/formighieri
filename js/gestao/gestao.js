@@ -625,9 +625,19 @@ function collectGestaoProjectFormData() {
     };
 }
 
+function syncGestaoOrderProjectsPhaseDeliveryColumn(visible) {
+    document.getElementById('gestao-projects-col-phase-delivery')?.classList.toggle('hidden', !visible);
+    document.querySelectorAll('.gestao-projects-phase-delivery-col').forEach(cell => {
+        cell.classList.toggle('hidden', !visible);
+    });
+}
+
 function renderGestaoProjectsSummaryList() {
     const tbody = document.getElementById('gestao-projects-rows');
     if (!tbody) return;
+
+    const isPhasedOrder = typeof hasGestaoOrderMultiplePhases === 'function' && hasGestaoOrderMultiplePhases();
+    syncGestaoOrderProjectsPhaseDeliveryColumn(isPhasedOrder);
 
     tbody.innerHTML = '';
 
@@ -635,6 +645,9 @@ function renderGestaoProjectsSummaryList() {
         const statusName = getGestaoProjectStatusName(project);
         const statusClass = getOrderProjectStatusBadgeClass(statusName);
         const saleValueDisplay = formatSaleValue(project.saleValue);
+        const phaseDeliveryDate = isPhasedOrder && typeof getGestaoProjectDeliveryPhaseDate === 'function'
+            ? getGestaoProjectDeliveryPhaseDate(project)
+            : null;
         const tr = document.createElement('tr');
         tr.className = 'gestao-project-summary-row';
         tr.innerHTML = `
@@ -642,6 +655,7 @@ function renderGestaoProjectsSummaryList() {
             <td class="p-3">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>
             </td>
+            <td class="p-3 text-slate-600 whitespace-nowrap gestao-projects-phase-delivery-col${isPhasedOrder ? '' : ' hidden'}">${escapeHtml(formatGestaoDate(phaseDeliveryDate))}</td>
             <td class="p-3 text-slate-600 whitespace-nowrap">${formatGestaoDate(project.deliveryDate)}</td>
             <td class="p-3 text-slate-600 whitespace-nowrap">${escapeHtml(saleValueDisplay)}</td>
             <td class="p-3">
