@@ -112,7 +112,7 @@ async function bootstrap() {
     const mount = document.getElementById('app-root');
 
     try {
-        const partialsVersion = '20261087';
+        const partialsVersion = '20261093';
         const htmlParts = await Promise.all(
             PARTIALS.map(url =>
                 fetch(`${url}?v=${partialsVersion}`).then(response => {
@@ -126,7 +126,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261090`);
+            await loadScript(`${src}?v=20261094`);
         }
 
         initAppEvents();

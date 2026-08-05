@@ -1,6 +1,8 @@
 const GESTAO_IMPORT_TEMPLATE_FILENAME = 'fgp-importacao-pedidos-projetos.xlsx';
 const GESTAO_IMPORT_SHEET_NAME = 'Importacao';
 
+const gestaoImportClienteIdByName = new Map();
+
 const GESTAO_IMPORT_COLUMNS = [
     { key: 'orderCode', header: 'codigo_pedido', label: 'Código do pedido', required: true },
     { key: 'clientName', header: 'cliente', label: 'Cliente', required: true },
@@ -695,6 +697,7 @@ async function loadGestaoImportWpsMappings() {
     const statusWpsToFgp = {};
     const consultorWpsToFgp = {};
     const marceneiroWpsToFgp = {};
+    let consultorWpsRows = [];
 
     const statusResult = await supabaseClient
         .from('importStatusWPS')
@@ -714,7 +717,8 @@ async function loadGestaoImportWpsMappings() {
         .select('ConsultorWPS, ConsultorFGP');
 
     if (!consultorResult.error) {
-        (consultorResult.data || []).forEach(row => {
+        consultorWpsRows = consultorResult.data || [];
+        consultorWpsRows.forEach(row => {
             const key = String(row.ConsultorWPS || '').trim().toLowerCase();
             if (key) consultorWpsToFgp[key] = String(row.ConsultorFGP || '').trim();
         });
@@ -735,7 +739,58 @@ async function loadGestaoImportWpsMappings() {
         console.error('loadGestaoImportWpsMappings marceneiro:', marceneiroResult.error);
     }
 
-    return { statusWpsToFgp, consultorWpsToFgp, marceneiroWpsToFgp };
+    return { statusWpsToFgp, consultorWpsToFgp, marceneiroWpsToFgp, consultorWpsRows };
+}
+
+function buildGestaoImportConsultantResolver(consultants, consultorWpsToFgp, consultorWpsRows = []) {
+    const consultantByName = {};
+    const consultantCanonicalNameByKey = {};
+
+    (consultants || []).forEach(item => {
+        const canonical = String(item.name || '').trim();
+        const key = canonical.toLowerCase();
+        if (!key) return;
+        consultantByName[key] = item.id;
+        consultantCanonicalNameByKey[key] = canonical;
+    });
+
+    const consultantResolvedNameByAlias = { ...consultantCanonicalNameByKey };
+
+    Object.entries(consultorWpsToFgp || {}).forEach(([wpsKey, fgpName]) => {
+        const fgpKey = String(fgpName || '').trim().toLowerCase();
+        const canonical = consultantCanonicalNameByKey[fgpKey]
+            || consultantCanonicalNameByKey[wpsKey];
+        if (canonical) {
+            consultantResolvedNameByAlias[wpsKey] = canonical;
+            if (fgpKey) consultantResolvedNameByAlias[fgpKey] = canonical;
+        }
+    });
+
+    (consultorWpsRows || []).forEach(row => {
+        const wpsKey = String(row.ConsultorWPS || '').trim().toLowerCase();
+        const fgpKey = String(row.ConsultorFGP || '').trim().toLowerCase();
+        const canonical = consultantCanonicalNameByKey[fgpKey]
+            || consultantCanonicalNameByKey[wpsKey];
+        if (!canonical) return;
+        if (wpsKey) consultantResolvedNameByAlias[wpsKey] = canonical;
+        if (fgpKey) consultantResolvedNameByAlias[fgpKey] = canonical;
+    });
+
+    return {
+        consultantByName,
+        consultantCanonicalNameByKey,
+        consultantResolvedNameByAlias
+    };
+}
+
+function resolveGestaoImportConsultantName(consultorWps, lookups) {
+    const key = String(consultorWps || '').trim().toLowerCase();
+    if (!key) return null;
+    return lookups.consultantResolvedNameByAlias?.[key] || null;
+}
+
+function mapGestaoImportConsultorWpsToFgp(consultorWps, lookups) {
+    return resolveGestaoImportConsultantName(consultorWps, lookups);
 }
 
 function mapGestaoImportStatusWpsToFgp(statusWps, lookups) {
@@ -745,17 +800,6 @@ function mapGestaoImportStatusWpsToFgp(statusWps, lookups) {
     if (!key) return 'Vendido';
     if (lookups.statusWpsToFgp?.[key]) return lookups.statusWpsToFgp[key];
     if (lookups.statusByName?.[key]) return raw;
-
-    return null;
-}
-
-function mapGestaoImportConsultorWpsToFgp(consultorWps, lookups) {
-    const raw = String(consultorWps || '').trim();
-    const key = raw.toLowerCase();
-
-    if (!key) return null;
-    if (lookups.consultorWpsToFgp?.[key]) return lookups.consultorWpsToFgp[key];
-    if (lookups.consultantNames?.has(raw)) return raw;
 
     return null;
 }
@@ -779,10 +823,20 @@ async function loadGestaoImportLookups() {
     const { data: consultants } = await supabaseClient
         .from('appUsers')
         .select('id, name')
+        .eq('isActive', true)
         .eq('role', 'Consultor')
-        .eq('isActive', true);
+        .order('name', { ascending: true });
+
+    const { data: clientes } = await supabaseClient
+        .from('Cliente')
+        .select('id, nome, ativo');
 
     const wpsMappings = await loadGestaoImportWpsMappings();
+    const consultantResolver = buildGestaoImportConsultantResolver(
+        consultants,
+        wpsMappings.consultorWpsToFgp,
+        wpsMappings.consultorWpsRows
+    );
 
     return {
         environmentByName: Object.fromEntries(
@@ -801,14 +855,44 @@ async function loadGestaoImportLookups() {
                 .filter(marceneiro => marceneiro.isActive !== false)
                 .map(marceneiro => [marceneiro.name.trim().toLowerCase(), marceneiro.id])
         ),
-        consultantNames: new Set((consultants || []).map(item => item.name.trim())),
-        consultantByName: Object.fromEntries(
-            (consultants || []).map(item => [item.name.trim().toLowerCase(), item.id])
+        clientByName: Object.fromEntries(
+            (clientes || [])
+                .filter(cliente => cliente.ativo !== false)
+                .map(cliente => [cliente.nome.trim().toLowerCase(), cliente.id])
         ),
+        ...consultantResolver,
         statusWpsToFgp: wpsMappings.statusWpsToFgp,
         consultorWpsToFgp: wpsMappings.consultorWpsToFgp,
         marceneiroWpsToFgp: wpsMappings.marceneiroWpsToFgp
     };
+}
+
+function resetGestaoImportClienteCache() {
+    gestaoImportClienteIdByName.clear();
+}
+
+async function resolveGestaoImportClienteId(clientName, lookups = null) {
+    const trimmed = String(clientName || '').trim();
+    if (!trimmed) return null;
+
+    const cacheKey = trimmed.toLowerCase();
+    if (gestaoImportClienteIdByName.has(cacheKey)) {
+        return gestaoImportClienteIdByName.get(cacheKey);
+    }
+
+    const existingId = lookups?.clientByName?.[cacheKey];
+    if (existingId) {
+        gestaoImportClienteIdByName.set(cacheKey, existingId);
+        return existingId;
+    }
+
+    if (typeof resolveOrCreateClienteId !== 'function') {
+        return null;
+    }
+
+    const clientId = await resolveOrCreateClienteId(trimmed);
+    gestaoImportClienteIdByName.set(cacheKey, clientId);
+    return clientId;
 }
 
 function resolveGestaoImportProject(row, lookups) {
@@ -896,22 +980,24 @@ async function createGestaoImportOrder(order, lookups, now) {
         if (!consultantFgp) {
             return {
                 ok: false,
-                message: `Consultor WPS "${order.consultantName}" não mapeado em importConsultorWPS.`
-            };
-        }
-
-        if (!lookups.consultantNames.has(consultantFgp)) {
-            return {
-                ok: false,
-                message: `Consultor FGP "${consultantFgp}" (WPS: "${order.consultantName}") não cadastrado ou inativo.`
+                message: `Pedido ${order.orderCode}: consultor "${order.consultantName}" não encontrado no cadastro nem no DE-PARA importConsultorWPS.`
             };
         }
 
         const consultantUserId = lookups.consultantByName?.[consultantFgp.trim().toLowerCase()] || null;
+        const clientId = await resolveGestaoImportClienteId(order.clientName, lookups);
+
+        if (!clientId) {
+            return {
+                ok: false,
+                message: `Pedido ${order.orderCode}: não foi possível cadastrar ou localizar o cliente "${order.clientName}".`
+            };
+        }
 
         const orderPayload = {
             orderCode: order.orderCode,
             clientName: order.clientName,
+            clientId,
             consultantName: consultantFgp,
             consultantUserId: consultantUserId || undefined,
             clientDeliveryDate: order.clientDeliveryDate,
@@ -928,6 +1014,15 @@ async function createGestaoImportOrder(order, lookups, now) {
 
         if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('consultantUserId')) {
             const { clientDeliveryDate: _d, updatedAt: _u, consultantUserId: _c, ...fallback } = orderPayload;
+            ({ data: created, error } = await supabaseClient
+                .from('salesOrders')
+                .insert(fallback)
+                .select('id')
+                .single());
+        }
+
+        if (error?.message?.includes('clientId')) {
+            const { clientId: _clientId, consultantUserId: _consultantUserId, ...fallback } = orderPayload;
             ({ data: created, error } = await supabaseClient
                 .from('salesOrders')
                 .insert(fallback)
@@ -1096,11 +1191,13 @@ function validateGestaoImportOrder(order, lookups, context) {
     } else {
         const consultantFgp = mapGestaoImportConsultorWpsToFgp(order.consultantName, lookups);
         if (!consultantFgp) {
-            errors.push(`Pedido ${order.orderCode}: consultor WPS "${order.consultantName}" não mapeado em importConsultorWPS.`);
-        } else if (!lookups.consultantNames.has(consultantFgp)) {
-            errors.push(`Pedido ${order.orderCode}: consultor FGP "${consultantFgp}" (WPS: "${order.consultantName}") não cadastrado ou inativo.`);
+            errors.push(`Pedido ${order.orderCode}: consultor "${order.consultantName}" não encontrado no cadastro nem no DE-PARA importConsultorWPS.`);
         } else {
             notes.push(`Pedido ${order.orderCode}: será criado com consultor ${consultantFgp}.`);
+            const clientKey = String(order.clientName || '').trim().toLowerCase();
+            if (clientKey && !lookups.clientByName?.[clientKey]) {
+                notes.push(`Pedido ${order.orderCode}: cliente "${order.clientName}" será cadastrado automaticamente.`);
+            }
         }
     }
 
@@ -1233,6 +1330,7 @@ async function runGestaoImportFromFile(file) {
     }
 
     const lookups = await loadGestaoImportLookups();
+    resetGestaoImportClienteCache();
     const now = new Date().toISOString();
     const messages = [];
     let imported = 0;
@@ -1258,6 +1356,14 @@ async function runGestaoImportFromFile(file) {
                 await loadOrders();
             } catch (refreshError) {
                 console.error('loadOrders after import:', refreshError);
+            }
+        }
+
+        if (typeof loadClientesDatalist === 'function') {
+            try {
+                await loadClientesDatalist();
+            } catch (refreshError) {
+                console.error('loadClientesDatalist after import:', refreshError);
             }
         }
     }

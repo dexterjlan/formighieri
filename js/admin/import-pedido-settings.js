@@ -1,6 +1,8 @@
 const SETTINGS_NAV_ACTIVE_CLASS = 'settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-slate-900 text-white';
 const SETTINGS_NAV_INACTIVE_CLASS = 'settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
 
+let importConsultorFgpUsersCache = [];
+
 function setSettingsNavActive(panelKey) {
     const buttons = {
         geral: document.getElementById('settings-nav-geral'),
@@ -84,8 +86,7 @@ function renderImportConsultorWpsList(rows) {
                     data-field="ConsultorWPS" value="${escapeHtml(row.ConsultorWPS || '')}" required>
             </td>
             <td class="p-3">
-                <input type="text" class="import-consultor-wps-field w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                    data-field="ConsultorFGP" value="${escapeHtml(row.ConsultorFGP || '')}" required>
+                ${getImportConsultorFgpSelectHtml(row.ConsultorFGP || '')}
             </td>
             <td class="p-3">
                 <div class="flex flex-wrap gap-1.5">
@@ -105,6 +106,90 @@ function renderImportConsultorWpsList(rows) {
     });
     tbody.querySelectorAll('.import-consultor-wps-delete').forEach(button => {
         button.addEventListener('click', () => deleteImportConsultorWpsRow(button.closest('tr')));
+    });
+}
+
+async function loadImportConsultorFgpUsers() {
+    const { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, name')
+        .eq('isActive', true)
+        .eq('role', 'Consultor')
+        .order('name', { ascending: true });
+
+    if (error) {
+        console.error('loadImportConsultorFgpUsers:', error);
+        importConsultorFgpUsersCache = [];
+        return [];
+    }
+
+    importConsultorFgpUsersCache = data || [];
+    return importConsultorFgpUsersCache;
+}
+
+function getImportConsultorFgpSelectHtml(selectedName = '') {
+    const normalizedSelected = String(selectedName || '').trim();
+    const users = importConsultorFgpUsersCache;
+    const selectClass = 'import-consultor-wps-field w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600';
+
+    if (!users.length) {
+        return `<select class="${selectClass}" data-field="ConsultorFGP" required disabled>
+            <option value="">Cadastre consultores ativos</option>
+        </select>`;
+    }
+
+    const hasSelected = users.some(user => user.name === normalizedSelected);
+    let optionsHtml = '';
+
+    if (!normalizedSelected || hasSelected) {
+        optionsHtml += '<option value="">Selecione...</option>';
+    }
+
+    if (normalizedSelected && !hasSelected) {
+        optionsHtml += `<option value="${escapeHtml(normalizedSelected)}" selected>${escapeHtml(normalizedSelected)} (não encontrado)</option>`;
+    }
+
+    optionsHtml += users.map(user => {
+        const selected = user.name === normalizedSelected ? ' selected' : '';
+        return `<option value="${escapeHtml(user.name)}"${selected}>${escapeHtml(user.name)}</option>`;
+    }).join('');
+
+    return `<select class="${selectClass}" data-field="ConsultorFGP" required>${optionsHtml}</select>`;
+}
+
+function populateImportConsultorFgpNewSelect(selectedName = '') {
+    const select = document.getElementById('import-consultor-wps-new-fgp');
+    if (!select) return;
+
+    const normalizedSelected = String(selectedName || '').trim();
+    const users = importConsultorFgpUsersCache;
+
+    select.innerHTML = '';
+    select.disabled = false;
+
+    if (!users.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Cadastre consultores ativos';
+        select.appendChild(option);
+        select.disabled = true;
+        return;
+    }
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Selecione...';
+    select.appendChild(placeholder);
+
+    users.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.name;
+        option.textContent = user.name;
+        if (user.name === normalizedSelected) {
+            option.selected = true;
+            placeholder.selected = false;
+        }
+        select.appendChild(option);
     });
 }
 
@@ -163,6 +248,9 @@ function readImportWpsRowValues(row, fieldClass) {
 }
 
 async function loadImportPedidoSettings() {
+    await loadImportConsultorFgpUsers();
+    populateImportConsultorFgpNewSelect();
+
     const [statusResult, consultorResult, marceneiroResult] = await Promise.all([
         supabaseClient.from('importStatusWPS').select('id, StatusWPS, StatusFGP').order('StatusWPS', { ascending: true }),
         supabaseClient.from('importConsultorWPS').select('id, ConsultorWPS, ConsultorFGP').order('ConsultorWPS', { ascending: true }),
@@ -270,7 +358,7 @@ async function saveImportConsultorWpsRow(row) {
     if (!row || !isAdmin()) return;
 
     const rowId = Number(row.dataset.rowId);
-    const values = readImportStatusWpsRowValues(row, 'import-consultor-wps-field');
+    const values = readImportWpsRowValues(row, 'import-consultor-wps-field');
 
     if (!values.ConsultorWPS || !values.ConsultorFGP) {
         alertAppDialog('Informe ConsultorWPS e ConsultorFGP.');
@@ -294,7 +382,7 @@ async function deleteImportConsultorWpsRow(row) {
     if (!row || !isAdmin()) return;
 
     const rowId = Number(row.dataset.rowId);
-    const values = readImportStatusWpsRowValues(row, 'import-consultor-wps-field');
+    const values = readImportWpsRowValues(row, 'import-consultor-wps-field');
     if (!(await confirmAppDialog(`Excluir mapeamento "${values.ConsultorWPS}" → "${values.ConsultorFGP}"?`))) return;
 
     const { error } = await supabaseClient
