@@ -1,5 +1,5 @@
 const GESTAO_RELATORIO_RANGE_START = 'Medição Realizada';
-const GESTAO_RELATORIO_RANGE_END_STATUSES = ['Aguardando Aprovação', 'Em Revisão Comercial', 'Em Revisão Técnica', 'Em Revisão', 'Em revisão'];
+const GESTAO_RELATORIO_PEDIDOS_PENDENTES_END = 'Montagem Interna';
 const GESTAO_RELATORIO_EXPEDICAO_STATUS = 'Expedição';
 
 const GESTAO_RELATORIO_PROJECT_SELECT = `
@@ -282,20 +282,18 @@ function renderGestaoRelatorioPieChart(statusCounts) {
     `;
 }
 
-function getGestaoRelatorioRangeBounds(statuses) {
+function getGestaoRelatorioRangeBounds(statuses, endStatusName = GESTAO_RELATORIO_PEDIDOS_PENDENTES_END) {
     const startStatus = statuses.find(status => status.name === GESTAO_RELATORIO_RANGE_START);
-    const endStatuses = statuses.filter(status => GESTAO_RELATORIO_RANGE_END_STATUSES.includes(status.name));
+    const endStatus = statuses.find(status => status.name === endStatusName);
 
     const minSort = startStatus?.sortOrder ?? null;
-    const maxSort = endStatuses.length
-        ? Math.max(...endStatuses.map(status => Number(status.sortOrder) || 0))
-        : null;
+    const maxSort = endStatus?.sortOrder ?? null;
 
     return { minSort, maxSort };
 }
 
-function filterGestaoRelatorioRangeProjects(projects, statuses) {
-    const { minSort, maxSort } = getGestaoRelatorioRangeBounds(statuses);
+function filterGestaoRelatorioRangeProjects(projects, statuses, endStatusName = GESTAO_RELATORIO_PEDIDOS_PENDENTES_END) {
+    const { minSort, maxSort } = getGestaoRelatorioRangeBounds(statuses, endStatusName);
     if (minSort == null || maxSort == null) return [];
 
     const statusById = Object.fromEntries(statuses.map(status => [status.id, status]));
@@ -306,70 +304,41 @@ function filterGestaoRelatorioRangeProjects(projects, statuses) {
     });
 }
 
-function getGestaoRelatorioNextMonthKey(referenceDate = new Date()) {
-    const nextMonth = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 1);
-    const year = nextMonth.getFullYear();
-    const month = String(nextMonth.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
-}
-
-function formatGestaoRelatorioNextMonthLabel(referenceDate = new Date()) {
-    return formatGestaoRelatorioMonthLabel(
-        getGestaoRelatorioNextMonthKey(referenceDate),
-        'Sem data de entrega do pedido'
-    );
-}
-
-function isGestaoRelatorioPedidosPendentesDeliveryMonth(monthKey, referenceDate = new Date()) {
-    if (monthKey === 'sem-data') return true;
-    return monthKey <= getGestaoRelatorioNextMonthKey(referenceDate);
-}
-
 function filterGestaoRelatorioPedidosPendentesProjects(projects, statuses) {
-    const rangeProjects = filterGestaoRelatorioRangeProjects(projects, statuses);
-
-    return rangeProjects.filter(project =>
-        isGestaoRelatorioPedidosPendentesDeliveryMonth(
-            getGestaoRelatorioMonthKey(project.order?.clientDeliveryDate)
-        )
-    );
+    return filterGestaoRelatorioRangeProjects(projects, statuses, GESTAO_RELATORIO_PEDIDOS_PENDENTES_END);
 }
 
-function buildGestaoRelatorioOrderProjectCounts(projects) {
-    const counts = {};
-
-    (projects || []).forEach(project => {
-        const orderId = Number(project.orderId);
-        if (!orderId) return;
-        counts[orderId] = (counts[orderId] || 0) + 1;
-    });
-
-    return counts;
-}
-
-function groupGestaoRelatorioPedidosPendentes(projects, allProjects = projects) {
-    const orderProjectCounts = buildGestaoRelatorioOrderProjectCounts(allProjects);
+function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects) {
     const monthGroups = {};
 
-    projects.forEach(project => {
+    (projects || []).forEach(project => {
         const monthKey = getGestaoRelatorioMonthKey(project.order?.clientDeliveryDate);
+        const clientName = project.order?.clientName?.trim() || 'Sem cliente';
+        const clientKey = clientName.toLocaleLowerCase('pt-BR');
         const orderId = Number(project.orderId);
+        if (!orderId) return;
 
         if (!monthGroups[monthKey]) {
-            monthGroups[monthKey] = { monthKey, ordersById: {} };
+            monthGroups[monthKey] = { monthKey, clientsByKey: {} };
         }
 
-        if (!monthGroups[monthKey].ordersById[orderId]) {
-            monthGroups[monthKey].ordersById[orderId] = {
+        if (!monthGroups[monthKey].clientsByKey[clientKey]) {
+            monthGroups[monthKey].clientsByKey[clientKey] = {
+                clientName,
+                ordersById: {}
+            };
+        }
+
+        if (!monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderId]) {
+            monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderId] = {
                 orderId,
                 order: project.order || {},
                 clientDeliveryDate: project.order?.clientDeliveryDate || null,
-                totalProjectCount: orderProjectCounts[orderId] || 0,
                 projects: []
             };
         }
 
-        monthGroups[monthKey].ordersById[orderId].projects.push(project);
+        monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderId].projects.push(project);
     });
 
     return Object.values(monthGroups)
@@ -379,64 +348,91 @@ function groupGestaoRelatorioPedidosPendentes(projects, allProjects = projects) 
             return a.monthKey.localeCompare(b.monthKey);
         })
         .map(monthGroup => {
-            const orders = Object.values(monthGroup.ordersById)
-                .sort((a, b) => String(a.order?.orderCode || '').localeCompare(
-                    String(b.order?.orderCode || ''),
-                    'pt-BR',
-                    { numeric: true }
-                ))
-                .map(orderGroup => ({
-                    ...orderGroup,
-                    projects: [...orderGroup.projects].sort((a, b) =>
-                        String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR')
-                    )
-                }));
+            const clients = Object.values(monthGroup.clientsByKey)
+                .map(clientGroup => {
+                    const orders = Object.values(clientGroup.ordersById)
+                        .map(orderGroup => ({
+                            ...orderGroup,
+                            projects: [...orderGroup.projects].sort((a, b) =>
+                                String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR')
+                            ),
+                            totalSaleValue: sumGestaoRelatorioSaleValues(orderGroup.projects)
+                        }))
+                        .sort((a, b) => String(a.order?.orderCode || '').localeCompare(
+                            String(b.order?.orderCode || ''),
+                            'pt-BR',
+                            { numeric: true }
+                        ));
+
+                    return {
+                        clientName: clientGroup.clientName,
+                        orders,
+                        orderCount: orders.length,
+                        totalSaleValue: orders.reduce((sum, order) => sum + order.totalSaleValue, 0)
+                    };
+                })
+                .sort((a, b) => a.clientName.localeCompare(b.clientName, 'pt-BR'));
+
+            const orders = clients.flatMap(client => client.orders);
 
             return {
                 monthKey: monthGroup.monthKey,
-                orders,
-                projectCount: orders.reduce((sum, order) => sum + order.projects.length, 0)
+                clients,
+                orderCount: orders.length,
+                totalSaleValue: orders.reduce((sum, order) => sum + order.totalSaleValue, 0)
             };
         });
 }
 
-function renderGestaoRelatorioPedidosPendentesProjectRow(project) {
-    const statusName = getGestaoRelatorioStatusName(project);
-    const statusClass = typeof getOrderProjectStatusBadgeClass === 'function'
-        ? getOrderProjectStatusBadgeClass(statusName)
-        : 'bg-slate-100 text-slate-700';
-    const measurementDate = typeof formatGestaoDate === 'function'
-        ? formatGestaoDate(project.measurementDate)
-        : (project.measurementDate || '—');
-    const projectDeliveryDate = typeof formatGestaoDate === 'function'
-        ? formatGestaoDate(project.deliveryDate)
-        : (project.deliveryDate || '—');
-    const saleValue = typeof formatSaleValue === 'function'
-        ? formatSaleValue(getProjectEffectiveSaleValue(project))
-        : (getProjectEffectiveSaleValue(project) ?? '—');
+function renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup) {
+    const orderCode = orderGroup.order?.orderCode || '—';
+    const deliveryDate = typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(orderGroup.clientDeliveryDate)
+        : (orderGroup.clientDeliveryDate || '—');
+    const totalLabel = typeof formatSaleValue === 'function'
+        ? formatSaleValue(orderGroup.totalSaleValue)
+        : orderGroup.totalSaleValue;
+    const projectCount = orderGroup.projects.length;
+
+    const projectRows = orderGroup.projects.map(project => {
+        const statusName = getGestaoRelatorioStatusName(project);
+        const statusClass = typeof getOrderProjectStatusBadgeClass === 'function'
+            ? getOrderProjectStatusBadgeClass(statusName)
+            : 'bg-slate-100 text-slate-700';
+        const saleValue = typeof formatSaleValue === 'function'
+            ? formatSaleValue(getProjectEffectiveSaleValue(project))
+            : (getProjectEffectiveSaleValue(project) ?? '—');
+
+        return `
+            <tr class="border-b border-slate-50 last:border-0 bg-slate-50/40">
+                <td class="p-2 pl-6 text-xs text-slate-700">${escapeHtml(getGestaoRelatorioProjectLabel(project))}</td>
+                <td class="p-2">
+                    <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
+                        ${escapeHtml(statusName || '—')}
+                    </span>
+                </td>
+                <td class="p-2 text-xs text-slate-600 text-right">${escapeHtml(saleValue)}</td>
+            </tr>
+        `;
+    }).join('');
 
     return `
-        <tr class="border-b border-slate-100 last:border-0">
-            <td class="p-2.5 text-xs font-medium text-slate-800">${escapeHtml(getGestaoRelatorioProjectLabel(project))}</td>
-            <td class="p-2.5">
-                <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
-                    ${escapeHtml(statusName || '—')}
-                </span>
-            </td>
-            <td class="p-2.5 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(measurementDate)}</td>
-            <td class="p-2.5 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(projectDeliveryDate)}</td>
-            <td class="p-2.5 text-xs text-slate-700 whitespace-nowrap text-right font-medium">${escapeHtml(saleValue)}</td>
-        </tr>
+        <tbody class="border-b border-slate-100 last:border-0">
+            <tr class="bg-white">
+                <td class="p-2.5 text-xs font-mono font-bold text-slate-800">${escapeHtml(orderCode)}</td>
+                <td class="p-2.5 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
+                <td class="p-2.5 text-xs text-slate-500">${projectCount} projeto${projectCount === 1 ? '' : 's'}</td>
+                <td class="p-2.5 text-xs text-slate-800 text-right font-semibold">${escapeHtml(totalLabel)}</td>
+            </tr>
+            ${projectRows}
+        </tbody>
     `;
 }
 
-function renderGestaoRelatorioPedidosPendentesOrderGroup(orderGroup) {
-    const orderCode = orderGroup.order?.orderCode || '—';
-    const clientName = orderGroup.order?.clientName || '—';
-    const projectCount = orderGroup.totalProjectCount || orderGroup.projects.length;
-    const orderDeliveryDate = typeof formatGestaoDate === 'function'
-        ? formatGestaoDate(orderGroup.clientDeliveryDate)
-        : (orderGroup.clientDeliveryDate || '—');
+function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup) {
+    const totalLabel = typeof formatSaleValue === 'function'
+        ? formatSaleValue(clientGroup.totalSaleValue)
+        : clientGroup.totalSaleValue;
 
     return `
         <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -444,28 +440,23 @@ function renderGestaoRelatorioPedidosPendentesOrderGroup(orderGroup) {
                 <div class="flex items-center gap-2 min-w-0">
                     <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                         aria-label="Expandir">▶</button>
-                    <span class="text-xs font-mono font-bold text-slate-700">${escapeHtml(orderCode)}</span>
-                    <span class="text-xs text-slate-700 truncate">${escapeHtml(clientName)}</span>
-                    <span class="text-[10px] text-slate-500 shrink-0">${projectCount} projeto${projectCount === 1 ? '' : 's'}</span>
+                    <span class="text-xs font-medium text-slate-800 truncate">${escapeHtml(clientGroup.clientName)}</span>
+                    <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.orderCount} pedido${clientGroup.orderCount === 1 ? '' : 's'}</span>
                 </div>
-                <div class="text-right shrink-0">
-                    <p class="text-[10px] text-slate-400 uppercase tracking-wide">Entrega pedido</p>
-                    <p class="text-xs font-semibold text-slate-700">${escapeHtml(orderDeliveryDate)}</p>
-                </div>
+                <span class="text-xs font-semibold text-indigo-700 shrink-0">${escapeHtml(totalLabel)}</span>
             </div>
             <div class="collapsible-list-body hidden p-2">
                 <div class="overflow-x-auto">
-                    <table class="gestao-relatorios-table w-full text-xs min-w-[36rem]">
+                    <table class="gestao-relatorios-table w-full text-xs min-w-[32rem]">
                         <thead class="bg-slate-50 text-[10px] uppercase text-slate-400">
                             <tr>
-                                <th class="text-left p-2.5 font-semibold">Projeto</th>
-                                <th class="text-left p-2.5 font-semibold">Status</th>
-                                <th class="text-left p-2.5 font-semibold">Data medição</th>
-                                <th class="text-left p-2.5 font-semibold">Entrega projeto</th>
-                                <th class="text-right p-2.5 font-semibold">Valor de venda</th>
+                                <th class="text-left p-2.5 font-semibold">Pedido</th>
+                                <th class="text-left p-2.5 font-semibold">Entrega</th>
+                                <th class="text-left p-2.5 font-semibold">Projetos</th>
+                                <th class="text-right p-2.5 font-semibold">Valor pedido</th>
                             </tr>
                         </thead>
-                        <tbody>${orderGroup.projects.map(renderGestaoRelatorioPedidosPendentesProjectRow).join('')}</tbody>
+                        ${clientGroup.orders.map(renderGestaoRelatorioPedidosPendentesOrderRow).join('')}
                     </table>
                 </div>
             </div>
@@ -475,25 +466,32 @@ function renderGestaoRelatorioPedidosPendentesOrderGroup(orderGroup) {
 
 function renderGestaoRelatorioPedidosPendentesGroups(groups) {
     if (!groups.length) {
-        return `<p class="text-xs text-slate-400 text-center py-4">Nenhum pedido pendente com entrega até ${escapeHtml(formatGestaoRelatorioNextMonthLabel())}.</p>`;
+        return '<p class="text-xs text-slate-400 text-center py-4">Nenhum pedido pendente encontrado.</p>';
     }
 
-    return groups.map(monthGroup => `
-        <div class="collapsible-list-card border border-indigo-100 rounded-lg overflow-hidden bg-indigo-50/20">
-            <div class="collapsible-list-header px-3 py-2.5 bg-indigo-50/80 border-b border-indigo-100 cursor-pointer flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 min-w-0">
-                    <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-indigo-700 hover:text-indigo-900 text-[10px]"
-                        aria-label="Expandir">▶</button>
-                    <span class="text-xs font-semibold text-slate-900">${escapeHtml(formatGestaoRelatorioMonthLabel(monthGroup.monthKey, 'Sem data de entrega do pedido'))}</span>
-                    <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.orders.length} pedido${monthGroup.orders.length === 1 ? '' : 's'}</span>
+    return groups.map(monthGroup => {
+        const totalLabel = typeof formatSaleValue === 'function'
+            ? formatSaleValue(monthGroup.totalSaleValue)
+            : monthGroup.totalSaleValue;
+
+        return `
+            <div class="collapsible-list-card border border-indigo-100 rounded-lg overflow-hidden bg-indigo-50/20">
+                <div class="collapsible-list-header px-3 py-2.5 bg-indigo-50/80 border-b border-indigo-100 cursor-pointer flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-indigo-700 hover:text-indigo-900 text-[10px]"
+                            aria-label="Expandir">▶</button>
+                        <span class="text-xs font-semibold text-slate-900">${escapeHtml(formatGestaoRelatorioMonthLabel(monthGroup.monthKey, 'Sem data de entrega do pedido'))}</span>
+                        <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.clients.length} cliente${monthGroup.clients.length === 1 ? '' : 's'}</span>
+                        <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.orderCount} pedido${monthGroup.orderCount === 1 ? '' : 's'}</span>
+                    </div>
+                    <span class="text-xs font-bold text-indigo-700 shrink-0">${escapeHtml(totalLabel)}</span>
                 </div>
-                <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.projectCount} projeto${monthGroup.projectCount === 1 ? '' : 's'}</span>
+                <div class="collapsible-list-body hidden p-2 space-y-2">
+                    ${monthGroup.clients.map(renderGestaoRelatorioPedidosPendentesClientGroup).join('')}
+                </div>
             </div>
-            <div class="collapsible-list-body hidden p-2 space-y-2">
-                ${monthGroup.orders.map(renderGestaoRelatorioPedidosPendentesOrderGroup).join('')}
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 function getGestaoRelatorioMonthKey(dateStr) {
@@ -667,8 +665,11 @@ function renderGestaoRelatoriosPanel(projects, statuses) {
 
     const statusCounts = buildGestaoRelatorioStatusCounts(projects, statuses);
     const pedidosPendentesProjects = filterGestaoRelatorioPedidosPendentesProjects(projects, statuses);
-    const pedidosPendentesGroups = groupGestaoRelatorioPedidosPendentes(pedidosPendentesProjects, projects);
-    const nextMonthLabel = formatGestaoRelatorioNextMonthLabel();
+    const pedidosPendentesGroups = groupGestaoRelatorioPedidosPendentesByMonthAndClient(pedidosPendentesProjects);
+    const pedidosPendentesGrandTotal = pedidosPendentesGroups.reduce((sum, group) => sum + group.totalSaleValue, 0);
+    const pedidosPendentesGrandTotalLabel = typeof formatSaleValue === 'function'
+        ? formatSaleValue(pedidosPendentesGrandTotal)
+        : pedidosPendentesGrandTotal;
     const fechamentoProjects = projects.filter(project =>
         getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
     );
@@ -688,9 +689,14 @@ function renderGestaoRelatoriosPanel(projects, statuses) {
         </section>
 
         <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
-            <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
-                <h4 class="text-sm font-bold text-slate-900">Pedidos Pendentes com entrega próximo mês</h4>
-                <p class="text-xs text-slate-400 mt-0.5">Projetos entre ${escapeHtml(GESTAO_RELATORIO_RANGE_START)} e ${escapeHtml(GESTAO_RELATORIO_RANGE_END_STATUSES.slice(0, 2).join(' / '))}, com entrega do pedido até ${escapeHtml(nextMonthLabel)} (inclusive).</p>
+            <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <h4 class="text-sm font-bold text-slate-900">Pedidos Pendentes</h4>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos entre ${escapeHtml(GESTAO_RELATORIO_RANGE_START)} e ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega do pedido e, dentro de cada mês, por cliente.</p>
+                </div>
+                <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
+                    Total: ${escapeHtml(pedidosPendentesGrandTotalLabel)}
+                </span>
             </div>
             <div id="gestao-relatorio-pedidos-pendentes-groups" class="p-3 space-y-2">
                 ${renderGestaoRelatorioPedidosPendentesGroups(pedidosPendentesGroups)}
