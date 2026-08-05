@@ -193,14 +193,12 @@ function buildProgramacaoProducaoOrderSlice(orderGroup, context, options = {}) {
         )
         : (orderGroup.projects || []);
 
-    if (phase && !parentProjects.length) return null;
+    if (!parentProjects.length) return null;
 
     const parentIds = new Set(parentProjects.map(project => Number(project.id)));
     const complementarProjects = (orderGroup.complementarProjects || []).filter(project => {
         const parentId = getProgramacaoProducaoParentProjectId(project);
-        if (parentId && parentIds.has(parentId)) return true;
-        if (!phase) return true;
-        return projectBelongsToProgramacaoProducaoPhase(project, phase, phases);
+        return parentId && parentIds.has(parentId);
     });
 
     const allProjects = [...parentProjects, ...complementarProjects];
@@ -267,6 +265,8 @@ function buildProgramacaoProducaoOrders() {
     const slices = [];
 
     Object.values(ordersById).forEach(orderGroup => {
+        if (!orderGroup.projects?.length) return;
+
         const phases = getProgramacaoProducaoOrderPhases(orderGroup.orderId, context);
 
         if (phases.length >= 2) {
