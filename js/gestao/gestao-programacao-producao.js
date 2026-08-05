@@ -132,7 +132,7 @@ function getProgramacaoProducaoFilteredProjects() {
     );
 }
 
-function getProgramacaoProducaoOrderDeliveryDatesLabel(projects, context) {
+function getProgramacaoProducaoOrderDeliveryDates(projects, context) {
     const parentProjects = (projects || []).filter(project =>
         typeof isGestaoRelatorioPedidosPendentesComplementarProject === 'function'
             ? !isGestaoRelatorioPedidosPendentesComplementarProject(project)
@@ -142,12 +142,19 @@ function getProgramacaoProducaoOrderDeliveryDatesLabel(projects, context) {
         ? getGestaoRelatorioPedidosPendentesProjectDeliveryDate
         : () => null;
 
-    const dates = parentProjects
+    return parentProjects
         .map(project => resolveDelivery(project, context))
         .filter(Boolean)
         .sort((a, b) => String(a).localeCompare(String(b)));
+}
 
-    const uniqueDates = [...new Set(dates)];
+function getProgramacaoProducaoOrderSortDeliveryDate(projects, context) {
+    const dates = getProgramacaoProducaoOrderDeliveryDates(projects, context);
+    return dates[0] || null;
+}
+
+function getProgramacaoProducaoOrderDeliveryDatesLabel(projects, context) {
+    const uniqueDates = [...new Set(getProgramacaoProducaoOrderDeliveryDates(projects, context))];
     return uniqueDates
         .map(date => (typeof formatGestaoDate === 'function' ? formatGestaoDate(date) : date))
         .join(' · ');
@@ -207,13 +214,23 @@ function buildProgramacaoProducaoOrders() {
                 ...orderGroup,
                 orderCode: orderGroup.order?.orderCode || '—',
                 clientName: orderGroup.order?.clientName || '—',
+                sortDeliveryDate: getProgramacaoProducaoOrderSortDeliveryDate(allProjects, context),
                 deliveryDatesLabel: getProgramacaoProducaoOrderDeliveryDatesLabel(allProjects, context),
                 monthInputValue: getProgramacaoProducaoOrderMonthInputValue(allProjects),
                 projectTree,
                 allProjectIds: allProjects.map(project => Number(project.id)).filter(Boolean)
             };
         })
-        .sort((a, b) => String(a.orderCode).localeCompare(String(b.orderCode), 'pt-BR', { numeric: true }));
+        .sort((a, b) => {
+            if (!a.sortDeliveryDate && !b.sortDeliveryDate) {
+                return String(a.orderCode).localeCompare(String(b.orderCode), 'pt-BR', { numeric: true });
+            }
+            if (!a.sortDeliveryDate) return 1;
+            if (!b.sortDeliveryDate) return -1;
+            const dateCompare = String(a.sortDeliveryDate).localeCompare(String(b.sortDeliveryDate));
+            if (dateCompare !== 0) return dateCompare;
+            return String(a.orderCode).localeCompare(String(b.orderCode), 'pt-BR', { numeric: true });
+        });
 }
 
 function getProgramacaoProducaoClientFilter() {
@@ -242,22 +259,6 @@ function applyProgramacaoProducaoOrderFilters(orders) {
         }
         return true;
     });
-}
-
-function getProgramacaoProducaoProjectsFromOrders(orders) {
-    const seen = new Set();
-    const projects = [];
-
-    (orders || []).forEach(order => {
-        [...(order.projects || []), ...(order.complementarProjects || [])].forEach(project => {
-            const id = Number(project.id);
-            if (!id || seen.has(id)) return;
-            seen.add(id);
-            projects.push(project);
-        });
-    });
-
-    return projects;
 }
 
 function scheduleProgramacaoProducaoFilterRender() {
@@ -415,11 +416,8 @@ function renderProgramacaoProducaoPanel() {
     const orders = buildProgramacaoProducaoOrders();
     const filteredOrders = applyProgramacaoProducaoOrderFilters(orders);
     const hasFilters = Boolean(getProgramacaoProducaoClientFilter() || getProgramacaoProducaoHideWithMonth());
-    const filteredProjects = hasFilters
-        ? getProgramacaoProducaoProjectsFromOrders(filteredOrders)
-        : null;
 
-    summary.innerHTML = renderProgramacaoProducaoSummary(filteredProjects);
+    summary.innerHTML = renderProgramacaoProducaoSummary();
     list.innerHTML = renderProgramacaoProducaoOrdersList(filteredOrders, { hasFilters });
 
     bindCollapsibleListCardToggles(summary, { defaultCollapsed: true });
