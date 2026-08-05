@@ -443,6 +443,9 @@ async function refreshViewsAfterAnteprojetoConfirmation() {
 }
 
 async function refreshViewsAfterAnteprojetoApproval() {
+    if (typeof loadOrders === 'function') {
+        await loadOrders();
+    }
     if (typeof loadAnteprojetoConferences === 'function' && activeOrderId) {
         await loadAnteprojetoConferences(activeOrderId);
     }

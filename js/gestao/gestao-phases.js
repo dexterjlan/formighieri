@@ -496,6 +496,10 @@ async function saveGestaoOrderPhasesFromModal() {
             );
             ensureGestaoProjectsHavePhaseDefaults();
             renderGestaoProjectsSummaryList();
+
+            if (maxDeliveryDate && typeof persistSalesOrderClientDeliveryDate === 'function') {
+                await persistSalesOrderClientDeliveryDate(editingGestaoOrderId, maxDeliveryDate);
+            }
         } catch (error) {
             alertAppDialog(`Erro ao salvar fases: ${error.message}`);
             return;

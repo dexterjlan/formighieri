@@ -66,7 +66,7 @@ async function notifyApprovalEmail(eventType, approval, options = {}) {
         );
         const body = buildApprovalEmailBody(payload);
         const html = buildApprovalEmailHtml(payload);
-        const toEmail = NOTIFICATION_TEST_MODE ? NOTIFICATION_TEST_EMAIL : NOTIFICATION_TEST_EMAIL;
+        const toEmail = await resolveApprovalNotificationToEmail(eventType, approval);
 
         await sendEmailViaGoogleAppsScript({
             to_email: toEmail,
@@ -728,3 +728,65 @@ async function notifyLiberacaoMedicaoEmail(options = {}) {
 }
 
 window.notifyLiberacaoMedicaoEmail = notifyLiberacaoMedicaoEmail;
+
+async function notifyThirdPartyProjectStatusEmail(options = {}) {
+    const {
+        orderId,
+        orderProjectId,
+        designerId = null,
+        statusLabel = '—',
+        previousStatusLabel = '—',
+        subtypeName = '',
+        filePath = ''
+    } = options;
+
+    if (!orderId || !orderProjectId) return;
+
+    if (!NOTIFICATIONS_ENABLED) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyThirdPartyProjectStatusEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const recipientEmails = await fetchThirdPartyProjectStatusRecipientEmails(orderId, designerId);
+        const extraFields = [
+            { label: 'Subtipo', value: subtypeName || '—' },
+            { label: 'Status anterior', value: previousStatusLabel || '—' },
+            { label: 'Novo status', value: statusLabel || '—' }
+        ];
+
+        if (filePath) {
+            extraFields.push({ label: 'Caminho do arquivo', value: filePath });
+        }
+
+        if (options.activities?.length) {
+            extraFields.push({
+                label: 'Atividades da revisão',
+                value: options.activities.map((activity, index) => {
+                    const parts = [`${index + 1}. ${activity.description || '—'}`];
+                    if (activity.observation) parts.push(`Obs: ${activity.observation}`);
+                    if (activity.completed) parts.push('[Realizado]');
+                    return parts.join(' · ');
+                }).join('\n')
+            });
+        }
+
+        await sendProcessNotificationEmail('third_party_project_status', {
+            orderId,
+            orderProjectIds: [orderProjectId],
+            designerId,
+            includeProjetista: true,
+            recipientEmails,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto de terceiros',
+            accentColor: '#7c3aed',
+            extraFields
+        });
+    } catch (err) {
+        console.warn('notifyThirdPartyProjectStatusEmail:', err);
+    }
+}
+
+window.notifyThirdPartyProjectStatusEmail = notifyThirdPartyProjectStatusEmail;

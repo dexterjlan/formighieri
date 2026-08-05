@@ -156,6 +156,10 @@ async function restoreAppNavState() {
                     await selectOrder(state.activeOrderId);
                     if (state.orderDetailTab && typeof switchOrderDetailTab === 'function') {
                         switchOrderDetailTab(state.orderDetailTab);
+                        if (state.orderDetailTab === 'third-party'
+                            && typeof loadOrderThirdPartyProjectsTab === 'function') {
+                            await loadOrderThirdPartyProjectsTab(state.activeOrderId);
+                        }
                     }
                 }
                 return true;

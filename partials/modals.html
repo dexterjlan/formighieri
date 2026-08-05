@@ -496,6 +496,11 @@
             <form id="project-characteristics-form" class="flex flex-col min-h-0 flex-1">
                 <div id="project-characteristics-modal-content"
                     class="project-characteristics-modal-content overflow-y-auto space-y-4 pr-1"></div>
+                <p id="project-characteristics-modal-third-party-hint"
+                    class="hidden text-[11px] text-slate-500 mt-3 leading-relaxed border border-slate-200 rounded-lg px-3 py-2 bg-slate-50/70">
+                    <span class="project-characteristic-third-party-marker">*</span>
+                    Características com projeto de terceiros terão fluxo próprio e precisarão de aprovação pelo consultor do pedido.
+                </p>
                 <div class="flex gap-2 pt-4 mt-4 border-t border-slate-100 shrink-0">
                     <button type="button" id="btn-project-characteristics-cancel"
                         onclick="closeProjectCharacteristicsModal()"
@@ -718,20 +723,16 @@
                     </div>
                     <div id="implantacao-terceiros-section" class="border-t border-slate-100 pt-3 space-y-3">
                         <p class="text-xs font-semibold text-slate-700">Terceiros</p>
-                        <div id="implantacao-terceiros-items" class="space-y-3"></div>
-                        <div class="flex flex-wrap gap-2 items-end">
-                            <div class="flex-1 min-w-[160px]">
-                                <label for="implantacao-terceiros-subtype-select" class="block text-[10px] font-semibold text-slate-500 mb-1">Subtipo</label>
-                                <select id="implantacao-terceiros-subtype-select"
-                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-teal-600">
-                                    <option value="">Selecione...</option>
-                                </select>
-                            </div>
-                            <button type="button" id="btn-implantacao-add-terceiro"
-                                class="bg-teal-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed">
-                                Adicionar
-                            </button>
+                        <div>
+                            <label for="implantacao-terceiros-path" class="block text-[10px] font-semibold text-slate-500 mb-1">Caminho da pasta (todos os subtipos)</label>
+                            <input type="text" id="implantacao-terceiros-path" placeholder="Caminho da pasta"
+                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600">
                         </div>
+                        <div id="implantacao-terceiros-items" class="space-y-2"></div>
+                        <p class="text-[10px] text-slate-500 leading-relaxed">
+                            <span class="project-characteristic-third-party-marker">*</span>
+                            Subtipos com projeto de terceiros vinculado são obrigatórios para enviar às compras e só podem ser enviados após aprovação do consultor.
+                        </p>
                     </div>
                 </div>
 
@@ -1086,6 +1087,174 @@
                     class="w-full bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-medium hover:bg-slate-200">
                     Fechar
                 </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DETALHE PROJETO DE TERCEIROS -->
+    <div id="third-party-project-detail-modal"
+        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[66]">
+        <div class="bg-white rounded-2xl w-full max-w-lg shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start gap-3">
+                <div class="min-w-0">
+                    <h3 id="third-party-project-detail-title" class="font-bold text-base text-slate-900">Projeto de Terceiros</h3>
+                    <p id="third-party-project-detail-subtitle" class="text-xs text-slate-500 mt-0.5 truncate"></p>
+                </div>
+                <button type="button" id="btn-close-third-party-project-detail"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
+            </div>
+            <div class="p-5 space-y-3 overflow-y-auto flex-1">
+                <div>
+                    <div class="text-[10px] font-semibold text-slate-500 uppercase">Status</div>
+                    <div id="third-party-project-detail-status" class="mt-1"></div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                        <div class="text-[10px] font-semibold text-slate-500 uppercase">Projeto</div>
+                        <div id="third-party-project-detail-project" class="text-slate-800 mt-1">—</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-semibold text-slate-500 uppercase">Subtipo</div>
+                        <div id="third-party-project-detail-subtype" class="text-slate-800 mt-1">—</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-semibold text-slate-500 uppercase">Característica</div>
+                        <div id="third-party-project-detail-characteristic" class="text-slate-800 mt-1">—</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-semibold text-slate-500 uppercase">Projetista</div>
+                        <div id="third-party-project-detail-designer" class="text-slate-800 mt-1">—</div>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-[10px] font-semibold text-slate-500 uppercase">Caminho do arquivo</div>
+                    <div id="third-party-project-detail-path" class="text-xs font-mono text-slate-700 mt-1 break-all">—</div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                        <div class="text-[10px] font-semibold text-slate-500 uppercase">Enviado em</div>
+                        <div id="third-party-project-detail-sent-at" class="text-slate-700 mt-1">—</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-semibold text-slate-500 uppercase">Aprovado em</div>
+                        <div id="third-party-project-detail-approved-at" class="text-slate-700 mt-1">—</div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-slate-100 bg-white flex gap-2">
+                <button type="button" id="btn-third-party-project-detail-history"
+                    class="flex-1 bg-white border border-indigo-200 text-indigo-700 py-2 rounded-lg text-xs font-medium hover:bg-indigo-50">
+                    Ver histórico
+                </button>
+                <button type="button" id="btn-close-third-party-project-detail-footer"
+                    class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-medium hover:bg-slate-200">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: PROJETOS DE TERCEIROS CRIADOS -->
+    <div id="third-party-projects-created-modal"
+        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[71]">
+        <div class="bg-white rounded-2xl w-full max-w-lg shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="p-5 border-b border-slate-100 bg-slate-50/50">
+                <h3 class="font-bold text-base text-slate-900">Projetos de terceiros criados</h3>
+                <p class="text-xs text-slate-500 mt-1">Foram abertos os seguintes projetos de terceiros com base nas características da conferência.</p>
+            </div>
+            <div class="p-5 overflow-y-auto flex-1">
+                <ul id="third-party-projects-created-list" class="space-y-2"></ul>
+            </div>
+            <div class="p-4 border-t border-slate-100 bg-white">
+                <button type="button" id="btn-close-third-party-projects-created-footer"
+                    class="w-full bg-indigo-700 text-white py-2 rounded-lg text-xs font-medium hover:bg-indigo-800">
+                    Entendi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: REVISÃO PROJETO DE TERCEIROS -->
+    <div id="third-party-revision-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[82]">
+        <div class="fm-revision-modal bg-white rounded-2xl w-full max-w-4xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 relative">
+            <div id="third-party-revision-loading"
+                class="hidden absolute inset-0 bg-white/90 rounded-2xl flex flex-col items-center justify-center gap-3 z-10 px-6 text-center">
+                <div id="third-party-revision-loading-spinner"
+                    class="h-8 w-8 border-2 border-slate-300 border-t-violet-700 rounded-full animate-spin"></div>
+                <div id="third-party-revision-loading-success"
+                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                <div id="third-party-revision-loading-error"
+                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                <p id="third-party-revision-loading-msg" class="text-sm text-slate-700 font-medium">Salvando revisão...</p>
+            </div>
+            <div class="fm-revision-modal__header shrink-0 px-5 md:px-6 py-4 md:py-5 border-b border-slate-100 flex justify-between items-start gap-3">
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-bold text-base text-slate-900">Revisão — Projeto de Terceiros</h3>
+                    <p id="third-party-revision-project-info" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span id="third-party-revision-status-badge" class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase bg-violet-100 text-violet-800">—</span>
+                    <button type="button" id="btn-close-third-party-revision"
+                        class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
+                </div>
+            </div>
+            <div class="fm-revision-modal__body flex-1 overflow-y-auto px-5 md:px-6 py-5 space-y-4 min-h-0">
+                <div class="flex justify-between items-center gap-3">
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Atividades</p>
+                    <button type="button" id="btn-add-third-party-revision-activity"
+                        class="text-xs bg-violet-700 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-violet-800 shrink-0">+ Adicionar atividade</button>
+                </div>
+                <div class="fm-revision-table-wrap overflow-x-auto border border-slate-200 rounded-xl">
+                    <table class="revision-activities-table w-full text-xs">
+                        <colgroup>
+                            <col style="width:36%">
+                            <col style="width:72px">
+                            <col style="width:36%">
+                            <col style="width:112px">
+                        </colgroup>
+                        <thead class="bg-slate-50 text-slate-500 uppercase">
+                            <tr>
+                                <th class="text-left p-3 font-semibold">Atividade solicitada</th>
+                                <th class="text-center p-3 font-semibold align-top">Realizado</th>
+                                <th class="text-left p-3 font-semibold align-top">Observação</th>
+                                <th class="text-left p-3 font-semibold align-top">Data realização</th>
+                            </tr>
+                        </thead>
+                        <tbody id="third-party-revision-activities-list" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <p id="third-party-revision-empty-msg" class="hidden text-xs text-slate-400 text-center py-4">Adicione ao menos uma atividade.</p>
+                <input type="file" id="third-party-revision-activity-image-input" class="hidden" accept="image/*">
+            </div>
+            <div class="fm-revision-modal__footer shrink-0 px-5 md:px-6 py-4 border-t border-slate-100 bg-white flex flex-wrap gap-2">
+                <button type="button" id="btn-cancel-third-party-revision"
+                    class="flex-1 min-w-[120px] bg-slate-100 text-slate-600 py-2.5 rounded-lg text-xs font-semibold">Cancelar</button>
+                <button type="button" id="btn-save-third-party-revision"
+                    class="flex-1 min-w-[120px] bg-violet-700 text-white py-2.5 rounded-lg text-xs font-semibold">Salvar Revisão</button>
+                <button type="button" id="btn-resend-third-party-project"
+                    class="hidden flex-1 min-w-[160px] bg-emerald-700 text-white py-2.5 rounded-lg text-xs font-semibold">Reenviar para Consultor</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: HISTÓRICO DE REVISÕES — PROJETO DE TERCEIROS -->
+    <div id="third-party-revisions-history-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[81]">
+        <div class="fm-revision-history-modal bg-white rounded-2xl w-full max-w-4xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
+            <div class="fm-revision-history-modal__header shrink-0 px-5 md:px-6 py-4 md:py-5 border-b border-slate-100 flex justify-between items-start gap-3">
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-bold text-base text-slate-900">Revisões do projeto de terceiros</h3>
+                    <p id="third-party-revisions-history-context" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <button type="button" id="btn-close-third-party-revisions-history"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1 shrink-0" aria-label="Fechar">×</button>
+            </div>
+            <div id="third-party-revisions-history-content"
+                class="fm-revision-history-modal__body overflow-y-auto px-5 md:px-6 py-5 flex-1 min-h-0"></div>
+            <div class="fm-revision-history-modal__footer shrink-0 px-5 md:px-6 py-4 border-t border-slate-100 bg-white">
+                <button type="button" id="btn-close-third-party-revisions-history-footer"
+                    class="w-full bg-slate-100 text-slate-600 py-2.5 rounded-lg text-xs font-semibold">Fechar</button>
             </div>
         </div>
     </div>

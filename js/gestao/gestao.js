@@ -200,6 +200,27 @@ function getDefaultProjectStatusId() {
     return firstActive?.id || gestaoProjectStatusesCache[0]?.id || null;
 }
 
+function isGestaoProjectVendido(project = {}) {
+    const statusName = project.projectStatus?.name
+        || gestaoProjectStatusesCache.find(
+            status => String(status.id) === String(project.statusId)
+        )?.name
+        || '';
+    return statusName === 'Vendido';
+}
+
+function syncGestaoProjectRemoveButtonVisibility(project = null) {
+    const removeBtn = document.getElementById('btn-gestao-remove-project');
+    if (!removeBtn) return;
+
+    if (project && isGestaoProjectVendido(project)) {
+        removeBtn.classList.remove('hidden');
+        return;
+    }
+
+    removeBtn.classList.add('hidden');
+}
+
 function resolveGestaoProjectStatusId(project = {}) {
     if (project.statusId || project.projectStatus?.id) {
         return project.statusId || project.projectStatus?.id;
@@ -669,18 +690,18 @@ async function openGestaoProjectForm(index = null) {
     resetGestaoProjectForm();
 
     const title = document.getElementById('gestao-project-form-title');
-    const removeBtn = document.getElementById('btn-gestao-remove-project');
 
     if (index != null && gestaoOrderProjectsDraft[index]) {
         if (title) title.textContent = 'Editar Projeto';
         fillGestaoProjectForm(gestaoOrderProjectsDraft[index]);
-        removeBtn?.classList.remove('hidden');
+        syncGestaoProjectRemoveButtonVisibility(gestaoOrderProjectsDraft[index]);
         syncGestaoProjectPhaseFieldVisibility();
         if (typeof loadGestaoProjectCharacteristicsForm === 'function') {
             await loadGestaoProjectCharacteristicsForm(gestaoOrderProjectsDraft[index]);
         }
     } else {
         if (title) title.textContent = 'Novo Projeto';
+        syncGestaoProjectRemoveButtonVisibility(null);
         const defaultStatusId = getDefaultProjectStatusId();
         if (defaultStatusId) {
             document.getElementById('gestao-project-status').value = String(defaultStatusId);
@@ -722,6 +743,19 @@ async function saveGestaoProjectDraftAsync() {
         project.characteristicIds = characteristicsSelection.noneChecked
             ? []
             : characteristicsSelection.characteristicIds;
+    }
+
+    let thirdPartyCharacteristicChanges = null;
+    if (typeof validateAndConfirmGestaoProjectCharacteristicsChanges === 'function') {
+        thirdPartyCharacteristicChanges = await validateAndConfirmGestaoProjectCharacteristicsChanges({
+            project,
+            previousCharacteristicIds: typeof getGestaoProjectCharacteristicsInitialIds === 'function'
+                ? getGestaoProjectCharacteristicsInitialIds()
+                : [],
+            newCharacteristicIds: project.characteristicIds || []
+        });
+
+        if (!thirdPartyCharacteristicChanges?.proceed) return;
     }
 
     if (!project.projectCode || !project.name || !project.environmentTypeId || !project.statusId) {
@@ -816,6 +850,8 @@ async function saveGestaoProjectDraftAsync() {
         }
     }
 
+    const savedProjectCode = project.projectCode;
+
     if (editingGestaoProjectDraftIndex != null) {
         gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex] = {
             ...gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex],
@@ -842,6 +878,28 @@ async function saveGestaoProjectDraftAsync() {
                 await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
             }
         }
+
+        const savedProject = gestaoOrderProjectsDraft.find(item => item.projectCode === savedProjectCode);
+        const savedProjectId = Number(savedProject?.id || project.id);
+        const orderIdForThirdParty = Number(editingGestaoOrderId || savedProject?.orderId);
+
+        if (savedProjectId && thirdPartyCharacteristicChanges?.removedThirdPartyCharacteristicIds?.length
+            && typeof deleteThirdPartyProjectsForOrderProjectCharacteristics === 'function') {
+            await deleteThirdPartyProjectsForOrderProjectCharacteristics(
+                savedProjectId,
+                thirdPartyCharacteristicChanges.removedThirdPartyCharacteristicIds
+            );
+        }
+
+        if (savedProjectId && orderIdForThirdParty
+            && thirdPartyCharacteristicChanges?.addedThirdPartyCharacteristicIds?.length
+            && typeof createThirdPartyProjectsForOrderProjectCharacteristics === 'function') {
+            await createThirdPartyProjectsForOrderProjectCharacteristics({
+                orderProjectId: savedProjectId,
+                orderId: orderIdForThirdParty,
+                characteristicIds: thirdPartyCharacteristicChanges.addedThirdPartyCharacteristicIds
+            });
+        }
     } catch (error) {
         alertAppDialog(`Erro ao salvar projeto no banco: ${error.message}`);
         return;
@@ -856,6 +914,11 @@ async function removeGestaoProjectDraft() {
     if (editingGestaoProjectDraftIndex == null) return;
 
     const project = gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex];
+    if (!isGestaoProjectVendido(project)) {
+        alertAppDialog('Somente projetos com status "Vendido" podem ser removidos.');
+        return;
+    }
+
     const confirmed = await confirmAppDialog(
         `Remover o projeto "${project?.name || 'sem nome'}" deste pedido?`,
         { title: 'Remover projeto', confirmLabel: 'Remover' }

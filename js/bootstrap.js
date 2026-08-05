@@ -39,6 +39,7 @@ const SCRIPTS = [
     'js/orders/implantacao.js',
     'js/pendencias/pendencias-core.js',
     'js/pendencias/pendencias-projetista-pt.js',
+    'js/pendencias/pendencias-third-party.js',
     'js/pendencias/pendencias-projetista-flows.js',
     'js/pendencias/pendencias-projetista-medicao.js',
     'js/pendencias/pendencias-operacional.js',
@@ -52,6 +53,10 @@ const SCRIPTS = [
     'js/orders/orders.js',
     'js/orders/order-projects.js',
     'js/orders/project-characteristics.js',
+    'js/orders/third-party-project.js',
+    'js/orders/third-party-project-revision-attachments.js',
+    'js/orders/third-party-project-revision.js',
+    'js/orders/third-party-project-tab.js',
     'js/orders/anteprojeto.js',
     'js/orders/anteprojeto-structure.js',
     'js/orders/anteprojeto-modal-core.js',
@@ -107,9 +112,10 @@ async function bootstrap() {
     const mount = document.getElementById('app-root');
 
     try {
+        const partialsVersion = '20261087';
         const htmlParts = await Promise.all(
             PARTIALS.map(url =>
-                fetch(url).then(response => {
+                fetch(`${url}?v=${partialsVersion}`).then(response => {
                     if (!response.ok) throw new Error(`Falha ao carregar ${url}`);
                     return response.text();
                 })
@@ -120,7 +126,7 @@ async function bootstrap() {
         await loadAppVersion();
 
         for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=20261068`);
+            await loadScript(`${src}?v=20261090`);
         }
 
         initAppEvents();

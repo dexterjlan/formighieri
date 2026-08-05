@@ -8,6 +8,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     projetista: {
         'aguardando-projeto-tecnico': 'Projetos aguardando projeto técnico associados a você.',
         'projeto-tecnico': 'Projetos em projeto técnico associados a você.',
+        'projetos-terceiros': 'Projetos de terceiros não aprovados sob sua responsabilidade.',
         'em-revisao': 'Projetos em revisão sob sua responsabilidade.',
         requisicao: 'Requisições aguardando sua resposta.',
         nomear: 'Projetos aguardando nomeação pelo projetista responsável.',
@@ -23,6 +24,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     },
     'gestor-projetos': {
         'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.',
+        'terceiros-sem-projetistas': 'Projetos de terceiros sem projetista responsável.',
         'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
     },
     'gestor-fabrica': {
@@ -54,6 +56,14 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 const { error, requests } = await fetchPendenciasConsultorRequisicaoRequests();
                 return error ? null : requests.length;
             }
+            case 'consultor:projetos-terceiros': {
+                if (typeof fetchThirdPartyProjectsSentForConsultor !== 'function') return null;
+                const overviewMode = typeof isPendenciasConsultorConferenciaOverviewMode === 'function'
+                    ? isPendenciasConsultorConferenciaOverviewMode()
+                    : isAdmin();
+                const projects = await fetchThirdPartyProjectsSentForConsultor({ overviewMode });
+                return projects.length;
+            }
             case 'projetista:aguardando-projeto-tecnico': {
                 const { error, unassigned, mine } = await fetchPendenciasAguardandoProjetoTecnico();
                 return error ? null : (unassigned.length + mine.length);
@@ -61,6 +71,15 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             case 'projetista:projeto-tecnico': {
                 const { error, projects } = await fetchPendenciasProjetoTecnicoProjects();
                 return error ? null : projects.length;
+            }
+            case 'projetista:projetos-terceiros': {
+                if (typeof fetchThirdPartyProjectsForProjetista !== 'function') return null;
+                const overviewMode = isAdmin() || (typeof canSeePendenciasGestorProjetosMenu === 'function'
+                    && canSeePendenciasGestorProjetosMenu());
+                const projects = await fetchThirdPartyProjectsForProjetista(currentUser?.id, {
+                    includeAll: overviewMode
+                });
+                return projects.length;
             }
             case 'projetista:em-revisao': {
                 const { error, projects } = await fetchPendenciasEmRevisaoProjects();
@@ -106,6 +125,11 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             case 'gestor-projetos:projetos-sem-projetistas': {
                 const { error, projects } = await fetchPendenciasAguardandoPtSemProjetista();
                 return error ? null : projects.length;
+            }
+            case 'gestor-projetos:terceiros-sem-projetistas': {
+                if (typeof fetchThirdPartyProjectsWithoutDesigner !== 'function') return null;
+                const projects = await fetchThirdPartyProjectsWithoutDesigner();
+                return projects.length;
             }
             case 'gestor-projetos:montagem-externa': {
                 const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);

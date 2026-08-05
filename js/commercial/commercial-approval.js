@@ -1128,49 +1128,7 @@ async function showCommercialApprovalOrderDeliveryModal(approval) {
 }
 
 async function saveCommercialApprovalOrderDeliveryDate(orderId, clientDeliveryDate) {
-    const normalizedOrderId = Number(orderId);
-    if (!normalizedOrderId || !clientDeliveryDate) {
-        throw new Error('Informe a data de entrega do pedido.');
-    }
-
-    const now = new Date().toISOString();
-    let orderPayload = {
-        clientDeliveryDate,
-        updatedAt: now,
-        updatedById: currentUser.id
-    };
-
-    let { error: orderError } = await supabaseClient
-        .from('salesOrders')
-        .update(orderPayload)
-        .eq('id', normalizedOrderId);
-
-    if (orderError?.message?.includes('clientDeliveryDate')) {
-        orderPayload = { clientDeliveryDate };
-        ({ error: orderError } = await supabaseClient
-            .from('salesOrders')
-            .update(orderPayload)
-            .eq('id', normalizedOrderId));
-    }
-
-    if (orderError) throw orderError;
-
-    if (typeof ordersCache !== 'undefined') {
-        const cacheIndex = ordersCache.findIndex(order => Number(order.id) === normalizedOrderId);
-        if (cacheIndex >= 0) {
-            ordersCache[cacheIndex] = {
-                ...ordersCache[cacheIndex],
-                clientDeliveryDate
-            };
-        }
-    }
-
-    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === normalizedOrderId) {
-        const detDelivery = document.getElementById('det-delivery');
-        if (detDelivery && typeof formatOrderDeliverySummary === 'function') {
-            detDelivery.innerText = formatOrderDeliverySummary(normalizedOrderId, clientDeliveryDate);
-        }
-    }
+    await persistSalesOrderClientDeliveryDate(orderId, clientDeliveryDate);
 }
 
 async function submitCommercialApprovalOrderDeliveryModal() {

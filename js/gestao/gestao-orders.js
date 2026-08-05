@@ -2,6 +2,7 @@ async function openGestaoCreateOrderForm() {
     if (!canAccessGestao()) return;
 
     editingGestaoOrderId = null;
+    setGestaoOrderFormOrderId(null);
     document.getElementById('gestao-order-form')?.reset();
     if (document.getElementById('gestao-ord-client-id')) document.getElementById('gestao-ord-client-id').value = '';
     document.getElementById('gestao-order-form-title').textContent = 'Criar Pedido';
@@ -19,10 +20,11 @@ async function openGestaoCreateOrderForm() {
 async function openGestaoEditOrderForm(orderId) {
     if (!canAccessGestao()) return;
 
-    const order = gestaoOrdersCache.find(item => item.id === orderId);
+    const order = gestaoOrdersCache.find(item => Number(item.id) === Number(orderId));
     if (!order) return;
 
-    editingGestaoOrderId = orderId;
+    editingGestaoOrderId = Number(orderId);
+    setGestaoOrderFormOrderId(editingGestaoOrderId);
     document.getElementById('gestao-order-form-title').textContent = 'Editar Pedido';
     document.getElementById('gestao-order-form-submit').textContent = 'Atualizar Pedido';
     document.getElementById('gestao-ord-code').value = order.orderCode || '';
@@ -38,6 +40,14 @@ async function openGestaoEditOrderForm(orderId) {
 
     setGestaoOrderProjectsDraft(order.projects || []);
     await loadGestaoOrderPhasesForOrder(orderId);
+    if (typeof hasGestaoOrderMultiplePhases === 'function' && hasGestaoOrderMultiplePhases()) {
+        const maxPhaseDeliveryDate = pickLatestIsoDate(
+            ...(gestaoOrderPhasesDraft || []).map(phase => phase.deliveryDate)
+        );
+        if (maxPhaseDeliveryDate) {
+            document.getElementById('gestao-ord-client-delivery').value = maxPhaseDeliveryDate;
+        }
+    }
     if (typeof ensureGestaoProjectsHavePhaseDefaults === 'function') {
         ensureGestaoProjectsHavePhaseDefaults();
     }
@@ -46,6 +56,30 @@ async function openGestaoEditOrderForm(orderId) {
 }
 
 window.openGestaoEditOrderForm = openGestaoEditOrderForm;
+
+function resolveGestaoOrderIdForSave() {
+    const fromForm = Number(document.getElementById('gestao-ord-id')?.value) || null;
+    const fromState = Number(editingGestaoOrderId) || null;
+    return fromForm || fromState || null;
+}
+
+function setGestaoOrderFormOrderId(orderId) {
+    const input = document.getElementById('gestao-ord-id');
+    if (!input) return;
+    input.value = orderId ? String(orderId) : '';
+}
+
+function resolveGestaoOrderClientDeliveryDateForSave(phases = gestaoOrderPhasesDraft) {
+    const inputDate = normalizeIsoDateValue(
+        document.getElementById('gestao-ord-client-delivery')?.value || ''
+    ) || null;
+
+    if ((phases || []).length >= 2) {
+        return pickLatestIsoDate(...phases.map(phase => phase.deliveryDate)) || inputDate;
+    }
+
+    return inputDate;
+}
 
 function groupGestaoProjectsByOrderId(projects) {
     const byOrderId = {};
@@ -963,15 +997,6 @@ async function saveGestaoOrder(event) {
     const orderCode = document.getElementById('gestao-ord-code')?.value.trim();
     const clientName = document.getElementById('gestao-ord-client')?.value.trim();
     const consultantName = document.getElementById('gestao-ord-consultant')?.value.trim();
-    let clientDeliveryDate = document.getElementById('gestao-ord-client-delivery')?.value || null;
-    if (hasGestaoOrderMultiplePhases()) {
-        const maxFromPhases = pickLatestIsoDate(
-            ...(gestaoOrderPhasesDraft || []).map(phase => phase.deliveryDate)
-        );
-        if (maxFromPhases) {
-            clientDeliveryDate = maxFromPhases;
-        }
-    }
     const projects = gestaoOrderProjectsDraft || [];
 
     if (!orderCode) {
@@ -986,40 +1011,48 @@ async function saveGestaoOrder(event) {
         alertAppDialog('Selecione o consultor.');
         return;
     }
-    if (!projects.length) {
-        alertAppDialog('Adicione ao menos um projeto.');
-        return;
-    }
 
-    for (const project of projects) {
-        if (!project.projectCode || !project.name || !project.environmentTypeId || !project.statusId) {
-            alertAppDialog('Preencha código, nome, ambiente e status de todos os projetos.');
+    const isEditingOrder = Boolean(resolveGestaoOrderIdForSave());
+
+    if (!isEditingOrder) {
+        if (!projects.length) {
+            alertAppDialog('Adicione ao menos um projeto.');
             return;
         }
-        if (project.isComplementar && !project.parentProjectCode) {
-            alertAppDialog(`Projeto "${project.name}": informe o código do projeto pai.`);
-            return;
-        }
-        if (project.isSubstituido && !project.substituidoPorProjectCode) {
-            alertAppDialog(`Projeto "${project.name}": informe o código do projeto substituto.`);
-            return;
-        }
-        if (!isNumericProjectCode(project.projectCode)) {
-            alertAppDialog(`O código do projeto "${project.name}" deve conter somente números.`, { variant: 'warning', title: 'Aviso' });
-            return;
-        }
-        if (Number.isNaN(project.saleValue)) {
-            alertAppDialog(`Informe um valor de venda válido para o projeto "${project.name}".`);
-            return;
-        }
-        if (project.deliveryDate && clientDeliveryDate
-            && !isProjectTechnicalDeliveryBeforeOrderDelivery(project.deliveryDate, clientDeliveryDate)) {
-            alertAppDialog(`Projeto "${project.name}": a data de entrega do projeto técnico deve ser anterior à data de entrega do pedido.`, { variant: 'warning', title: 'Aviso' });
-            return;
-        }
-        if (hasGestaoOrderMultiplePhases() && !project.deliveryPhaseId) {
-            alertAppDialog(`Projeto "${project.name}": selecione a fase de entrega.`);
-            return;
+
+        for (const project of projects) {
+            if (!project.projectCode || !project.name || !project.environmentTypeId || !project.statusId) {
+                alertAppDialog('Preencha código, nome, ambiente e status de todos os projetos.');
+                return;
+            }
+            if (project.isComplementar && !project.parentProjectCode) {
+                alertAppDialog(`Projeto "${project.name}": informe o código do projeto pai.`);
+                return;
+            }
+            if (project.isSubstituido && !project.substituidoPorProjectCode) {
+                alertAppDialog(`Projeto "${project.name}": informe o código do projeto substituto.`);
+                return;
+            }
+            if (!isNumericProjectCode(project.projectCode)) {
+                alertAppDialog(`O código do projeto "${project.name}" deve conter somente números.`, { variant: 'warning', title: 'Aviso' });
+                return;
+            }
+            if (Number.isNaN(project.saleValue)) {
+                alertAppDialog(`Informe um valor de venda válido para o projeto "${project.name}".`);
+                return;
+            }
+            if (project.deliveryDate) {
+                const clientDeliveryDate = resolveGestaoOrderClientDeliveryDateForSave();
+                if (clientDeliveryDate
+                    && !isProjectTechnicalDeliveryBeforeOrderDelivery(project.deliveryDate, clientDeliveryDate)) {
+                    alertAppDialog(`Projeto "${project.name}": a data de entrega do projeto técnico deve ser anterior à data de entrega do pedido.`, { variant: 'warning', title: 'Aviso' });
+                    return;
+                }
+            }
+            if (hasGestaoOrderMultiplePhases() && !project.deliveryPhaseId) {
+                alertAppDialog(`Projeto "${project.name}": selecione a fase de entrega.`);
+                return;
+            }
         }
     }
 
@@ -1027,39 +1060,17 @@ async function saveGestaoOrder(event) {
     const consultantUserId = await resolveConsultantUserIdByNameAsync(consultantName);
 
     try {
+        let orderId = resolveGestaoOrderIdForSave();
+        if (isEditingOrder && !orderId) {
+            throw new Error('Pedido inválido para edição.');
+        }
         const clientIdInput = document.getElementById('gestao-ord-client-id')?.value;
         let clientId = clientIdInput ? Number(clientIdInput) : null;
         if (!clientId && clientName && typeof resolveOrCreateClienteId === 'function') {
             clientId = await resolveOrCreateClienteId(clientName);
         }
 
-        if (editingGestaoOrderId) {
-            let { error } = await supabaseClient
-                .from('salesOrders')
-                .update({
-                    clientName,
-                    clientId: clientId || null,
-                    consultantName,
-                    consultantUserId: consultantUserId || null,
-                    clientDeliveryDate,
-                    updatedById: currentUser.id,
-                    updatedAt: now
-                })
-                .eq('id', editingGestaoOrderId);
-
-            if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('consultantUserId')) {
-                ({ error } = await supabaseClient
-                    .from('salesOrders')
-                    .update({
-                        clientName,
-                        consultantName,
-                        updatedById: currentUser.id
-                    })
-                    .eq('id', editingGestaoOrderId));
-            }
-
-            if (error) throw error;
-        } else {
+        if (!isEditingOrder) {
             const { data: existing } = await supabaseClient
                 .from('salesOrders')
                 .select('id')
@@ -1077,7 +1088,6 @@ async function saveGestaoOrder(event) {
                 clientId: clientId || undefined,
                 consultantName,
                 consultantUserId: consultantUserId || undefined,
-                clientDeliveryDate,
                 createdById: currentUser.id,
                 updatedById: currentUser.id,
                 updatedAt: now
@@ -1089,7 +1099,25 @@ async function saveGestaoOrder(event) {
                 .select('id')
                 .single();
 
-            if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('consultantUserId')) {
+            if (error?.message?.includes('consultantUserId')) {
+                const { consultantUserId: _consultantUserId, ...retryPayload } = orderPayload;
+                ({ data: created, error } = await supabaseClient
+                    .from('salesOrders')
+                    .insert(retryPayload)
+                    .select('id')
+                    .single());
+            }
+
+            if (error?.message?.includes('clientId')) {
+                const { clientId: _clientId, consultantUserId: _consultantUserId, ...retryPayload } = orderPayload;
+                ({ data: created, error } = await supabaseClient
+                    .from('salesOrders')
+                    .insert(retryPayload)
+                    .select('id')
+                    .single());
+            }
+
+            if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('updatedAt')) {
                 const { clientDeliveryDate: _d, updatedAt: _u, consultantUserId: _c, ...fallback } = orderPayload;
                 ({ data: created, error } = await supabaseClient
                     .from('salesOrders')
@@ -1099,30 +1127,65 @@ async function saveGestaoOrder(event) {
             }
 
             if (error) throw error;
-            orderId = created.id;
+            orderId = Number(created.id);
+            setGestaoOrderFormOrderId(orderId);
         }
 
-        const previousPhases = editingGestaoOrderId
-            ? await fetchGestaoOrderPhases(orderId)
-            : [...getGestaoOrderPhasesDraft()];
+        orderId = Number(orderId);
+        if (!orderId) {
+            throw new Error('Pedido inválido.');
+        }
+
+        const previousPhasesForProjects = !isEditingOrder
+            ? [...getGestaoOrderPhasesDraft()]
+            : [];
 
         let persistedPhases = [];
         if (typeof persistGestaoOrderPhases === 'function') {
             persistedPhases = await persistGestaoOrderPhases(orderId, orderCode, gestaoOrderPhasesDraft);
         }
 
-        let projectsToPersist = typeof mapGestaoProjectPhaseIds === 'function'
-            ? mapGestaoProjectPhaseIds(projects, persistedPhases, previousPhases)
-            : projects;
+        if (!isEditingOrder) {
+            let projectsToPersist = typeof mapGestaoProjectPhaseIds === 'function'
+                ? mapGestaoProjectPhaseIds(projects, persistedPhases, previousPhasesForProjects)
+                : projects;
 
-        if (!hasGestaoOrderMultiplePhases(persistedPhases)) {
-            projectsToPersist = projectsToPersist.map(project => ({
-                ...project,
-                deliveryPhaseId: null
-            }));
+            if (!hasGestaoOrderMultiplePhases(persistedPhases)) {
+                projectsToPersist = projectsToPersist.map(project => ({
+                    ...project,
+                    deliveryPhaseId: null
+                }));
+            }
+
+            await persistGestaoProjects(orderId, projectsToPersist);
         }
 
-        await persistGestaoProjects(orderId, projectsToPersist);
+        const deliveryDateToSave = resolveGestaoOrderClientDeliveryDateForSave(persistedPhases);
+        const rawDeliveryInput = normalizeIsoDateValue(
+            document.getElementById('gestao-ord-client-delivery')?.value || ''
+        );
+
+        if (rawDeliveryInput && !deliveryDateToSave) {
+            alertAppDialog('Não foi possível determinar a data de entrega. Verifique as fases do pedido.');
+            return;
+        }
+
+        await updateSalesOrderRecord(orderId, {
+            clientName,
+            ...(clientId ? { clientId } : {}),
+            consultantName,
+            ...(consultantUserId ? { consultantUserId } : {}),
+            updatedById: currentUser?.id || null,
+            updatedAt: now
+        });
+
+        if (deliveryDateToSave) {
+            await persistSalesOrderClientDeliveryDate(orderId, deliveryDateToSave, {
+                clientName,
+                consultantName,
+                orderCode
+            });
+        }
 
         editingGestaoOrderId = null;
         showGestaoPedidoListPanel();

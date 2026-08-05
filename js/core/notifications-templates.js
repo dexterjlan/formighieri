@@ -256,6 +256,7 @@ async function sendEmailViaGoogleAppsScript(payload) {
 const APPROVAL_EMAIL_TITLE = {
     approval_requested: 'Aprovação Solicitada',
     revision_created: 'Revisão Criada',
+    revision_updated: 'Revisão Atualizada',
     sent_back_to_approval: 'Aprovação Reenviada',
     approved: 'Aprovação Aprovada'
 };
@@ -496,7 +497,8 @@ const PROCESS_EMAIL_TITLE = {
     projeto_nomeado: 'Projeto Nomeado',
     projeto_tecnico_iniciado: 'Projeto Técnico Iniciado',
     implantacao_enviado_producao: 'Projeto Enviado para Produção',
-    montagem_externa_finalizada: 'Montagem Externa Finalizada'
+    montagem_externa_finalizada: 'Montagem Externa Finalizada',
+    third_party_project_status: 'Projeto de Terceiros — Atualização de Status'
 };
 function buildProcessEmailSubject(eventType, orderCode, clientName) {
     const prefix = PROCESS_EMAIL_TITLE[eventType] || 'Atualização de Processo';

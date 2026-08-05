@@ -522,6 +522,11 @@ const ORDER_DETAIL_TABS = {
         tabId: 'order-tab-compras',
         panelId: 'order-tab-panel-compras',
         accent: 'rose'
+    },
+    'third-party': {
+        tabId: 'order-tab-third-party',
+        panelId: 'order-tab-panel-third-party',
+        accent: 'violet'
     }
 };
 
@@ -629,7 +634,7 @@ async function selectOrder(id) {
 
     await loadOrderPhasesForOrders(ordersCache.length ? ordersCache : [order]);
     loadOrders();
-    loadOrderProjects(id);
+    await loadOrderProjects(id);
     loadConversations(id);
 
     if (typeof loadAnteprojetoConferences === 'function') {
@@ -640,6 +645,9 @@ async function selectOrder(id) {
     }
     if (typeof loadOrderCompras === 'function') {
         loadOrderCompras(id);
+    }
+    if (typeof loadOrderThirdPartyProjectsTab === 'function') {
+        await loadOrderThirdPartyProjectsTab(id);
     }
 
     updateOrderDetailTabsVisibility();
@@ -668,6 +676,12 @@ function bindOrderEvents() {
         switchOrderDetailTab('compras');
         if (activeOrderId && typeof loadOrderCompras === 'function') {
             loadOrderCompras(activeOrderId);
+        }
+    });
+    document.getElementById('order-tab-third-party')?.addEventListener('click', async function () {
+        switchOrderDetailTab('third-party');
+        if (activeOrderId && typeof loadOrderThirdPartyProjectsTab === 'function') {
+            loadOrderThirdPartyProjectsTab(activeOrderId);
         }
     });
 

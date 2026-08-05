@@ -50,10 +50,16 @@ function isRevisionActivityAttachmentImage(file) {
     );
 }
 
-function canEditRevisionActivityAttachments(approval = null) {
+function canEditRevisionActivityAttachments(approval = null, activity = null) {
     const resolvedApproval = approval
         || (typeof getCurrentApproval === 'function' ? getCurrentApproval() : null);
     if (revisionModalViewOnly) return false;
+
+    if (typeof canConsultorEditExistingTecnicaRevisionActivity === 'function'
+        && canConsultorEditExistingTecnicaRevisionActivity(resolvedApproval, activity)) {
+        return true;
+    }
+
     return typeof canEditRevisionActivitiesConsultor === 'function'
         && canEditRevisionActivitiesConsultor(resolvedApproval);
 }
@@ -102,8 +108,8 @@ function migrateRevisionActivityAttachmentDrafts(fromRowId, toRowId) {
     revisionActivityAttachmentDrafts.delete(fromKey);
 }
 
-function renderRevisionActivityAttachmentsHtml(rowId, approval = null) {
-    const canEdit = canEditRevisionActivityAttachments(approval);
+function renderRevisionActivityAttachmentsHtml(rowId, approval = null, activity = null) {
+    const canEdit = canEditRevisionActivityAttachments(approval, activity);
     const { existing, draft } = getRevisionActivityImageForRow(rowId);
     const visibleItem = draft || existing;
 
@@ -158,7 +164,8 @@ function refreshRevisionActivityAttachmentsForRow(rowId) {
     if (!container) return;
 
     const approval = typeof getCurrentApproval === 'function' ? getCurrentApproval() : null;
-    container.outerHTML = renderRevisionActivityAttachmentsHtml(rowId, approval);
+    const completed = Boolean(tr.querySelector('.revision-activity-completed')?.checked);
+    container.outerHTML = renderRevisionActivityAttachmentsHtml(rowId, approval, { completed });
     hydrateRevisionActivityAttachmentPreviews(tr);
 }
 

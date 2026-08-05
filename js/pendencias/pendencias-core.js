@@ -176,6 +176,7 @@ function getPendenciasProjetistaMenuItems() {
         items.push(
             { id: 'aguardando-projeto-tecnico', label: 'Aguardando Projeto Técnico' },
             { id: 'projeto-tecnico', label: 'Projeto Técnico' },
+            { id: 'projetos-terceiros', label: 'Projetos de Terceiros' },
             { id: 'em-revisao', label: 'Em Revisão' },
             { id: 'requisicao', label: 'Requisição' },
             { id: 'nomear', label: 'Nomear' }
@@ -261,6 +262,7 @@ function getPendenciasSidebarSections() {
                 { id: 'conferencia', label: 'Conferência' },
                 { id: 'em-revisao-comercial', label: 'Em Revisão Comercial' },
                 { id: 'aguardando-aprovacao', label: 'Aguardando Aprovação' },
+                { id: 'projetos-terceiros', label: 'Projetos de Terceiros' },
                 { id: 'requisicoes', label: 'Requisições' }
             ]
         },
@@ -285,6 +287,7 @@ function getPendenciasSidebarSections() {
             visible: canSeePendenciasGestorProjetosMenu() && !hideGestorAndConferente,
             items: [
                 { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
+                { id: 'terceiros-sem-projetistas', label: 'Terceiros Sem Projetistas' },
                 { id: 'montagem-externa', label: 'Montagem Externa' }
             ]
         },
@@ -581,6 +584,13 @@ function loadPendenciasContent() {
         return;
     }
 
+    if (pendenciasActiveSection === 'consultor' && pendenciasActiveItem === 'projetos-terceiros') {
+        if (typeof loadPendenciasThirdPartyConsultor === 'function') {
+            loadPendenciasThirdPartyConsultor();
+        }
+        return;
+    }
+
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'aguardando-projeto-tecnico') {
         loadPendenciasAguardandoProjetoTecnico();
         return;
@@ -588,6 +598,13 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'projeto-tecnico') {
         loadPendenciasProjetoTecnico();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'projetos-terceiros') {
+        if (typeof loadPendenciasThirdPartyProjetista === 'function') {
+            loadPendenciasThirdPartyProjetista();
+        }
         return;
     }
 
@@ -633,6 +650,13 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'projetos-sem-projetistas') {
         loadPendenciasProjetosSemProjetistas();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'terceiros-sem-projetistas') {
+        if (typeof loadPendenciasThirdPartySemProjetista === 'function') {
+            loadPendenciasThirdPartySemProjetista();
+        }
         return;
     }
 

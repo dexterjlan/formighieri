@@ -1,3 +1,36 @@
+function isEmRevisaoTecnicaApproval(approval) {
+    const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
+        ? getCommercialApprovalProjectStatusName(approval)
+        : '';
+
+    if (projectStatusName) {
+        return projectStatusName === 'Em Revisão Técnica'
+            || projectStatusName === 'Em Revisão'
+            || projectStatusName === 'Em revisão';
+    }
+
+    return approval?.status === 'Em revisão';
+}
+
+function isCreatingNewTecnicaRevision(approval) {
+    return currentRevisionType === 'tecnica'
+        && (!editingRevisionId
+            || approval?.status === 'Em Revisão Comercial'
+            || approval?.status === 'Aguardando Aprovação');
+}
+
+function canConsultorEditExistingTecnicaRevision(approval) {
+    if (!approval || currentRevisionType !== 'tecnica') return false;
+    if (isCreatingNewTecnicaRevision(approval)) return false;
+    if (!isEmRevisaoTecnicaApproval(approval)) return false;
+    return canEditRevisionActivitiesConsultor(approval);
+}
+
+function canConsultorEditExistingTecnicaRevisionActivity(approval, activity = null) {
+    if (!canConsultorEditExistingTecnicaRevision(approval)) return false;
+    return !activity?.completed;
+}
+
 function canEditRevisionActivitiesConsultor(approval) {
     if (currentUser?.role === 'Admin') return true;
     if (typeof currentRevisionType !== 'undefined' && currentRevisionType === 'comercial') {
@@ -45,16 +78,14 @@ function canViewCommercialRevision(approval) {
 
 function canOpenRevisionModal(approval) {
     if (!approval) return false;
-    if (currentUser?.role === 'Projetista') {
-        const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
-            ? getCommercialApprovalProjectStatusName(approval)
-            : '';
-        const isEmRevisaoTecnica = projectStatusName
-            ? (projectStatusName === 'Em Revisão Técnica' || projectStatusName === 'Em Revisão' || projectStatusName === 'Em revisão')
-            : approval?.status === 'Em revisão';
 
-        if (!isEmRevisaoTecnica) return false;
-        return approval?.designerId && Number(approval.designerId) === Number(currentUser.id);
+    if (isEmRevisaoTecnicaApproval(approval)) {
+        if (currentUser?.role === 'Projetista') {
+            return approval?.designerId && Number(approval.designerId) === Number(currentUser.id);
+        }
+        if (currentUser?.role === 'Admin') return true;
+        return typeof isAdminOrOrderConsultorForApproval === 'function'
+            && isAdminOrOrderConsultorForApproval(approval);
     }
 
     const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
@@ -62,12 +93,6 @@ function canOpenRevisionModal(approval) {
         : '';
     if (projectStatusName === 'Em Revisão Comercial') {
         return canRequestNewRevision(approval, projectStatusName);
-    }
-
-    if (approval?.status === 'Em revisão') {
-        if (currentUser?.role === 'Admin') return true;
-        return typeof isAdminOrOrderConsultorForApproval === 'function'
-            && isAdminOrOrderConsultorForApproval(approval);
     }
 
     return canRequestNewRevision(approval, projectStatusName);
@@ -129,17 +154,17 @@ let currentRevisionType = 'tecnica';
 function renderRevisionActivityRow(activity) {
     const approval = getCurrentApproval();
     const isComercial = currentRevisionType === 'comercial';
-    const isCreatingNewTecnicaRevision = currentRevisionType === 'tecnica'
-        && (!editingRevisionId || approval?.status === 'Em Revisão Comercial' || approval?.status === 'Aguardando Aprovação');
+    const isCreatingNewTecnica = isCreatingNewTecnicaRevision(approval);
+    const canConsultorEditExistingActivity = canConsultorEditExistingTecnicaRevisionActivity(approval, activity);
 
     const consultorCanEdit = !revisionModalViewOnly
         && canEditRevisionActivitiesConsultor(approval)
-        && (isComercial || isCreatingNewTecnicaRevision);
+        && (isComercial || isCreatingNewTecnica || canConsultorEditExistingActivity);
 
     const completionCanEdit = !revisionModalViewOnly && (
         isComercial
             ? consultorCanEdit
-            : (!isCreatingNewTecnicaRevision && canEditRevisionActivityCompletionFields(approval))
+            : (!isCreatingNewTecnica && canEditRevisionActivityCompletionFields(approval))
     );
     const rowId = activity.id || activity.tempId;
 
@@ -157,7 +182,7 @@ function renderRevisionActivityRow(activity) {
                 placeholder="Descreva a atividade..."
                 ${consultorCanEdit ? '' : 'disabled'}>${escapeHtml(activity.description || '')}</textarea>
             ${typeof renderRevisionActivityAttachmentsHtml === 'function'
-                ? renderRevisionActivityAttachmentsHtml(rowId, approval)
+                ? renderRevisionActivityAttachmentsHtml(rowId, approval, activity)
                 : ''}
         </td>
         <td class="p-3 align-top text-center">
@@ -250,14 +275,23 @@ function updateRevisionModalControls(approval) {
         return;
     }
 
-    const isCreatingNewTecnica = !editingRevisionId || approval?.status === 'Em Revisão Comercial' || approval?.status === 'Aguardando Aprovação';
+    const isCreatingNewTecnica = isCreatingNewTecnicaRevision(approval);
     const canConsultorCreate = canEditRevisionActivitiesConsultor(approval) && isCreatingNewTecnica;
+    const canConsultorEditExisting = canConsultorEditExistingTecnicaRevision(approval);
 
     if (isCreatingNewTecnica) {
         addBtn.classList.toggle('hidden', !canConsultorCreate);
         saveBtn.classList.toggle('hidden', !canConsultorCreate);
         sendBackBtn.classList.add('hidden');
         saveBtn.textContent = 'Criar Revisão Técnica';
+        return;
+    }
+
+    if (canConsultorEditExisting) {
+        addBtn.classList.remove('hidden');
+        saveBtn.classList.remove('hidden');
+        sendBackBtn.classList.add('hidden');
+        saveBtn.textContent = 'Salvar Revisão Técnica';
         return;
     }
 
@@ -566,9 +600,16 @@ async function openCommercialRevisionForRevision(approvalId, revisionId, viewOnl
     const approval = await ensureApprovalInCache(approvalId);
     if (!approval || !canViewCommercialRevision(approval)) return;
 
-    const isAuthorized = currentUser?.role === 'Admin' || (currentUser?.role === 'Projetista' && Number(approval.designerId) === Number(currentUser.id));
+    currentRevisionType = 'tecnica';
+    currentRevisionApprovalId = approvalId;
+    editingRevisionId = revisionId;
 
-    if (!viewOnly && isAuthorized) {
+    const isProjetistaAuthorized = currentUser?.role === 'Projetista'
+        && Number(approval.designerId) === Number(currentUser.id);
+    const isAdminAuthorized = currentUser?.role === 'Admin';
+    const canConsultorEditExisting = canConsultorEditExistingTecnicaRevision(approval);
+
+    if (!viewOnly && (isAdminAuthorized || isProjetistaAuthorized || canConsultorEditExisting)) {
         return openCommercialRevisionModal(approvalId, 'tecnica', { revisionId });
     }
 
@@ -785,12 +826,20 @@ async function saveCommercialRevision() {
         if (!result.ok) return;
 
         const approval = getCurrentApproval();
-        if (result.createdRevision && approval && currentRevisionType === 'tecnica') {
-            setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
-            await notifyApprovalEmail('revision_created', {
-                ...approval,
-                status: 'Em revisão'
-            }, { activities: result.activities });
+        if (approval && currentRevisionType === 'tecnica') {
+            if (result.createdRevision) {
+                setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+                await notifyApprovalEmail('revision_created', {
+                    ...approval,
+                    status: 'Em revisão'
+                }, { activities: result.activities });
+            } else if (canConsultorEditExistingTecnicaRevision(approval)) {
+                setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+                await notifyApprovalEmail('revision_updated', {
+                    ...approval,
+                    status: 'Em revisão'
+                }, { activities: result.activities });
+            }
         }
 
         setCommercialRevisionModalLoading(true, 'Atualizando telas...');
@@ -1133,15 +1182,14 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
             `).join('')
             : `<tr><td colspan="4" class="py-2 text-xs text-slate-400">Nenhuma atividade registrada.</td></tr>`;
 
-        const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
-            ? getCommercialApprovalProjectStatusName(approval)
-            : '';
-        const isEmRevisao = approval?.status === 'Em revisão'
-            || projectStatusName === 'Em Revisão Técnica'
-            || projectStatusName === 'Em Revisão'
-            || projectStatusName === 'Em revisão';
-
-        const canEditThisRevision = isCurrentRevision && isAuthorizedUser && isEmRevisao;
+        const isEmRevisao = isEmRevisaoTecnicaApproval(approval);
+        const canConsultorEditRevision = isCurrentRevision
+            && !isComercial
+            && isEmRevisao
+            && canEditRevisionActivitiesConsultor(approval);
+        const canEditThisRevision = isCurrentRevision && isEmRevisao && (
+            isAuthorizedUser || canConsultorEditRevision
+        );
 
         let editButtonHtml = '';
         if (canEditThisRevision) {
@@ -1150,7 +1198,7 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
         } else {
             editButtonHtml = `<button type="button" disabled
                 class="fm-revision-block__action text-xs bg-slate-100 text-slate-400 border border-slate-200 px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap opacity-50 cursor-not-allowed"
-                title="${!isCurrentRevision ? 'Disponível apenas para a revisão corrente em aberto' : 'Habilitado apenas para o projetista responsável ou admin'}">Editar</button>`;
+                title="${!isCurrentRevision ? 'Disponível apenas para a revisão corrente em aberto' : 'Habilitado apenas para o projetista responsável, consultor ou admin'}">Editar</button>`;
         }
 
         const activityCount = revision.activities.length;
@@ -1210,7 +1258,11 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
 function bindCommercialRevisionEvents() {
     document.getElementById('btn-add-revision-activity').addEventListener('click', async function () {
         const approval = getCurrentApproval();
-        if (!canEditRevisionActivitiesConsultor(approval)) return;
+        const canAddActivity = canEditRevisionActivitiesConsultor(approval)
+            && (currentRevisionType === 'comercial'
+                || isCreatingNewTecnicaRevision(approval)
+                || canConsultorEditExistingTecnicaRevision(approval));
+        if (!canAddActivity) return;
         addRevisionActivityRow();
     });
 

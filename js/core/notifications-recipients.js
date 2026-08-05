@@ -62,6 +62,23 @@ async function fetchProjectCaminhoRedeAprovacao(orderProjectId) {
     return data?.caminhoRedeAprovacao || '';
 }
 
+async function resolveApprovalNotificationToEmail(eventType, approval) {
+    if (NOTIFICATION_TEST_MODE) {
+        return NOTIFICATION_TEST_EMAIL;
+    }
+
+    if (eventType === 'revision_created' || eventType === 'revision_updated') {
+        const designerEmail = await fetchDesignerEmailById(approval?.designerId);
+        return designerEmail || NOTIFICATION_TEST_EMAIL;
+    }
+
+    if (eventType === 'sent_back_to_approval') {
+        return fetchConsultorEmailForOrder(approval?.orderId);
+    }
+
+    return NOTIFICATION_TEST_EMAIL;
+}
+
 async function fetchApprovalNotificationContext(approval) {
     const context = await fetchOrderRequestNotificationContext(
         approval.orderId,
@@ -381,6 +398,20 @@ async function fetchLiberacaoMedicaoRecipientEmails(orderId) {
         consultorEmail,
         ...gestores
     ]);
+}
+
+async function fetchThirdPartyProjectStatusRecipientEmails(orderId, designerId) {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    const [consultorEmail, designerEmail] = await Promise.all([
+        fetchConsultorEmailForOrder(orderId),
+        fetchDesignerEmailById(designerId)
+    ]);
+
+    const recipients = uniqueEmails([consultorEmail, designerEmail].filter(Boolean));
+    return recipients.length ? recipients : [NOTIFICATION_TEST_EMAIL];
 }
 
 async function fetchConsultorEmailForOrder(orderId) {

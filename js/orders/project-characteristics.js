@@ -1,7 +1,10 @@
 const PROJECT_CHARACTERISTIC_NONE_VALUE = 'none';
+const GESTAO_THIRD_PARTY_MAX_PROJECT_STATUS_NAME = 'Em Produção';
+const GESTAO_THIRD_PARTY_IMPLANTACAO_STATUS_ABERTO = 'Aberto';
 
 let projectCharacteristicsCache = [];
 let pendingConferenceCharacteristicsConfirm = null;
+let gestaoProjectCharacteristicsInitialIds = [];
 
 async function loadProjectCharacteristics(activeOnly = true) {
     let query = supabaseClient
@@ -24,6 +27,47 @@ async function loadProjectCharacteristics(activeOnly = true) {
 
     projectCharacteristicsCache = data || [];
     return projectCharacteristicsCache;
+}
+
+async function fetchThirdPartyLinkedCharacteristicIds() {
+    const { data, error } = await supabaseClient
+        .from('ThirdPartySubtype')
+        .select('projectCharacteristicId')
+        .not('projectCharacteristicId', 'is', null)
+        .eq('isActive', true);
+
+    if (error) {
+        if (error.message?.includes('projectCharacteristicId')) {
+            return new Set();
+        }
+        console.error('fetchThirdPartyLinkedCharacteristicIds:', error);
+        return new Set();
+    }
+
+    return new Set(
+        (data || [])
+            .map(row => Number(row.projectCharacteristicId))
+            .filter(Boolean)
+    );
+}
+
+function renderProjectCharacteristicOptionLabel(characteristic, linkedCharacteristicIds = new Set()) {
+    const isThirdPartyLinked = linkedCharacteristicIds.has(Number(characteristic.id));
+    const asterisk = isThirdPartyLinked
+        ? '<span class="project-characteristic-third-party-marker" title="Projeto de terceiros">*</span>'
+        : '';
+    return `${escapeHtml(characteristic.name)}${asterisk}`;
+}
+
+function setProjectCharacteristicsThirdPartyHint(linkedCharacteristicIds = new Set(), characteristics = []) {
+    const hintEl = document.getElementById('project-characteristics-modal-third-party-hint');
+    if (!hintEl) return;
+
+    const hasLinkedCharacteristics = characteristics.some(characteristic =>
+        linkedCharacteristicIds.has(Number(characteristic.id))
+    );
+
+    hintEl.classList.toggle('hidden', !hasLinkedCharacteristics);
 }
 
 async function fetchOrderProjectCharacteristicsMap(orderProjectIds) {
@@ -114,19 +158,26 @@ function renderPendenciasProjectCharacteristicsCell(rows = []) {
     `;
 }
 
-function renderGestaoProjectCharacteristicsFormHtml(characteristics = [], selectedIds = []) {
+function renderGestaoProjectCharacteristicsFormHtml(characteristics = [], selectedIds = [], linkedCharacteristicIds = new Set()) {
     const selected = new Set(selectedIds.map(id => Number(id)).filter(Boolean));
     const hasNone = selected.size === 0;
 
-    const optionsHtml = characteristics.map(characteristic => `
+    const optionsHtml = characteristics.map(characteristic => {
+        const isThirdPartyLinked = linkedCharacteristicIds.has(Number(characteristic.id));
+        const asterisk = isThirdPartyLinked
+            ? '<span class="project-characteristic-third-party-marker" title="Projeto de terceiros">*</span>'
+            : '';
+
+        return `
         <label class="project-characteristic-option">
             <input type="checkbox"
                 class="gestao-project-characteristic-checkbox h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 data-characteristic-id="${characteristic.id}"
                 ${selected.has(Number(characteristic.id)) ? 'checked' : ''}>
-            <span>${escapeHtml(characteristic.name)}</span>
+            <span>${escapeHtml(characteristic.name)}${asterisk}</span>
         </label>
-    `).join('');
+    `;
+    }).join('');
 
     const noneHtml = `
         <label class="project-characteristic-option project-characteristic-option--none">
@@ -178,11 +229,263 @@ function validateGestaoProjectCharacteristicsSelection(selection) {
     return false;
 }
 
+function setGestaoProjectCharacteristicsThirdPartyHint(linkedCharacteristicIds = new Set(), characteristics = []) {
+    const hintEl = document.getElementById('gestao-project-characteristics-third-party-hint');
+    if (!hintEl) return;
+
+    const hasLinkedCharacteristics = characteristics.some(characteristic =>
+        linkedCharacteristicIds.has(Number(characteristic.id))
+    );
+
+    hintEl.classList.toggle('hidden', !hasLinkedCharacteristics);
+}
+
+function getGestaoProjectCharacteristicsInitialIds() {
+    return [...gestaoProjectCharacteristicsInitialIds];
+}
+
+function diffCharacteristicIds(previousIds = [], newIds = []) {
+    const previous = new Set(previousIds.map(id => Number(id)).filter(Boolean));
+    const next = new Set(newIds.map(id => Number(id)).filter(Boolean));
+
+    return {
+        added: [...next].filter(id => !previous.has(id)),
+        removed: [...previous].filter(id => !next.has(id))
+    };
+}
+
+function getProjectCharacteristicNameById(characteristicId, characteristics = projectCharacteristicsCache) {
+    const match = (characteristics || []).find(item => Number(item.id) === Number(characteristicId));
+    return match?.name || `Característica #${characteristicId}`;
+}
+
+async function resolveGestaoProjectStatusForThirdPartyCheck(project = {}) {
+    if (project.projectStatus?.name) return project.projectStatus;
+
+    const statusId = Number(project.statusId);
+    if (!statusId) return null;
+
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id, name, sortOrder')
+        .eq('id', statusId)
+        .maybeSingle();
+
+    if (error) {
+        console.warn('resolveGestaoProjectStatusForThirdPartyCheck:', error);
+        return null;
+    }
+
+    return data;
+}
+
+async function isGestaoProjectStatusWithinEmProducao(project = {}) {
+    const status = await resolveGestaoProjectStatusForThirdPartyCheck(project);
+    if (!status?.name) return true;
+
+    const { data: emProducaoStatus } = await supabaseClient
+        .from('OrderProjectStatus')
+        .select('id, name, sortOrder')
+        .eq('name', GESTAO_THIRD_PARTY_MAX_PROJECT_STATUS_NAME)
+        .maybeSingle();
+
+    if (emProducaoStatus?.sortOrder != null && status.sortOrder != null) {
+        return Number(status.sortOrder) <= Number(emProducaoStatus.sortOrder);
+    }
+
+    const blockedStatusNames = new Set([
+        'Montagem Interna',
+        'Expedição',
+        'Projeto Substituído'
+    ]);
+
+    return !blockedStatusNames.has(status.name);
+}
+
+async function isGestaoImplantacaoOpenForProject(orderProjectId) {
+    const normalizedProjectId = Number(orderProjectId);
+    if (!normalizedProjectId || typeof fetchImplantacaoByOrderProjectId !== 'function') {
+        return true;
+    }
+
+    const implantacao = await fetchImplantacaoByOrderProjectId(normalizedProjectId);
+    if (!implantacao) return true;
+
+    return implantacao.status === GESTAO_THIRD_PARTY_IMPLANTACAO_STATUS_ABERTO;
+}
+
+async function canAddThirdPartyCharacteristicsInGestao(project = {}, characteristicIds = []) {
+    const uniqueIds = [...new Set(characteristicIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) {
+        return { allowed: true, addedIds: [] };
+    }
+
+    const linkedCharacteristicIds = await fetchThirdPartyLinkedCharacteristicIds();
+    const addedIds = uniqueIds.filter(id => linkedCharacteristicIds.has(id));
+    if (!addedIds.length) {
+        return { allowed: true, addedIds: [] };
+    }
+
+    const statusAllowed = await isGestaoProjectStatusWithinEmProducao(project);
+    if (!statusAllowed) {
+        return {
+            allowed: false,
+            addedIds,
+            reason: 'Não é possível adicionar características com projeto de terceiros porque o projeto já está além de "Em Produção".'
+        };
+    }
+
+    const implantacaoOpen = await isGestaoImplantacaoOpenForProject(project.id);
+    if (!implantacaoOpen) {
+        return {
+            allowed: false,
+            addedIds,
+            reason: 'Não é possível adicionar características com projeto de terceiros porque a implantação do projeto não está aberta.'
+        };
+    }
+
+    return { allowed: true, addedIds };
+}
+
+async function fetchThirdPartyCharacteristicIdsSentToComprasForOrderProject(orderProjectId) {
+    const normalizedProjectId = Number(orderProjectId);
+    if (!normalizedProjectId || typeof fetchImplantacaoByOrderProjectId !== 'function') {
+        return new Set();
+    }
+
+    const implantacao = await fetchImplantacaoByOrderProjectId(normalizedProjectId);
+    if (!implantacao?.id) return new Set();
+
+    const { data, error } = await supabaseClient
+        .from('ImplantacaoPurchaseItem')
+        .select('sentToCommercial, thirdPartySubtype:ThirdPartySubtype(id, projectCharacteristicId)')
+        .eq('implantacaoId', implantacao.id)
+        .eq('purchaseType', 'Terceiro')
+        .eq('sentToCommercial', true);
+
+    if (error) {
+        if (error.message?.includes('ImplantacaoPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
+            return new Set();
+        }
+        console.warn('fetchThirdPartyCharacteristicIdsSentToComprasForOrderProject:', error);
+        return new Set();
+    }
+
+    return new Set(
+        (data || [])
+            .map(item => Number(item.thirdPartySubtype?.projectCharacteristicId))
+            .filter(Boolean)
+    );
+}
+
+async function validateAndConfirmGestaoProjectCharacteristicsChanges(options = {}) {
+    const {
+        project = {},
+        previousCharacteristicIds = [],
+        newCharacteristicIds = []
+    } = options;
+
+    const diff = diffCharacteristicIds(previousCharacteristicIds, newCharacteristicIds);
+    const linkedCharacteristicIds = await fetchThirdPartyLinkedCharacteristicIds();
+    const addedThirdPartyIds = diff.added.filter(id => linkedCharacteristicIds.has(id));
+    const removedThirdPartyIds = diff.removed.filter(id => linkedCharacteristicIds.has(id));
+
+    if (!addedThirdPartyIds.length && !removedThirdPartyIds.length) {
+        return {
+            proceed: true,
+            addedThirdPartyCharacteristicIds: [],
+            removedThirdPartyCharacteristicIds: []
+        };
+    }
+
+    const characteristics = projectCharacteristicsCache.length
+        ? projectCharacteristicsCache
+        : await loadProjectCharacteristics(true);
+
+    if (removedThirdPartyIds.length && project.id) {
+        const sentToComprasCharacteristicIds = await fetchThirdPartyCharacteristicIdsSentToComprasForOrderProject(project.id);
+        const blockedRemovalIds = removedThirdPartyIds.filter(id => sentToComprasCharacteristicIds.has(id));
+
+        if (blockedRemovalIds.length) {
+            const labels = blockedRemovalIds.map(id => getProjectCharacteristicNameById(id, characteristics));
+            alertAppDialog(
+                `Não é possível remover ${labels.length > 1 ? 'as características' : 'a característica'} ${labels.join(', ')} porque ${labels.length > 1 ? 'já foram enviadas' : 'já foi enviada'} para compras.`,
+                { variant: 'warning', title: 'Ação não permitida' }
+            );
+            return { proceed: false };
+        }
+
+        const existingProjects = typeof fetchThirdPartyProjectsByOrderProjectId === 'function'
+            ? await fetchThirdPartyProjectsByOrderProjectId(project.id)
+            : [];
+        const projectsToDelete = existingProjects.filter(row =>
+            removedThirdPartyIds.includes(Number(row.projectCharacteristicId))
+        );
+
+        if (projectsToDelete.length) {
+            const labels = projectsToDelete.map(row => {
+                const characteristicName = row.projectCharacteristic?.name
+                    || getProjectCharacteristicNameById(row.projectCharacteristicId, characteristics);
+                const subtypeName = row.thirdPartySubtype?.name;
+                return subtypeName ? `${characteristicName} (${subtypeName})` : characteristicName;
+            });
+            const uniqueLabels = [...new Set(labels)];
+
+            const confirmed = await confirmAppDialog(
+                `Ao remover ${uniqueLabels.length > 1 ? 'essas características' : 'esta característica'}, ${projectsToDelete.length > 1 ? 'os projetos de terceiros vinculados serão excluídos' : 'o projeto de terceiros vinculado será excluído'}: ${uniqueLabels.join(', ')}.\n\nDeseja continuar?`,
+                {
+                    title: 'Excluir projeto de terceiros?',
+                    confirmLabel: 'Sim, continuar',
+                    cancelLabel: 'Não, voltar',
+                    variant: 'danger'
+                }
+            );
+
+            if (!confirmed) {
+                return { proceed: false };
+            }
+        }
+    }
+
+    if (addedThirdPartyIds.length) {
+        const addCheck = await canAddThirdPartyCharacteristicsInGestao(project, addedThirdPartyIds);
+        if (!addCheck.allowed) {
+            alertAppDialog(addCheck.reason || 'Não é possível adicionar esta característica com projeto de terceiros.', {
+                variant: 'warning',
+                title: 'Ação não permitida'
+            });
+            return { proceed: false };
+        }
+
+        const labels = addedThirdPartyIds.map(id => getProjectCharacteristicNameById(id, characteristics));
+        const confirmed = await confirmAppDialog(
+            `Será criado um projeto de terceiros para ${labels.length > 1 ? 'as características' : 'a característica'} ${labels.join(', ')}. Esse fluxo precisa ser aprovado pelo consultor do pedido.\n\nDeseja continuar?`,
+            {
+                title: 'Criar projeto de terceiros?',
+                confirmLabel: 'Sim, continuar',
+                cancelLabel: 'Cancelar'
+            }
+        );
+
+        if (!confirmed) {
+            return { proceed: false };
+        }
+    }
+
+    return {
+        proceed: true,
+        addedThirdPartyCharacteristicIds: addedThirdPartyIds,
+        removedThirdPartyCharacteristicIds: removedThirdPartyIds
+    };
+}
+
 function resetGestaoProjectCharacteristicsForm() {
     const optionsEl = document.getElementById('gestao-project-characteristics-options');
     const emptyEl = document.getElementById('gestao-project-characteristics-empty');
     if (optionsEl) optionsEl.innerHTML = '';
     emptyEl?.classList.add('hidden');
+    gestaoProjectCharacteristicsInitialIds = [];
+    document.getElementById('gestao-project-characteristics-third-party-hint')?.classList.add('hidden');
 }
 
 async function loadGestaoProjectCharacteristicsForm(project = {}) {
@@ -190,7 +493,10 @@ async function loadGestaoProjectCharacteristicsForm(project = {}) {
     const emptyEl = document.getElementById('gestao-project-characteristics-empty');
     if (!optionsEl) return;
 
-    const characteristics = await loadProjectCharacteristics(true);
+    const [characteristics, linkedCharacteristicIds] = await Promise.all([
+        loadProjectCharacteristics(true),
+        fetchThirdPartyLinkedCharacteristicIds()
+    ]);
 
     let selectedIds = project.characteristicIds;
     if (selectedIds == null && project.id) {
@@ -199,16 +505,23 @@ async function loadGestaoProjectCharacteristicsForm(project = {}) {
         selectedIds = rows.map(row => Number(row.characteristicId));
     }
     selectedIds = selectedIds || [];
+    gestaoProjectCharacteristicsInitialIds = [...selectedIds];
 
     if (!characteristics.length) {
         optionsEl.innerHTML = '';
         emptyEl?.classList.remove('hidden');
+        setGestaoProjectCharacteristicsThirdPartyHint(linkedCharacteristicIds, characteristics);
         return;
     }
 
     emptyEl?.classList.add('hidden');
-    optionsEl.innerHTML = renderGestaoProjectCharacteristicsFormHtml(characteristics, selectedIds);
+    optionsEl.innerHTML = renderGestaoProjectCharacteristicsFormHtml(
+        characteristics,
+        selectedIds,
+        linkedCharacteristicIds
+    );
     bindGestaoProjectCharacteristicsFormInteractions(optionsEl);
+    setGestaoProjectCharacteristicsThirdPartyHint(linkedCharacteristicIds, characteristics);
 }
 
 function renderProjectViewCharacteristicsHtml(allCharacteristics = [], associatedIds = []) {
@@ -284,7 +597,7 @@ function getProjectCharacteristicLabel(project) {
     return project.name || `Projeto #${project.id}`;
 }
 
-function renderProjectCharacteristicsModalContent(projects, characteristics, existingByProjectId) {
+function renderProjectCharacteristicsModalContent(projects, characteristics, existingByProjectId, linkedCharacteristicIds = new Set()) {
     if (!projects || !projects.length) {
         return '<p class="text-xs text-slate-500">Nenhum projeto na conferência.</p>';
     }
@@ -307,7 +620,7 @@ function renderProjectCharacteristicsModalContent(projects, characteristics, exi
                     data-project-id="${projectId}"
                     data-characteristic-id="${characteristic.id}"
                     ${existingIds.has(Number(characteristic.id)) ? 'checked' : ''}>
-                <span>${escapeHtml(characteristic.name)}</span>
+                <span>${renderProjectCharacteristicOptionLabel(characteristic, linkedCharacteristicIds)}</span>
             </label>
         `).join('');
 
@@ -408,7 +721,10 @@ async function openProjectCharacteristicsModalForConference(conference, onComple
 
     const projects = await getConferenceProjectsForCharacteristics(conference);
     const projectIds = projects.map(project => Number(project.id)).filter(Boolean);
-    const existingByProjectId = await fetchOrderProjectCharacteristicsMap(projectIds);
+    const [existingByProjectId, linkedCharacteristicIds] = await Promise.all([
+        fetchOrderProjectCharacteristicsMap(projectIds),
+        fetchThirdPartyLinkedCharacteristicIds()
+    ]);
     const content = document.getElementById('project-characteristics-modal-content');
     const subtitle = document.getElementById('project-characteristics-modal-subtitle');
 
@@ -417,9 +733,16 @@ async function openProjectCharacteristicsModalForConference(conference, onComple
     }
 
     if (content) {
-        content.innerHTML = renderProjectCharacteristicsModalContent(projects, characteristics, existingByProjectId);
+        content.innerHTML = renderProjectCharacteristicsModalContent(
+            projects,
+            characteristics,
+            existingByProjectId,
+            linkedCharacteristicIds
+        );
         bindProjectCharacteristicsModalInteractions();
     }
+
+    setProjectCharacteristicsThirdPartyHint(linkedCharacteristicIds, characteristics);
 
     pendingConferenceCharacteristicsConfirm = onComplete || null;
     toggleModal('project-characteristics-modal', true);
@@ -453,6 +776,7 @@ async function saveProjectCharacteristicsModal(event) {
 
 function closeProjectCharacteristicsModal() {
     pendingConferenceCharacteristicsConfirm = null;
+    document.getElementById('project-characteristics-modal-third-party-hint')?.classList.add('hidden');
     toggleModal('project-characteristics-modal', false);
     if (typeof setAnteprojetoConferenceActionLoading === 'function') {
         setAnteprojetoConferenceActionLoading(false);
@@ -475,4 +799,6 @@ window.loadGestaoProjectCharacteristicsForm = loadGestaoProjectCharacteristicsFo
 window.resetGestaoProjectCharacteristicsForm = resetGestaoProjectCharacteristicsForm;
 window.collectGestaoProjectCharacteristicsFormSelection = collectGestaoProjectCharacteristicsFormSelection;
 window.validateGestaoProjectCharacteristicsSelection = validateGestaoProjectCharacteristicsSelection;
+window.validateAndConfirmGestaoProjectCharacteristicsChanges = validateAndConfirmGestaoProjectCharacteristicsChanges;
+window.getGestaoProjectCharacteristicsInitialIds = getGestaoProjectCharacteristicsInitialIds;
 window.replaceOrderProjectCharacteristics = replaceOrderProjectCharacteristics;

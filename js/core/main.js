@@ -44,6 +44,12 @@ function initAppEvents() {
     bindOrderEvents();
     bindOrderProjectEvents();
     bindProjectCharacteristicsEvents();
+    if (typeof bindThirdPartyProjectTabEvents === 'function') {
+        bindThirdPartyProjectTabEvents();
+    }
+    if (typeof bindThirdPartyProjectRevisionEvents === 'function') {
+        bindThirdPartyProjectRevisionEvents();
+    }
     bindAnteprojetoEvents();
     bindMedicaoEvents();
     bindOrderProjectMontagemEvents();

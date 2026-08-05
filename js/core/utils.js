@@ -527,6 +527,249 @@ function pickLatestIsoDate(...dates) {
     return latest || null;
 }
 
+function syncSalesOrderDeliveryDateCaches(orderId, clientDeliveryDate) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return;
+
+    if (typeof ordersCache !== 'undefined') {
+        const cacheIndex = ordersCache.findIndex(order => Number(order.id) === normalizedOrderId);
+        if (cacheIndex >= 0) {
+            ordersCache[cacheIndex] = {
+                ...ordersCache[cacheIndex],
+                clientDeliveryDate
+            };
+        }
+    }
+
+    if (typeof gestaoOrdersCache !== 'undefined') {
+        const cacheIndex = gestaoOrdersCache.findIndex(order => Number(order.id) === normalizedOrderId);
+        if (cacheIndex >= 0) {
+            gestaoOrdersCache[cacheIndex] = {
+                ...gestaoOrdersCache[cacheIndex],
+                clientDeliveryDate
+            };
+        }
+    }
+
+    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === normalizedOrderId) {
+        const detDelivery = document.getElementById('det-delivery');
+        if (detDelivery && typeof formatOrderDeliverySummary === 'function') {
+            detDelivery.innerText = formatOrderDeliverySummary(normalizedOrderId, clientDeliveryDate);
+        }
+    }
+}
+
+async function resolveSalesOrderUpdateContext(orderId) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return {};
+
+    const caches = [];
+    if (typeof gestaoOrdersCache !== 'undefined') caches.push(...gestaoOrdersCache);
+    if (typeof ordersCache !== 'undefined') caches.push(...ordersCache);
+
+    const cached = caches.find(order => Number(order.id) === normalizedOrderId);
+    if (cached) {
+        return {
+            clientName: cached.clientName,
+            consultantName: cached.consultantName,
+            clientId: cached.clientId || cached.cliente?.id || null,
+            consultantUserId: cached.consultantUserId || null
+        };
+    }
+
+    const { data, error } = await supabaseClient
+        .from('salesOrders')
+        .select('clientName, consultantName, clientId, consultantUserId')
+        .eq('id', normalizedOrderId)
+        .maybeSingle();
+
+    if (error || !data) return {};
+    return data;
+}
+
+async function readSalesOrderClientDeliveryDate(orderId, orderCode = '') {
+    const normalizedOrderId = Number(orderId);
+    let query = supabaseClient.from('salesOrders').select('clientDeliveryDate');
+
+    if (orderCode) {
+        query = query.eq('orderCode', String(orderCode).trim());
+    } else if (normalizedOrderId) {
+        query = query.eq('id', normalizedOrderId);
+    } else {
+        return null;
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error || !data) return null;
+    return normalizeIsoDateValue(data.clientDeliveryDate) || null;
+}
+
+async function persistSalesOrderClientDeliveryDate(orderId, clientDeliveryDate, contextOverride = null) {
+    const normalizedOrderId = Number(orderId);
+    const normalizedDate = normalizeIsoDateValue(clientDeliveryDate);
+    if (!normalizedOrderId || !normalizedDate) {
+        throw new Error('Informe a data de entrega do pedido.');
+    }
+
+    const context = {
+        ...(await resolveSalesOrderUpdateContext(normalizedOrderId)),
+        ...(contextOverride || {})
+    };
+    const clientName = context.clientName || '';
+    const consultantName = context.consultantName || '';
+    const orderCode = context.orderCode || '';
+    const now = new Date().toISOString();
+    const userId = currentUser?.id || null;
+
+    const { data: rpcUpdated, error: rpcError } = await supabaseClient.rpc(
+        'set_sales_order_client_delivery_date',
+        {
+            p_order_id: normalizedOrderId,
+            p_client_delivery_date: normalizedDate
+        }
+    );
+
+    if (!rpcError && rpcUpdated === true) {
+        syncSalesOrderDeliveryDateCaches(normalizedOrderId, normalizedDate);
+        return normalizedDate;
+    }
+
+    const attempts = [
+        { clientDeliveryDate: normalizedDate, clientName, consultantName, updatedAt: now, updatedById: userId },
+        { clientDeliveryDate: normalizedDate, clientName, consultantName, updatedAt: now },
+        { clientDeliveryDate: normalizedDate, clientName, consultantName },
+        { clientDeliveryDate: normalizedDate }
+    ];
+
+    let lastError = rpcError || null;
+
+    for (const attempt of attempts) {
+        const cleanPayload = Object.fromEntries(
+            Object.entries(attempt).filter(([, value]) => value !== undefined && value !== null && value !== '')
+        );
+        if (!cleanPayload.clientDeliveryDate) continue;
+
+        let query = supabaseClient.from('salesOrders').update(cleanPayload);
+        query = orderCode
+            ? query.eq('orderCode', String(orderCode).trim())
+            : query.eq('id', normalizedOrderId);
+
+        const { error } = await query;
+        if (error) {
+            lastError = error;
+            if (error.message?.includes('clientDeliveryDate') && Object.keys(cleanPayload).length === 1) {
+                break;
+            }
+            continue;
+        }
+
+        const verified = await readSalesOrderClientDeliveryDate(normalizedOrderId, orderCode);
+        if (verified === normalizedDate) {
+            syncSalesOrderDeliveryDateCaches(normalizedOrderId, normalizedDate);
+            return normalizedDate;
+        }
+    }
+
+    const verified = await readSalesOrderClientDeliveryDate(normalizedOrderId, orderCode);
+    if (verified === normalizedDate) {
+        syncSalesOrderDeliveryDateCaches(normalizedOrderId, normalizedDate);
+        return normalizedDate;
+    }
+
+    throw lastError || new Error(
+        verified
+            ? `A data de entrega não foi gravada (valor atual no banco: ${verified}).`
+            : 'Não foi possível salvar a data de entrega do pedido. Execute supabase/create-gestao-order-fields.sql no Supabase.'
+    );
+}
+
+async function updateSalesOrderRecord(orderId, payload = {}, options = {}) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) {
+        throw new Error('Pedido inválido.');
+    }
+
+    const basePayload = Object.fromEntries(
+        Object.entries(payload).filter(([, value]) => value !== undefined && value !== null)
+    );
+    if (!Object.keys(basePayload).length) return;
+
+    const attemptPayloads = [
+        basePayload,
+        (() => {
+            const next = { ...basePayload };
+            delete next.consultantUserId;
+            return next;
+        })(),
+        (() => {
+            const next = { ...basePayload };
+            delete next.clientId;
+            delete next.consultantUserId;
+            return next;
+        })(),
+        (() => {
+            const next = { ...basePayload };
+            delete next.updatedById;
+            delete next.updatedAt;
+            return next;
+        })(),
+        (() => {
+            const next = { ...basePayload };
+            delete next.clientId;
+            delete next.consultantUserId;
+            delete next.updatedById;
+            delete next.updatedAt;
+            return next;
+        })(),
+        {
+            clientName: basePayload.clientName,
+            consultantName: basePayload.consultantName,
+            ...(basePayload.clientDeliveryDate
+                ? { clientDeliveryDate: basePayload.clientDeliveryDate }
+                : {})
+        },
+        {
+            clientName: basePayload.clientName,
+            consultantName: basePayload.consultantName
+        }
+    ];
+
+    const seen = new Set();
+    let lastError = null;
+
+    for (const attempt of attemptPayloads) {
+        const cleanPayload = Object.fromEntries(
+            Object.entries(attempt).filter(([, value]) => value !== undefined)
+        );
+        if (!Object.keys(cleanPayload).length) continue;
+
+        if (options.requireClientDeliveryDate && !cleanPayload.clientDeliveryDate) {
+            continue;
+        }
+        if (basePayload.clientDeliveryDate && !cleanPayload.clientDeliveryDate) {
+            continue;
+        }
+
+        const key = JSON.stringify(cleanPayload);
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const { error } = await supabaseClient
+            .from('salesOrders')
+            .update(cleanPayload)
+            .eq('id', normalizedOrderId);
+
+        if (error) {
+            lastError = error;
+            continue;
+        }
+
+        return;
+    }
+
+    throw lastError || new Error('Não foi possível atualizar o pedido.');
+}
+
 function isProjectTechnicalDeliveryBeforeOrderDelivery(projectDeliveryDate, orderDeliveryDate) {
     if (!projectDeliveryDate || !orderDeliveryDate) return true;
     return String(projectDeliveryDate) < String(orderDeliveryDate);

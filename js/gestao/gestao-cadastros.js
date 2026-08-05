@@ -709,6 +709,21 @@ async function deleteGestaoProjectCharacteristicRow(row) {
         return;
     }
 
+    const { count: subtypeCount, error: subtypeCountError } = await supabaseClient
+        .from('ThirdPartySubtype')
+        .select('id', { count: 'exact', head: true })
+        .eq('projectCharacteristicId', characteristicId);
+
+    if (subtypeCountError) {
+        if (!subtypeCountError.message?.includes('projectCharacteristicId')) {
+            alertAppDialog('Erro ao verificar uso da característica: ' + subtypeCountError.message);
+            return;
+        }
+    } else if (subtypeCount > 0) {
+        alertAppDialog(`A característica "${name}" está vinculada a ${subtypeCount} subtipo(s) de terceiros. Remova o vínculo antes de excluir.`);
+        return;
+    }
+
     if (!(await confirmAppDialog(`Excluir a característica "${name}"?`))) return;
 
     const { error } = await supabaseClient
@@ -922,27 +937,84 @@ async function deleteGestaoClienteRow(tr) {
 }
 
 let gestaoThirdPartySubtypesCache = [];
+let gestaoThirdPartySubtypeCharacteristicEnabled = true;
 
-async function loadGestaoThirdPartySubtypes(activeOnly = false) {
-    let query = supabaseClient
-        .from('ThirdPartySubtype')
-        .select('id, name, sortOrder, isActive')
-        .order('sortOrder', { ascending: true })
-        .order('name', { ascending: true });
-
-    if (activeOnly) {
-        query = query.eq('isActive', true);
+function setGestaoThirdPartySubtypeCharacteristicAvailability(enabled) {
+    gestaoThirdPartySubtypeCharacteristicEnabled = enabled;
+    const hint = document.getElementById('gestao-third-party-subtypes-sql-hint');
+    if (hint) {
+        hint.classList.toggle('hidden', enabled);
     }
 
-    const { data, error } = await query;
+    document.querySelectorAll('.gestao-third-party-subtype-characteristic-wrap').forEach(element => {
+        element.classList.toggle('hidden', !enabled);
+    });
+    document.querySelectorAll('.gestao-third-party-subtype-characteristic').forEach(element => {
+        element.disabled = !enabled;
+    });
+    document.getElementById('gestao-new-third-party-subtype-characteristic')?.toggleAttribute('disabled', !enabled);
+}
 
-    if (error) {
-        console.error('loadGestaoThirdPartySubtypes:', error);
+function getGestaoProjectCharacteristicOptionsHtml(selectedId = null, includeEmpty = true) {
+    const characteristics = gestaoProjectCharacteristicsCache || [];
+    const normalizedSelected = selectedId != null && selectedId !== '' ? Number(selectedId) : null;
+    const options = [];
+
+    if (includeEmpty) {
+        options.push('<option value="">Nenhuma</option>');
+    }
+
+    characteristics.forEach(characteristic => {
+        const id = Number(characteristic.id);
+        const selected = normalizedSelected === id ? ' selected' : '';
+        options.push(`<option value="${id}"${selected}>${escapeHtml(characteristic.name)}</option>`);
+    });
+
+    return options.join('');
+}
+
+async function populateGestaoNewThirdPartySubtypeCharacteristicSelect() {
+    const select = document.getElementById('gestao-new-third-party-subtype-characteristic');
+    if (!select) return;
+
+    await loadGestaoProjectCharacteristics(true);
+    select.innerHTML = getGestaoProjectCharacteristicOptionsHtml(null, true);
+}
+
+async function loadGestaoThirdPartySubtypes(activeOnly = false) {
+    const buildQuery = (includeCharacteristic) => {
+        const fields = includeCharacteristic
+            ? 'id, name, sortOrder, isActive, projectCharacteristicId'
+            : 'id, name, sortOrder, isActive';
+        let query = supabaseClient
+            .from('ThirdPartySubtype')
+            .select(fields)
+            .order('sortOrder', { ascending: true })
+            .order('name', { ascending: true });
+
+        if (activeOnly) {
+            query = query.eq('isActive', true);
+        }
+
+        return query;
+    };
+
+    let result = await buildQuery(true);
+
+    if (result.error?.message?.includes('projectCharacteristicId')) {
+        setGestaoThirdPartySubtypeCharacteristicAvailability(false);
+        result = await buildQuery(false);
+    } else {
+        setGestaoThirdPartySubtypeCharacteristicAvailability(!result.error);
+    }
+
+    if (result.error) {
+        console.error('loadGestaoThirdPartySubtypes:', result.error);
         gestaoThirdPartySubtypesCache = [];
         return [];
     }
 
-    gestaoThirdPartySubtypesCache = data || [];
+    gestaoThirdPartySubtypesCache = result.data || [];
     return gestaoThirdPartySubtypesCache;
 }
 
@@ -950,12 +1022,15 @@ async function loadGestaoThirdPartySubtypesList() {
     const tbody = document.getElementById('gestao-third-party-subtypes-list');
     if (!tbody) return;
 
+    await populateGestaoNewThirdPartySubtypeCharacteristicSelect();
+    await loadGestaoProjectCharacteristics(true);
     const subtypes = await loadGestaoThirdPartySubtypes(false);
 
     if (!subtypes.length) {
+        const colspan = gestaoThirdPartySubtypeCharacteristicEnabled ? 5 : 4;
         tbody.innerHTML = `
             <tr>
-                <td colspan="4" class="p-6 text-center text-xs text-amber-700">
+                <td colspan="${colspan}" class="p-6 text-center text-xs text-amber-700">
                     Nenhum subtipo cadastrado. Execute <code>supabase/create-third-party-subtype.sql</code> no Supabase.
                 </td>
             </tr>
@@ -976,6 +1051,12 @@ async function loadGestaoThirdPartySubtypesList() {
                 <input type="text" class="gestao-third-party-subtype-name w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
                     value="${escapeHtml(subtype.name)}" required>
             </td>
+            ${gestaoThirdPartySubtypeCharacteristicEnabled ? `
+            <td class="p-3 gestao-third-party-subtype-characteristic-wrap">
+                <select class="gestao-third-party-subtype-characteristic w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white">
+                    ${getGestaoProjectCharacteristicOptionsHtml(subtype.projectCharacteristicId, true)}
+                </select>
+            </td>` : ''}
             <td class="p-3 text-center">
                 <input type="checkbox" class="gestao-third-party-subtype-active h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                     ${subtype.isActive !== false ? 'checked' : ''}>
@@ -1009,6 +1090,8 @@ async function saveGestaoThirdPartySubtypeRow(row) {
     const name = row.querySelector('.gestao-third-party-subtype-name')?.value.trim();
     const sortOrder = Number(row.querySelector('.gestao-third-party-subtype-sort')?.value) || 0;
     const isActive = Boolean(row.querySelector('.gestao-third-party-subtype-active')?.checked);
+    const characteristicRaw = row.querySelector('.gestao-third-party-subtype-characteristic')?.value;
+    const projectCharacteristicId = characteristicRaw ? Number(characteristicRaw) : null;
 
     if (!name) {
         alertAppDialog('Informe o nome do subtipo.');
@@ -1016,12 +1099,21 @@ async function saveGestaoThirdPartySubtypeRow(row) {
     }
 
     const now = new Date().toISOString();
+    const payload = { name, sortOrder, isActive, updatedAt: now };
+    if (gestaoThirdPartySubtypeCharacteristicEnabled) {
+        payload.projectCharacteristicId = projectCharacteristicId;
+    }
+
     const { error } = await supabaseClient
         .from('ThirdPartySubtype')
-        .update({ name, sortOrder, isActive, updatedAt: now })
+        .update(payload)
         .eq('id', subtypeId);
 
     if (error) {
+        if (error.message?.includes('projectCharacteristicId')) {
+            alertAppDialog('Execute supabase/create-third-party-subtype-characteristic-link.sql no Supabase para salvar a característica.');
+            return;
+        }
         alertAppDialog('Erro ao salvar subtipo: ' + error.message);
         return;
     }
@@ -1054,6 +1146,21 @@ async function deleteGestaoThirdPartySubtypeRow(row) {
         return;
     }
 
+    const { count: projectCount, error: projectCountError } = await supabaseClient
+        .from('ThirdPartyProject')
+        .select('id', { count: 'exact', head: true })
+        .eq('thirdPartySubtypeId', subtypeId);
+
+    if (projectCountError) {
+        if (!projectCountError.message?.includes('ThirdPartyProject')) {
+            alertAppDialog('Erro ao verificar uso do subtipo: ' + projectCountError.message);
+            return;
+        }
+    } else if (projectCount > 0) {
+        alertAppDialog(`O subtipo "${name}" está em uso por ${projectCount} projeto(s) de terceiros. Desative-o em vez de excluir.`);
+        return;
+    }
+
     if (!(await confirmAppDialog(`Excluir o subtipo "${name}"?`))) return;
 
     const { error } = await supabaseClient
@@ -1075,6 +1182,8 @@ async function addGestaoThirdPartySubtype(event) {
 
     const name = document.getElementById('gestao-new-third-party-subtype-name')?.value.trim();
     const sortOrder = Number(document.getElementById('gestao-new-third-party-subtype-sort')?.value) || 0;
+    const characteristicRaw = document.getElementById('gestao-new-third-party-subtype-characteristic')?.value;
+    const projectCharacteristicId = characteristicRaw ? Number(characteristicRaw) : null;
 
     if (!name) {
         alertAppDialog('Informe o nome do subtipo.');
@@ -1082,16 +1191,25 @@ async function addGestaoThirdPartySubtype(event) {
     }
 
     const now = new Date().toISOString();
+    const payload = {
+        name,
+        sortOrder,
+        isActive: true,
+        updatedAt: now
+    };
+    if (gestaoThirdPartySubtypeCharacteristicEnabled && projectCharacteristicId) {
+        payload.projectCharacteristicId = projectCharacteristicId;
+    }
+
     const { error } = await supabaseClient
         .from('ThirdPartySubtype')
-        .insert({
-            name,
-            sortOrder,
-            isActive: true,
-            updatedAt: now
-        });
+        .insert(payload);
 
     if (error) {
+        if (error.message?.includes('projectCharacteristicId')) {
+            alertAppDialog('Execute supabase/create-third-party-subtype-characteristic-link.sql no Supabase para vincular características.');
+            return;
+        }
         alertAppDialog('Erro ao adicionar subtipo: ' + error.message);
         return;
     }

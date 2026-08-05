@@ -240,6 +240,10 @@
                                 class="order-detail-tab order-detail-tab--rose" data-order-tab="compras">
                                 Compras <span id="order-tab-compras-count" class="order-detail-tab-count">(0)</span>
                             </button>
+                            <button type="button" id="order-tab-third-party"
+                                class="order-detail-tab order-detail-tab--violet" data-order-tab="third-party">
+                                Projetos de Terceiros <span id="order-tab-third-party-count" class="order-detail-tab-count">(0)</span>
+                            </button>
                                 </div>
                             </div>
                             <p id="order-tab-readonly-notice" class="hidden order-tab-readonly-notice" role="status"></p>
@@ -286,6 +290,20 @@
                         <div id="order-tab-panel-compras" class="order-detail-tab-panel hidden p-4 md:p-5">
                             <p class="text-xs text-slate-500 mb-3">Solicitações de compra geradas pela implantação deste pedido.</p>
                             <div id="order-compras-list"></div>
+                        </div>
+                        <div id="order-tab-panel-third-party" class="order-detail-tab-panel hidden p-4 md:p-5 relative">
+                            <div id="third-party-tab-action-loading"
+                                class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                                <div id="third-party-tab-action-loading-spinner"
+                                    class="h-8 w-8 border-2 border-slate-300 border-t-violet-700 rounded-full animate-spin"></div>
+                                <div id="third-party-tab-action-loading-success"
+                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                                <div id="third-party-tab-action-loading-error"
+                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                                <p id="third-party-tab-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                            </div>
+                            <p class="text-xs text-slate-500 mb-3">Projetos de terceiros gerados na aprovação da conferência comercial.</p>
+                            <div id="order-third-party-projects-list"></div>
                         </div>
                         </div>
                     </div>
@@ -841,6 +859,7 @@
                             </button>
                         </div>
                         <form id="gestao-order-form" class="p-4 md:p-5 space-y-5">
+                            <input type="hidden" id="gestao-ord-id" value="">
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-500 mb-1">Código do pedido <span class="text-red-500">*</span></label>
@@ -1029,6 +1048,11 @@
                                 <div id="gestao-project-characteristics-options" class="project-characteristics-project__options"></div>
                                 <p id="gestao-project-characteristics-empty" class="hidden text-xs text-slate-400">
                                     Nenhuma característica cadastrada. Cadastre em Gestão → Cadastros → Características.
+                                </p>
+                                <p id="gestao-project-characteristics-third-party-hint"
+                                    class="hidden text-[11px] text-slate-500 leading-relaxed border border-slate-200 rounded-lg px-3 py-2 bg-white/70">
+                                    <span class="project-characteristic-third-party-marker">*</span>
+                                    Características com projeto de terceiros terão fluxo próprio e precisarão de aprovação pelo consultor do pedido.
                                 </p>
                             </div>
 
@@ -1295,9 +1319,12 @@
                     <div id="gestao-third-party-subtypes-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h3 class="font-bold text-sm text-slate-900">Subtipos de Terceiros</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os subtipos usados na implantação para compras com terceiros (espelhos, vidros, etc.).</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os subtipos usados na implantação e vincule à característica de projeto quando o fluxo de projetos de terceiros se aplicar.</p>
                         </div>
                         <div class="p-4 md:p-5 space-y-4">
+                            <p id="gestao-third-party-subtypes-sql-hint" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                Execute <code>supabase/create-third-party-subtype-characteristic-link.sql</code> no Supabase para habilitar o vínculo com características.
+                            </p>
                             <form id="gestao-new-third-party-subtype-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
                                 <div class="flex-1 min-w-[180px]">
                                     <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo subtipo</label>
@@ -1310,6 +1337,13 @@
                                     <input type="number" id="gestao-new-third-party-subtype-sort" min="0" step="1" value="0"
                                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
                                 </div>
+                                <div class="min-w-[200px] flex-1 gestao-third-party-subtype-characteristic-wrap">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Característica</label>
+                                    <select id="gestao-new-third-party-subtype-characteristic"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 bg-white">
+                                        <option value="">Nenhuma</option>
+                                    </select>
+                                </div>
                                 <button type="submit"
                                     class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
                                     + Adicionar
@@ -1321,6 +1355,7 @@
                                         <tr>
                                             <th class="text-left p-3 font-semibold w-20">Ordem</th>
                                             <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-left p-3 font-semibold min-w-[180px] gestao-third-party-subtype-characteristic-wrap">Característica</th>
                                             <th class="text-center p-3 font-semibold w-20">Ativo</th>
                                             <th class="text-left p-3 font-semibold w-36">Ações</th>
                                         </tr>

@@ -2911,6 +2911,12 @@ body.montagem-prog-resizing {
     font-style: italic;
 }
 
+.project-characteristic-third-party-marker {
+    margin-left: 0.125rem;
+    color: rgb(220 38 38);
+    font-weight: 700;
+}
+
 @media print {
     body.montagem-prog-printing * {
         visibility: hidden;

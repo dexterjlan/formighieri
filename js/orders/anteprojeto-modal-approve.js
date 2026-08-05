@@ -246,48 +246,10 @@ function validateAnteprojetoApproveDeliverySelections(selections) {
 }
 
 async function saveAnteprojetoApprovalDeliveryDates(conference, selections) {
-    const now = new Date().toISOString();
     const orderId = Number(conference.orderId);
+    await persistSalesOrderClientDeliveryDate(orderId, selections.orderDeliveryDate);
 
-    let orderPayload = {
-        clientDeliveryDate: selections.orderDeliveryDate,
-        updatedAt: now,
-        updatedById: currentUser.id
-    };
-
-    let { error: orderError } = await supabaseClient
-        .from('salesOrders')
-        .update(orderPayload)
-        .eq('id', orderId);
-
-    if (orderError?.message?.includes('clientDeliveryDate')) {
-        orderPayload = {
-            clientDeliveryDate: selections.orderDeliveryDate
-        };
-        ({ error: orderError } = await supabaseClient
-            .from('salesOrders')
-            .update(orderPayload)
-            .eq('id', orderId));
-    }
-
-    if (orderError) throw orderError;
-
-    if (typeof ordersCache !== 'undefined') {
-        const cacheIndex = ordersCache.findIndex(order => Number(order.id) === orderId);
-        if (cacheIndex >= 0) {
-            ordersCache[cacheIndex] = {
-                ...ordersCache[cacheIndex],
-                clientDeliveryDate: selections.orderDeliveryDate
-            };
-        }
-    }
-
-    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === orderId) {
-        const detDelivery = document.getElementById('det-delivery');
-        if (detDelivery && typeof formatOrderDeliverySummary === 'function') {
-            detDelivery.innerText = formatOrderDeliverySummary(orderId, selections.orderDeliveryDate);
-        }
-    }
+    const now = new Date().toISOString();
 
     // Salvar o novo caminho da rede na nova coluna caminhoRede da AnteprojetoConference
     // sem alterar a coluna sketchUpPath original informada pelo conferente.
@@ -416,6 +378,20 @@ async function approveAnteprojetoConference(conferenceId) {
 
         if (conferenceError) throw conferenceError;
 
+        let thirdPartyCreationResult = { created: [] };
+        if (typeof createThirdPartyProjectsForConferenceApproval === 'function') {
+            setAnteprojetoConferenceActionLoading(true, 'Criando projetos de terceiros...');
+            try {
+                thirdPartyCreationResult = await createThirdPartyProjectsForConferenceApproval(conference);
+            } catch (creationError) {
+                console.error('createThirdPartyProjectsForConferenceApproval:', creationError);
+                alertAppDialog(
+                    'Conferência aprovada, mas houve erro ao criar projetos de terceiros: ' + creationError.message,
+                    { variant: 'warning', title: 'Aviso' }
+                );
+            }
+        }
+
         if (typeof notifyConferenciaAprovadaEmail === 'function') {
             setAnteprojetoConferenceActionLoading(true, 'Enviando e-mail de notificação...');
             await notifyConferenciaAprovadaEmail({
@@ -430,6 +406,11 @@ async function approveAnteprojetoConference(conferenceId) {
 
         setAnteprojetoConferenceActionLoading(true, 'Conferência aprovada!', 'success');
         await new Promise(resolve => setTimeout(resolve, 900));
+
+        if (thirdPartyCreationResult.created?.length
+            && typeof showThirdPartyProjectsCreatedModal === 'function') {
+            showThirdPartyProjectsCreatedModal(thirdPartyCreationResult.created);
+        }
 
         if (isAnteprojetoModalVisible()) {
             closeAnteprojetoModal();
