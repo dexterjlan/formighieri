@@ -19,7 +19,8 @@ let programacaoProducaoCache = {
     projects: [],
     statuses: [],
     phasesByOrderId: {},
-    projectsById: {}
+    projectsById: {},
+    fechamentoTotals: { projectCount: 0, totalSaleValue: 0 }
 };
 
 let programacaoProducaoClientFilterTimer = null;
@@ -456,12 +457,20 @@ function renderProgramacaoProducaoSummary(projects) {
     }
 
     const groups = groupGestaoRelatorioPedidosPendentesByMonthAndClient(filteredProjects, context, {
-        getProjectReferenceDate: getProgramacaoProducaoProjectReferenceDate
+        getProjectReferenceDate: getProgramacaoProducaoProjectReferenceDate,
+        getOrderDisplayDeliveryDate: (project, groupContext) =>
+            typeof getGestaoRelatorioPedidosPendentesProjectDeliveryDate === 'function'
+                ? getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, groupContext)
+                : null
     });
 
-    return renderGestaoRelatorioPedidosPendentesGroups(groups, {
+    const fechamentoLine = typeof renderGestaoRelatorioFechamentoProducaoTotalsLine === 'function'
+        ? renderGestaoRelatorioFechamentoProducaoTotalsLine(programacaoProducaoCache.fechamentoTotals)
+        : '';
+
+    return `${fechamentoLine}${renderGestaoRelatorioPedidosPendentesGroups(groups, {
         emptyMonthLabel: 'Sem mês de produção'
-    });
+    })}`;
 }
 
 function renderProgramacaoProducaoOrdersList(orders, options = {}) {
@@ -584,13 +593,23 @@ async function loadProgramacaoProducao() {
         phasesByOrderId = await fetchGestaoOrderPhasesByOrderIds(orderIds);
     }
 
+    let fechamentoTotals = { projectCount: 0, totalSaleValue: 0 };
+    if (typeof loadGestaoRelatorioFechamentoProducaoTotals === 'function') {
+        try {
+            fechamentoTotals = await loadGestaoRelatorioFechamentoProducaoTotals();
+        } catch (fechamentoError) {
+            console.error('programacao-producao fechamento totals:', fechamentoError);
+        }
+    }
+
     programacaoProducaoCache = {
         projects: projects || [],
         statuses: statuses || [],
         phasesByOrderId,
         projectsById: typeof buildGestaoRelatorioProjectsById === 'function'
             ? buildGestaoRelatorioProjectsById(projects || [])
-            : {}
+            : {},
+        fechamentoTotals
     };
 
     renderProgramacaoProducaoPanel();

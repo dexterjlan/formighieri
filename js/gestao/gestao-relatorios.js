@@ -347,15 +347,19 @@ function isGestaoRelatorioPedidosPendentesComplementarProject(project) {
 }
 
 function getGestaoRelatorioPedidosPendentesOrderGroupKeys(project, context = {}, options = {}) {
-    const resolveDate = typeof options.getProjectReferenceDate === 'function'
+    const resolveReferenceDate = typeof options.getProjectReferenceDate === 'function'
         ? options.getProjectReferenceDate
         : getGestaoRelatorioPedidosPendentesProjectDeliveryDate;
-    const deliveryDate = resolveDate(project, context);
+    const resolveOrderDeliveryDate = typeof options.getOrderDisplayDeliveryDate === 'function'
+        ? options.getOrderDisplayDeliveryDate
+        : getGestaoRelatorioPedidosPendentesProjectDeliveryDate;
+    const referenceDate = resolveReferenceDate(project, context);
+    const deliveryDate = resolveOrderDeliveryDate(project, context);
     const clientName = project.order?.clientName?.trim() || 'Sem cliente';
     const orderId = Number(project.orderId);
 
     return {
-        monthKey: getGestaoRelatorioMonthKey(deliveryDate),
+        monthKey: getGestaoRelatorioMonthKey(referenceDate),
         clientKey: clientName.toLocaleLowerCase('pt-BR'),
         clientName,
         orderId,
@@ -687,6 +691,49 @@ function sumGestaoRelatorioSaleValues(projects) {
     }, 0);
 }
 
+function getGestaoRelatorioFechamentoProducaoTotals(projects) {
+    const fechamentoProjects = (projects || []).filter(project =>
+        getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
+    );
+
+    return {
+        projectCount: fechamentoProjects.length,
+        totalSaleValue: sumGestaoRelatorioSaleValues(fechamentoProjects)
+    };
+}
+
+function renderGestaoRelatorioFechamentoProducaoTotalsLine(totals = {}) {
+    const projectCount = Number(totals.projectCount) || 0;
+    const totalLabel = typeof formatSaleValue === 'function'
+        ? formatSaleValue(totals.totalSaleValue || 0)
+        : (totals.totalSaleValue || 0);
+
+    return `
+        <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 mb-2 rounded-lg border border-emerald-100 bg-emerald-50/60">
+            <div class="min-w-0">
+                <span class="text-xs font-semibold text-slate-800">Já produzidos</span>
+                <p class="text-[10px] text-slate-400 mt-0.5">Mesmo total do relatório Fechamento Produção (projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)}).</p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+                <span class="text-[10px] text-slate-500">${projectCount} projeto${projectCount === 1 ? '' : 's'}</span>
+                <span class="text-xs font-bold text-emerald-700">${escapeHtml(totalLabel)}</span>
+            </div>
+        </div>
+    `;
+}
+
+async function loadGestaoRelatorioFechamentoProducaoTotals() {
+    const { data: projects, error } = await fetchGestaoRelatorioProjects();
+    if (error) throw error;
+
+    let enrichedProjects = projects || [];
+    if (typeof enrichGestaoRelatorioProjectsWithSubstituicaoValues === 'function') {
+        enrichedProjects = await enrichGestaoRelatorioProjectsWithSubstituicaoValues(enrichedProjects);
+    }
+
+    return getGestaoRelatorioFechamentoProducaoTotals(enrichedProjects);
+}
+
 function sortGestaoRelatorioFechamentoProducaoProjects(projects) {
     return [...projects].sort((a, b) => {
         const fimA = a.fimMontagemInterna || '';
@@ -844,10 +891,10 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
         getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
     );
     const fechamentoGroups = groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects);
-    const fechamentoGrandTotal = sumGestaoRelatorioSaleValues(fechamentoProjects);
+    const fechamentoTotals = getGestaoRelatorioFechamentoProducaoTotals(projects);
     const fechamentoGrandTotalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(fechamentoGrandTotal)
-        : fechamentoGrandTotal;
+        ? formatSaleValue(fechamentoTotals.totalSaleValue)
+        : fechamentoTotals.totalSaleValue;
 
     content.innerHTML = `
         <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
@@ -956,3 +1003,6 @@ window.getGestaoRelatorioPedidosPendentesProjectDeliveryDate = getGestaoRelatori
 window.isGestaoRelatorioPedidosPendentesComplementarProject = isGestaoRelatorioPedidosPendentesComplementarProject;
 window.getGestaoRelatorioProjectLabel = getGestaoRelatorioProjectLabel;
 window.getGestaoRelatorioStatusName = getGestaoRelatorioStatusName;
+window.getGestaoRelatorioFechamentoProducaoTotals = getGestaoRelatorioFechamentoProducaoTotals;
+window.renderGestaoRelatorioFechamentoProducaoTotalsLine = renderGestaoRelatorioFechamentoProducaoTotalsLine;
+window.loadGestaoRelatorioFechamentoProducaoTotals = loadGestaoRelatorioFechamentoProducaoTotals;
