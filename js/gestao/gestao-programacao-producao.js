@@ -20,7 +20,7 @@ let programacaoProducaoCache = {
     statuses: [],
     phasesByOrderId: {},
     projectsById: {},
-    fechamentoTotals: { projectCount: 0, totalSaleValue: 0 }
+    fechamentoMonthGroups: []
 };
 
 let programacaoProducaoClientFilterTimer = null;
@@ -447,30 +447,137 @@ function renderProgramacaoProducaoOrderCard(orderGroup) {
     `;
 }
 
+function mergeProgramacaoProducaoSummaryMonthGroups(pendingGroups, fechamentoMonthGroups) {
+    const byMonthKey = {};
+
+    (pendingGroups || []).forEach(monthGroup => {
+        byMonthKey[monthGroup.monthKey] = {
+            ...monthGroup,
+            fechamento: null
+        };
+    });
+
+    (fechamentoMonthGroups || []).forEach(monthGroup => {
+        if (!byMonthKey[monthGroup.monthKey]) {
+            byMonthKey[monthGroup.monthKey] = {
+                monthKey: monthGroup.monthKey,
+                clients: [],
+                orderCount: 0,
+                projectCount: 0,
+                totalSaleValue: 0,
+                fechamento: monthGroup
+            };
+            return;
+        }
+
+        byMonthKey[monthGroup.monthKey].fechamento = monthGroup;
+    });
+
+    return Object.values(byMonthKey).sort((a, b) => {
+        if (a.monthKey === 'sem-data') return 1;
+        if (b.monthKey === 'sem-data') return -1;
+        return a.monthKey.localeCompare(b.monthKey);
+    });
+}
+
+function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel) {
+    const pendingTotalLabel = typeof formatSaleValue === 'function'
+        ? formatSaleValue(monthGroup.totalSaleValue || 0)
+        : (monthGroup.totalSaleValue || 0);
+    const fechamento = monthGroup.fechamento;
+    const fechamentoTotalLabel = typeof formatSaleValue === 'function'
+        ? formatSaleValue(fechamento?.totalSaleValue || 0)
+        : (fechamento?.totalSaleValue || 0);
+    const monthLabel = typeof formatGestaoRelatorioMonthLabel === 'function'
+        ? formatGestaoRelatorioMonthLabel(monthGroup.monthKey, emptyMonthLabel)
+        : monthGroup.monthKey;
+
+    const pendingBody = (monthGroup.clients || []).length
+        ? (monthGroup.clients || []).map(clientGroup =>
+            typeof renderGestaoRelatorioPedidosPendentesClientGroup === 'function'
+                ? renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup)
+                : ''
+        ).join('')
+        : '';
+
+    const fechamentoBody = fechamento?.clients?.length
+        ? `
+            <div class="space-y-2 ${pendingBody ? 'mt-2 pt-2 border-t border-emerald-100' : ''}">
+                <p class="text-[10px] font-semibold uppercase text-emerald-700 px-1">Já produzidos</p>
+                ${fechamento.clients.map(clientGroup =>
+                    typeof renderGestaoRelatorioFechamentoProducaoClientGroup === 'function'
+                        ? renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup)
+                        : ''
+                ).join('')}
+            </div>
+        `
+        : '';
+
+    if (!pendingBody && !fechamentoBody) {
+        return '';
+    }
+
+    return `
+        <div class="collapsible-list-card border border-indigo-100 rounded-lg overflow-hidden bg-indigo-50/20">
+            <div class="collapsible-list-header px-3 py-2.5 bg-indigo-50/80 border-b border-indigo-100 cursor-pointer flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2 min-w-0">
+                    <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-indigo-700 hover:text-indigo-900 text-[10px]"
+                        aria-label="Expandir">▶</button>
+                    <span class="text-xs font-semibold text-slate-900">${escapeHtml(monthLabel)}</span>
+                    ${monthGroup.projectCount ? `
+                        <span class="text-[10px] text-slate-500 shrink-0">${monthGroup.projectCount} programado${monthGroup.projectCount === 1 ? '' : 's'}</span>
+                    ` : ''}
+                    ${fechamento?.projectCount ? `
+                        <span class="text-[10px] text-emerald-700 shrink-0">${fechamento.projectCount} produzido${fechamento.projectCount === 1 ? '' : 's'}</span>
+                    ` : ''}
+                </div>
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    ${monthGroup.projectCount ? `<span class="text-xs font-bold text-indigo-700">${escapeHtml(pendingTotalLabel)}</span>` : ''}
+                    ${fechamento?.projectCount ? `<span class="text-xs font-bold text-emerald-700">${escapeHtml(fechamentoTotalLabel)}</span>` : ''}
+                </div>
+            </div>
+            <div class="collapsible-list-body hidden p-2 space-y-2">
+                ${pendingBody}
+                ${fechamentoBody}
+            </div>
+        </div>
+    `;
+}
+
+function renderProgramacaoProducaoSummaryMonthGroups(groups, emptyMonthLabel) {
+    const rendered = (groups || [])
+        .map(monthGroup => renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel))
+        .filter(Boolean);
+
+    if (!rendered.length) {
+        return '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto programado ou produzido encontrado.</p>';
+    }
+
+    return rendered.join('');
+}
+
 function renderProgramacaoProducaoSummary(projects) {
     const filteredProjects = projects || getProgramacaoProducaoFilteredProjects();
     const context = getProgramacaoProducaoContext();
 
-    if (typeof groupGestaoRelatorioPedidosPendentesByMonthAndClient !== 'function'
-        || typeof renderGestaoRelatorioPedidosPendentesGroups !== 'function') {
+    if (typeof groupGestaoRelatorioPedidosPendentesByMonthAndClient !== 'function') {
         return '<p class="text-xs text-slate-400 text-center py-4">Resumo indisponível.</p>';
     }
 
-    const groups = groupGestaoRelatorioPedidosPendentesByMonthAndClient(filteredProjects, context, {
+    const emptyMonthLabel = 'Sem mês de produção';
+    const pendingGroups = groupGestaoRelatorioPedidosPendentesByMonthAndClient(filteredProjects, context, {
         getProjectReferenceDate: getProgramacaoProducaoProjectReferenceDate,
         getOrderDisplayDeliveryDate: (project, groupContext) =>
             typeof getGestaoRelatorioPedidosPendentesProjectDeliveryDate === 'function'
                 ? getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, groupContext)
                 : null
     });
+    const mergedGroups = mergeProgramacaoProducaoSummaryMonthGroups(
+        pendingGroups,
+        programacaoProducaoCache.fechamentoMonthGroups || []
+    );
 
-    const fechamentoLine = typeof renderGestaoRelatorioFechamentoProducaoTotalsLine === 'function'
-        ? renderGestaoRelatorioFechamentoProducaoTotalsLine(programacaoProducaoCache.fechamentoTotals)
-        : '';
-
-    return `${fechamentoLine}${renderGestaoRelatorioPedidosPendentesGroups(groups, {
-        emptyMonthLabel: 'Sem mês de produção'
-    })}`;
+    return renderProgramacaoProducaoSummaryMonthGroups(mergedGroups, emptyMonthLabel);
 }
 
 function renderProgramacaoProducaoOrdersList(orders, options = {}) {
@@ -593,12 +700,17 @@ async function loadProgramacaoProducao() {
         phasesByOrderId = await fetchGestaoOrderPhasesByOrderIds(orderIds);
     }
 
-    let fechamentoTotals = { projectCount: 0, totalSaleValue: 0 };
-    if (typeof loadGestaoRelatorioFechamentoProducaoTotals === 'function') {
+    let fechamentoMonthGroups = [];
+    if (typeof loadGestaoRelatorioFechamentoProducaoMonthGroups === 'function') {
         try {
-            fechamentoTotals = await loadGestaoRelatorioFechamentoProducaoTotals();
+            fechamentoMonthGroups = await loadGestaoRelatorioFechamentoProducaoMonthGroups({
+                getMonthKey: typeof getGestaoRelatorioFechamentoProducaoProjectMonthKey === 'function'
+                    ? getGestaoRelatorioFechamentoProducaoProjectMonthKey
+                    : undefined,
+                sortDescending: false
+            });
         } catch (fechamentoError) {
-            console.error('programacao-producao fechamento totals:', fechamentoError);
+            console.error('programacao-producao fechamento month groups:', fechamentoError);
         }
     }
 
@@ -609,7 +721,7 @@ async function loadProgramacaoProducao() {
         projectsById: typeof buildGestaoRelatorioProjectsById === 'function'
             ? buildGestaoRelatorioProjectsById(projects || [])
             : {},
-        fechamentoTotals
+        fechamentoMonthGroups
     };
 
     renderProgramacaoProducaoPanel();

@@ -2,7 +2,7 @@ const GESTAO_RELATORIO_PEDIDOS_PENDENTES_END = 'Montagem Interna';
 const GESTAO_RELATORIO_EXPEDICAO_STATUS = 'Expedição';
 
 const GESTAO_RELATORIO_PROJECT_SELECT = `
-    id, orderId, projectCode, name, saleValue, deliveryDate, fimMontagemInterna, statusId,
+    id, orderId, projectCode, name, saleValue, deliveryDate, fimMontagemInterna, productionMonth, statusId,
     deliveryPhaseId, isComplementar, parentProjectId,
     isSubstituicao, substituiProjectId,
     substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)),
@@ -52,6 +52,7 @@ async function fetchGestaoRelatorioProjects() {
     if (result.error?.message?.includes('projectStatus')
         || result.error?.message?.includes('sortOrder')
         || result.error?.message?.includes('fimMontagemInterna')
+        || result.error?.message?.includes('productionMonth')
         || result.error?.message?.includes('clientDeliveryDate')
         || result.error?.message?.includes('deliveryPhaseId')
         || result.error?.message?.includes('isComplementar')
@@ -691,6 +692,10 @@ function sumGestaoRelatorioSaleValues(projects) {
     }, 0);
 }
 
+function getGestaoRelatorioFechamentoProducaoProjectMonthKey(project) {
+    return getGestaoRelatorioMonthKey(project?.productionMonth || project?.fimMontagemInterna);
+}
+
 function getGestaoRelatorioFechamentoProducaoTotals(projects) {
     const fechamentoProjects = (projects || []).filter(project =>
         getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
@@ -722,7 +727,7 @@ function renderGestaoRelatorioFechamentoProducaoTotalsLine(totals = {}) {
     `;
 }
 
-async function loadGestaoRelatorioFechamentoProducaoTotals() {
+async function loadGestaoRelatorioFechamentoProducaoProjects() {
     const { data: projects, error } = await fetchGestaoRelatorioProjects();
     if (error) throw error;
 
@@ -731,7 +736,19 @@ async function loadGestaoRelatorioFechamentoProducaoTotals() {
         enrichedProjects = await enrichGestaoRelatorioProjectsWithSubstituicaoValues(enrichedProjects);
     }
 
-    return getGestaoRelatorioFechamentoProducaoTotals(enrichedProjects);
+    return enrichedProjects.filter(project =>
+        getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
+    );
+}
+
+async function loadGestaoRelatorioFechamentoProducaoTotals() {
+    const fechamentoProjects = await loadGestaoRelatorioFechamentoProducaoProjects();
+    return getGestaoRelatorioFechamentoProducaoTotals(fechamentoProjects);
+}
+
+async function loadGestaoRelatorioFechamentoProducaoMonthGroups(options = {}) {
+    const fechamentoProjects = await loadGestaoRelatorioFechamentoProducaoProjects();
+    return groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects, options);
 }
 
 function sortGestaoRelatorioFechamentoProducaoProjects(projects) {
@@ -744,11 +761,15 @@ function sortGestaoRelatorioFechamentoProducaoProjects(projects) {
     });
 }
 
-function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects) {
+function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, options = {}) {
+    const getMonthKey = typeof options.getMonthKey === 'function'
+        ? options.getMonthKey
+        : (project) => getGestaoRelatorioMonthKey(project.fimMontagemInterna);
+    const sortDescending = options.sortDescending !== false;
     const monthGroups = {};
 
     projects.forEach(project => {
-        const monthKey = getGestaoRelatorioMonthKey(project.fimMontagemInterna);
+        const monthKey = getMonthKey(project);
         const clientName = project.order?.clientName?.trim() || 'Sem cliente';
         const clientKey = clientName.toLocaleLowerCase('pt-BR');
 
@@ -767,7 +788,8 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects) {
         .sort((a, b) => {
             if (a.monthKey === 'sem-data') return 1;
             if (b.monthKey === 'sem-data') return -1;
-            return b.monthKey.localeCompare(a.monthKey);
+            if (sortDescending) return b.monthKey.localeCompare(a.monthKey);
+            return a.monthKey.localeCompare(b.monthKey);
         })
         .map(monthGroup => {
             const clients = Object.values(monthGroup.clientsByKey)
@@ -1004,5 +1026,11 @@ window.isGestaoRelatorioPedidosPendentesComplementarProject = isGestaoRelatorioP
 window.getGestaoRelatorioProjectLabel = getGestaoRelatorioProjectLabel;
 window.getGestaoRelatorioStatusName = getGestaoRelatorioStatusName;
 window.getGestaoRelatorioFechamentoProducaoTotals = getGestaoRelatorioFechamentoProducaoTotals;
+window.getGestaoRelatorioFechamentoProducaoProjectMonthKey = getGestaoRelatorioFechamentoProducaoProjectMonthKey;
+window.groupGestaoRelatorioFechamentoProducaoByMonthAndClient = groupGestaoRelatorioFechamentoProducaoByMonthAndClient;
+window.renderGestaoRelatorioFechamentoProducaoClientGroup = renderGestaoRelatorioFechamentoProducaoClientGroup;
+window.formatGestaoRelatorioMonthLabel = formatGestaoRelatorioMonthLabel;
+window.loadGestaoRelatorioFechamentoProducaoProjects = loadGestaoRelatorioFechamentoProducaoProjects;
+window.loadGestaoRelatorioFechamentoProducaoMonthGroups = loadGestaoRelatorioFechamentoProducaoMonthGroups;
 window.renderGestaoRelatorioFechamentoProducaoTotalsLine = renderGestaoRelatorioFechamentoProducaoTotalsLine;
 window.loadGestaoRelatorioFechamentoProducaoTotals = loadGestaoRelatorioFechamentoProducaoTotals;
