@@ -127,7 +127,7 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId,
 
     const rows = conferenceGroups.map(group => {
         const orderCode = group.order?.orderCode || '—';
-        const clientName = group.order?.clientName || '—';
+        const clientName = getOrderClientName(group.order) || '—';
         const projectSummary = getPendenciasConsultorConferenciaProjectSummary(group.projects);
         const conference = group.conference;
         const canView = Boolean(conference?.id);
@@ -238,7 +238,7 @@ async function fetchPendenciasConsultorConferenciaProjects() {
 
     if (!overviewMode) {
         projects = projects.filter(project => isCurrentUserOrderConsultor(
-            project.order?.consultantName,
+            getOrderConsultantNameFromRecord(project.order),
             project.order?.consultantUserId
         ));
     }
@@ -336,7 +336,7 @@ function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectI
 
     const rows = conferenceGroups.map(group => {
         const orderCode = group.order?.orderCode || '—';
-        const clientName = group.order?.clientName || '—';
+        const clientName = getOrderClientName(group.order) || '—';
         const projectSummary = getPendenciasConsultorConferenciaProjectSummary(group.projects);
         const deliveryDates = group.projects
             .map(project => project.deliveryDate)
@@ -443,7 +443,7 @@ function enrichPendenciasApprovalWithProject(approval, project) {
     return {
         ...approval,
         orderId: approval.orderId || project?.orderId,
-        orderConsultantName: project?.order?.consultantName || approval.orderConsultantName
+        orderConsultantName: getOrderConsultantNameFromRecord(project?.order) || approval.orderConsultantName
     };
 }
 
@@ -483,7 +483,7 @@ async function fetchPendenciasConsultorAguardandoAprovacaoProjects(targetStatusN
 
     if (!overviewMode) {
         projects = projects.filter(project => isCurrentUserOrderConsultor(
-            project.order?.consultantName,
+            getOrderConsultantNameFromRecord(project.order),
             project.order?.consultantUserId
         ));
     }
@@ -523,7 +523,7 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
 
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = typeof getPendenciasProjectDetailLabel === 'function'
             ? getPendenciasProjectDetailLabel(project)
             : (project?.name || 'Projeto');
@@ -663,12 +663,12 @@ async function ensureCommercialApprovalInPendenciasContext(approvalId) {
     if (!approval.orderConsultantName && approval.orderId) {
         const { data: orderInfo } = await supabaseClient
             .from('salesOrders')
-            .select('consultantName')
+            .select('consultantUserId, consultor:appUsers!consultantUserId(name)')
             .eq('id', approval.orderId)
             .maybeSingle();
         approval = {
             ...approval,
-            orderConsultantName: orderInfo?.consultantName || approval.orderConsultantName
+            orderConsultantName: getOrderConsultantNameFromRecord(orderInfo) || approval.orderConsultantName
         };
     }
 
@@ -740,12 +740,12 @@ async function fetchPendenciasConsultorRequisicaoRequests() {
 
     const selectWithProject = `
         *,
-        order:salesOrders(id, orderCode, clientName, consultantName),
+        order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
         orderProject:OrderProject(id, name, projectCode, environmentType:EnvironmentType(name))
     `;
     const selectFallback = `
         *,
-        order:salesOrders(id, orderCode, clientName, consultantName)
+        order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
     `;
 
     let result = await supabaseClient
@@ -769,7 +769,7 @@ async function fetchPendenciasConsultorRequisicaoRequests() {
 
     if (!overviewMode) {
         requests = requests.filter(request => isCurrentUserOrderConsultor(
-            request.order?.consultantName,
+            getOrderConsultantNameFromRecord(request.order),
             request.order?.consultantUserId
         ));
     }
@@ -794,7 +794,7 @@ function renderPendenciasConsultorRequisicaoList(requests, overviewMode) {
 
     const rows = requests.map(request => {
         const orderCode = request.order?.orderCode || '—';
-        const clientName = request.order?.clientName || '—';
+        const clientName = getOrderClientName(request.order) || '—';
         const projectLabel = getPendenciasRequestProjectLabel(request);
         const designerName = request.designerName || '—';
         const canShowRequest = overviewMode
@@ -889,7 +889,7 @@ async function openConsultorRequestFromPendencias(requestId) {
     if (!request) {
         const selectWithProject = `
             *,
-            order:salesOrders(id, orderCode, clientName, consultantName),
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
             orderProject:OrderProject(id, name, projectCode, environmentType:EnvironmentType(name))
         `;
         let result = await supabaseClient
@@ -901,7 +901,7 @@ async function openConsultorRequestFromPendencias(requestId) {
         if (result.error?.message?.includes('orderProject')) {
             result = await supabaseClient
                 .from('OrderRequest')
-                .select('*, order:salesOrders(id, orderCode, clientName, consultantName)')
+                .select('*, order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
                 .eq('id', id)
                 .maybeSingle();
         }

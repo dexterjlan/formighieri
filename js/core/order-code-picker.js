@@ -9,8 +9,8 @@ async function searchOrdersByClientName(clientName, limit = 50) {
 
     const { data, error } = await supabaseClient
         .from('salesOrders')
-        .select('id, orderCode, clientName, consultantName')
-        .ilike('clientName', `%${term}%`)
+        .select(`id, orderCode, clientId, consultantUserId, cliente:Cliente!inner(nome), consultor:appUsers!consultantUserId(name)`)
+        .ilike('cliente.nome', `%${term}%`)
         .order('orderCode', { ascending: false })
         .limit(limit);
 
@@ -68,9 +68,9 @@ function renderOrderCodePickerResults(orders, options = {}) {
             class="order-code-picker-result"
             data-order-id="${order.id}">
             <span class="order-code-picker-result__code">${escapeHtml(order.orderCode || '—')}</span>
-            <span class="order-code-picker-result__client">${escapeHtml(order.clientName || '—')}</span>
-            ${order.consultantName
-                ? `<span class="order-code-picker-result__consultant">${escapeHtml(order.consultantName)}</span>`
+            <span class="order-code-picker-result__client">${escapeHtml(getOrderClientName(order) || '—')}</span>
+            ${getOrderConsultantNameFromRecord(order)
+                ? `<span class="order-code-picker-result__consultant">${escapeHtml(getOrderConsultantNameFromRecord(order))}</span>`
                 : ''}
         </button>
     `).join('');
@@ -162,7 +162,7 @@ function bindOrderCodePickerEvents() {
         const order = orderCodePickerLastResults.find(item => Number(item.id) === Number(button.dataset.orderId));
         if (!order) return;
 
-        applyOrderCodePickerSelection(order.orderCode, order.clientName);
+        applyOrderCodePickerSelection(order.orderCode, getOrderClientName(order));
         closeOrderCodePickerModal();
     });
 

@@ -7,7 +7,7 @@ const GESTAO_RELATORIO_PROJECT_SELECT = `
     isSubstituicao, substituiProjectId,
     substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)),
     parentProject:parentProjectId(id, deliveryPhaseId),
-    order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
+    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
 
@@ -15,7 +15,7 @@ const GESTAO_RELATORIO_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, saleValue, deliveryDate, statusId,
     deliveryPhaseId, isComplementar, parentProjectId,
     isSubstituicao, substituiProjectId,
-    order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
+    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
@@ -356,7 +356,7 @@ function getGestaoRelatorioPedidosPendentesOrderGroupKeys(project, context = {},
         : getGestaoRelatorioPedidosPendentesProjectDeliveryDate;
     const referenceDate = resolveReferenceDate(project, context);
     const deliveryDate = resolveOrderDeliveryDate(project, context);
-    const clientName = project.order?.clientName?.trim() || 'Sem cliente';
+    const clientName = getOrderClientName(project.order)?.trim() || 'Sem cliente';
     const orderId = Number(project.orderId);
 
     return {
@@ -770,7 +770,7 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, option
 
     projects.forEach(project => {
         const monthKey = getMonthKey(project);
-        const clientName = project.order?.clientName?.trim() || 'Sem cliente';
+        const clientName = getOrderClientName(project.order)?.trim() || 'Sem cliente';
         const clientKey = clientName.toLocaleLowerCase('pt-BR');
 
         if (!monthGroups[monthKey]) {

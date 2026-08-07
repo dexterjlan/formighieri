@@ -2270,6 +2270,18 @@ body.gestao-kanban-fullscreen-active {
     border-color: rgb(253 230 138);
 }
 
+.calendar-event-chip--reuniao {
+    background: rgb(224 231 255);
+    color: rgb(67 56 202);
+    border-color: rgb(199 210 254);
+}
+
+.calendar-event-chip--vistoria-obra {
+    background: rgb(219 234 254);
+    color: rgb(29 78 216);
+    border-color: rgb(191 219 254);
+}
+
 .calendar-event-floating-tooltip {
     position: fixed;
     z-index: 80;
@@ -2307,6 +2319,16 @@ body.gestao-kanban-fullscreen-active {
 .calendar-event-tooltip--atendimento .calendar-event-tooltip__badge {
     background: rgb(120 53 15);
     color: rgb(253 230 138);
+}
+
+.calendar-event-tooltip--reuniao .calendar-event-tooltip__badge {
+    background: rgb(49 46 129);
+    color: rgb(199 210 254);
+}
+
+.calendar-event-tooltip--vistoria-obra .calendar-event-tooltip__badge {
+    background: rgb(30 64 175);
+    color: rgb(191 219 254);
 }
 
 .calendar-event-tooltip--montagem .calendar-event-tooltip__badge {
@@ -2368,6 +2390,14 @@ body.gestao-kanban-fullscreen-active {
 
 .calendar-day-event-card--atendimento {
     border-left: 3px solid rgb(245 158 11);
+}
+
+.calendar-day-event-card--reuniao {
+    border-left: 3px solid rgb(99 102 241);
+}
+
+.calendar-day-event-card--vistoria-obra {
+    border-left: 3px solid rgb(59 130 246);
 }
 
 .calendar-day-event-card__top {

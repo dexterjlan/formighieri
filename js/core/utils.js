@@ -34,9 +34,43 @@ function canEditProjetistaResponse(conv) {
     return currentUser?.role === 'Projetista' && conv?.designerId === currentUser.id;
 }
 
+const SALES_ORDER_CLIENT_REL = 'cliente:Cliente(id, nome, ativo)';
+const SALES_ORDER_CONSULTANT_REL = 'consultor:appUsers!consultantUserId(id, name)';
+const SALES_ORDER_RELATIONS_SELECT = `${SALES_ORDER_CLIENT_REL}, ${SALES_ORDER_CONSULTANT_REL}`;
+const SALES_ORDER_EMBED_MINIMAL = 'id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)';
+
+function getSalesOrderEmbedSelect(extraFields = '') {
+    const base = extraFields ? `${extraFields}, ` : '';
+    return `${base}${SALES_ORDER_RELATIONS_SELECT}`;
+}
+
+function getSalesOrderMinimalEmbedSelect() {
+    return SALES_ORDER_EMBED_MINIMAL;
+}
+
+function getOrderClientName(order) {
+    if (order?.cliente?.nome) return order.cliente.nome;
+    if (order?.id && typeof ordersCache !== 'undefined') {
+        const cached = ordersCache.find(item => Number(item.id) === Number(order.id));
+        if (cached?.cliente?.nome) return cached.cliente.nome;
+    }
+    return '';
+}
+
+function getOrderConsultantNameFromRecord(order) {
+    if (order?.consultor?.name) return order.consultor.name;
+    if (order?.id && typeof ordersCache !== 'undefined') {
+        const cached = ordersCache.find(item => Number(item.id) === Number(order.id));
+        if (cached?.consultor?.name) return cached.consultor.name;
+    }
+    return '';
+}
+
 function getOrderConsultantName(orderId) {
     if (!orderId || typeof ordersCache === 'undefined') return null;
-    return ordersCache.find(o => o.id === orderId)?.consultantName || null;
+    const order = ordersCache.find(o => o.id === orderId);
+    if (!order) return null;
+    return getOrderConsultantNameFromRecord(order) || null;
 }
 
 function getOrderConsultantUserId(orderId) {
@@ -97,51 +131,28 @@ async function resolveConsultantUserIdByNameAsync(consultantName) {
 async function syncSalesOrdersConsultantName(oldName, newName, consultantUserId = null) {
     const from = String(oldName || '').trim();
     const to = String(newName || '').trim();
-    if (!from || !to || from === to) return;
-
-    const payload = { consultantName: to };
     const resolvedUserId = Number(consultantUserId);
-    if (resolvedUserId) payload.consultantUserId = resolvedUserId;
+    if (!to && !resolvedUserId) return;
 
-    const updates = [];
-
-    if (resolvedUserId) {
-        updates.push(
-            supabaseClient
-                .from('salesOrders')
-                .update(payload)
-                .eq('consultantUserId', resolvedUserId)
-        );
-    }
-
-    updates.push(
-        supabaseClient
-            .from('salesOrders')
-            .update(payload)
-            .eq('consultantName', from)
-    );
-
-    for (const request of updates) {
-        const { error } = await request;
-        if (error?.message?.includes('consultantUserId')) {
-            const { error: nameOnlyError } = await supabaseClient
-                .from('salesOrders')
-                .update({ consultantName: to })
-                .eq('consultantName', from);
-            if (nameOnlyError) console.error('syncSalesOrdersConsultantName:', nameOnlyError);
-        } else if (error) {
-            console.error('syncSalesOrdersConsultantName:', error);
+    const updateCacheConsultor = order => {
+        const matchesUser = resolvedUserId && Number(order.consultantUserId) === resolvedUserId;
+        const matchesName = from
+            && normalizeConsultantNameKey(getOrderConsultantNameFromRecord(order)) === normalizeConsultantNameKey(from);
+        if (!matchesUser && !matchesName) return;
+        if (order.consultor) {
+            order.consultor = { ...order.consultor, name: to };
+        } else if (to) {
+            order.consultor = { id: resolvedUserId || order.consultor?.id, name: to };
         }
-    }
+        if (resolvedUserId) order.consultantUserId = resolvedUserId;
+    };
 
     if (typeof ordersCache !== 'undefined' && Array.isArray(ordersCache)) {
-        ordersCache.forEach(order => {
-            const matchesUser = resolvedUserId && Number(order.consultantUserId) === resolvedUserId;
-            const matchesName = order.consultantName === from;
-            if (!matchesUser && !matchesName) return;
-            order.consultantName = to;
-            if (resolvedUserId) order.consultantUserId = resolvedUserId;
-        });
+        ordersCache.forEach(updateCacheConsultor);
+    }
+
+    if (typeof gestaoOrdersCache !== 'undefined' && Array.isArray(gestaoOrdersCache)) {
+        gestaoOrdersCache.forEach(updateCacheConsultor);
     }
 }
 
@@ -152,9 +163,10 @@ async function enrichItemsWithOrderConsultantUserId(items, getOrder = item => it
 
     return items.map(item => {
         const order = getOrder(item);
-        if (!order || order.consultantUserId || !order.consultantName) return item;
+        if (!order || order.consultantUserId) return item;
 
-        const consultantUserId = resolveConsultantUserIdByName(order.consultantName);
+        const consultantUserId = order.consultor?.id
+            || resolveConsultantUserIdByName(getOrderConsultantNameFromRecord(order));
         if (!consultantUserId) return item;
 
         return { ...item, order: { ...order, consultantUserId } };
@@ -168,7 +180,7 @@ function isOrderConsultorForRequest(conv) {
         ? ordersCache.find(item => Number(item.id) === Number(conv?.orderId))
         : null;
     return isCurrentUserOrderConsultor(
-        order?.consultantName || getOrderConsultantName(conv?.orderId),
+        getOrderConsultantNameFromRecord(order) || getOrderConsultantName(conv?.orderId),
         order?.consultantUserId || getOrderConsultantUserId(conv?.orderId)
     );
 }
@@ -570,21 +582,24 @@ async function resolveSalesOrderUpdateContext(orderId) {
     const cached = caches.find(order => Number(order.id) === normalizedOrderId);
     if (cached) {
         return {
-            clientName: cached.clientName,
-            consultantName: cached.consultantName,
             clientId: cached.clientId || cached.cliente?.id || null,
-            consultantUserId: cached.consultantUserId || null
+            consultantUserId: cached.consultantUserId || cached.consultor?.id || null,
+            orderCode: cached.orderCode || ''
         };
     }
 
     const { data, error } = await supabaseClient
         .from('salesOrders')
-        .select('clientName, consultantName, clientId, consultantUserId')
+        .select('clientId, consultantUserId, orderCode, cliente:Cliente(id), consultor:appUsers!consultantUserId(id)')
         .eq('id', normalizedOrderId)
         .maybeSingle();
 
     if (error || !data) return {};
-    return data;
+    return {
+        clientId: data.clientId || data.cliente?.id || null,
+        consultantUserId: data.consultantUserId || data.consultor?.id || null,
+        orderCode: data.orderCode || ''
+    };
 }
 
 async function readSalesOrderClientDeliveryDate(orderId, orderCode = '') {
@@ -615,8 +630,6 @@ async function persistSalesOrderClientDeliveryDate(orderId, clientDeliveryDate, 
         ...(await resolveSalesOrderUpdateContext(normalizedOrderId)),
         ...(contextOverride || {})
     };
-    const clientName = context.clientName || '';
-    const consultantName = context.consultantName || '';
     const orderCode = context.orderCode || '';
     const now = new Date().toISOString();
     const userId = currentUser?.id || null;
@@ -635,9 +648,8 @@ async function persistSalesOrderClientDeliveryDate(orderId, clientDeliveryDate, 
     }
 
     const attempts = [
-        { clientDeliveryDate: normalizedDate, clientName, consultantName, updatedAt: now, updatedById: userId },
-        { clientDeliveryDate: normalizedDate, clientName, consultantName, updatedAt: now },
-        { clientDeliveryDate: normalizedDate, clientName, consultantName },
+        { clientDeliveryDate: normalizedDate, updatedAt: now, updatedById: userId },
+        { clientDeliveryDate: normalizedDate, updatedAt: now },
         { clientDeliveryDate: normalizedDate }
     ];
 
@@ -698,40 +710,10 @@ async function updateSalesOrderRecord(orderId, payload = {}, options = {}) {
         basePayload,
         (() => {
             const next = { ...basePayload };
-            delete next.consultantUserId;
-            return next;
-        })(),
-        (() => {
-            const next = { ...basePayload };
-            delete next.clientId;
-            delete next.consultantUserId;
-            return next;
-        })(),
-        (() => {
-            const next = { ...basePayload };
             delete next.updatedById;
             delete next.updatedAt;
             return next;
-        })(),
-        (() => {
-            const next = { ...basePayload };
-            delete next.clientId;
-            delete next.consultantUserId;
-            delete next.updatedById;
-            delete next.updatedAt;
-            return next;
-        })(),
-        {
-            clientName: basePayload.clientName,
-            consultantName: basePayload.consultantName,
-            ...(basePayload.clientDeliveryDate
-                ? { clientDeliveryDate: basePayload.clientDeliveryDate }
-                : {})
-        },
-        {
-            clientName: basePayload.clientName,
-            consultantName: basePayload.consultantName
-        }
+        })()
     ];
 
     const seen = new Set();

@@ -1,10 +1,10 @@
 function getOrderConsultantNameForApproval(approval) {
     if (!approval) return null;
     if (approval.orderConsultantName) return approval.orderConsultantName;
-    if (approval.order?.consultantName) return approval.order.consultantName;
+    if (approval.order) return getOrderConsultantNameFromRecord(approval.order) || null;
     if (approval.orderId && typeof ordersCache !== 'undefined') {
         const order = ordersCache.find(o => o.id === approval.orderId);
-        if (order?.consultantName) return order.consultantName;
+        return getOrderConsultantNameFromRecord(order) || null;
     }
     return null;
 }
@@ -221,6 +221,7 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (fetchError?.message?.includes('conclusaoProjetoTecnico')) {
+        await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Em Revisão Comercial');
         return;
     }
 
@@ -230,23 +231,26 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
         .filter(project => !project.conclusaoProjetoTecnico)
         .map(project => project.id);
 
-    if (!idsNeedingConclusao.length) return;
+    if (idsNeedingConclusao.length) {
+        const { error: conclusaoError } = await supabaseClient
+            .from('OrderProject')
+            .update({
+                conclusaoProjetoTecnico: today,
+                updatedById: currentUser.id,
+                updatedAt: now
+            })
+            .in('id', idsNeedingConclusao)
+            .is('conclusaoProjetoTecnico', null);
 
-    const { error: conclusaoError } = await supabaseClient
-        .from('OrderProject')
-        .update({
-            conclusaoProjetoTecnico: today,
-            updatedById: currentUser.id,
-            updatedAt: now
-        })
-        .in('id', idsNeedingConclusao)
-        .is('conclusaoProjetoTecnico', null);
+        if (conclusaoError?.message?.includes('conclusaoProjetoTecnico')) {
+            await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Em Revisão Comercial');
+            return;
+        }
 
-    if (conclusaoError?.message?.includes('conclusaoProjetoTecnico')) {
-        return;
+        if (conclusaoError) throw conclusaoError;
     }
 
-    if (conclusaoError) throw conclusaoError;
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Em Revisão Comercial');
 }
 
 async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
@@ -269,6 +273,8 @@ async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (error) throw error;
+
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Aguardando Aprovação');
 }
 
 const COMMERCIAL_REVISION_PROJECT_STATUS = 'Em Revisão Técnica';
@@ -323,6 +329,8 @@ async function applyEmRevisaoStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (error) throw error;
+
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, COMMERCIAL_REVISION_PROJECT_STATUS);
 }
 
 async function resolveCommercialApprovalOrderProjectId(approval) {
@@ -405,6 +413,8 @@ async function applyNomearStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (error) throw error;
+
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, COMMERCIAL_APPROVED_PROJECT_STATUS);
 }
 
 async function applyNomearStatusForCommercialApproval(approval) {
@@ -952,13 +962,6 @@ async function submitCommercialApprovalFromPendencias(projectId) {
         setCommercialApprovalSubmitLoading(true, 'Atualizando status do projeto...');
         await applyEmRevisaoComercialStatusToProjects([normalizedId]);
 
-        if (insertedApprovals?.length) {
-            setCommercialApprovalSubmitLoading(true, 'Enviando e-mail de notificação...');
-            for (const inserted of insertedApprovals) {
-                await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
-            }
-        }
-
         setCommercialApprovalSubmitLoading(true, 'Atualizando telas...');
         if (typeof loadPendenciasProjetoTecnico === 'function'
             && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
@@ -1079,18 +1082,18 @@ async function fetchCommercialApprovalOrderDeliveryContext(orderId) {
 
     if (cachedOrder) {
         orderCode = cachedOrder.orderCode || '—';
-        clientName = cachedOrder.clientName || '—';
+        clientName = getOrderClientName(cachedOrder) || '—';
         clientDeliveryDate = cachedOrder.clientDeliveryDate || '';
     } else if (orderId) {
         const { data } = await supabaseClient
             .from('salesOrders')
-            .select('orderCode, clientName, clientDeliveryDate')
+            .select('orderCode, clientDeliveryDate, cliente:Cliente(nome)')
             .eq('id', orderId)
             .maybeSingle();
 
         if (data) {
             orderCode = data.orderCode || '—';
-            clientName = data.clientName || '—';
+            clientName = getOrderClientName(data) || '—';
             clientDeliveryDate = data.clientDeliveryDate || '';
         }
     }
@@ -1299,16 +1302,6 @@ async function executeCommercialApproval(id) {
             await applyApprovedStatusForCommercialApproval(approval);
         }
 
-        if (!isMovingToAguardandoAprovacao) {
-            setCommercialApprovalActionLoading(id, true, 'Enviando notificação por e-mail...');
-            await notifyApprovalEmail('approved', {
-                ...approval,
-                status: 'Aprovado',
-                approved: true,
-                approvedAt: now
-            });
-        }
-
         setCommercialApprovalActionLoading(id, true, 'Atualizando telas...');
         if (activeOrderId) {
             loadCommercialApprovals(activeOrderId);
@@ -1504,14 +1497,15 @@ async function loadCommercialApprovals(orderId) {
 
         const { data: orderInfo } = await supabaseClient
             .from('salesOrders')
-            .select('consultantName')
+            .select('consultantUserId, consultor:appUsers!consultantUserId(name)')
             .eq('id', orderId)
             .maybeSingle();
 
-        if (orderInfo?.consultantName) {
+        const consultantName = getOrderConsultantNameFromRecord(orderInfo);
+        if (consultantName) {
             commercialApprovalsCache = commercialApprovalsCache.map(a => ({
                 ...a,
-                orderConsultantName: orderInfo.consultantName
+                orderConsultantName: consultantName
             }));
         }
 
@@ -1804,11 +1798,6 @@ function bindCommercialApprovalEvents() {
 
             setCommercialApprovalFormLoading(true, 'Atualizando status dos projetos...');
             await applyEmRevisaoComercialStatusToProjects(selectedProjectIds);
-
-            setCommercialApprovalFormLoading(true, 'Enviando notificação por e-mail...');
-            for (const inserted of insertedApprovals) {
-                await notifyApprovalEmail('approval_requested', normalizeCommercialApproval(inserted));
-            }
 
             setCommercialApprovalFormLoading(true, 'Atualizando telas...');
             loadCommercialApprovals(activeOrderId);

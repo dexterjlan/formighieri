@@ -49,8 +49,8 @@ function enrichOrderProjectsForAguardandoMedicaoModal(orderId, projects) {
         order: {
             id: Number(orderId),
             orderCode: order?.orderCode || '—',
-            clientName: order?.clientName || '—',
-            consultantName: order?.consultantName || '—'
+            clientName: getOrderClientName(order) || '—',
+            consultantName: getOrderConsultantNameFromRecord(order) || '—'
         },
         projectStatus: project.projectStatus || {
             id: project.statusId,
@@ -94,8 +94,8 @@ function groupPendenciasAguardandoMedicaoProjects(projects) {
                 orderId,
                 statusName,
                 orderCode: project.order?.orderCode || '—',
-                clientName: project.order?.clientName || '—',
-                consultantName: project.order?.consultantName || '—',
+                clientName: getOrderClientName(project.order) || '—',
+                consultantName: getOrderConsultantNameFromRecord(project.order) || '—',
                 projects: []
             });
         }
@@ -188,8 +188,8 @@ function openPendenciasAguardandoMedicaoEditModal(orderId, statusName) {
         orderId: Number(orderId),
         statusName,
         orderCode: sample.order?.orderCode || '—',
-        clientName: sample.order?.clientName || '—',
-        consultantName: sample.order?.consultantName || '—'
+        clientName: getOrderClientName(sample.order) || '—',
+        consultantName: getOrderConsultantNameFromRecord(sample.order) || '—'
     };
 
     document.getElementById('pendencias-am-modal-order-line').textContent =
@@ -605,7 +605,7 @@ function renderPendenciasPpcpProjectList(config) {
     const labelFn = config.projectLabelFn || getPendenciasProjectLabel;
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = labelFn(project);
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const statusName = getPendenciasProjectStatusName(project);
@@ -814,7 +814,7 @@ function renderPendenciasNomearList(projects) {
 
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = labelFn(project);
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const statusName = getPendenciasProjectStatusName(project);
@@ -1062,7 +1062,7 @@ function renderPendenciasImplantacaoList(projects) {
 
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = labelFn(project);
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const statusLabel = project.implantacaoStatus || getPendenciasProjectStatusName(project);
@@ -1227,7 +1227,7 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
 
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = getPendenciasFabricaProjectLabel(project);
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const inicioValue = project.inicioMontagemInterna
@@ -1330,7 +1330,7 @@ function renderPendenciasEmMontagemList(projects) {
 
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = getPendenciasFabricaProjectLabel(project);
         const inicioDisplay = formatPendenciasFabricaDisplayDate(project.inicioMontagemInterna);
         const fimValue = project.fimMontagemInterna

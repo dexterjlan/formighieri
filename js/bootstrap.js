@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '20261118';
+const APP_CACHE_VERSION = '20260807';
 
 const PARTIALS = [
     'partials/login.html',
@@ -73,6 +73,7 @@ const SCRIPTS = [
     'js/orders/order-project-actions.js',
     'js/core/notifications-templates.js',
     'js/core/notifications-recipients.js',
+    'js/core/notifications-project-status-rules.js',
     'js/core/notifications-dispatch.js',
     'js/conversations/request-activities.js',
     'js/conversations/request-attachments.js',

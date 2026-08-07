@@ -6,14 +6,14 @@ const GESTAO_GANTT_STATUS_NAMES = [
 const GESTAO_GANTT_PROJECT_SELECT = `
     id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico,
     isComplementar, parentProjectId, isSubstituido,
-    order:salesOrders(id, orderCode, clientName),
+    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
 const GESTAO_GANTT_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico,
-    order:salesOrders(id, orderCode, clientName),
+    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     projectStatus:OrderProjectStatus(id, name)
 `;

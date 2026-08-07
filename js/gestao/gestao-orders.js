@@ -29,14 +29,14 @@ async function openGestaoEditOrderForm(orderId) {
     document.getElementById('gestao-order-form-submit').textContent = 'Atualizar Pedido';
     document.getElementById('gestao-ord-code').value = order.orderCode || '';
     document.getElementById('gestao-ord-code').disabled = true;
-    document.getElementById('gestao-ord-client').value = order.cliente?.nome || order.clientName || '';
+    document.getElementById('gestao-ord-client').value = getOrderClientName(order);
     if (document.getElementById('gestao-ord-client-id')) {
         document.getElementById('gestao-ord-client-id').value = order.clientId || order.cliente?.id || '';
     }
     document.getElementById('gestao-ord-client-delivery').value = toGestaoInputDate(order.clientDeliveryDate);
 
     await loadGestaoFormOptions();
-    await loadGestaoConsultants(order.consultantName || '');
+    await loadGestaoConsultants(getOrderConsultantNameFromRecord(order));
 
     setGestaoOrderProjectsDraft(order.projects || []);
     await loadGestaoOrderPhasesForOrder(orderId);
@@ -481,19 +481,21 @@ async function enrichGestaoOrdersWithProjectStatuses(orders) {
 async function fetchGestaoOrders(filters = {}) {
     const orderCode = String(filters.orderCode || '').trim();
     const clientName = String(filters.clientName || '').trim();
+    const orderRelations = `cliente:Cliente(id, nome, ativo), consultor:appUsers!consultantUserId(id, name)`;
     const orderSelectVariants = [
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao)',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name))',
-        '*, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId)',
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao)`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId)`,
+        `*, ${orderRelations}`,
         '*'
     ];
 
@@ -508,9 +510,6 @@ async function fetchGestaoOrders(filters = {}) {
 
         if (orderCode) {
             query = query.ilike('orderCode', `%${orderCode}%`);
-        }
-        if (clientName) {
-            query = query.ilike('clientName', `%${clientName}%`);
         }
 
         const attempt = await query;
@@ -539,6 +538,13 @@ async function fetchGestaoOrders(filters = {}) {
 
     orders = await enrichGestaoOrdersWithProjectStatuses(orders);
 
+    if (clientName) {
+        const term = clientName.toLocaleLowerCase('pt-BR');
+        orders = orders.filter(order =>
+            getOrderClientName(order).toLocaleLowerCase('pt-BR').includes(term)
+        );
+    }
+
     return { data: orders, error: null };
 }
 
@@ -564,8 +570,8 @@ function renderGestaoOrdersListRows(orders) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="p-3 font-mono text-xs font-bold text-slate-700">${escapeHtml(order.orderCode || '—')}</td>
-            <td class="p-3 text-slate-800">${escapeHtml(order.clientName || '—')}</td>
-            <td class="p-3 text-slate-500">${escapeHtml(order.consultantName || '—')}</td>
+            <td class="p-3 text-slate-800">${escapeHtml(getOrderClientName(order) || '—')}</td>
+            <td class="p-3 text-slate-500">${escapeHtml(getOrderConsultantNameFromRecord(order) || '—')}</td>
             <td class="p-3 text-slate-600 whitespace-nowrap">${formatGestaoDate(order.clientDeliveryDate)}</td>
             <td class="p-3 text-slate-600">${projectCount}</td>
             <td class="p-3">
@@ -1060,6 +1066,11 @@ async function saveGestaoOrder(event) {
     const now = new Date().toISOString();
     const consultantUserId = await resolveConsultantUserIdByNameAsync(consultantName);
 
+    if (!consultantUserId) {
+        alertAppDialog('Consultor não encontrado entre os usuários ativos.');
+        return;
+    }
+
     try {
         let orderId = resolveGestaoOrderIdForSave();
         if (isEditingOrder && !orderId) {
@@ -1069,6 +1080,11 @@ async function saveGestaoOrder(event) {
         let clientId = clientIdInput ? Number(clientIdInput) : null;
         if (!clientId && clientName && typeof resolveOrCreateClienteId === 'function') {
             clientId = await resolveOrCreateClienteId(clientName);
+        }
+
+        if (!clientId) {
+            alertAppDialog('Selecione um cliente válido no cadastro.');
+            return;
         }
 
         if (!isEditingOrder) {
@@ -1085,10 +1101,8 @@ async function saveGestaoOrder(event) {
 
             const orderPayload = {
                 orderCode,
-                clientName,
-                clientId: clientId || undefined,
-                consultantName,
-                consultantUserId: consultantUserId || undefined,
+                clientId,
+                consultantUserId,
                 createdById: currentUser.id,
                 updatedById: currentUser.id,
                 updatedAt: now
@@ -1100,26 +1114,8 @@ async function saveGestaoOrder(event) {
                 .select('id')
                 .single();
 
-            if (error?.message?.includes('consultantUserId')) {
-                const { consultantUserId: _consultantUserId, ...retryPayload } = orderPayload;
-                ({ data: created, error } = await supabaseClient
-                    .from('salesOrders')
-                    .insert(retryPayload)
-                    .select('id')
-                    .single());
-            }
-
-            if (error?.message?.includes('clientId')) {
-                const { clientId: _clientId, consultantUserId: _consultantUserId, ...retryPayload } = orderPayload;
-                ({ data: created, error } = await supabaseClient
-                    .from('salesOrders')
-                    .insert(retryPayload)
-                    .select('id')
-                    .single());
-            }
-
-            if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('updatedAt')) {
-                const { clientDeliveryDate: _d, updatedAt: _u, consultantUserId: _c, ...fallback } = orderPayload;
+            if (error?.message?.includes('updatedAt')) {
+                const { updatedAt: _u, ...fallback } = orderPayload;
                 ({ data: created, error } = await supabaseClient
                     .from('salesOrders')
                     .insert(fallback)
@@ -1172,18 +1168,14 @@ async function saveGestaoOrder(event) {
         }
 
         await updateSalesOrderRecord(orderId, {
-            clientName,
-            ...(clientId ? { clientId } : {}),
-            consultantName,
-            ...(consultantUserId ? { consultantUserId } : {}),
+            clientId,
+            consultantUserId,
             updatedById: currentUser?.id || null,
             updatedAt: now
         });
 
         if (deliveryDateToSave) {
             await persistSalesOrderClientDeliveryDate(orderId, deliveryDateToSave, {
-                clientName,
-                consultantName,
                 orderCode
             });
         }

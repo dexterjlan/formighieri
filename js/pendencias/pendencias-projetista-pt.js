@@ -97,7 +97,7 @@ function renderPendenciasSemResponsavelProjectRow(project, characteristicsMap = 
     const showPrevisao = options.showPrevisao !== false;
     const showAction = options.showAction !== false;
     const orderCode = project.order?.orderCode || '—';
-    const clientName = project.order?.clientName || '—';
+    const clientName = getOrderClientName(project.order) || '—';
     const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
     const projectLabel = getPendenciasProjectDetailLabel(project);
     const characteristicRows = characteristicsMap.get(Number(project.id)) || [];
@@ -222,7 +222,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
 
     const renderRow = (project, mode, options = {}) => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const projectLabel = project.projectCode
             ? `${project.projectCode} — ${project.name || 'Projeto'}`
@@ -497,7 +497,7 @@ function renderPendenciasWorkloadStatusSections(projects) {
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
         const projectsHtml = statusProjects.length
             ? statusProjects.map(project => {
-                const clientName = project.order?.clientName || '—';
+                const clientName = getOrderClientName(project.order) || '—';
                 const projectName = project.name || 'Projeto';
                 const itemTitle = `${clientName} · ${projectName}`;
 
@@ -821,6 +821,20 @@ async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, curren
             }
         }
 
+        const { data: projectMeta } = await supabaseClient
+            .from('OrderProject')
+            .select('orderId')
+            .eq('id', projectId)
+            .maybeSingle();
+
+        if (typeof notifyDesignerAssignedToProjectEmail === 'function' && projectMeta?.orderId) {
+            await notifyDesignerAssignedToProjectEmail({
+                orderId: projectMeta.orderId,
+                orderProjectIds: [projectId],
+                designerId: newDesignerId
+            });
+        }
+
         await loadPendenciasProjetosSemProjetistas();
     } finally {
         setPendenciasActionLoading(false);
@@ -883,6 +897,20 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId, previs
         if (error) {
             alertAppDialog('Erro ao associar projetista: ' + error.message);
             return;
+        }
+
+        const { data: projectMeta } = await supabaseClient
+            .from('OrderProject')
+            .select('orderId')
+            .eq('id', projectId)
+            .maybeSingle();
+
+        if (typeof notifyDesignerAssignedToProjectEmail === 'function' && projectMeta?.orderId) {
+            await notifyDesignerAssignedToProjectEmail({
+                orderId: projectMeta.orderId,
+                orderProjectIds: [projectId],
+                designerId
+            });
         }
 
         await loadPendenciasProjetosSemProjetistas();

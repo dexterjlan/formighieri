@@ -93,9 +93,13 @@ async function fetchGestaoAlterarStatusProjects(filters = {}) {
         return { projects: [], requiresFilter: true };
     }
 
+    const orderSelect = clientName
+        ? `id, orderCode, clientId, consultantUserId, cliente:Cliente!inner(nome), consultor:appUsers!consultantUserId(name)`
+        : getSalesOrderMinimalEmbedSelect();
+
     let orderQuery = supabaseClient
         .from('salesOrders')
-        .select('id, orderCode, clientName')
+        .select(orderSelect)
         .order('orderCode', { ascending: true })
         .limit(200);
 
@@ -103,7 +107,7 @@ async function fetchGestaoAlterarStatusProjects(filters = {}) {
         orderQuery = orderQuery.ilike('orderCode', `%${orderCode}%`);
     }
     if (clientName) {
-        orderQuery = orderQuery.ilike('clientName', `%${clientName}%`);
+        orderQuery = orderQuery.ilike('cliente.nome', `%${clientName}%`);
     }
 
     const { data: orders, error: ordersError } = await orderQuery;
@@ -178,7 +182,7 @@ function renderGestaoAlterarStatusProjectsList(projects = gestaoAlterarStatusPro
         return `
             <tr data-project-id="${project.id}">
                 <td class="p-3 font-mono text-xs text-indigo-800 whitespace-nowrap">${escapeHtml(project.order?.orderCode || '—')}</td>
-                <td class="p-3 text-xs text-slate-700">${escapeHtml(project.order?.clientName || '—')}</td>
+                <td class="p-3 text-xs text-slate-700">${escapeHtml(getOrderClientName(project.order) || '—')}</td>
                 <td class="p-3 text-xs text-slate-800">${escapeHtml(projectName)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(currentStatusName)}</td>
                 <td class="p-3">

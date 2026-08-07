@@ -212,6 +212,8 @@ async function applyConferenciaRealizadaStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (error) throw error;
+
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Conferência Realizada');
 }
 
 async function getAguardandoProjetoTecnicoStatusId() {

@@ -7,7 +7,7 @@ async function openRequestFromPendencias(requestId) {
     if (!request) {
         const selectWithProject = `
             *,
-            order:salesOrders(id, orderCode, clientName),
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
             orderProject:OrderProject(id, name, projectCode, environmentType:EnvironmentType(name))
         `;
         let result = await supabaseClient
@@ -19,7 +19,7 @@ async function openRequestFromPendencias(requestId) {
         if (result.error?.message?.includes('orderProject')) {
             result = await supabaseClient
                 .from('OrderRequest')
-                .select('*, order:salesOrders(id, orderCode, clientName)')
+                .select('*, order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
                 .eq('id', id)
                 .maybeSingle();
         }
@@ -130,7 +130,7 @@ function renderPendenciasProjetistaOrdersList(config) {
     const detailLabelFn = config.detailLabelFn || getPendenciasProjectDetailLabel;
     const rows = orders.map(orderGroup => {
         const orderCode = orderGroup.order?.orderCode || '—';
-        const clientName = orderGroup.order?.clientName || '—';
+        const clientName = getOrderClientName(orderGroup.order) || '—';
         const projectCount = orderGroup.projects.length;
         const projectSummary = orderGroup.projects
             .map(project => detailLabelFn(project))
@@ -205,7 +205,7 @@ async function fetchPendenciasAguardandoPlantaMedicoes() {
     const selectVariants = [
         `
             id, orderId, observation, createdAt, createdById,
-            order:salesOrders(id, orderCode, clientName),
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
             medicaoProjects:MedicaoProject(
                 id, orderProjectId, measurementDate, plantaLevantada, plantaLevantadaDate,
                 orderProject:OrderProject(id, name, projectCode)
@@ -213,7 +213,7 @@ async function fetchPendenciasAguardandoPlantaMedicoes() {
         `,
         `
             id, orderId, observation, createdAt, createdById,
-            order:salesOrders(id, orderCode, clientName),
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
             medicaoProjects:MedicaoProject(id, orderProjectId, measurementDate, plantaLevantada, plantaLevantadaDate)
         `,
         `
@@ -258,7 +258,7 @@ async function fetchPendenciasAguardandoPlantaMedicoes() {
     if (orderIds.length && medicoes.some(medicao => !medicao.order)) {
         const { data: orders } = await supabaseClient
             .from('salesOrders')
-            .select('id, orderCode, clientName')
+            .select(getSalesOrderMinimalEmbedSelect())
             .in('id', orderIds);
 
         orderById = Object.fromEntries((orders || []).map(order => [Number(order.id), order]));
@@ -335,7 +335,7 @@ function renderPendenciasAguardandoPlantaList(medicoes) {
     const canAct = canCreateAsAdminOrConferente();
     const rows = medicoes.map(medicao => {
         const orderCode = medicao.order?.orderCode || '—';
-        const clientName = medicao.order?.clientName || '—';
+        const clientName = getOrderClientName(medicao.order) || '—';
         const measurementDate = formatPendenciasDeliveryDate(getPendenciasMedicaoPrimaryDate(medicao));
         const projectSummary = (medicao.medicaoProjects || [])
             .map(project => getPendenciasMedicaoProjectLabel(project))

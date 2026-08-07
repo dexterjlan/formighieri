@@ -4,14 +4,14 @@ const PROGRAMACAO_PRODUCAO_PROJECT_SELECT = `
     id, orderId, projectCode, name, saleValue, statusId, deliveryPhaseId, productionMonth,
     isComplementar, parentProjectId,
     parentProject:parentProjectId(id, deliveryPhaseId),
-    order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
+    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
 
 const PROGRAMACAO_PRODUCAO_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, saleValue, statusId, deliveryPhaseId,
     isComplementar, parentProjectId,
-    order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
+    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
@@ -224,7 +224,7 @@ function buildProgramacaoProducaoOrderSlice(orderGroup, context, options = {}) {
         projects: parentProjects,
         complementarProjects,
         orderCode: orderGroup.order?.orderCode || '—',
-        clientName: orderGroup.order?.clientName || '—',
+        clientName: getOrderClientName(orderGroup.order) || '—',
         phaseLabel,
         sortDeliveryDate: phase?.deliveryDate
             || getProgramacaoProducaoOrderSortDeliveryDate(allProjects, context),
@@ -319,7 +319,7 @@ function applyProgramacaoProducaoOrderFilters(orders) {
     return (orders || []).filter(order => {
         if (hideWithMonth && orderProgramacaoProducaoHasMonthDefined(order)) return false;
         if (clientTerm) {
-            const name = String(order.clientName || '').toLocaleLowerCase('pt-BR');
+            const name = getOrderClientName(order).toLocaleLowerCase('pt-BR');
             if (!name.includes(clientTerm)) return false;
         }
         return true;

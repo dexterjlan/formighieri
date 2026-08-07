@@ -6,7 +6,7 @@ const GESTAO_DASHBOARD_PROJECT_SELECT = `
     id, orderId, projectCode, name, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico,
     fimMontagemInterna, statusId, designerId, marceneiroId, deliveryPhaseId,
     isComplementar, parentProjectId, isSubstituido,
-    order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
+    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     marceneiro:Marceneiro(id, name),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
@@ -15,7 +15,7 @@ const GESTAO_DASHBOARD_PROJECT_SELECT = `
 const GESTAO_DASHBOARD_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId,
     isComplementar, parentProjectId, isSubstituido,
-    order:salesOrders(id, orderCode, clientName, clientDeliveryDate),
+    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
@@ -283,7 +283,7 @@ function groupGestaoDashboardByClient(projects, tabId, phasesByOrderId = {}) {
     const groups = new Map();
 
     (projects || []).forEach(project => {
-        const baseClientName = project.order?.clientName?.trim() || 'Sem cliente';
+        const baseClientName = getOrderClientName(project.order)?.trim() || 'Sem cliente';
         const orderId = Number(project.orderId);
         const phases = getGestaoDashboardOrderPhases(orderId, phasesByOrderId);
 

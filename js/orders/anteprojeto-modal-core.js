@@ -239,19 +239,19 @@ async function updateAnteprojetoModalOrderContext(orderId) {
 
         if (cached) {
             orderCode = cached.orderCode || '—';
-            clientName = cached.clientName || '—';
-            consultantName = cached.consultantName || '—';
+            clientName = getOrderClientName(cached) || '—';
+            consultantName = getOrderConsultantNameFromRecord(cached) || '—';
         } else {
             const { data, error } = await supabaseClient
                 .from('salesOrders')
-                .select('orderCode, clientName, consultantName')
+                .select(`orderCode, ${SALES_ORDER_RELATIONS_SELECT}`)
                 .eq('id', orderId)
                 .maybeSingle();
 
             if (!error && data) {
                 orderCode = data.orderCode || '—';
-                clientName = data.clientName || '—';
-                consultantName = data.consultantName || '—';
+                clientName = getOrderClientName(data) || '—';
+                consultantName = getOrderConsultantNameFromRecord(data) || '—';
             }
         }
     }
@@ -575,14 +575,6 @@ async function confirmAnteprojetoConference(conferenceId, options = {}) {
 
         setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
         await applyConferenciaRealizadaStatusToProjects(getConferenceOrderProjectIds(conference));
-
-        if (typeof notifyConferenciaConfirmadaEmail === 'function') {
-            setAnteprojetoConferenceActionLoading(true, 'Enviando e-mail de notificação...');
-            await notifyConferenciaConfirmadaEmail({
-                orderId: conference.orderId,
-                orderProjectIds: getConferenceOrderProjectIds(conference)
-            });
-        }
 
         setAnteprojetoConferenceActionLoading(true, 'Atualizando telas...');
         await refreshViewsAfterAnteprojetoConfirmation();

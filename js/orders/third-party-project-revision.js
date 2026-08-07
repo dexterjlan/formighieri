@@ -205,7 +205,7 @@ function setupThirdPartyRevisionModalHeader(project) {
     const badge = document.getElementById('third-party-revision-status-badge');
     const label = getThirdPartyProjectLabel(project);
     const orderCode = project.order?.orderCode || '—';
-    const clientName = project.order?.clientName || '—';
+    const clientName = getOrderClientName(project.order) || '—';
 
     if (info) {
         info.textContent = `${label} · Pedido ${orderCode} · ${clientName}`;
@@ -279,7 +279,7 @@ async function fetchThirdPartyProjectById(thirdPartyProjectId) {
             thirdPartySubtype:ThirdPartySubtype(id, name),
             ${THIRD_PARTY_PROJECT_DESIGNER_EMBED},
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientName, consultantName, consultantUserId)
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
         .eq('id', projectId)
         .maybeSingle();
@@ -350,7 +350,7 @@ async function fetchThirdPartyProjectsSentForConsultor(options = {}) {
             thirdPartySubtype:ThirdPartySubtype(id, name),
             ${THIRD_PARTY_PROJECT_DESIGNER_EMBED},
             orderProject:OrderProject(id, name, projectCode, deliveryDate),
-            order:salesOrders(id, orderCode, clientName, consultantName, consultantUserId)
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
         .eq('status', THIRD_PARTY_PROJECT_STATUS_SENT)
         .order('sentAt', { ascending: true });
@@ -361,7 +361,7 @@ async function fetchThirdPartyProjectsSentForConsultor(options = {}) {
     let projects = data || [];
     if (!overviewMode) {
         projects = projects.filter(project => typeof isCurrentUserOrderConsultor === 'function'
-            && isCurrentUserOrderConsultor(project.order?.consultantName, project.order?.consultantUserId));
+            && isCurrentUserOrderConsultor(getOrderConsultantNameFromRecord(project.order), project.order?.consultantUserId));
     }
 
     return projects;
@@ -661,7 +661,7 @@ async function updateThirdPartyProjectStatus(thirdPartyProjectId, newStatus, pre
             designerId,
             thirdPartySubtype:ThirdPartySubtype(id, name),
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientName)
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
         .single();
 

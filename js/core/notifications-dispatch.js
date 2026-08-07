@@ -407,6 +407,111 @@ async function sendProcessNotificationEmail(eventType, options = {}) {
     });
 }
 
+async function notifyOrderProjectStatusChangeEmail(options = {}) {
+    const {
+        statusName,
+        orderId,
+        orderProjectIds = [],
+        designerId = null,
+        extraFields = [],
+        buildProjectDetails = null,
+        projectSectionTitle = 'Projetos',
+        showProjectDetails = true,
+        accentColor = '#0d9488',
+        includeProjetista = null
+    } = options;
+
+    if (!NOTIFICATIONS_ENABLED || !statusName || !orderId || !orderProjectIds.length) return;
+    if (!hasOrderProjectStatusEmailRule(statusName)) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyOrderProjectStatusChangeEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const roles = getOrderProjectStatusEmailRoles(statusName);
+        const recipientEmails = await fetchEmailsForProjectStatusRoles(roles, { orderId, designerId });
+        if (!recipientEmails.length) return;
+
+        const shouldIncludeProjetista = includeProjetista != null
+            ? includeProjetista
+            : roles.includes(PROJECT_STATUS_RECIPIENT_ROLE.PROJETISTA);
+
+        const payload = await buildProcessNotificationPayload('project_status_change', {
+            orderId,
+            orderProjectIds,
+            designerId,
+            includeProjetista: shouldIncludeProjetista,
+            extraFields,
+            buildProjectDetails,
+            projectSectionTitle,
+            showProjectDetails,
+            accentColor
+        });
+        payload.eventTitle = statusName;
+
+        const subject = buildProjectStatusEmailSubject(statusName, payload.orderCode, payload.clientName);
+        const body = buildProcessEmailBody(payload);
+        const html = buildProcessEmailHtml(payload);
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: recipientEmails.join(', '),
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject,
+            message_body: body,
+            message_html: html
+        });
+    } catch (err) {
+        console.warn('notifyOrderProjectStatusChangeEmail:', err);
+    }
+}
+
+window.notifyOrderProjectStatusChangeEmail = notifyOrderProjectStatusChangeEmail;
+
+async function notifyDesignerAssignedToProjectEmail(options = {}) {
+    const { orderId, orderProjectIds = [], designerId = null } = options;
+    if (!NOTIFICATIONS_ENABLED || !orderId || !orderProjectIds.length || !designerId) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyDesignerAssignedToProjectEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const recipientEmail = await fetchDesignerEmailById(designerId);
+        if (!recipientEmail) return;
+
+        const payload = await buildProcessNotificationPayload('designer_assigned', {
+            orderId,
+            orderProjectIds,
+            designerId,
+            includeProjetista: true,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto atribuído',
+            accentColor: '#7c3aed'
+        });
+
+        const subject = buildProjectStatusEmailSubject('Projetista associado', payload.orderCode, payload.clientName);
+        const body = buildProcessEmailBody(payload);
+        const html = buildProcessEmailHtml(payload);
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: recipientEmail,
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject,
+            message_body: body,
+            message_html: html
+        });
+    } catch (err) {
+        console.warn('notifyDesignerAssignedToProjectEmail:', err);
+    }
+}
+
+window.notifyDesignerAssignedToProjectEmail = notifyDesignerAssignedToProjectEmail;
+
 async function notifyMedicaoRealizadaEmail(options = {}) {
     const { orderId, projects = [] } = options;
     if (!orderId || !projects.length) return;
@@ -416,10 +521,10 @@ async function notifyMedicaoRealizadaEmail(options = {}) {
             projects.map(project => [Number(project.orderProjectId), project.measurementDate])
         );
 
-        await sendProcessNotificationEmail('medicao_realizada', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Medição Realizada',
             orderId,
             orderProjectIds: projects.map(project => project.orderProjectId),
-            recipientMode: 'gestores',
             projectSectionTitle: 'Projetos medidos',
             accentColor: '#14b8a6',
             buildProjectDetails: (orderProjectId) => {
@@ -441,10 +546,10 @@ async function notifyPlantaLevantadaEmail(options = {}) {
             projects.map(project => [Number(project.orderProjectId), project.plantaLevantadaDate])
         );
 
-        await sendProcessNotificationEmail('planta_levantada', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Planta Levantada',
             orderId,
             orderProjectIds: projects.map(project => project.orderProjectId),
-            recipientMode: 'gestores',
             projectSectionTitle: 'Projetos com planta levantada',
             accentColor: '#0891b2',
             buildProjectDetails: (orderProjectId) => {
@@ -477,12 +582,12 @@ async function notifyConferenciaEnviadaEmail(options = {}) {
             extraFields.push({ label: 'Observação da conferência', value: conferenceObservation });
         }
 
-        await sendProcessNotificationEmail('conferencia_enviada', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Conferência Enviada',
             orderId,
             orderProjectIds,
             designerId,
             includeProjetista: true,
-            recipientMode: 'consultor_and_gestores',
             projectSectionTitle: 'Projetos da conferência',
             showProjectDetails: false,
             accentColor: '#8b5cf6',
@@ -502,12 +607,10 @@ async function notifyConferenciaConfirmadaEmail(options = {}) {
     if (!orderId || !orderProjectIds.length) return;
 
     try {
-        const recipientEmails = await fetchActiveGestorComercialRecipientEmails();
-
-        await sendProcessNotificationEmail('conferencia_confirmada', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Conferência Realizada',
             orderId,
             orderProjectIds,
-            recipientEmails,
             showProjectDetails: false,
             projectSectionTitle: 'Projetos da conferência confirmada',
             accentColor: '#0ea5e9'
@@ -524,18 +627,17 @@ async function notifyConferenciaAprovadaEmail(options = {}) {
     if (!orderId || !orderProjectIds.length) return;
 
     try {
-        const recipientEmails = await fetchConferenciaAprovadaRecipientEmails();
         const extraFields = [];
         if (caminhoRede) {
             extraFields.push({ label: 'Pasta / Caminho da rede da conferência', value: caminhoRede });
         }
 
-        await sendProcessNotificationEmail('conferencia_aprovada', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Aguardando Projeto Técnico',
             orderId,
             orderProjectIds,
-            recipientEmails,
             showProjectDetails: false,
-            projectSectionTitle: 'Projetos da conferência aprovada',
+            projectSectionTitle: 'Projetos aguardando projeto técnico',
             accentColor: '#6366f1',
             extraFields
         });
@@ -577,14 +679,12 @@ async function notifyProjetoNomeadoEmail(options = {}) {
     if (!orderId || !orderProjectIds.length) return;
 
     try {
-        const recipientEmails = await fetchNomearRecipientEmails();
-
-        await sendProcessNotificationEmail('projeto_nomeado', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Aguardando PPCP',
             orderId,
             orderProjectIds,
             designerId,
             includeProjetista: true,
-            recipientEmails,
             showProjectDetails: false,
             projectSectionTitle: 'Projeto nomeado',
             accentColor: '#a855f7',
@@ -610,7 +710,6 @@ async function notifyProjetoTecnicoIniciadoEmail(options = {}) {
     if (!orderId || !orderProjectId) return;
 
     try {
-        const recipientEmails = await fetchIniciarProjetoTecnicoRecipientEmails(orderId, designerId);
         const extraFields = [
             { label: 'Novo status', value: 'Projeto Técnico' }
         ];
@@ -622,12 +721,12 @@ async function notifyProjetoTecnicoIniciadoEmail(options = {}) {
             });
         }
 
-        await sendProcessNotificationEmail('projeto_tecnico_iniciado', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Projeto Técnico',
             orderId,
             orderProjectIds: [orderProjectId],
             designerId,
             includeProjetista: true,
-            recipientEmails,
             showProjectDetails: false,
             projectSectionTitle: 'Projeto técnico iniciado',
             accentColor: '#6366f1',
@@ -652,7 +751,6 @@ async function notifyImplantacaoEnviarProducaoEmail(options = {}) {
     if (!orderId || !orderProjectId) return;
 
     try {
-        const recipientEmails = await fetchImplantacaoEnviarProducaoRecipientEmails(orderId, designerId);
         const extraFields = [
             { label: 'Novo status', value: 'Em Produção' }
         ];
@@ -664,12 +762,12 @@ async function notifyImplantacaoEnviarProducaoEmail(options = {}) {
             extraFields.push({ label: 'Código da OP no WPS', value: wpsOpCode });
         }
 
-        await sendProcessNotificationEmail('implantacao_enviado_producao', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Em Produção',
             orderId,
             orderProjectIds: [orderProjectId],
             designerId,
             includeProjetista: true,
-            recipientEmails,
             showProjectDetails: false,
             projectSectionTitle: 'Projeto enviado para produção',
             accentColor: '#7c3aed',
@@ -712,12 +810,10 @@ async function notifyLiberacaoMedicaoEmail(options = {}) {
     if (!orderId || !projects.length) return;
 
     try {
-        const recipientEmails = await fetchLiberacaoMedicaoRecipientEmails(orderId);
-
-        await sendProcessNotificationEmail('liberacao_medicao', {
+        await notifyOrderProjectStatusChangeEmail({
+            statusName: 'Aguardando Medição',
             orderId,
             orderProjectIds: projects.map(project => project.id),
-            recipientEmails,
             showProjectDetails: false,
             projectSectionTitle: 'Projetos liberados para medição',
             accentColor: '#06b6d4'

@@ -360,13 +360,13 @@ async function ensureApprovalInCache(approvalId, forceRefresh = false) {
 
         const { data: orderInfo } = await supabaseClient
             .from('salesOrders')
-            .select('consultantName')
+            .select('consultantUserId, consultor:appUsers!consultantUserId(name)')
             .eq('id', data.orderId)
             .maybeSingle();
 
         approval = normalizeCommercialApproval({
             ...data,
-            orderConsultantName: orderInfo?.consultantName || null
+            orderConsultantName: getOrderConsultantNameFromRecord(orderInfo) || null
         });
 
         const idx = commercialApprovalsCache.findIndex(a => Number(a.id) === Number(approvalId));
@@ -826,20 +826,12 @@ async function saveCommercialRevision() {
         if (!result.ok) return;
 
         const approval = getCurrentApproval();
-        if (approval && currentRevisionType === 'tecnica') {
-            if (result.createdRevision) {
-                setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
-                await notifyApprovalEmail('revision_created', {
-                    ...approval,
-                    status: 'Em revisão'
-                }, { activities: result.activities });
-            } else if (canConsultorEditExistingTecnicaRevision(approval)) {
-                setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
-                await notifyApprovalEmail('revision_updated', {
-                    ...approval,
-                    status: 'Em revisão'
-                }, { activities: result.activities });
-            }
+        if (approval && currentRevisionType === 'tecnica' && canConsultorEditExistingTecnicaRevision(approval) && !result.createdRevision) {
+            setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+            await notifyApprovalEmail('revision_updated', {
+                ...approval,
+                status: 'Em revisão'
+            }, { activities: result.activities });
         }
 
         setCommercialRevisionModalLoading(true, 'Atualizando telas...');
@@ -960,14 +952,6 @@ async function sendRevisionBackToApproval() {
             setCommercialRevisionModalLoading(true, 'Atualizando status do projeto...');
             await applyAguardandoAprovacaoStatusForCommercialApproval(approval);
         }
-
-        setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
-        await notifyApprovalEmail('sent_back_to_approval', {
-            ...approval,
-            status: 'Em Revisão Comercial',
-            approved: false,
-            approvedAt: null
-        }, { activities: result.activities });
 
         setCommercialRevisionModalLoading(true, 'Atualizando telas...');
         refreshCommercialApprovalViews();

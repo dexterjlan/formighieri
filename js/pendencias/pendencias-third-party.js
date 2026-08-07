@@ -2,7 +2,7 @@ let pendenciasThirdPartyProjectsCache = [];
 
 function renderPendenciasThirdPartyProjectMeta(project) {
     const orderCode = project.order?.orderCode || '—';
-    const clientName = project.order?.clientName || '—';
+    const clientName = getOrderClientName(project.order) || '—';
     const projectName = project.orderProject?.name || 'Projeto';
     const subtypeName = project.thirdPartySubtype?.name || '—';
     const statusLabel = getThirdPartyProjectStatusLabel(project.status);

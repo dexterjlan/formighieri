@@ -311,7 +311,7 @@ async function fetchDesignerProjetoTecnicoEmExecucao(designerId, excludeProjectI
 
     let result = await supabaseClient
         .from('OrderProject')
-        .select('id, name, projectCode, order:salesOrders(orderCode, clientName)')
+        .select('id, name, projectCode, order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
         .eq('designerId', normalizedDesignerId)
         .eq('statusId', statusId);
 
@@ -332,7 +332,7 @@ async function fetchDesignerProjetoTecnicoEmExecucao(designerId, excludeProjectI
 }
 
 function formatProjetoTecnicoEmExecucaoLabel(project) {
-    const clientName = project.order?.clientName || '—';
+    const clientName = getOrderClientName(project.order) || '—';
     const projectName = project.name || 'Projeto';
     const orderCode = project.order?.orderCode;
     const orderSuffix = orderCode ? ` · Pedido ${orderCode}` : '';

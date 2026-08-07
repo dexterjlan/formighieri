@@ -139,7 +139,7 @@ function renderGestaoKanbanCard(order, projectTree, phase = null) {
     card.innerHTML = `
         <div class="space-y-0.5">
             <div class="font-mono text-xs font-bold text-indigo-800">${escapeHtml(orderCodeLabel)}</div>
-            <div class="text-xs font-semibold text-slate-800">${escapeHtml(order.clientName || '—')}</div>
+            <div class="text-xs font-semibold text-slate-800">${escapeHtml(getOrderClientName(order) || '—')}</div>
             ${phase?.deliveryDate
                 ? `<div class="text-[10px] text-slate-500">Entrega: ${escapeHtml(formatGestaoDate(phase.deliveryDate))}</div>`
                 : ''}
@@ -532,7 +532,7 @@ function getGestaoProjectHistoryContext(orderProjectId) {
             orderProjectId: normalizedId,
             projectLabel,
             orderCode: order.orderCode || '—',
-            clientName: order.clientName || '—'
+            clientName: getOrderClientName(order) || '—'
         };
     }
 
@@ -562,7 +562,7 @@ function buildProjectStatusHistoryContext(project = {}) {
     }
 
     let orderCode = project.order?.orderCode || '—';
-    let clientName = project.order?.clientName || '—';
+    let clientName = getOrderClientName(project.order) || '—';
 
     if (project.orderId && (orderCode === '—' || clientName === '—')) {
         const gestaoOrder = Array.isArray(gestaoOrdersCache)
@@ -570,7 +570,7 @@ function buildProjectStatusHistoryContext(project = {}) {
             : null;
         if (gestaoOrder) {
             orderCode = gestaoOrder.orderCode || orderCode;
-            clientName = gestaoOrder.clientName || clientName;
+            clientName = getOrderClientName(gestaoOrder) || clientName;
         }
 
         const ordersOrder = typeof ordersCache !== 'undefined' && Array.isArray(ordersCache)
@@ -578,7 +578,7 @@ function buildProjectStatusHistoryContext(project = {}) {
             : null;
         if (ordersOrder) {
             orderCode = ordersOrder.orderCode || orderCode;
-            clientName = ordersOrder.clientName || clientName;
+            clientName = getOrderClientName(ordersOrder) || clientName;
         }
     }
 
@@ -674,7 +674,7 @@ function filterGestaoKanbanOrdersByClient(orders, clientName = getGestaoKanbanCl
 
     const normalized = term.toLocaleLowerCase('pt-BR');
     return (orders || []).filter(order => {
-        const name = String(order.clientName || order.cliente?.nome || '').toLocaleLowerCase('pt-BR');
+        const name = getOrderClientName(order).toLocaleLowerCase('pt-BR');
         return name.includes(normalized);
     });
 }
@@ -803,8 +803,8 @@ function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplem
     return [
         statusName,
         order.orderCode || '',
-        order.clientName || '',
-        order.consultantName || '',
+        getOrderClientName(order) || '',
+        getOrderConsultantNameFromRecord(order) || '',
         phase?.name || '',
         parseGestaoKanbanExportExcelDate(orderDeliveryDate),
         parseGestaoKanbanExportExcelDate(projectDeliveryDate),

@@ -213,22 +213,25 @@
         <header class="hero">
             <h1>FGP — Manual de E-mails Automáticos</h1>
             <p>Mapeamento de todas as notificações por e-mail disparadas pela aplicação: tela, botão, ação, mudança de status e destinatários.</p>
-            <p class="meta">Gerado a partir de <code>js/core/notifications.js</code> · Última revisão: jul/2026</p>
+            <p class="meta">Fonte: <code>js/core/notifications-project-status-rules.js</code> · Última revisão: ago/2026</p>
         </header>
 
         <nav class="toc">
             <h2>Índice</h2>
             <ol>
                 <li><a href="#modo-teste">Modo teste vs produção</a></li>
+                <li><a href="#regras-status">Regras centralizadas por status</a></li>
+                <li><a href="#excecoes">Exceções e outros e-mails</a></li>
                 <li><a href="#resumo">Resumo rápido</a></li>
                 <li><a href="#aprovacoes">Aprovações comerciais</a></li>
                 <li><a href="#requisicoes">Requisições técnicas</a></li>
                 <li><a href="#anteprojeto">Anteprojeto / Conferência</a></li>
                 <li><a href="#medicao">Medição</a></li>
                 <li><a href="#pendencias-medicao">Pendências — Liberação para medição</a></li>
-                <li><a href="#nomear">Nomear projeto</a></li>
-                <li><a href="#projeto-tecnico-iniciado">Projeto técnico iniciado</a></li>
-                <li><a href="#implantacao">Implantação</a></li>
+                <li><a href="#nomear">Nomear / PPCP</a></li>
+                <li><a href="#projeto-tecnico-iniciado">Projeto técnico</a></li>
+                <li><a href="#projetista-associado">Associar / trocar projetista</a></li>
+                <li><a href="#implantacao">Implantação / Produção</a></li>
                 <li><a href="#destinatarios">Glossário de destinatários</a></li>
                 <li><a href="#config">Configuração (CC)</a></li>
             </ol>
@@ -239,12 +242,87 @@
             <div class="note">
                 <strong>Desenvolvimento</strong> (<code>config.dev.js</code>): <code>NOTIFICATION_TEST_MODE: true</code> — todos os e-mails vão para <code>dexterjl@gmail.com</code>.<br>
                 <strong>Produção</strong> (<code>config.prod.js</code>): <code>NOTIFICATION_TEST_MODE: false</code> — destinatários conforme regras abaixo.<br><br>
-                <strong>Atenção:</strong> nos fluxos de <em>Aprovação Comercial</em> e <em>Requisição</em>, o campo <strong>Para (TO)</strong> está fixo em <code>NOTIFICATION_TEST_EMAIL</code> no código, mesmo em produção. Os destinatários reais de negócio recebem via <strong>CC</strong> configurado em Gestão → Configurações do Sistema.
+                <strong>E-mails por status de projeto:</strong> em produção, o <strong>Para (TO)</strong> vai diretamente aos destinatários da <a href="#regras-status">tabela centralizada</a> (sem CC fixo).<br>
+                <strong>Requisições e revisão técnica atualizada:</strong> o campo <strong>Para (TO)</strong> permanece fixo em <code>NOTIFICATION_TEST_EMAIL</code> no código; destinatários de negócio recebem via <strong>CC</strong> em Gestão → Configurações do Sistema.
             </div>
         </section>
 
+        <section id="regras-status" class="block">
+            <h2>Regras centralizadas por status de projeto</h2>
+            <div class="note">
+                <strong>Fonte única de manutenção:</strong> mapa <code>ORDER_PROJECT_STATUS_EMAIL_RULES</code> em
+                <code>js/core/notifications-project-status-rules.js</code>.<br>
+                Quando uma ação altera o status do projeto para um dos valores abaixo, o sistema envia um e-mail com assunto
+                <code>{Status}: Pedido {código}, {cliente}</code> para os destinatários indicados.<br><br>
+                <strong>Consultor</strong> = consultor do pedido (<code>consultantUserId</code> em <code>salesOrders</code>).<br>
+                <strong>Projetista</strong> = projetista associado ao projeto (<code>designerId</code> em <code>OrderProject</code>).
+            </div>
+            <table class="summary-table">
+                <thead>
+                    <tr>
+                        <th>Status destino</th>
+                        <th>Destinatários (produção)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Aguardando Medição</td><td>Conferente + Consultor</td></tr>
+                    <tr><td>Medição Realizada</td><td>Gestor Comercial + Consultor</td></tr>
+                    <tr><td>Planta Levantada</td><td>Gestor Comercial + Consultor</td></tr>
+                    <tr><td>Conferência Enviada</td><td>Consultor</td></tr>
+                    <tr><td>Conferência Realizada</td><td>Gestor Comercial</td></tr>
+                    <tr><td>Aguardando Projeto Técnico</td><td>Gestor Projetos + Consultor</td></tr>
+                    <tr><td>Projeto Técnico</td><td>Gestor Projetos + Consultor</td></tr>
+                    <tr><td>Em Revisão Comercial</td><td>Consultor</td></tr>
+                    <tr><td>Em Revisão Técnica</td><td>Projetista (do projeto)</td></tr>
+                    <tr><td>Aguardando Aprovação</td><td>Gestor Comercial</td></tr>
+                    <tr><td>Nomear</td><td>Projetista (do projeto)</td></tr>
+                    <tr><td>Aguardando PPCP</td><td>PPCP + Gestor Projetos</td></tr>
+                    <tr><td>Implantação</td><td>Gestor Projetos</td></tr>
+                    <tr><td>Em Produção</td><td>Gestor Projetos + Gestor Fábrica</td></tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="excecoes" class="block">
+            <h2>Exceções e outros e-mails</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Situação</th>
+                        <th>Comportamento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Gestão → Alterar Status Projeto</strong></td>
+                        <td>Alteração manual de status <strong>não dispara</strong> e-mails automáticos.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Conferência devolvida ao consultor</strong></td>
+                        <td>E-mail específico (<code>Conferência Devolvida ao Consultor: Pedido …</code>) para o consultor do pedido, com observações do gestor comercial.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Revisão técnica atualizada</strong> (sem novo status)</td>
+                        <td>E-mail de aprovação <code>revision_updated</code> para o projetista (TO fixo + CC aprovações).</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Requisições técnicas</strong></td>
+                        <td>Criação e resposta usam fluxo próprio (TO fixo + CC requisições).</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Liberação de compra</strong></td>
+                        <td>E-mail para perfil Compras (sem mudança de status do projeto).</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Projetista associado / trocado</strong></td>
+                        <td>E-mail <code>Projetista associado: Pedido …</code> para o <strong>novo</strong> projetista (Gestor de Projetos em Pendências).</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
         <section id="resumo" class="block">
-            <h2>Resumo rápido — 17 tipos de notificação</h2>
+            <h2>Resumo rápido — notificações por status e fluxos especiais</h2>
             <table class="summary-table">
                 <thead>
                     <tr>
@@ -255,23 +333,25 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>1</td><td>Aprovação solicitada</td><td>Aprovação Solicitada: Pedido …</td><td>TO fixo* + CC aprovações</td></tr>
-                    <tr><td>2</td><td>Aprovação aprovada</td><td>Aprovação Aprovada: Pedido …</td><td>TO fixo* + CC aprovações</td></tr>
-                    <tr><td>3</td><td>Revisão criada</td><td>Revisão Criada: Pedido …</td><td>TO fixo* + CC aprovações</td></tr>
-                    <tr><td>4</td><td>Reenvio para aprovação</td><td>Aprovação Reenviada: Pedido …</td><td>TO fixo* + CC aprovações</td></tr>
-                    <tr><td>5</td><td>Requisição criada</td><td>Requisição Criada: Pedido …</td><td>TO fixo* + CC requisições</td></tr>
-                    <tr><td>6</td><td>Requisição respondida</td><td>Requisição Respondida: Pedido …</td><td>TO fixo* + CC requisições</td></tr>
-                    <tr><td>7</td><td>Conferência enviada</td><td>Conferência Enviada: Pedido …</td><td>Consultor (TO) + Gestores (CC)</td></tr>
-                    <tr><td>8</td><td>Conferência confirmada</td><td>Conferência Confirmada: Pedido …</td><td>Gestores comerciais</td></tr>
-                    <tr><td>9</td><td>Conferência aprovada</td><td>Conferência Aprovada: Pedido …</td><td>Projetistas + Gestores</td></tr>
-                    <tr><td>10</td><td>Conferência devolvida</td><td>Conferência Devolvida ao Consultor: Pedido …</td><td>Consultor do pedido</td></tr>
-                    <tr><td>11</td><td>Liberação para medição</td><td>Liberação para Medição: Pedido …</td><td>Conferentes + Consultor + Gestores</td></tr>
-                    <tr><td>12</td><td>Medição realizada</td><td>Medição Realizada: Pedido …</td><td>Todos os gestores</td></tr>
-                    <tr><td>13</td><td>Planta levantada</td><td>Planta Levantada: Pedido …</td><td>Todos os gestores</td></tr>
-                    <tr><td>14</td><td>Projeto nomeado</td><td>Projeto Nomeado: Pedido …</td><td>Projetistas PPCP + Gestores de projetos</td></tr>
-                    <tr><td>15</td><td>Projeto técnico iniciado</td><td>Projeto Técnico Iniciado: Pedido …</td><td>Projetista + Gestores de projetos + Consultor + Gestores comerciais</td></tr>
-                    <tr><td>16</td><td>Enviado para produção</td><td>Projeto Enviado para Produção: Pedido …</td><td>Gestores + Consultor + Projetista + PPCP + Compras</td></tr>
-                    <tr><td>17</td><td>Liberação de compra</td><td>Liberação de compra de {tipo} - {cliente} ({pedido})</td><td>Usuários Compras ativos</td></tr>
+                    <tr><td>1</td><td>Aguardando Medição</td><td>Aguardando Medição: Pedido …</td><td>Conferente + Consultor</td></tr>
+                    <tr><td>2</td><td>Medição Realizada</td><td>Medição Realizada: Pedido …</td><td>Gestor Comercial + Consultor</td></tr>
+                    <tr><td>3</td><td>Planta Levantada</td><td>Planta Levantada: Pedido …</td><td>Gestor Comercial + Consultor</td></tr>
+                    <tr><td>4</td><td>Conferência Enviada</td><td>Conferência Enviada: Pedido …</td><td>Consultor</td></tr>
+                    <tr><td>5</td><td>Conferência Realizada</td><td>Conferência Realizada: Pedido …</td><td>Gestor Comercial</td></tr>
+                    <tr><td>6</td><td>Aguardando Projeto Técnico</td><td>Aguardando Projeto Técnico: Pedido …</td><td>Gestor Projetos + Consultor</td></tr>
+                    <tr><td>7</td><td>Projeto Técnico</td><td>Projeto Técnico: Pedido …</td><td>Gestor Projetos + Consultor</td></tr>
+                    <tr><td>8</td><td>Em Revisão Comercial</td><td>Em Revisão Comercial: Pedido …</td><td>Consultor</td></tr>
+                    <tr><td>9</td><td>Em Revisão Técnica</td><td>Em Revisão Técnica: Pedido …</td><td>Projetista do projeto</td></tr>
+                    <tr><td>10</td><td>Aguardando Aprovação</td><td>Aguardando Aprovação: Pedido …</td><td>Gestor Comercial</td></tr>
+                    <tr><td>11</td><td>Nomear</td><td>Nomear: Pedido …</td><td>Projetista do projeto</td></tr>
+                    <tr><td>12</td><td>Aguardando PPCP</td><td>Aguardando PPCP: Pedido …</td><td>PPCP + Gestor Projetos</td></tr>
+                    <tr><td>13</td><td>Implantação</td><td>Implantação: Pedido …</td><td>Gestor Projetos</td></tr>
+                    <tr><td>14</td><td>Em Produção</td><td>Em Produção: Pedido …</td><td>Gestor Projetos + Gestor Fábrica</td></tr>
+                    <tr><td>15</td><td>Conferência devolvida</td><td>Conferência Devolvida ao Consultor: Pedido …</td><td>Consultor do pedido</td></tr>
+                    <tr><td>16</td><td>Revisão técnica atualizada</td><td>Revisão Atualizada: Pedido …</td><td>TO fixo* + CC aprovações</td></tr>
+                    <tr><td>17</td><td>Requisição criada / respondida</td><td>Requisição Criada/Respondida: Pedido …</td><td>TO fixo* + CC requisições</td></tr>
+                    <tr><td>18</td><td>Projetista associado</td><td>Projetista associado: Pedido …</td><td>Novo projetista</td></tr>
+                    <tr><td>19</td><td>Liberação de compra</td><td>Liberação de compra de {tipo} - {cliente} ({pedido})</td><td>Usuários Compras ativos</td></tr>
                 </tbody>
             </table>
             <div class="note" style="margin-top:16px;">* TO fixo = endereço em <code>NOTIFICATION_TEST_EMAIL</code> (comportamento atual do código).</div>
@@ -280,6 +360,10 @@
         <!-- APROVAÇÕES -->
         <section id="aprovacoes" class="block">
             <h2>Aprovações comerciais</h2>
+            <div class="note" style="margin-bottom:0;">
+                Mudanças de status do projeto disparam e-mail conforme a <a href="#regras-status">tabela centralizada por status</a>.
+                O fluxo de aprovação comercial mantém apenas o e-mail de <strong>revisão técnica atualizada</strong> (edição sem novo status).
+            </div>
             <table>
                 <thead>
                     <tr>
@@ -299,12 +383,11 @@
                         </td>
                         <td><strong>Salvar Solicitação</strong></td>
                         <td>Cria registro de aprovação comercial para projeto(s) selecionado(s)</td>
-                        <td><span class="tag tag--status">Aguardando Aprovação</span></td>
-                        <td><code>Aprovação Solicitada: Pedido {código}, {cliente}</code></td>
+                        <td><span class="tag tag--status">Em Revisão Comercial</span></td>
+                        <td><code>Em Revisão Comercial: Pedido {código}, {cliente}</code></td>
                         <td class="recipients">
                             <ul>
-                                <li><strong>Para:</strong> <code>NOTIFICATION_TEST_EMAIL</code></li>
-                                <li><strong>CC:</strong> e-mails em <em>Configurações → CC Aprovações</em></li>
+                                <li>Consultor do pedido</li>
                             </ul>
                         </td>
                     </tr>
@@ -314,9 +397,9 @@
                         </td>
                         <td><strong>Enviar para Aprovação</strong></td>
                         <td>Atalho: cria solicitação de aprovação a partir da pendência</td>
-                        <td><span class="tag tag--status">Aguardando Aprovação</span></td>
-                        <td><code>Aprovação Solicitada: Pedido …</code></td>
-                        <td class="recipients">Idem acima</td>
+                        <td><span class="tag tag--status">Em Revisão Comercial</span></td>
+                        <td><code>Em Revisão Comercial: Pedido …</code></td>
+                        <td class="recipients">Consultor do pedido</td>
                     </tr>
                     <tr>
                         <td>
@@ -326,20 +409,35 @@
                         </td>
                         <td><strong>Aprovar</strong></td>
                         <td>Registra aprovação comercial; projeto segue para nomeação</td>
-                        <td><span class="tag tag--status">Nomear</span></td>
-                        <td><code>Aprovação Aprovada: Pedido …</code></td>
-                        <td class="recipients">TO fixo + CC aprovações</td>
+                        <td><span class="tag tag--status">Nomear</span> (ou <span class="tag tag--status">Aguardando Aprovação</span> se vinha de revisão comercial)</td>
+                        <td><code>Nomear: Pedido …</code> ou <code>Aguardando Aprovação: Pedido …</code></td>
+                        <td class="recipients">
+                            <ul>
+                                <li><strong>Nomear:</strong> projetista do projeto</li>
+                                <li><strong>Aguardando Aprovação:</strong> gestores comerciais</li>
+                            </ul>
+                        </td>
                     </tr>
                     <tr>
                         <td>
                             Pedido → aba <strong>Aprovações Comerciais</strong><br>
-                            <span class="tag">Modal</span> Revisão Comercial
+                            <span class="tag">Modal</span> Revisão Comercial / Técnica
                         </td>
-                        <td><strong>Criar Revisão</strong> / <strong>Salvar Revisão</strong> (nova revisão)</td>
-                        <td>Registra revisão comercial com atividades</td>
-                        <td><span class="tag tag--status">Em Revisão</span></td>
-                        <td><code>Revisão Criada: Pedido …</code></td>
-                        <td class="recipients">TO fixo + CC aprovações</td>
+                        <td><strong>Criar Revisão</strong> / <strong>Salvar Revisão</strong> (nova revisão técnica)</td>
+                        <td>Registra revisão com atividades; projeto em revisão técnica</td>
+                        <td><span class="tag tag--status">Em Revisão Técnica</span></td>
+                        <td><code>Em Revisão Técnica: Pedido …</code></td>
+                        <td class="recipients">Projetista responsável pelo projeto</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="tag">Modal</span> Revisão Técnica
+                        </td>
+                        <td><strong>Salvar Revisão</strong> (edição de revisão existente)</td>
+                        <td>Atualiza atividades da revisão sem mudar status</td>
+                        <td>Sem mudança de status</td>
+                        <td><code>Revisão Atualizada: Pedido …</code></td>
+                        <td class="recipients">TO fixo* + CC aprovações</td>
                     </tr>
                     <tr>
                         <td>
@@ -347,9 +445,9 @@
                         </td>
                         <td><strong>Enviar novamente para Aprovação</strong></td>
                         <td>Reabre solicitação após revisão concluída</td>
-                        <td>Status aprovação → <span class="tag tag--status">Aguardando Aprovação</span></td>
-                        <td><code>Aprovação Reenviada: Pedido …</code></td>
-                        <td class="recipients">TO fixo + CC aprovações</td>
+                        <td><span class="tag tag--status">Em Revisão Comercial</span> (ou <span class="tag tag--status">Aguardando Aprovação</span> em fallback)</td>
+                        <td>Conforme status aplicado</td>
+                        <td class="recipients">Consultor ou gestores comerciais (conforme status)</td>
                     </tr>
                 </tbody>
             </table>
@@ -433,7 +531,6 @@
                         <td class="recipients">
                             <ul>
                                 <li><strong>Para:</strong> consultor responsável pelo pedido</li>
-                                <li><strong>CC:</strong> todos os gestores</li>
                             </ul>
                             <small>Inclui caminho SketchUp e observação, quando informados.</small>
                         </td>
@@ -446,7 +543,7 @@
                         <td><strong>Confirmar Conferência</strong></td>
                         <td>Consultor confirma conferência após revisar checklists</td>
                         <td><span class="tag tag--conf">Conferência Realizada</span></td>
-                        <td><code>Conferência Confirmada: Pedido …</code></td>
+                        <td><code>Conferência Realizada: Pedido …</code></td>
                         <td class="recipients">
                             <ul>
                                 <li><strong>Para:</strong> gestores comerciais (Admin/Consultor com flag <code>gestorComercial</code>)</li>
@@ -461,11 +558,13 @@
                         <td><strong>Aprovar</strong></td>
                         <td>Gestor comercial aprova conferência para seguir fluxo técnico</td>
                         <td><span class="tag tag--conf">Aguardando Projeto Técnico</span></td>
-                        <td><code>Conferência Aprovada: Pedido …</code></td>
+                        <td><code>Aguardando Projeto Técnico: Pedido …</code></td>
                         <td class="recipients">
                             <ul>
-                                <li><strong>Para:</strong> todos os projetistas ativos + todos os gestores</li>
+                                <li>Gestores de projetos (<code>gestorProjetos = true</code>)</li>
+                                <li>Consultor do pedido</li>
                             </ul>
+                            <small>Inclui caminho da rede da conferência, quando informado.</small>
                         </td>
                     </tr>
                     <tr>
@@ -513,7 +612,8 @@
                         <td><code>Medição Realizada: Pedido …</code></td>
                         <td class="recipients">
                             <ul>
-                                <li><strong>Para:</strong> todos os gestores</li>
+                                <li>Gestores comerciais</li>
+                                <li>Consultor do pedido</li>
                             </ul>
                             <small>Lista projetos medidos com data da medição.</small>
                         </td>
@@ -529,7 +629,8 @@
                         <td><code>Planta Levantada: Pedido …</code></td>
                         <td class="recipients">
                             <ul>
-                                <li><strong>Para:</strong> todos os gestores</li>
+                                <li>Gestores comerciais</li>
+                                <li>Consultor do pedido</li>
                             </ul>
                             <small>Disparado apenas para projetos recém-marcados com planta levantada.</small>
                         </td>
@@ -561,12 +662,11 @@
                         <td><strong>Aguardando Medição</strong> (confirma com <em>Liberar para medição</em>)</td>
                         <td>Libera projeto(s) vendido(s) ou aguardando obra para medição</td>
                         <td><span class="tag tag--status">Aguardando Medição</span></td>
-                        <td><code>Liberação para Medição: Pedido …</code></td>
+                        <td><code>Aguardando Medição: Pedido …</code></td>
                         <td class="recipients">
                             <ul>
                                 <li>Projetistas conferentes (<code>conferente = true</code>)</li>
                                 <li>Consultor do pedido</li>
-                                <li>Todos os gestores</li>
                             </ul>
                         </td>
                     </tr>
@@ -576,7 +676,7 @@
 
         <!-- NOMEAR -->
         <section id="nomear" class="block">
-            <h2>Nomear projeto</h2>
+            <h2>Nomear / PPCP</h2>
             <table>
                 <thead>
                     <tr>
@@ -591,13 +691,28 @@
                 <tbody>
                     <tr>
                         <td>
+                            Pedido → aba <strong>Aprovações Comerciais</strong><br>
+                            Pendências → Consultor / Gestor Comercial
+                        </td>
+                        <td><strong>Aprovar</strong> (após projeto técnico)</td>
+                        <td>Aprovação comercial concluída; projeto aguarda nomeação pelo projetista</td>
+                        <td><span class="tag tag--status">Nomear</span></td>
+                        <td><code>Nomear: Pedido …</code></td>
+                        <td class="recipients">
+                            <ul>
+                                <li>Projetista responsável pelo projeto</li>
+                            </ul>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
                             Pedido → aba <strong>Nomear</strong><br>
-                            Pendências → Projetista → <strong>Aguardando PPCP</strong> (quando aplicável)
+                            Pendências → Projetista → <strong>Nomear</strong>
                         </td>
                         <td><strong>Nomear Projeto</strong></td>
                         <td>Projetista confirma projeto como nomeado</td>
                         <td><span class="tag tag--status">Aguardando PPCP</span> + flag <code>nomeado</code></td>
-                        <td><code>Projeto Nomeado: Pedido …</code></td>
+                        <td><code>Aguardando PPCP: Pedido …</code></td>
                         <td class="recipients">
                             <ul>
                                 <li>Projetistas PPCP (<code>ppcp = true</code>)</li>
@@ -609,9 +724,9 @@
             </table>
         </section>
 
-        <!-- PROJETO TÉCNICO INICIADO -->
+        <!-- PROJETO TÉCNICO -->
         <section id="projeto-tecnico-iniciado" class="block">
-            <h2>Projeto técnico iniciado</h2>
+            <h2>Projeto técnico</h2>
             <table>
                 <thead>
                     <tr>
@@ -632,13 +747,11 @@
                         <td><strong>Iniciar Projeto</strong> / <strong>Iniciar projeto</strong></td>
                         <td>Projetista responsável inicia a execução do projeto técnico</td>
                         <td><span class="tag tag--status">Projeto Técnico</span></td>
-                        <td><code>Projeto Técnico Iniciado: Pedido …</code></td>
+                        <td><code>Projeto Técnico: Pedido …</code></td>
                         <td class="recipients">
                             <ul>
-                                <li>Projetista responsável pelo projeto</li>
                                 <li>Gestores de projetos (<code>gestorProjetos = true</code>)</li>
                                 <li>Consultor do pedido</li>
-                                <li>Gestores comerciais (<code>gestorComercial = true</code>)</li>
                             </ul>
                             <small>Inclui previsão de conclusão, quando cadastrada.</small>
                         </td>
@@ -647,9 +760,9 @@
             </table>
         </section>
 
-        <!-- IMPLANTAÇÃO -->
-        <section id="implantacao" class="block">
-            <h2>Implantação</h2>
+        <!-- PROJETISTA ASSOCIADO -->
+        <section id="projetista-associado" class="block">
+            <h2>Associar / trocar projetista</h2>
             <table>
                 <thead>
                     <tr>
@@ -664,20 +777,64 @@
                 <tbody>
                     <tr>
                         <td>
+                            Pendências → Gestor de Projetos → <strong>Projetos sem projetista</strong> / carga de trabalho
+                        </td>
+                        <td><strong>Associar</strong> / <strong>Trocar</strong></td>
+                        <td>Gestor de projetos define ou altera o projetista responsável</td>
+                        <td>Sem mudança de status</td>
+                        <td><code>Projetista associado: Pedido …</code></td>
+                        <td class="recipients">
+                            <ul>
+                                <li><strong>Para:</strong> e-mail do <strong>novo</strong> projetista associado</li>
+                            </ul>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- IMPLANTAÇÃO -->
+        <section id="implantacao" class="block">
+            <h2>Implantação / Produção</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tela</th>
+                        <th>Botão</th>
+                        <th>Ação</th>
+                        <th>Status do projeto</th>
+                        <th>Assunto</th>
+                        <th>Destinatários (prod)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            PPCP do pedido / Pendências → <strong>Aguardando PPCP</strong>
+                        </td>
+                        <td><strong>Iniciar Implantação</strong></td>
+                        <td>PPCP inicia implantação do projeto</td>
+                        <td><span class="tag tag--status">Implantação</span></td>
+                        <td><code>Implantação: Pedido …</code></td>
+                        <td class="recipients">
+                            <ul>
+                                <li>Gestores de projetos (<code>gestorProjetos = true</code>)</li>
+                            </ul>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
                             PPCP do pedido / Pendências → <strong>Implantação</strong><br>
                             <span class="tag">Modal</span> Implantação
                         </td>
                         <td><strong>Enviar para produção</strong></td>
                         <td>Envia projeto à produção (exige checklist Projeto, caminho da pasta e código OP WPS)</td>
                         <td><span class="tag tag--status">Em Produção</span></td>
-                        <td><code>Projeto Enviado para Produção: Pedido …</code></td>
+                        <td><code>Em Produção: Pedido …</code></td>
                         <td class="recipients">
                             <ul>
-                                <li>Todos os gestores</li>
-                                <li>Consultor do pedido</li>
-                                <li>Projetista responsável pelo projeto</li>
-                                <li>Projetistas PPCP</li>
-                                <li>Usuários Compras ativos</li>
+                                <li>Gestores de projetos (<code>gestorProjetos = true</code>)</li>
+                                <li>Gestores de fábrica (<code>gestorFabrica = true</code>, perfil Marceneiro)</li>
                             </ul>
                             <small>Inclui caminho do projeto e código OP WPS.</small>
                         </td>
@@ -744,8 +901,12 @@
                         <td><code>role = Compras</code>, <code>isActive = true</code></td>
                     </tr>
                     <tr>
+                        <td><strong>Gestores de fábrica</strong></td>
+                        <td>Marceneiro com <code>gestorFabrica = true</code> e <code>isActive = true</code></td>
+                    </tr>
+                    <tr>
                         <td><strong>Consultor do pedido</strong></td>
-                        <td>E-mail do usuário cujo nome coincide com <code>consultantName</code> do pedido em <code>salesOrders</code></td>
+                        <td>E-mail do usuário vinculado em <code>salesOrders.consultantUserId</code> (<code>appUsers</code>)</td>
                     </tr>
                     <tr>
                         <td><strong>Projetista responsável</strong></td>
@@ -770,7 +931,7 @@
                     <tr>
                         <td><strong>E-mails em cópia — Aprovações</strong></td>
                         <td>Gestão → <strong>Configurações do Sistema</strong></td>
-                        <td>CC em todos os e-mails de aprovação comercial (solicitação, aprovação, revisão, reenvio)</td>
+                        <td>CC em e-mails de <strong>revisão técnica atualizada</strong> (fluxo de aprovação comercial)</td>
                     </tr>
                     <tr>
                         <td><strong>E-mails em cópia — Requisições</strong></td>
@@ -787,7 +948,9 @@
         <footer class="refs">
             <h3>Referências técnicas</h3>
             <ul>
-                <li><code>js/core/notifications.js</code> — funções <code>notify*Email</code> e regras de destinatários</li>
+                <li><code>js/core/notifications-project-status-rules.js</code> — mapa <code>ORDER_PROJECT_STATUS_EMAIL_RULES</code> (fonte das regras por status)</li>
+                <li><code>js/core/notifications-dispatch.js</code> — funções <code>notify*Email</code> e envio via Google Apps Script</li>
+                <li><code>js/core/notifications-recipients.js</code> — resolução de destinatários por papel</li>
                 <li><code>js/admin/system-settings.js</code> — CC de aprovações e requisições</li>
                 <li><code>js/core/config.dev.js</code> / <code>config.prod.js</code> — modo teste e e-mail de teste</li>
                 <li>Envio via Google Apps Script (<code>GOOGLE_APPS_SCRIPT_URL</code> em <code>config.js</code>)</li>

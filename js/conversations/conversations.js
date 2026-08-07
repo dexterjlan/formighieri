@@ -468,12 +468,12 @@ async function loadConversations(orderId) {
             Promise.resolve(convsResult),
             supabaseClient
                 .from('salesOrders')
-                .select('consultantName')
+                .select('consultantUserId, consultor:appUsers!consultantUserId(name)')
                 .eq('id', orderId)
                 .single()
         ]);
 
-        const consultantName = orderInfo?.consultantName || getOrderConsultantName(orderId) || '-';
+        const consultantName = getOrderConsultantNameFromRecord(orderInfo) || getOrderConsultantName(orderId) || '-';
 
         const list = document.getElementById("conversations-list");
 

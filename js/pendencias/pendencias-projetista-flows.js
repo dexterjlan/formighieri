@@ -167,7 +167,7 @@ function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, appro
 
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = getPendenciasProjectLabel(project);
         const statusChangedAt = statusChangedAtByProject[project.id];
         const designerName = project.designer?.name || '—';
@@ -346,7 +346,7 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
 
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = getPendenciasProjectLabel(project);
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const designerName = project.designer?.name || '—';
@@ -488,12 +488,12 @@ async function fetchPendenciasRequisicaoRequests() {
 
     const selectWithProject = `
         *,
-        order:salesOrders(id, orderCode, clientName),
+        order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
         orderProject:OrderProject(id, name, projectCode, environmentType:EnvironmentType(name))
     `;
     const selectFallback = `
         *,
-        order:salesOrders(id, orderCode, clientName)
+        order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
     `;
 
     let result = await supabaseClient
@@ -534,7 +534,7 @@ function renderPendenciasRequisicaoList(requests, overviewMode) {
 
     const rows = requests.map(request => {
         const orderCode = request.order?.orderCode || '—';
-        const clientName = request.order?.clientName || '—';
+        const clientName = getOrderClientName(request.order) || '—';
         const projectLabel = getPendenciasRequestProjectLabel(request);
         const designerName = request.designerName || '—';
         const canViewRequest = !overviewMode

@@ -57,7 +57,7 @@ async function fetchPendenciasEnviadosCompras() {
             return {
                 ...compra,
                 project,
-                clientName: project?.order?.clientName || '',
+                clientName: getOrderClientName(project?.order) || '',
                 projectName: project?.name || '',
                 subtypeName
             };
@@ -96,7 +96,7 @@ function renderPendenciasEnviadosComprasList(items) {
 
     const rows = items.map(item => {
         const orderCode = item.orderCode || item.project?.order?.orderCode || '—';
-        const clientName = item.clientName || item.project?.order?.clientName || '—';
+        const clientName = item.clientName || getOrderClientName(item.project?.order) || '—';
         const projectName = item.projectName || item.project?.name || '—';
         const tipoLabel = typeof formatCompraTipoLabel === 'function'
             ? formatCompraTipoLabel(item.tipoCompra, item.subtypeName)

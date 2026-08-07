@@ -19,10 +19,12 @@ const PENDENCIAS_STATUS_MONTAGEM_EXTERNA = 'Montagem Externa';
 const PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA = 'Aguardando Entrega Técnica';
 const PENDENCIAS_STATUS_EXPEDICAO = 'Expedição';
 
+const PENDENCIAS_ORDER_EMBED = 'id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)';
+
 const PENDENCIAS_FABRICA_PROJECT_SELECT = `
     id, orderId, projectCode, name, statusId, deliveryDate,
     marceneiroId, inicioMontagemInterna, fimMontagemInterna,
-    order:salesOrders(id, orderCode, clientName),
+    order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
     projectStatus:OrderProjectStatus(id, name),
     marceneiro:Marceneiro(id, name)
 `;
@@ -30,7 +32,7 @@ const PENDENCIAS_FABRICA_PROJECT_SELECT = `
 const PENDENCIAS_FABRICA_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, statusId, deliveryDate,
     marceneiroId, inicioMontagemInterna, fimMontagemInterna,
-    order:salesOrders(id, orderCode, clientName)
+    order:salesOrders(${PENDENCIAS_ORDER_EMBED})
 `;
 const PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES = [
     PENDENCIAS_STATUS_VENDIDO,
@@ -47,14 +49,14 @@ const PENDENCIAS_MINE_EXTRA_STATUSES = [
 
 const PENDENCIAS_PROJECT_SELECT = `
     id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico, observacaoAguardandoObra,
-    order:salesOrders(id, orderCode, clientName, consultantName),
+    order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
 const PENDENCIAS_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico,
-    order:salesOrders(id, orderCode, clientName, consultantName)
+    order:salesOrders(${PENDENCIAS_ORDER_EMBED})
 `;
 
 const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
@@ -468,14 +470,14 @@ async function queryPendenciasProjects(filters = {}) {
     if (result.error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
         result = await buildQuery(`
             id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
-            order:salesOrders(id, orderCode, clientName, consultantName),
+            order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
             designer:appUsers!OrderProject_designerId_fkey(id, name),
             projectStatus:OrderProjectStatus(id, name)
         `, true);
         if (result.error?.message?.includes('isComplementar') || result.error?.message?.includes('isSubstituido')) {
             result = await buildQuery(`
                 id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
-                order:salesOrders(id, orderCode, clientName, consultantName),
+                order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
                 designer:appUsers!OrderProject_designerId_fkey(id, name),
                 projectStatus:OrderProjectStatus(id, name)
             `, false);
@@ -494,7 +496,7 @@ async function queryPendenciasProjects(filters = {}) {
         || result.error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
         result = await buildQuery(`
             id, orderId, projectCode, name, designerId, statusId, deliveryDate,
-            order:salesOrders(id, orderCode, clientName, consultantName)
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `, false);
     }
 

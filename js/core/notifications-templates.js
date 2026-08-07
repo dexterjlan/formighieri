@@ -180,7 +180,7 @@ async function fetchOrderRequestNotificationContext(orderId, orderProjectId, des
     if (!order && orderId) {
         const { data } = await supabaseClient
             .from('salesOrders')
-            .select('orderCode, clientName, consultantName')
+            .select(`orderCode, ${SALES_ORDER_RELATIONS_SELECT}`)
             .eq('id', orderId)
             .maybeSingle();
         order = data;
@@ -216,8 +216,8 @@ async function fetchOrderRequestNotificationContext(orderId, orderProjectId, des
 
     return {
         orderCode: order?.orderCode || '-',
-        clientName: order?.clientName || '-',
-        consultantName: order?.consultantName || '-',
+        clientName: getOrderClientName(order) || '-',
+        consultantName: getOrderConsultantNameFromRecord(order) || '-',
         projectName,
         projetistaName
     };

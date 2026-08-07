@@ -108,16 +108,16 @@ async function showAnteprojetoReturnObservationForm(conferenceId) {
 
         if (cached) {
             orderCode = cached.orderCode || '—';
-            clientName = cached.clientName || '—';
+            clientName = getOrderClientName(cached) || '—';
         } else if (conference.orderId) {
             const { data } = await supabaseClient
                 .from('salesOrders')
-                .select('orderCode, clientName')
+                .select('orderCode, cliente:Cliente(nome)')
                 .eq('id', conference.orderId)
                 .maybeSingle();
             if (data) {
                 orderCode = data.orderCode || '—';
-                clientName = data.clientName || '—';
+                clientName = getOrderClientName(data) || '—';
             }
         }
 

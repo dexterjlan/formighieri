@@ -64,18 +64,18 @@ async function fetchAnteprojetoApprovalDeliveryContext(conference) {
 
     if (cachedOrder) {
         orderCode = cachedOrder.orderCode || '—';
-        clientName = cachedOrder.clientName || '—';
+        clientName = getOrderClientName(cachedOrder) || '—';
         clientDeliveryDate = cachedOrder.clientDeliveryDate || '';
     } else if (conference.orderId) {
         const { data } = await supabaseClient
             .from('salesOrders')
-            .select('orderCode, clientName, clientDeliveryDate')
+            .select('orderCode, clientDeliveryDate, cliente:Cliente(nome)')
             .eq('id', conference.orderId)
             .maybeSingle();
 
         if (data) {
             orderCode = data.orderCode || '—';
-            clientName = data.clientName || '—';
+            clientName = getOrderClientName(data) || '—';
             clientDeliveryDate = data.clientDeliveryDate || '';
         }
     }

@@ -248,10 +248,11 @@ async function resolveOrCreateClienteId(clientName) {
 async function loadOrders() {
     let result = await supabaseClient
         .from('salesOrders')
-        .select('*, cliente:Cliente(id, nome, ativo)')
+        .select(`*, ${SALES_ORDER_RELATIONS_SELECT}`)
         .order('createdAt', { ascending: false });
 
-    if (result.error?.message?.includes('Cliente') || result.error?.message?.includes('salesOrders')) {
+    if (result.error?.message?.includes('Cliente') || result.error?.message?.includes('consultor')
+        || result.error?.message?.includes('salesOrders')) {
         result = await supabaseClient
             .from('salesOrders')
             .select('*')
@@ -261,10 +262,7 @@ async function loadOrders() {
     if (result.error || !result.data) {
         ordersCache = [];
     } else {
-        ordersCache = result.data.map(order => ({
-            ...order,
-            clientName: order.cliente?.nome || order.clientName || ''
-        }));
+        ordersCache = result.data;
     }
 
     await loadOrderPhasesForOrders(ordersCache);
@@ -343,16 +341,19 @@ function renderOrdersList() {
 
     let orders = [...ordersCache];
     if (filterMine) {
-        orders = orders.filter(o => isCurrentUserOrderConsultor(o.consultantName, o.consultantUserId));
+        orders = orders.filter(o => isCurrentUserOrderConsultor(
+            getOrderConsultantNameFromRecord(o),
+            o.consultantUserId
+        ));
     }
     if (filter) {
-        orders = orders.filter(o => (o.clientName || '').toLowerCase().includes(filter));
+        orders = orders.filter(o => getOrderClientName(o).toLowerCase().includes(filter));
     }
 
     orders.sort((a, b) => {
         let cmp = 0;
         if (currentOrdersSortField === 'clientName') {
-            cmp = (a.clientName || '').localeCompare(b.clientName || '', 'pt-BR', { sensitivity: 'base' });
+            cmp = getOrderClientName(a).localeCompare(getOrderClientName(b), 'pt-BR', { sensitivity: 'base' });
         } else if (currentOrdersSortField === 'clientDeliveryDate') {
             const hasA = Boolean(a.clientDeliveryDate);
             const hasB = Boolean(b.clientDeliveryDate);
@@ -391,8 +392,8 @@ function renderOrdersList() {
         div.innerHTML = `
             <div class="text-[11px] font-mono font-bold bg-slate-900 text-amber-500 px-2 py-1.5 rounded text-center leading-tight">${o.orderCode}</div>
             <div class="min-w-0">
-                <div class="text-sm font-bold text-slate-900 leading-snug">${o.clientName}</div>
-                <div class="text-[11px] text-slate-500 mt-1">📋 Consultor: ${o.consultantName}</div>
+                <div class="text-sm font-bold text-slate-900 leading-snug">${escapeHtml(getOrderClientName(o))}</div>
+                <div class="text-[11px] text-slate-500 mt-1">📋 Consultor: ${escapeHtml(getOrderConsultantNameFromRecord(o))}</div>
                 <div class="text-[11px] text-slate-500 mt-0.5">📅 ${escapeHtml(formatOrderDeliverySummary(o.id, o.clientDeliveryDate, { prefix: 'Entrega' }))}</div>
                 ${renderOrderSummaryBadges(o.id)}
             </div>
@@ -618,18 +619,41 @@ async function selectOrder(id) {
     document.getElementById("empty-state").classList.add("hidden");
     document.getElementById("order-content").classList.remove("hidden");
 
-    const { data: order, error } = await supabaseClient
+    let order = null;
+    let fetchError = null;
+
+    const primary = await supabaseClient
         .from('salesOrders')
-        .select('*, creator:appUsers!salesOrders_createdById_fkey(name)')
+        .select(`*, creator:appUsers!salesOrders_createdById_fkey(name), ${SALES_ORDER_RELATIONS_SELECT}`)
         .eq('id', id)
         .single();
 
-    if (error || !order) return;
+    if (!primary.error && primary.data) {
+        order = primary.data;
+    } else if (primary.error?.message?.includes('Cliente') || primary.error?.message?.includes('consultor')) {
+        const fallback = await supabaseClient
+            .from('salesOrders')
+            .select('*, creator:appUsers!salesOrders_createdById_fkey(name)')
+            .eq('id', id)
+            .single();
+        if (!fallback.error && fallback.data) {
+            order = fallback.data;
+            const cached = ordersCache.find(item => Number(item.id) === Number(id));
+            if (cached?.cliente) order.cliente = cached.cliente;
+            if (cached?.consultor) order.consultor = cached.consultor;
+        } else {
+            fetchError = fallback.error || primary.error;
+        }
+    } else {
+        fetchError = primary.error;
+    }
+
+    if (fetchError || !order) return;
 
     document.getElementById("det-code").innerText = order.orderCode;
-    document.getElementById("det-client").innerText = order.clientName;
+    document.getElementById("det-client").innerText = getOrderClientName(order);
     document.getElementById("det-info").innerText =
-        `📋 Consultor: ${order.consultantName} | Criado por: ${order.creator?.name || 'Sistema'}`;
+        `📋 Consultor: ${getOrderConsultantNameFromRecord(order)} | Criado por: ${order.creator?.name || 'Sistema'}`;
     document.getElementById("det-delivery").innerText = formatOrderDeliverySummary(order.id, order.clientDeliveryDate);
 
     await loadOrderPhasesForOrders(ordersCache.length ? ordersCache : [order]);
@@ -723,7 +747,21 @@ function bindOrderEvents() {
 
         const consultantUserId = await resolveConsultantUserIdByNameAsync(consultantName);
         const clientIdInput = document.getElementById("ord-client-id")?.value;
-        const clientId = clientIdInput ? Number(clientIdInput) : (await resolveOrCreateClienteId(clientName));
+        let clientId = clientIdInput ? Number(clientIdInput) : null;
+        if (!clientId) {
+            clientId = await resolveOrCreateClienteId(clientName);
+        }
+
+        if (!clientId) {
+            alertAppDialog("Selecione um cliente válido no cadastro.");
+            document.getElementById("ord-client").focus();
+            return;
+        }
+        if (!consultantUserId) {
+            alertAppDialog("Consultor não encontrado entre os usuários ativos.");
+            document.getElementById("ord-consultant").focus();
+            return;
+        }
 
         const { data: existing } = await supabaseClient
             .from('salesOrders')
@@ -738,23 +776,13 @@ function bindOrderEvents() {
 
         const payload = {
             orderCode,
-            clientName,
-            clientId: clientId || undefined,
-            consultantName,
-            consultantUserId: consultantUserId || undefined,
+            clientId,
+            consultantUserId,
             createdById: currentUser.id,
             updatedById: currentUser.id
         };
 
-        let { error } = await supabaseClient.from('salesOrders').insert([payload]);
-        if (error?.message?.includes('clientId')) {
-            delete payload.clientId;
-            ({ error } = await supabaseClient.from('salesOrders').insert([payload]));
-        }
-        if (error?.message?.includes('consultantUserId')) {
-            delete payload.consultantUserId;
-            ({ error } = await supabaseClient.from('salesOrders').insert([payload]));
-        }
+        const { error } = await supabaseClient.from('salesOrders').insert([payload]);
         if (error) {
             alertAppDialog("Erro ao salvar pedido: " + error.message);
             return;

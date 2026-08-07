@@ -6,7 +6,7 @@ async function fetchOrderRequestNotificationContext(orderId, orderProjectId, des
     if (!order && orderId) {
         const { data } = await supabaseClient
             .from('salesOrders')
-            .select('orderCode, clientName, consultantName')
+            .select(`orderCode, clientId, consultantUserId, ${SALES_ORDER_RELATIONS_SELECT}`)
             .eq('id', orderId)
             .maybeSingle();
         order = data;
@@ -42,8 +42,8 @@ async function fetchOrderRequestNotificationContext(orderId, orderProjectId, des
 
     return {
         orderCode: order?.orderCode || '-',
-        clientName: order?.clientName || '-',
-        consultantName: order?.consultantName || '-',
+        clientName: getOrderClientName(order) || '-',
+        consultantName: getOrderConsultantNameFromRecord(order) || '-',
         projectName,
         projetistaName
     };
@@ -233,6 +233,30 @@ async function fetchActivePpcpProjetistasRecipientEmails() {
     return uniqueEmails(emails);
 }
 
+async function fetchActiveGestorFabricaRecipientEmails() {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    const { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('email, role, gestorFabrica')
+        .eq('isActive', true);
+
+    if (error?.message?.includes('gestorFabrica')) {
+        return [];
+    }
+
+    if (error) throw error;
+
+    const emails = (data || [])
+        .filter(user => user.role === 'Marceneiro' && user.gestorFabrica)
+        .map(user => user.email);
+
+    const unique = uniqueEmails(emails);
+    return unique.length ? unique : [NOTIFICATION_TEST_EMAIL];
+}
+
 async function fetchActiveGestorProjetosRecipientEmails() {
     if (NOTIFICATION_TEST_MODE) {
         return [NOTIFICATION_TEST_EMAIL];
@@ -419,29 +443,46 @@ async function fetchConsultorEmailForOrder(orderId) {
         return NOTIFICATION_TEST_EMAIL;
     }
 
-    let consultantName = typeof ordersCache !== 'undefined'
-        ? ordersCache.find(order => Number(order.id) === Number(orderId))?.consultantName
+    let consultantUserId = typeof ordersCache !== 'undefined'
+        ? ordersCache.find(order => Number(order.id) === Number(orderId))?.consultantUserId
         : null;
 
-    if (!consultantName && orderId) {
+    if (!consultantUserId && orderId) {
         const { data } = await supabaseClient
             .from('salesOrders')
-            .select('consultantName')
+            .select('consultantUserId')
             .eq('id', orderId)
             .maybeSingle();
-        consultantName = data?.consultantName || null;
+        consultantUserId = data?.consultantUserId || null;
     }
 
-    if (!consultantName) {
-        return NOTIFICATION_TEST_EMAIL;
+    const normalizedUserId = Number(consultantUserId);
+    if (!normalizedUserId) {
+        const cachedOrder = typeof ordersCache !== 'undefined'
+            ? ordersCache.find(order => Number(order.id) === Number(orderId))
+            : null;
+        const consultantName = getOrderConsultantNameFromRecord(cachedOrder);
+        if (!consultantName) {
+            return NOTIFICATION_TEST_EMAIL;
+        }
+
+        const { data, error } = await supabaseClient
+            .from('appUsers')
+            .select('email')
+            .eq('role', 'Consultor')
+            .eq('isActive', true)
+            .eq('name', consultantName)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data?.email?.trim() || NOTIFICATION_TEST_EMAIL;
     }
 
     const { data, error } = await supabaseClient
         .from('appUsers')
         .select('email')
-        .eq('role', 'Consultor')
+        .eq('id', normalizedUserId)
         .eq('isActive', true)
-        .eq('name', consultantName)
         .maybeSingle();
 
     if (error) throw error;

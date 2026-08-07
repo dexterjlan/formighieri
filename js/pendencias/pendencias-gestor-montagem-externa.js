@@ -26,7 +26,7 @@ function renderPendenciasMontagemExternaList(projects) {
     const canAct = canSeePendenciasGestorProjetosMenu();
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
-        const clientName = project.order?.clientName || '—';
+        const clientName = getOrderClientName(project.order) || '—';
         const projectName = project.name || getPendenciasProjectLabel(project);
         const statusName = getPendenciasProjectStatusName(project);
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);

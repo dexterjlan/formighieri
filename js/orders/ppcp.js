@@ -252,6 +252,10 @@ async function implantarPpcpProject(projectId, button, projectName) {
             return;
         }
 
+        if (typeof notifyOrderProjectStatusChangeForProjects === 'function') {
+            await notifyOrderProjectStatusChangeForProjects([projectId], PPCP_IMPLANTACAO_STATUS);
+        }
+
         if (typeof createImplantacaoForProject === 'function') {
             await createImplantacaoForProject(projectId);
         }

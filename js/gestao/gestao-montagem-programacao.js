@@ -240,7 +240,7 @@ function shiftMontagemProgDateKey(dateKey, days) {
 }
 
 function getMontagemProgClientLabel(prog) {
-    return prog?.order?.clientName || prog?.clientName || '';
+    return getOrderClientName(prog?.order) || prog?.clientName || '';
 }
 
 function getMontagemProgOrderLabel(prog) {
@@ -585,7 +585,7 @@ async function lookupMontagemProgOrderByCode(orderCode) {
 
     const { data, error } = await supabaseClient
         .from('salesOrders')
-        .select('id, orderCode, clientName')
+        .select(getSalesOrderMinimalEmbedSelect())
         .eq('orderCode', trimmed)
         .maybeSingle();
 
@@ -603,7 +603,7 @@ async function loadMontagemProgramacoesForWeek(weekStartKey = getMontagemProgWee
     const selectVariants = [
         `
             *,
-            order:salesOrders(id, orderCode, clientName),
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
             montadores:MontagemProgramacaoMontador(
                 id, montadorId,
                 montador:Montador(id, name)
@@ -1784,7 +1784,7 @@ async function saveMontagemProg(event) {
             return;
         }
         orderId = order.id;
-        clientName = order.clientName || clientName;
+        clientName = getOrderClientName(order) || clientName;
     } else if (!clientName) {
         alertAppDialog('Informe o nome do cliente quando não houver código de pedido.');
         return;
@@ -2054,8 +2054,9 @@ function bindMontagemProgramacaoEvents() {
         const orderCode = this.value.trim();
         if (orderCode) {
             const order = await lookupMontagemProgOrderByCode(orderCode);
-            if (order?.clientName) {
-                document.getElementById('montagem-prog-client-name').value = order.clientName;
+            const orderClientName = getOrderClientName(order);
+            if (orderClientName) {
+                document.getElementById('montagem-prog-client-name').value = orderClientName;
             }
         }
     });
@@ -2063,8 +2064,9 @@ function bindMontagemProgramacaoEvents() {
         const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
         if (orderCode) {
             const order = await lookupMontagemProgOrderByCode(orderCode);
-            if (order?.clientName) {
-                document.getElementById('montagem-prog-client-name').value = order.clientName;
+            const orderClientName = getOrderClientName(order);
+            if (orderClientName) {
+                document.getElementById('montagem-prog-client-name').value = orderClientName;
             }
         }
         syncMontagemProgClientRequired();

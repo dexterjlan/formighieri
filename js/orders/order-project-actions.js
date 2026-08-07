@@ -8,7 +8,7 @@ function enrichApprovalForOrderProject(approval, orderId, project = null) {
     return {
         ...approval,
         orderId: approval.orderId || orderId,
-        orderConsultantName: order?.consultantName || approval.orderConsultantName || null,
+        orderConsultantName: getOrderConsultantNameFromRecord(order) || approval.orderConsultantName || null,
         designerId: approval.designerId || project?.designerId || null
     };
 }

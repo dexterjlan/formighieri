@@ -45,7 +45,7 @@ function getThirdPartyProjectMinimalSelect(options = {}) {
     const relationEmbed = includeOrder
         ? `,
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientName)`
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))`
         : '';
 
     return `
@@ -71,7 +71,7 @@ function getThirdPartyProjectSelectVariants(options = {}) {
     const relationEmbed = includeOrder
         ? `,
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientName)`
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))`
         : '';
 
     const baseFields = `
@@ -167,7 +167,7 @@ function enrichThirdPartyProjectsForOrder(projects = [], orderId) {
                 ? {
                     id: order.id,
                     orderCode: order.orderCode,
-                    clientName: order.clientName
+                    clientName: getOrderClientName(order)
                 }
                 : null)
         };
@@ -536,7 +536,7 @@ async function fetchThirdPartyProjectsWithoutDesigner() {
             projectCharacteristic:ProjectCharacteristic(id, name),
             thirdPartySubtype:ThirdPartySubtype(id, name),
             orderProject:OrderProject(id, name, projectCode, deliveryDate),
-            order:salesOrders(id, orderCode, clientName)
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
         .is('designerId', null)
         .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED)
@@ -574,7 +574,7 @@ async function fetchThirdPartyProjectsForProjetista(designerId, options = {}) {
             thirdPartySubtype:ThirdPartySubtype(id, name),
             ${THIRD_PARTY_PROJECT_DESIGNER_EMBED},
             orderProject:OrderProject(id, name, projectCode, deliveryDate),
-            order:salesOrders(id, orderCode, clientName, consultantName)
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
         .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED)
         .order('updatedAt', { ascending: false });
@@ -618,7 +618,7 @@ async function assignThirdPartyProjectDesigner(thirdPartyProjectId, designerId) 
             thirdPartySubtype:ThirdPartySubtype(id, name),
             ${THIRD_PARTY_PROJECT_DESIGNER_EMBED},
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientName)
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
         .single();
 
@@ -712,7 +712,7 @@ async function sendThirdPartyProject(thirdPartyProjectId) {
             designerId,
             thirdPartySubtype:ThirdPartySubtype(id, name),
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientName)
+            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
         .single();
 
@@ -746,7 +746,7 @@ async function openThirdPartyProjectStatusHistoryModal(project) {
     const subtitle = document.getElementById('project-status-history-subtitle');
     const flow = document.getElementById('project-status-history-flow');
     const orderCode = project?.order?.orderCode || '—';
-    const clientName = project?.order?.clientName || '—';
+    const clientName = getOrderClientName(project?.order) || '—';
     const label = getThirdPartyProjectLabel(project);
 
     if (subtitle) {

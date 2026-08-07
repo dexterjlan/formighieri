@@ -892,7 +892,38 @@ async function resolveGestaoImportClienteId(clientName, lookups = null) {
 
     const clientId = await resolveOrCreateClienteId(trimmed);
     gestaoImportClienteIdByName.set(cacheKey, clientId);
+    if (clientId && lookups?.clientByName) {
+        lookups.clientByName[cacheKey] = clientId;
+    }
     return clientId;
+}
+
+function resolveGestaoImportConsultantUserId(consultantNameFromSheet, orderCode, lookups) {
+    const consultantFgp = mapGestaoImportConsultorWpsToFgp(consultantNameFromSheet, lookups);
+    if (!consultantFgp) {
+        return {
+            error: `Pedido ${orderCode}: consultor "${consultantNameFromSheet}" não encontrado no cadastro nem no DE-PARA importConsultorWPS.`
+        };
+    }
+
+    const consultantUserId = lookups.consultantByName?.[consultantFgp.trim().toLowerCase()] || null;
+    if (!consultantUserId) {
+        return {
+            error: `Pedido ${orderCode}: consultor "${consultantFgp}" não encontrado entre os usuários Consultor ativos.`
+        };
+    }
+
+    return { consultantUserId, consultantFgp };
+}
+
+async function resolveGestaoImportClienteIdForOrder(order, lookups) {
+    const clientId = await resolveGestaoImportClienteId(order.clientName, lookups);
+    if (!clientId) {
+        return {
+            error: `Pedido ${order.orderCode}: não foi possível cadastrar ou localizar o cliente "${order.clientName}".`
+        };
+    }
+    return { clientId };
 }
 
 function resolveGestaoImportProject(row, lookups) {
@@ -976,31 +1007,25 @@ async function createGestaoImportOrder(order, lookups, now) {
     if (existingOrder) {
         orderId = existingOrder.id;
     } else {
-        const consultantFgp = mapGestaoImportConsultorWpsToFgp(order.consultantName, lookups);
-        if (!consultantFgp) {
-            return {
-                ok: false,
-                message: `Pedido ${order.orderCode}: consultor "${order.consultantName}" não encontrado no cadastro nem no DE-PARA importConsultorWPS.`
-            };
+        const consultantResult = resolveGestaoImportConsultantUserId(
+            order.consultantName,
+            order.orderCode,
+            lookups
+        );
+        if (consultantResult.error) {
+            return { ok: false, message: consultantResult.error };
         }
 
-        const consultantUserId = lookups.consultantByName?.[consultantFgp.trim().toLowerCase()] || null;
-        const clientId = await resolveGestaoImportClienteId(order.clientName, lookups);
-
-        if (!clientId) {
-            return {
-                ok: false,
-                message: `Pedido ${order.orderCode}: não foi possível cadastrar ou localizar o cliente "${order.clientName}".`
-            };
+        const clientResult = await resolveGestaoImportClienteIdForOrder(order, lookups);
+        if (clientResult.error) {
+            return { ok: false, message: clientResult.error };
         }
 
         const orderPayload = {
             orderCode: order.orderCode,
-            clientName: order.clientName,
-            clientId,
-            consultantName: consultantFgp,
-            consultantUserId: consultantUserId || undefined,
-            clientDeliveryDate: order.clientDeliveryDate,
+            clientId: clientResult.clientId,
+            consultantUserId: consultantResult.consultantUserId,
+            clientDeliveryDate: order.clientDeliveryDate || undefined,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -1012,17 +1037,8 @@ async function createGestaoImportOrder(order, lookups, now) {
             .select('id')
             .single();
 
-        if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('consultantUserId')) {
-            const { clientDeliveryDate: _d, updatedAt: _u, consultantUserId: _c, ...fallback } = orderPayload;
-            ({ data: created, error } = await supabaseClient
-                .from('salesOrders')
-                .insert(fallback)
-                .select('id')
-                .single());
-        }
-
-        if (error?.message?.includes('clientId')) {
-            const { clientId: _clientId, consultantUserId: _consultantUserId, ...fallback } = orderPayload;
+        if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('updatedAt')) {
+            const { clientDeliveryDate: _d, updatedAt: _u, ...fallback } = orderPayload;
             ({ data: created, error } = await supabaseClient
                 .from('salesOrders')
                 .insert(fallback)
@@ -1189,11 +1205,15 @@ function validateGestaoImportOrder(order, lookups, context) {
     if (existingOrder) {
         notes.push(`Pedido ${order.orderCode}: já cadastrado — serão adicionados apenas projetos novos.`);
     } else {
-        const consultantFgp = mapGestaoImportConsultorWpsToFgp(order.consultantName, lookups);
-        if (!consultantFgp) {
-            errors.push(`Pedido ${order.orderCode}: consultor "${order.consultantName}" não encontrado no cadastro nem no DE-PARA importConsultorWPS.`);
+        const consultantResult = resolveGestaoImportConsultantUserId(
+            order.consultantName,
+            order.orderCode,
+            lookups
+        );
+        if (consultantResult.error) {
+            errors.push(consultantResult.error);
         } else {
-            notes.push(`Pedido ${order.orderCode}: será criado com consultor ${consultantFgp}.`);
+            notes.push(`Pedido ${order.orderCode}: será criado com consultor ${consultantResult.consultantFgp}.`);
             const clientKey = String(order.clientName || '').trim().toLowerCase();
             if (clientKey && !lookups.clientByName?.[clientKey]) {
                 notes.push(`Pedido ${order.orderCode}: cliente "${order.clientName}" será cadastrado automaticamente.`);

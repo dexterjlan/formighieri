@@ -224,7 +224,7 @@ function openThirdPartyProjectDetailModal(project) {
 
     document.getElementById('third-party-project-detail-title').textContent = getThirdPartyProjectLabel(project);
     document.getElementById('third-party-project-detail-subtitle').textContent =
-        `Pedido ${project.order?.orderCode || '—'} · ${project.order?.clientName || '—'}`;
+        `Pedido ${project.order?.orderCode || '—'} · ${getOrderClientName(project.order) || '—'}`;
 
     document.getElementById('third-party-project-detail-status').innerHTML =
         `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusLabel)}</span>`;

@@ -1,5 +1,4 @@
 const CALENDAR_WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const CALENDAR_EVENT_TYPES = ['Medição', 'Atendimento'];
 const CALENDAR_VIEW_MODES = ['month', 'week'];
 
 let calendarViewMode = 'month';
@@ -7,9 +6,10 @@ let calendarViewAnchor = startOfMonth(new Date());
 let calendarSelectedDate = toDateKey(new Date());
 let calendarEventsCache = [];
 let calendarUsersCache = [];
+let calendarEventTypesCache = [];
 let editingCalendarEventId = null;
 let calendarFilterResponsibleId = '';
-let calendarFilterEventType = '';
+let calendarFilterEventTypeId = '';
 
 function startOfMonth(date) {
     return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -95,20 +95,36 @@ function getCalendarVisibleRange(viewMode = calendarViewMode, anchor = calendarV
     };
 }
 
-function getCalendarEventTypeClass(eventType) {
-    return eventType === 'Medição'
-        ? 'calendar-event-chip--medicao'
-        : 'calendar-event-chip--atendimento';
+function slugifyCalendarEventTypeName(typeName) {
+    return String(typeName || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '') || 'evento';
 }
 
-function getCalendarDayEventCardClass(eventType) {
-    return eventType === 'Medição'
-        ? 'calendar-day-event-card--medicao'
-        : 'calendar-day-event-card--atendimento';
+function getCalendarEventTypeName(event) {
+    return event?.eventType?.name || '';
+}
+
+function getCalendarEventTypeClass(event) {
+    const slug = slugifyCalendarEventTypeName(getCalendarEventTypeName(event));
+    return `calendar-event-chip--${slug}`;
+}
+
+function getCalendarDayEventCardClass(event) {
+    const slug = slugifyCalendarEventTypeName(getCalendarEventTypeName(event));
+    return `calendar-day-event-card--${slug}`;
+}
+
+function getCalendarEventTooltipClass(event) {
+    const slug = slugifyCalendarEventTypeName(getCalendarEventTypeName(event));
+    return `calendar-event-tooltip--${slug}`;
 }
 
 function getCalendarEventClientLabel(event) {
-    if (event?.order?.clientName) return event.order.clientName;
+    if (event?.order) return getOrderClientName(event.order);
     if (event?.clientName) return event.clientName;
     return '';
 }
@@ -149,13 +165,12 @@ function getCalendarEventTooltipRows(event) {
 
 function renderCalendarEventTooltipHtml(event) {
     const rows = getCalendarEventTooltipRows(event);
-    const typeClass = event.eventType === 'Medição'
-        ? 'calendar-event-tooltip--medicao'
-        : 'calendar-event-tooltip--atendimento';
+    const typeClass = getCalendarEventTooltipClass(event);
+    const typeName = getCalendarEventTypeName(event);
 
     return `
         <div class="calendar-event-tooltip ${typeClass}">
-            <div class="calendar-event-tooltip__badge">${escapeHtml(event.eventType || '—')}</div>
+            <div class="calendar-event-tooltip__badge">${escapeHtml(typeName || '—')}</div>
             <dl class="calendar-event-tooltip__rows">
                 ${rows.map(([label, value]) => `
                     <div class="calendar-event-tooltip__row">
@@ -231,6 +246,56 @@ function getCalendarMaxChipsForMode() {
     return calendarViewMode === 'week' ? 8 : 3;
 }
 
+async function loadCalendarEventTypes() {
+    const { data, error } = await supabaseClient
+        .from('CalendarEventType')
+        .select('id, name, isActive, clientRequired, orderRequired, sortOrder')
+        .eq('isActive', true)
+        .order('sortOrder', { ascending: true })
+        .order('name', { ascending: true });
+
+    if (error) {
+        console.error('loadCalendarEventTypes:', error);
+        calendarEventTypesCache = [];
+        return [];
+    }
+
+    calendarEventTypesCache = data || [];
+    return calendarEventTypesCache;
+}
+
+function getCalendarEventTypeById(typeId) {
+    return calendarEventTypesCache.find(type => String(type.id) === String(typeId)) || null;
+}
+
+function populateCalendarEventTypeSelects(selectedId = '') {
+    const modalSelect = document.getElementById('cal-event-type');
+    const filterSelect = document.getElementById('calendar-filter-type');
+
+    if (modalSelect) {
+        if (!calendarEventTypesCache.length) {
+            modalSelect.innerHTML = '<option value="">Nenhum tipo disponível</option>';
+        } else {
+            modalSelect.innerHTML = calendarEventTypesCache.map(type => `
+                <option value="${type.id}" ${String(type.id) === String(selectedId) ? 'selected' : ''}>
+                    ${escapeHtml(type.name)}
+                </option>
+            `).join('');
+        }
+    }
+
+    if (filterSelect) {
+        filterSelect.innerHTML = [
+            '<option value="">Todos</option>',
+            ...calendarEventTypesCache.map(type => `
+                <option value="${type.id}" ${String(type.id) === String(calendarFilterEventTypeId) ? 'selected' : ''}>
+                    ${escapeHtml(type.name)}
+                </option>
+            `)
+        ].join('');
+    }
+}
+
 async function loadCalendarUsers() {
     if (calendarUsersCache.length) return calendarUsersCache;
 
@@ -255,8 +320,9 @@ async function loadCalendarEventsForVisibleRange(viewMode = calendarViewMode, an
     const { data, error } = await supabaseClient
         .from('CalendarEvent')
         .select(`
-            id, eventDate, eventTime, eventType, description, orderCode, orderId, clientName, responsibleId,
-            order:salesOrders(orderCode, clientName)
+            id, eventDate, eventTime, eventTypeId, description, orderCode, orderId, clientName, responsibleId,
+            eventType:CalendarEventType(id, name, clientRequired, orderRequired),
+            order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
         .gte('eventDate', startDate)
         .lte('eventDate', endDate)
@@ -277,7 +343,7 @@ async function loadCalendarEventsForVisibleRange(viewMode = calendarViewMode, an
 }
 
 function matchesCalendarFilters(event) {
-    if (calendarFilterEventType && event.eventType !== calendarFilterEventType) {
+    if (calendarFilterEventTypeId && String(event.eventTypeId) !== String(calendarFilterEventTypeId)) {
         return false;
     }
 
@@ -308,7 +374,7 @@ function renderCalendarDayCell(dateKey, options = {}) {
         const summary = getCalendarEventDisplayParts(event).join(' · ');
         return `
         <button type="button"
-            class="calendar-event-chip ${getCalendarEventTypeClass(event.eventType)}"
+            class="calendar-event-chip ${getCalendarEventTypeClass(event)}"
             data-calendar-event-id="${event.id}"
             aria-label="${escapeHtml(getCalendarEventDisplayParts(event).join(', '))}">
             <span class="calendar-event-chip__time">${escapeHtml(formatCalendarTimeValue(event.eventTime))}</span>
@@ -426,7 +492,7 @@ function renderCalendarDayEvents() {
     }
 
     if (!dayEvents.length) {
-        const hasActiveFilters = Boolean(calendarFilterResponsibleId || calendarFilterEventType);
+        const hasActiveFilters = Boolean(calendarFilterResponsibleId || calendarFilterEventTypeId);
         listEl.innerHTML = hasActiveFilters
             ? '<p class="text-xs text-slate-400 text-center py-6">Nenhum evento neste dia com os filtros aplicados.</p>'
             : '<p class="text-xs text-slate-400 text-center py-6">Nenhum evento neste dia.</p>';
@@ -443,7 +509,7 @@ function renderCalendarDayEvents() {
 
         return `
             <button type="button"
-                class="calendar-day-event-card ${getCalendarDayEventCardClass(event.eventType)}"
+                class="calendar-day-event-card ${getCalendarDayEventCardClass(event)}"
                 data-calendar-event-id="${event.id}">
                 <div class="calendar-day-event-card__top">
                     <span class="calendar-day-event-card__time">${escapeHtml(formatCalendarTimeValue(event.eventTime))}</span>
@@ -466,6 +532,8 @@ async function refreshCalendarView() {
     renderCalendarWeekdays();
     syncCalendarViewModeButtons();
     await loadCalendarUsers();
+    await loadCalendarEventTypes();
+    populateCalendarEventTypeSelects();
     populateCalendarFilterSelects();
     await loadCalendarEventsForVisibleRange();
     renderCalendarGrid();
@@ -474,11 +542,6 @@ async function refreshCalendarView() {
 
 function populateCalendarFilterSelects() {
     const responsibleSelect = document.getElementById('calendar-filter-responsible');
-    const typeSelect = document.getElementById('calendar-filter-type');
-
-    if (typeSelect) {
-        typeSelect.value = calendarFilterEventType;
-    }
 
     if (!responsibleSelect) return;
 
@@ -499,7 +562,7 @@ function populateCalendarFilterSelects() {
 
 function applyCalendarFilters() {
     calendarFilterResponsibleId = document.getElementById('calendar-filter-responsible')?.value || '';
-    calendarFilterEventType = document.getElementById('calendar-filter-type')?.value || '';
+    calendarFilterEventTypeId = document.getElementById('calendar-filter-type')?.value || '';
     renderCalendarGrid();
     renderCalendarDayEvents();
 }
@@ -523,19 +586,24 @@ function populateCalendarResponsibleSelect(selectedId = '') {
     ].join('');
 }
 
-function syncCalendarClientNameField() {
-    const orderCodeInput = document.getElementById('cal-event-order-code');
-    const clientInput = document.getElementById('cal-event-client-name');
+function syncCalendarEventTypeRequirements() {
+    const typeId = document.getElementById('cal-event-type')?.value;
+    const selectedType = getCalendarEventTypeById(typeId);
+    const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
+    const clientRequired = Boolean(selectedType?.clientRequired);
+    const orderRequired = Boolean(selectedType?.orderRequired);
+
+    document.getElementById('cal-event-client-required')?.classList.toggle('hidden', !clientRequired);
+    document.getElementById('cal-event-order-required')?.classList.toggle('hidden', !orderRequired);
+
     const clientBtn = document.getElementById('btn-cal-event-client-picker');
-    const requiredMark = document.getElementById('cal-event-client-required');
-    if (!orderCodeInput || !clientInput) return;
-
-    const hasOrderCode = Boolean(orderCodeInput.value.trim());
-    requiredMark?.classList.toggle('hidden', hasOrderCode);
-
     if (clientBtn) {
-        clientBtn.disabled = hasOrderCode;
+        clientBtn.disabled = Boolean(orderCode);
     }
+}
+
+function syncCalendarClientNameField() {
+    syncCalendarEventTypeRequirements();
 }
 
 async function lookupCalendarOrderByCode(orderCode) {
@@ -544,7 +612,7 @@ async function lookupCalendarOrderByCode(orderCode) {
 
     const { data, error } = await supabaseClient
         .from('salesOrders')
-        .select('id, orderCode, clientName')
+        .select(getSalesOrderMinimalEmbedSelect())
         .eq('orderCode', trimmed)
         .maybeSingle();
 
@@ -558,7 +626,17 @@ async function lookupCalendarOrderByCode(orderCode) {
 
 async function openCalendarEventModal(event = null, presetDate = calendarSelectedDate) {
     await loadCalendarUsers();
-    populateCalendarResponsibleSelect(event?.responsibleId || event?.responsible?.id || '');
+    await loadCalendarEventTypes();
+    populateCalendarEventTypeSelects(event?.eventTypeId || event?.eventType?.id || calendarEventTypesCache[0]?.id || '');
+
+    let responsibleId = event?.responsibleId || event?.responsible?.id || '';
+    if (!event && currentUser?.id) {
+        const currentUserInList = calendarUsersCache.some(user => String(user.id) === String(currentUser.id));
+        if (currentUserInList) {
+            responsibleId = currentUser.id;
+        }
+    }
+    populateCalendarResponsibleSelect(responsibleId);
 
     editingCalendarEventId = event?.id || null;
     const titleEl = document.getElementById('calendar-event-modal-title');
@@ -571,12 +649,12 @@ async function openCalendarEventModal(event = null, presetDate = calendarSelecte
 
     document.getElementById('cal-event-date').value = event?.eventDate || presetDate || toDateKey(new Date());
     document.getElementById('cal-event-time').value = formatCalendarTimeValue(event?.eventTime || '09:00');
-    document.getElementById('cal-event-type').value = event?.eventType || 'Medição';
     document.getElementById('cal-event-description').value = event?.description || '';
     document.getElementById('cal-event-order-code').value = event?.orderCode || event?.order?.orderCode || '';
 
     const clientName = getCalendarEventClientLabel(event);
     document.getElementById('cal-event-client-name').value = clientName;
+    document.getElementById('cal-event-client-id').value = '';
 
     syncCalendarClientNameField();
     toggleModal('calendar-event-modal', true);
@@ -587,18 +665,19 @@ async function saveCalendarEvent(event) {
 
     const eventDate = document.getElementById('cal-event-date').value;
     const eventTime = document.getElementById('cal-event-time').value;
-    const eventType = document.getElementById('cal-event-type').value;
+    const eventTypeId = Number(document.getElementById('cal-event-type').value);
     const responsibleId = Number(document.getElementById('cal-event-responsible').value);
     const description = document.getElementById('cal-event-description').value.trim();
     const orderCode = document.getElementById('cal-event-order-code').value.trim();
     let clientName = document.getElementById('cal-event-client-name').value.trim();
+    const selectedType = getCalendarEventTypeById(eventTypeId);
 
-    if (!eventDate || !eventTime || !eventType || !responsibleId) {
+    if (!eventDate || !eventTime || !eventTypeId || !responsibleId) {
         alertAppDialog('Preencha dia, hora, tipo e responsável.');
         return;
     }
 
-    if (!CALENDAR_EVENT_TYPES.includes(eventType)) {
+    if (!selectedType) {
         alertAppDialog('Tipo de evento inválido.');
         return;
     }
@@ -611,9 +690,14 @@ async function saveCalendarEvent(event) {
             return;
         }
         orderId = order.id;
-        clientName = order.clientName || clientName;
-    } else if (!clientName) {
-        alertAppDialog('Informe o nome do cliente quando não houver código de pedido.');
+        clientName = getOrderClientName(order) || clientName;
+    } else if (selectedType.orderRequired) {
+        alertAppDialog('Informe o código do pedido para este tipo de evento.');
+        return;
+    }
+
+    if (selectedType.clientRequired && !clientName) {
+        alertAppDialog('Informe o cliente para este tipo de evento.');
         return;
     }
 
@@ -621,12 +705,12 @@ async function saveCalendarEvent(event) {
     const payload = {
         eventDate,
         eventTime: `${eventTime}:00`,
-        eventType,
+        eventTypeId,
         responsibleId,
         description: description || '',
         orderCode: orderCode || null,
         orderId,
-        clientName: orderCode ? null : clientName,
+        clientName: orderCode ? null : (clientName || null),
         updatedAt: now,
         updatedById: currentUser?.id || null
     };
@@ -809,7 +893,7 @@ function buildCalendarIcsEndDateTime(dateKey, timeValue, durationMinutes = 60) {
 }
 
 function buildCalendarIcsEventSummary(event) {
-    const parts = [event.eventType || 'Evento'];
+    const parts = [getCalendarEventTypeName(event) || 'Evento'];
     const clientLabel = getCalendarEventClientLabel(event);
     const orderLabel = getCalendarEventOrderLabel(event);
 
@@ -891,8 +975,9 @@ function getCalendarExportFilename() {
     }
 
     let typeSlug = '';
-    if (calendarFilterEventType) {
-        typeSlug = `-${slugifyCalendarExportLabel(calendarFilterEventType)}`;
+    if (calendarFilterEventTypeId) {
+        const type = getCalendarEventTypeById(calendarFilterEventTypeId);
+        typeSlug = `-${slugifyCalendarExportLabel(type?.name || calendarFilterEventTypeId)}`;
     }
 
     return `fgp-calendario-${periodLabel}-${startDate}-${responsibleSlug}${typeSlug}.ics`;
@@ -1003,6 +1088,7 @@ function bindCalendarEvents() {
     document.getElementById('btn-calendar-export-ics')?.addEventListener('click', exportCalendarToIcs);
     document.getElementById('calendar-filter-responsible')?.addEventListener('change', applyCalendarFilters);
     document.getElementById('calendar-filter-type')?.addEventListener('change', applyCalendarFilters);
+    document.getElementById('cal-event-type')?.addEventListener('change', syncCalendarEventTypeRequirements);
 
     document.getElementById('calendar-month-grid')?.addEventListener('click', event => {
         const eventBtn = event.target.closest('[data-calendar-event-id]');
@@ -1061,7 +1147,7 @@ function bindCalendarEvents() {
             const order = await lookupCalendarOrderByCode(orderCode);
             const clientInput = document.getElementById('cal-event-client-name');
             if (order && clientInput) {
-                clientInput.value = order.clientName || '';
+                clientInput.value = getOrderClientName(order) || '';
             }
         }
     });
@@ -1071,7 +1157,7 @@ function bindCalendarEvents() {
             const order = await lookupCalendarOrderByCode(orderCode);
             const clientInput = document.getElementById('cal-event-client-name');
             if (order && clientInput) {
-                clientInput.value = order.clientName || '';
+                clientInput.value = getOrderClientName(order) || '';
             }
         }
         syncCalendarClientNameField();

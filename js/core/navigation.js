@@ -83,6 +83,10 @@ async function restoreGestaoView(state) {
             if (typeof showGestaoClientesPanel === 'function') showGestaoClientesPanel();
             if (typeof loadGestaoClientesList === 'function') loadGestaoClientesList();
         },
+        'calendar-event-types': () => {
+            if (typeof showGestaoCalendarEventTypesPanel === 'function') showGestaoCalendarEventTypesPanel();
+            if (typeof loadGestaoCalendarEventTypesList === 'function') loadGestaoCalendarEventTypesList();
+        },
         marceneiros: () => {
             if (typeof showGestaoMarceneirosPanel === 'function') showGestaoMarceneirosPanel();
         },

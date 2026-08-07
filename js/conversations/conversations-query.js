@@ -72,7 +72,7 @@ async function searchConversations() {
 
     const { data: orders } = await supabaseClient
         .from('salesOrders')
-        .select('id, orderCode, clientName, consultantName');
+        .select(getSalesOrderMinimalEmbedSelect());
 
     const orderMap = {};
     orders?.forEach(o => { orderMap[o.id] = o; });
@@ -103,11 +103,11 @@ async function searchConversations() {
         rows = rows.filter(r => (r.order.orderCode || '').toLowerCase().includes(pedido));
     }
     if (cliente) {
-        rows = rows.filter(r => (r.order.clientName || '').toLowerCase().includes(cliente));
+        rows = rows.filter(r => getOrderClientName(r.order).toLowerCase().includes(cliente));
     }
     rows = rows.filter(r => matchesRequestQueryStatusFilter(r, statusFilters));
     if (consultor) {
-        rows = rows.filter(r => r.order.consultantName === consultor);
+        rows = rows.filter(r => getOrderConsultantNameFromRecord(r.order) === consultor);
     }
     if (projetista) {
         rows = rows.filter(r => String(r.designerId) === projetista);
@@ -139,8 +139,8 @@ async function searchConversations() {
         const tr = document.createElement("tr");
         tr.innerHTML = `
             <td class="p-3 font-mono text-xs font-bold text-slate-600" style="${cellStyle}">${r.order.orderCode || '-'}</td>
-            <td class="p-3 text-slate-800" style="${cellStyle}">${r.order.clientName || '-'}</td>
-            <td class="p-3 text-slate-500" style="${cellStyle}">${r.order.consultantName || '-'}</td>
+            <td class="p-3 text-slate-800" style="${cellStyle}">${getOrderClientName(r.order) || '-'}</td>
+            <td class="p-3 text-slate-500" style="${cellStyle}">${getOrderConsultantNameFromRecord(r.order) || '-'}</td>
             <td class="p-3 text-slate-700" style="${cellStyle}">${r.projetistaName}</td>
             <td class="p-3" style="${cellStyle}">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>

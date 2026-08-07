@@ -145,7 +145,7 @@ function fromCompraDateInputValue(value) {
 async function fetchOrderProjectCodesForCompra(orderProjectId) {
     let result = await supabaseClient
         .from('OrderProject')
-        .select('id, projectCode, name, order:salesOrders(orderCode, clientName)')
+        .select('id, projectCode, name, order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
         .eq('id', orderProjectId)
         .maybeSingle();
 
@@ -159,7 +159,7 @@ async function fetchOrderProjectCodesForCompra(orderProjectId) {
         if (!result.error && result.data?.orderId) {
             const orderResult = await supabaseClient
                 .from('salesOrders')
-                .select('orderCode, clientName')
+                .select(`orderCode, ${SALES_ORDER_RELATIONS_SELECT}`)
                 .eq('id', result.data.orderId)
                 .maybeSingle();
 
@@ -181,7 +181,7 @@ async function fetchOrderProjectCodesForCompra(orderProjectId) {
     return {
         orderCode,
         projectCode,
-        clientName: result.data?.order?.clientName || '',
+        clientName: getOrderClientName(result.data?.order) || '',
         projectName: result.data?.name || ''
     };
 }

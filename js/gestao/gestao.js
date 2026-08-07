@@ -13,7 +13,7 @@ const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 roun
 const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
 const GESTAO_NAV_SUB_ACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
 const GESTAO_NAV_SUB_INACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'clientes', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'compra-status', 'usuarios'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'clientes', 'calendar-event-types', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'compra-status', 'usuarios'];
 const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
 const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
@@ -52,6 +52,7 @@ function setGestaoNavActive(navKey) {
         'project-status': document.getElementById('gestao-nav-project-status'),
         'alterar-status-projeto': document.getElementById('gestao-nav-alterar-status-projeto'),
         clientes: document.getElementById('gestao-nav-clientes'),
+        'calendar-event-types': document.getElementById('gestao-nav-calendar-event-types'),
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
         montadores: document.getElementById('gestao-nav-montadores'),
         characteristics: document.getElementById('gestao-nav-characteristics'),
@@ -113,6 +114,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-project-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-alterar-status-projeto-panel')?.classList.add('hidden');
     document.getElementById('gestao-clientes-panel')?.classList.add('hidden');
+    document.getElementById('gestao-calendar-event-types-panel')?.classList.add('hidden');
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-montadores-panel')?.classList.add('hidden');
     document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
@@ -1045,6 +1047,12 @@ function showGestaoClientesPanel() {
     setGestaoNavActive('clientes');
 }
 
+function showGestaoCalendarEventTypesPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-calendar-event-types-panel')?.classList.remove('hidden');
+    setGestaoNavActive('calendar-event-types');
+}
+
 function showGestaoMarceneirosPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-marceneiros-panel')?.classList.remove('hidden');
@@ -1238,6 +1246,13 @@ function bindGestaoEvents() {
             loadGestaoClientesList();
         }
     });
+    document.getElementById('gestao-nav-calendar-event-types')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoCalendarEventTypesPanel();
+        if (typeof loadGestaoCalendarEventTypesList === 'function') {
+            loadGestaoCalendarEventTypesList();
+        }
+    });
     document.getElementById('gestao-nav-marceneiros')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoMarceneirosPanel();
@@ -1284,6 +1299,23 @@ function bindGestaoEvents() {
     });
     document.getElementById('gestao-new-cliente-form')?.addEventListener('submit', (e) => {
         if (typeof addGestaoCliente === 'function') addGestaoCliente(e);
+    });
+    document.getElementById('gestao-new-calendar-event-type-form')?.addEventListener('submit', (e) => {
+        if (typeof addGestaoCalendarEventType === 'function') addGestaoCalendarEventType(e);
+    });
+    document.getElementById('gestao-calendar-event-types-list')?.addEventListener('click', (event) => {
+        const saveBtn = event.target.closest('.gestao-save-calendar-event-type');
+        if (saveBtn && typeof saveGestaoCalendarEventTypeRow === 'function') {
+            event.preventDefault();
+            saveGestaoCalendarEventTypeRow(saveBtn.closest('tr'), saveBtn);
+            return;
+        }
+
+        const deleteBtn = event.target.closest('.gestao-delete-calendar-event-type');
+        if (deleteBtn && typeof deleteGestaoCalendarEventTypeRow === 'function') {
+            event.preventDefault();
+            deleteGestaoCalendarEventTypeRow(deleteBtn.closest('tr'));
+        }
     });
     document.getElementById('gestao-clientes-list')?.addEventListener('click', (event) => {
         const saveBtn = event.target.closest('.gestao-save-cliente');
@@ -1481,7 +1513,7 @@ async function openProjectRelationPickerModal(target = 'parent') {
     if (activeOrder) {
         currentOrderId = Number(activeOrder.id);
         clientId = activeOrder.clientId;
-        clientName = activeOrder.cliente?.nome || activeOrder.clientName || '';
+        clientName = getOrderClientName(activeOrder) || '';
     } else {
         clientName = document.getElementById('gestao-order-client-name')?.value.trim()
             || document.getElementById('ord-client')?.value.trim()
@@ -1524,8 +1556,8 @@ async function openProjectRelationPickerModal(target = 'parent') {
     if (!orderIds.length && clientName) {
         const { data: nameOrders } = await supabaseClient
             .from('salesOrders')
-            .select('id')
-            .ilike('clientName', clientName.trim());
+            .select('id, cliente:Cliente!inner(nome)')
+            .ilike('cliente.nome', clientName.trim());
         if (nameOrders?.length) {
             orderIds = nameOrders.map(o => o.id);
         }
@@ -1547,14 +1579,14 @@ async function openProjectRelationPickerModal(target = 'parent') {
 
     let { data: projects, error } = await supabaseClient
         .from('OrderProject')
-        .select('id, projectCode, name, orderId, isComplementar, isSubstituido, projectStatus:OrderProjectStatus(name, sortOrder), order:salesOrders(orderCode, clientName)')
+        .select('id, projectCode, name, orderId, isComplementar, isSubstituido, projectStatus:OrderProjectStatus(name, sortOrder), order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
         .in('orderId', orderIds)
         .order('createdAt', { ascending: false });
 
     if (error?.message?.includes('projectStatus')) {
         ({ data: projects } = await supabaseClient
             .from('OrderProject')
-            .select('id, projectCode, name, orderId, isComplementar, isSubstituido, order:salesOrders(orderCode, clientName)')
+            .select('id, projectCode, name, orderId, isComplementar, isSubstituido, order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
             .in('orderId', orderIds)
             .order('createdAt', { ascending: false }));
     }

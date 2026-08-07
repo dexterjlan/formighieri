@@ -672,6 +672,10 @@
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Clientes
                                 </button>
+                                <button type="button" id="gestao-nav-calendar-event-types"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Tipos de Evento
+                                </button>
                                 <button type="button" id="gestao-nav-marceneiros"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Marceneiros
@@ -1205,6 +1209,57 @@
                                         </tr>
                                     </thead>
                                     <tbody id="gestao-clientes-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-calendar-event-types-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Tipos de Evento</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os tipos usados no calendário e defina se cliente e pedido são obrigatórios ao criar um evento.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-calendar-event-type-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[160px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo tipo</label>
+                                    <input type="text" id="gestao-new-calendar-event-type-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Ex.: Reunião">
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ordem</label>
+                                    <input type="number" id="gestao-new-calendar-event-type-sort" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <label class="flex items-center gap-1.5 text-xs text-slate-600 pb-2">
+                                    <input type="checkbox" id="gestao-new-calendar-event-type-client-required"
+                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                                    Cliente obrig.
+                                </label>
+                                <label class="flex items-center gap-1.5 text-xs text-slate-600 pb-2">
+                                    <input type="checkbox" id="gestao-new-calendar-event-type-order-required"
+                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                                    Pedido obrig.
+                                </label>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-28">Cliente obrig.</th>
+                                            <th class="text-center p-3 font-semibold w-28">Pedido obrig.</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-calendar-event-types-list" class="divide-y divide-slate-100"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -1773,8 +1828,6 @@
                         <select id="calendar-filter-type"
                             class="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600 min-w-[9rem]">
                             <option value="">Todos</option>
-                            <option value="Medição">Medição</option>
-                            <option value="Atendimento">Atendimento</option>
                         </select>
                     </label>
                     <label class="flex items-center gap-2 text-xs text-slate-600">
