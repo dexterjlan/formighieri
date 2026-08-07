@@ -458,18 +458,7 @@ function mergeProgramacaoProducaoSummaryMonthGroups(pendingGroups, fechamentoMon
     });
 
     (fechamentoMonthGroups || []).forEach(monthGroup => {
-        if (!byMonthKey[monthGroup.monthKey]) {
-            byMonthKey[monthGroup.monthKey] = {
-                monthKey: monthGroup.monthKey,
-                clients: [],
-                orderCount: 0,
-                projectCount: 0,
-                totalSaleValue: 0,
-                fechamento: monthGroup
-            };
-            return;
-        }
-
+        if (!byMonthKey[monthGroup.monthKey]) return;
         byMonthKey[monthGroup.monthKey].fechamento = monthGroup;
     });
 

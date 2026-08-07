@@ -1676,6 +1676,43 @@
         </div>
     </div>
 
+    <!-- MODAL: CADASTRO RÁPIDO DE CLIENTE -->
+    <div id="cliente-create-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[98]">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900">Cadastrar Cliente</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">O cliente será criado como ativo e selecionado automaticamente</p>
+                </div>
+                <button type="button" onclick="toggleModal('cliente-create-modal', false)"
+                    class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+
+            <form id="cliente-create-form" class="space-y-4">
+                <div>
+                    <label for="cliente-create-nome" class="block text-xs font-medium text-slate-600 mb-1">
+                        Nome do cliente <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="cliente-create-nome" required
+                        placeholder="Ex.: João Silva"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                </div>
+
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" onclick="toggleModal('cliente-create-modal', false)"
+                        class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-200">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                        class="px-4 py-2 bg-indigo-700 text-white rounded-lg text-xs font-medium hover:bg-indigo-800">
+                        Salvar e selecionar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL: DIÁLOGO DE CONFIRMAÇÃO / AVISO -->
     <div id="app-dialog-modal"
         class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">

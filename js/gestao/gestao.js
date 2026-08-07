@@ -1211,6 +1211,7 @@ function bindGestaoEvents() {
     };
     document.getElementById('gestao-ord-client-picker-btn')?.addEventListener('click', triggerGestaoOrdClientPicker);
     document.getElementById('gestao-ord-client')?.addEventListener('click', triggerGestaoOrdClientPicker);
+    document.getElementById('cliente-create-form')?.addEventListener('submit', saveClienteCreateFromPicker);
     document.getElementById('gestao-nav-cadastros-toggle')?.addEventListener('click', async () => {
         const items = document.getElementById('gestao-nav-cadastros-items');
         if (!items) return;
@@ -1614,6 +1615,64 @@ async function openProjectRelationPickerModal(target = 'parent') {
 let clientePickerCache = [];
 let activeClientePickerCallback = null;
 
+function selectClienteFromPicker(cliente) {
+    if (typeof activeClientePickerCallback === 'function') {
+        activeClientePickerCallback(cliente);
+    }
+    toggleModal('cliente-create-modal', false);
+    toggleModal('cliente-picker-modal', false);
+}
+
+function openClienteCreateModal() {
+    const searchInput = document.getElementById('cliente-picker-search');
+    const nomeInput = document.getElementById('cliente-create-nome');
+    const filterText = (searchInput?.value || '').trim();
+    if (nomeInput) nomeInput.value = filterText;
+    toggleModal('cliente-create-modal', true);
+    nomeInput?.focus();
+}
+
+async function saveClienteCreateFromPicker(event) {
+    event.preventDefault();
+
+    const nome = document.getElementById('cliente-create-nome')?.value.trim();
+    if (!nome) {
+        alertAppDialog('Informe o nome do cliente.');
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const { data, error } = await supabaseClient
+        .from('Cliente')
+        .insert({
+            nome,
+            ativo: true,
+            updatedAt: now
+        })
+        .select('id, nome, ativo')
+        .single();
+
+    if (error) {
+        const isDuplicate = error.code === '23505'
+            || /unique/i.test(error.message || '')
+            || /duplicate/i.test(error.message || '');
+        alertAppDialog(
+            isDuplicate
+                ? `Já existe um cliente com o nome "${nome}".`
+                : 'Erro ao cadastrar cliente: ' + error.message
+        );
+        return;
+    }
+
+    clientePickerCache = [...(clientePickerCache || []), data]
+        .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
+
+    document.getElementById('cliente-create-form')?.reset();
+    selectClienteFromPicker({ id: data.id, nome: data.nome });
+}
+
+window.openClienteCreateModal = openClienteCreateModal;
+
 async function openClientePickerModal(onSelectCallback) {
     activeClientePickerCallback = onSelectCallback;
     const searchInput = document.getElementById('cliente-picker-search');
@@ -1638,7 +1697,7 @@ async function openClientePickerModal(onSelectCallback) {
     if (error || !clientes || !clientes.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="3" class="p-4 text-center text-slate-400">Nenhum cliente ativo cadastrado. Cadastre em Gestão → Cadastros → Clientes.</td>
+                <td colspan="3" class="p-4 text-center text-slate-400">Nenhum cliente ativo cadastrado.</td>
             </tr>
         `;
         clientePickerCache = [];
@@ -1670,9 +1729,15 @@ function renderClientePickerList() {
     if (!filtered.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="3" class="p-4 text-center text-slate-400">Nenhum cliente ativo encontrado com o filtro informado.</td>
+                <td colspan="3" class="p-4 text-center text-slate-400">
+                    Nenhum cliente ativo encontrado com o filtro informado.
+                    <button type="button" class="cliente-picker-create-inline mt-2 block mx-auto text-indigo-700 hover:text-indigo-900 font-medium underline">
+                        Cadastrar novo cliente
+                    </button>
+                </td>
             </tr>
         `;
+        tbody.querySelector('.cliente-picker-create-inline')?.addEventListener('click', openClienteCreateModal);
         return;
     }
 
@@ -1696,10 +1761,7 @@ function renderClientePickerList() {
         btn.addEventListener('click', (e) => {
             const id = Number(e.currentTarget.dataset.clienteId);
             const nome = e.currentTarget.dataset.clienteNome;
-            if (typeof activeClientePickerCallback === 'function') {
-                activeClientePickerCallback({ id, nome });
-            }
-            toggleModal('cliente-picker-modal', false);
+            selectClienteFromPicker({ id, nome });
         });
     });
 }
