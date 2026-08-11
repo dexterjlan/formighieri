@@ -301,6 +301,7 @@
                 </div>
             </div>
             <div class="fm-revision-modal__body flex-1 overflow-y-auto px-5 md:px-6 py-5 space-y-4 min-h-0">
+                <p id="revision-progress-info" class="hidden text-xs rounded-lg border px-3 py-2"></p>
                 <div class="flex justify-between items-center gap-3">
                     <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Atividades</p>
                     <button type="button" id="btn-add-revision-activity"
@@ -331,6 +332,8 @@
             <div class="fm-revision-modal__footer shrink-0 px-5 md:px-6 py-4 border-t border-slate-100 bg-white flex flex-wrap gap-2">
                 <button type="button" onclick="closeCommercialRevisionModal()"
                     class="flex-1 min-w-[120px] bg-slate-100 text-slate-600 py-2.5 rounded-lg text-xs font-semibold">Cancelar</button>
+                <button type="button" id="btn-start-revision"
+                    class="hidden flex-1 min-w-[140px] bg-amber-600 text-white py-2.5 rounded-lg text-xs font-semibold">Iniciar Revisão</button>
                 <button type="button" id="btn-save-revision"
                     class="flex-1 min-w-[120px] bg-sky-700 text-white py-2.5 rounded-lg text-xs font-semibold">Salvar Revisão</button>
                 <button type="button" id="btn-send-back-approval"
@@ -853,6 +856,93 @@
         </div>
     </div>
 
+    <!-- MODAL: DETALHAMENTO -->
+    <div id="detalhamento-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[70]">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto relative">
+            <div id="detalhamento-modal-loading"
+                class="hidden absolute inset-0 bg-white/90 rounded-2xl flex flex-col items-center justify-center gap-3 z-10 px-6 text-center">
+                <div id="detalhamento-modal-loading-spinner"
+                    class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
+                <div id="detalhamento-modal-loading-success"
+                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                <div id="detalhamento-modal-loading-error"
+                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                <p id="detalhamento-modal-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+            </div>
+            <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900">Detalhamento</h3>
+                    <p id="detalhamento-modal-project-name" class="text-sm text-slate-600 mt-0.5"></p>
+                </div>
+                <span id="detalhamento-modal-status-badge"
+                    class="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase bg-slate-100 text-slate-700"></span>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label for="detalhamento-projeto-path" class="block text-xs font-semibold text-slate-700 mb-1">Pasta do projeto (implantação)</label>
+                    <input type="text" id="detalhamento-projeto-path" readonly
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700">
+                </div>
+
+                <div id="detalhamento-gestor-section" class="hidden border border-slate-200 rounded-xl p-3 space-y-2">
+                    <label for="detalhamento-designer-select" class="block text-xs font-semibold text-slate-700">Projetista de detalhamento</label>
+                    <select id="detalhamento-designer-select"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                        <option value="">Selecione...</option>
+                    </select>
+                    <button type="button" id="btn-detalhamento-associar"
+                        class="w-full bg-violet-700 text-white py-2 rounded-lg text-xs font-semibold hover:bg-violet-800">
+                        Associar projetista
+                    </button>
+                </div>
+
+                <div id="detalhamento-designer-readonly-wrap">
+                    <div class="text-[10px] font-semibold text-slate-500 uppercase">Projetista</div>
+                    <div id="detalhamento-designer-readonly" class="text-sm text-slate-800 mt-1">—</div>
+                </div>
+
+                <div id="detalhamento-server-folder-field" class="hidden">
+                    <label for="detalhamento-server-folder-path" class="block text-xs font-semibold text-slate-700 mb-1">Pasta no servidor</label>
+                    <input type="text" id="detalhamento-server-folder-path" placeholder="Caminho da pasta no servidor"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                        <div class="text-[10px] font-semibold text-slate-500 uppercase">Início</div>
+                        <div id="detalhamento-started-at" class="text-slate-800 mt-1">—</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-semibold text-slate-500 uppercase">Conclusão</div>
+                        <div id="detalhamento-completed-at" class="text-slate-800 mt-1">—</div>
+                    </div>
+                </div>
+
+                <div id="detalhamento-projetista-actions" class="hidden flex flex-wrap gap-2 pt-2">
+                    <button type="button" id="btn-detalhamento-iniciar"
+                        class="flex-1 min-w-[120px] bg-violet-700 text-white py-2 rounded-lg text-xs font-semibold hover:bg-violet-800">
+                        Iniciar detalhamento
+                    </button>
+                    <button type="button" id="btn-detalhamento-encerrar"
+                        class="flex-1 min-w-[120px] bg-emerald-700 text-white py-2 rounded-lg text-xs font-semibold hover:bg-emerald-800">
+                        Encerrar detalhamento
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex gap-2 pt-5 mt-4 border-t border-slate-100">
+                <button type="button" id="btn-close-detalhamento-modal-footer"
+                    class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-semibold hover:bg-slate-200">
+                    Fechar
+                </button>
+                <button type="button" id="btn-close-detalhamento-modal"
+                    class="hidden" aria-hidden="true"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: PENDÊNCIAS — AGUARDANDO MEDIÇÃO (GESTOR COMERCIAL) -->
     <div id="pendencias-aguardando-medicao-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[55]">
@@ -962,6 +1052,10 @@
                             <dd id="project-view-delivery">—</dd>
                         </div>
                         <div class="project-view-field">
+                            <dt>Início previsto</dt>
+                            <dd id="project-view-previsao-inicio">—</dd>
+                        </div>
+                        <div class="project-view-field">
                             <dt>Previsão de conclusão</dt>
                             <dd id="project-view-previsao-conclusao">—</dd>
                         </div>
@@ -1042,6 +1136,43 @@
                         </div>
                     </dl>
                 </div>
+                <div id="project-view-detalhamento-wrap"
+                    class="hidden project-view-section project-view-section--boxed project-view-section--indigo">
+                    <div class="flex flex-wrap items-start justify-between gap-2 mb-1">
+                        <h4 class="project-view-section__title mb-0">Detalhamento</h4>
+                        <span id="project-view-detalhamento-status" class="text-[10px] px-2 py-0.5 rounded-full font-semibold"></span>
+                    </div>
+                    <dl class="project-view-fields">
+                        <div class="project-view-field">
+                            <dt>Projetista</dt>
+                            <dd id="project-view-detalhamento-designer">—</dd>
+                        </div>
+                        <div class="project-view-field">
+                            <dt>Pasta (implantação)</dt>
+                            <dd id="project-view-detalhamento-projeto-path" class="project-view-path">—</dd>
+                        </div>
+                        <div class="project-view-field project-view-field--full">
+                            <dt>Pasta no servidor</dt>
+                            <dd id="project-view-detalhamento-server-path" class="project-view-path">—</dd>
+                        </div>
+                    </dl>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 text-xs">
+                        <div>
+                            <div class="text-[10px] font-semibold text-slate-500 uppercase">Início</div>
+                            <div id="project-view-detalhamento-started-at" class="text-slate-800 mt-1">—</div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-semibold text-slate-500 uppercase">Conclusão</div>
+                            <div id="project-view-detalhamento-completed-at" class="text-slate-800 mt-1">—</div>
+                        </div>
+                        <div class="flex items-end justify-start sm:justify-end">
+                            <button type="button" id="project-view-detalhamento-open"
+                                class="text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline underline-offset-2">
+                                Abrir detalhamento
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <span id="project-view-code" class="hidden" aria-hidden="true"></span>
                 <span id="project-view-name" class="hidden" aria-hidden="true"></span>
                 <span id="project-view-status" class="hidden" aria-hidden="true"></span>
@@ -1070,7 +1201,7 @@
     <!-- MODAL: HISTÓRICO DE STATUS DO PROJETO -->
     <div id="order-project-status-history-modal"
         class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[66]">
-        <div class="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="bg-white rounded-2xl w-full max-w-3xl shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
             <div class="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-start gap-3">
                 <div class="min-w-0">
                     <h3 class="font-bold text-base text-slate-900">Histórico de status</h3>
@@ -1547,7 +1678,12 @@
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
         <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h3 class="font-bold text-base text-slate-900 mb-1">Associar a mim</h3>
-            <p class="text-xs text-slate-500 mb-4">Informe a previsão de conclusão do projeto técnico para assumir o projeto.</p>
+            <p class="text-xs text-slate-500 mb-4">Informe o período previsto do projeto técnico para assumir o projeto.</p>
+            <label class="block text-xs font-semibold text-slate-500 mb-1" for="order-project-associar-previsao-inicio">
+                Início previsto <span class="text-red-500">*</span>
+            </label>
+            <input type="date" id="order-project-associar-previsao-inicio"
+                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 mb-3">
             <label class="block text-xs font-semibold text-slate-500 mb-1" for="order-project-associar-previsao">
                 Previsão de conclusão <span class="text-red-500">*</span>
             </label>

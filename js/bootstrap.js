@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '20260807';
+const APP_CACHE_VERSION = '20260811u';
 
 const PARTIALS = [
     'partials/login.html',
@@ -40,12 +40,14 @@ const SCRIPTS = [
     'js/orders/projeto-tecnico.js',
     'js/orders/compras.js',
     'js/orders/implantacao.js',
+    'js/orders/detalhamento.js',
     'js/pendencias/pendencias-core.js',
     'js/pendencias/pendencias-projetista-pt.js',
     'js/pendencias/pendencias-third-party.js',
     'js/pendencias/pendencias-projetista-flows.js',
     'js/pendencias/pendencias-projetista-medicao.js',
     'js/pendencias/pendencias-operacional.js',
+    'js/pendencias/pendencias-detalhamento.js',
     'js/pendencias/pendencias-gestor-montagem-externa.js',
     'js/pendencias/pendencias-comercial.js',
     'js/pendencias/pendencias-compras.js',

@@ -55,6 +55,7 @@ function initAppEvents() {
     bindOrderProjectMontagemEvents();
     bindNomearEvents();
     bindImplantacaoEvents();
+    bindDetalhamentoEvents();
     bindCompraEvents();
     bindPpcpEvents();
     bindConversationEvents();

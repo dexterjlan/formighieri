@@ -72,7 +72,7 @@ async function resolveApprovalNotificationToEmail(eventType, approval) {
         return designerEmail || NOTIFICATION_TEST_EMAIL;
     }
 
-    if (eventType === 'sent_back_to_approval') {
+    if (eventType === 'revision_started' || eventType === 'sent_back_to_approval') {
         return fetchConsultorEmailForOrder(approval?.orderId);
     }
 
@@ -230,6 +230,28 @@ async function fetchActivePpcpProjetistasRecipientEmails() {
     if (error) throw error;
 
     const emails = (data || []).map(user => user.email);
+    return uniqueEmails(emails);
+}
+
+async function fetchActiveDetalhamentoProjetistasRecipientEmails() {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    let { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('email')
+        .eq('role', 'Projetista')
+        .eq('isActive', true)
+        .eq('detalhamento', true);
+
+    if (error?.message?.includes('detalhamento')) {
+        return [];
+    }
+
+    if (error) throw error;
+
+    const emails = (data || []).map(user => user.email?.trim()).filter(Boolean);
     return uniqueEmails(emails);
 }
 

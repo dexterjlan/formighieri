@@ -105,7 +105,8 @@ async function fetchPendenciasEmRevisaoProjects() {
             overviewMode,
             projects: [],
             statusChangedAtByProject: {},
-            approvalsByProject: {}
+            approvalsByProject: {},
+            revisionsByApproval: {}
         };
     }
 
@@ -121,7 +122,8 @@ async function fetchPendenciasEmRevisaoProjects() {
             overviewMode,
             projects: [],
             statusChangedAtByProject: {},
-            approvalsByProject: {}
+            approvalsByProject: {},
+            revisionsByApproval: {}
         };
     }
 
@@ -137,7 +139,8 @@ async function fetchPendenciasEmRevisaoProjects() {
             overviewMode,
             projects: [],
             statusChangedAtByProject: {},
-            approvalsByProject: {}
+            approvalsByProject: {},
+            revisionsByApproval: {}
         };
     }
 
@@ -152,16 +155,22 @@ async function fetchPendenciasEmRevisaoProjects() {
         fetchCommercialApprovalsByProjectIds(projectIds)
     ]);
 
+    const approvalIds = Object.values(approvalsByProject).map(approval => approval.id).filter(Boolean);
+    const revisionsByApproval = typeof fetchLatestTechnicalRevisionsByApprovalIds === 'function'
+        ? await fetchLatestTechnicalRevisionsByApprovalIds(approvalIds)
+        : {};
+
     return {
         error: null,
         overviewMode,
         projects,
         statusChangedAtByProject,
-        approvalsByProject
+        approvalsByProject,
+        revisionsByApproval
     };
 }
 
-function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, approvalsByProject, overviewMode) {
+function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, approvalsByProject, overviewMode, revisionsByApproval = {}) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
@@ -172,6 +181,16 @@ function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, appro
         const statusChangedAt = statusChangedAtByProject[project.id];
         const designerName = project.designer?.name || '—';
         const approval = approvalsByProject[project.id];
+        const revision = approval ? revisionsByApproval[approval.id] : null;
+        const revisionProgressLabel = typeof getTechnicalRevisionProgressLabel === 'function'
+            ? getTechnicalRevisionProgressLabel(revision)
+            : '—';
+        const revisionProgressClass = typeof getTechnicalRevisionProgressBadgeClass === 'function'
+            ? getTechnicalRevisionProgressBadgeClass(revision)
+            : 'bg-slate-100 text-slate-600';
+        const revisionStartedAt = revision?.revisionStartedAt
+            ? formatDate(revision.revisionStartedAt)
+            : '—';
         const canViewRevision = !overviewMode
             && approval
             && typeof canViewCommercialRevision === 'function'
@@ -189,6 +208,12 @@ function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, appro
                     ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>`
                     : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
+                ${overviewMode
+                    ? `<td class="p-3">
+                        <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${revisionProgressClass}">${escapeHtml(revisionProgressLabel)}</span>
+                    </td>
+                    <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${escapeHtml(revisionStartedAt)}</td>`
+                    : ''}
                 <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${statusChangedAt ? formatDate(statusChangedAt) : '—'}</td>
                 ${overviewMode ? '' : `<td class="p-3 text-right whitespace-nowrap">${actionCell}</td>`}
             </tr>
@@ -216,13 +241,17 @@ function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, appro
             </div>
             ${projects.length
                 ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[${overviewMode ? '920' : '820'}px]">
+                    <table class="w-full text-sm min-w-[${overviewMode ? '1080' : '820'}px]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
                                 ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="text-left p-3 font-semibold">Projeto</th>
+                                ${overviewMode
+                                    ? `<th class="text-left p-3 font-semibold">Revisão</th>
+                                       <th class="text-left p-3 font-semibold">Início revisão</th>`
+                                    : ''}
                                 <th class="text-left p-3 font-semibold">Data Em Revisão</th>
                                 ${overviewMode ? '' : '<th class="text-right p-3 font-semibold w-32">Ações</th>'}
                             </tr>
@@ -249,7 +278,7 @@ async function loadPendenciasEmRevisao() {
         return;
     }
 
-    const { error, overviewMode, projects, statusChangedAtByProject, approvalsByProject } =
+    const { error, overviewMode, projects, statusChangedAtByProject, approvalsByProject, revisionsByApproval } =
         await fetchPendenciasEmRevisaoProjects();
 
     if (error) {
@@ -261,7 +290,8 @@ async function loadPendenciasEmRevisao() {
         projects,
         statusChangedAtByProject,
         approvalsByProject,
-        overviewMode
+        overviewMode,
+        revisionsByApproval || {}
     );
 }
 

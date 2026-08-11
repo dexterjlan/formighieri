@@ -704,7 +704,8 @@ async function notifyProjetoTecnicoIniciadoEmail(options = {}) {
         orderId,
         orderProjectId,
         designerId = null,
-        previsaoConclusaoProjetoTecnico = null
+        previsaoConclusaoProjetoTecnico = null,
+        technicalProjectForecastStartDate = null
     } = options;
 
     if (!orderId || !orderProjectId) return;
@@ -713,6 +714,13 @@ async function notifyProjetoTecnicoIniciadoEmail(options = {}) {
         const extraFields = [
             { label: 'Novo status', value: 'Projeto Técnico' }
         ];
+
+        if (technicalProjectForecastStartDate) {
+            extraFields.push({
+                label: 'Início previsto',
+                value: formatNotificationDate(technicalProjectForecastStartDate)
+            });
+        }
 
         if (previsaoConclusaoProjetoTecnico) {
             extraFields.push({
@@ -779,6 +787,112 @@ async function notifyImplantacaoEnviarProducaoEmail(options = {}) {
 }
 
 window.notifyImplantacaoEnviarProducaoEmail = notifyImplantacaoEnviarProducaoEmail;
+
+async function notifyAguardandoDetalhamentoEmail(options = {}) {
+    const { orderProjectId, projetoPath = '' } = options;
+    if (!orderProjectId) return;
+
+    if (!NOTIFICATIONS_ENABLED) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyAguardandoDetalhamentoEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const recipientEmails = await fetchActiveGestorProjetosRecipientEmails();
+        if (!recipientEmails.length) return;
+
+        const { data: project, error } = await supabaseClient
+            .from('OrderProject')
+            .select('id, orderId, designerId')
+            .eq('id', orderProjectId)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!project?.orderId) return;
+
+        const extraFields = [
+            {
+                label: 'Mensagem',
+                value: 'Há um projeto aguardando detalhamento. Associe o projetista responsável em Pendências > Aguardando Detalhamento.'
+            }
+        ];
+
+        if (projetoPath) {
+            extraFields.push({ label: 'Caminho do projeto (implantação)', value: projetoPath });
+        }
+
+        await sendProcessNotificationEmail('aguardando_detalhamento', {
+            orderId: project.orderId,
+            orderProjectIds: [orderProjectId],
+            designerId: project.designerId,
+            recipientEmails,
+            includeProjetista: true,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto aguardando detalhamento',
+            accentColor: '#4f46e5',
+            extraFields
+        });
+    } catch (err) {
+        console.warn('notifyAguardandoDetalhamentoEmail:', err);
+    }
+}
+
+window.notifyAguardandoDetalhamentoEmail = notifyAguardandoDetalhamentoEmail;
+
+async function notifyDetalhamentoProjetistaAssociadoEmail(options = {}) {
+    const { orderProjectId, designerId, projetoPath = '' } = options;
+    if (!orderProjectId || !designerId) return;
+
+    if (!NOTIFICATIONS_ENABLED) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyDetalhamentoProjetistaAssociadoEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const recipientEmail = await fetchDesignerEmailById(designerId);
+        if (!recipientEmail) return;
+
+        const { data: project, error } = await supabaseClient
+            .from('OrderProject')
+            .select('id, orderId')
+            .eq('id', orderProjectId)
+            .maybeSingle();
+
+        if (error) throw error;
+        if (!project?.orderId) return;
+
+        const extraFields = [
+            {
+                label: 'Mensagem',
+                value: 'Você foi associado ao detalhamento deste projeto. Acesse Pendências > Detalhamento para iniciar.'
+            }
+        ];
+
+        if (projetoPath) {
+            extraFields.push({ label: 'Pasta (implantação)', value: projetoPath });
+        }
+
+        await sendProcessNotificationEmail('detalhamento_projetista_associado', {
+            orderId: project.orderId,
+            orderProjectIds: [orderProjectId],
+            designerId,
+            recipientEmails: [recipientEmail],
+            includeProjetista: true,
+            showProjectDetails: false,
+            projectSectionTitle: 'Detalhamento atribuído',
+            accentColor: '#4f46e5',
+            extraFields
+        });
+    } catch (err) {
+        console.warn('notifyDetalhamentoProjetistaAssociadoEmail:', err);
+    }
+}
+
+window.notifyDetalhamentoProjetistaAssociadoEmail = notifyDetalhamentoProjetistaAssociadoEmail;
 
 async function notifyMontagemExternaFinalizadaEmail(options = {}) {
     const { orderId, orderProjectId } = options;

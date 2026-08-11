@@ -250,7 +250,8 @@ const PROJECT_STATUS_HISTORY_BAR_COLORS = {
 
 let projectStatusHistoryState = {
     entries: [],
-    viewMode: 'flow'
+    viewMode: 'flow',
+    detailingRecord: null
 };
 
 function getProjectStatusHistoryBarColor(statusName) {
@@ -391,10 +392,10 @@ function renderProjectStatusHistoryTimeline(entries) {
     `;
 }
 
-function renderProjectStatusHistoryView(entries, viewMode = 'flow') {
+function renderProjectStatusHistoryView(entries, viewMode = 'flow', detailingRecord = null) {
     const content = viewMode === 'timeline'
         ? renderProjectStatusHistoryTimeline(entries)
-        : renderProjectStatusHistoryFlow(entries);
+        : renderProjectStatusHistoryFlow(entries, detailingRecord);
 
     return `
         ${renderProjectStatusHistoryToolbar(viewMode)}
@@ -404,17 +405,22 @@ function renderProjectStatusHistoryView(entries, viewMode = 'flow') {
     `;
 }
 
-function setProjectStatusHistoryContent(containerId, entries, viewMode = 'flow') {
+function setProjectStatusHistoryContent(containerId, entries, viewMode = 'flow', detailingRecord = null) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     projectStatusHistoryState = {
         entries: entries || [],
-        viewMode
+        viewMode,
+        detailingRecord: detailingRecord || null
     };
 
     container.dataset.projectStatusHistoryContainer = 'true';
-    container.innerHTML = renderProjectStatusHistoryView(projectStatusHistoryState.entries, viewMode);
+    container.innerHTML = renderProjectStatusHistoryView(
+        projectStatusHistoryState.entries,
+        viewMode,
+        projectStatusHistoryState.detailingRecord
+    );
 }
 
 function bindProjectStatusHistoryViewToggle() {
@@ -428,7 +434,12 @@ function bindProjectStatusHistoryViewToggle() {
         const viewMode = button.dataset.projectStatusHistoryView;
         if (!viewMode || viewMode === projectStatusHistoryState.viewMode) return;
 
-        setProjectStatusHistoryContent(container.id, projectStatusHistoryState.entries, viewMode);
+        setProjectStatusHistoryContent(
+            container.id,
+            projectStatusHistoryState.entries,
+            viewMode,
+            projectStatusHistoryState.detailingRecord
+        );
     });
 }
 
@@ -465,10 +476,14 @@ function renderProjectStatusHistoryStep(entry, index) {
     `;
 }
 
-function renderProjectStatusHistoryFlow(entries) {
+function renderProjectStatusHistoryFlow(entries, detailingRecord = null) {
     if (!entries.length) {
         return '<p class="text-xs text-slate-400 text-center py-12">Nenhum registro de histórico para este projeto.</p>';
     }
+
+    const lastEmProducaoIndex = typeof findLastEmProducaoHistoryIndex === 'function'
+        ? findLastEmProducaoHistoryIndex(entries)
+        : -1;
 
     const parts = [];
     entries.forEach((entry, index) => {
@@ -476,6 +491,11 @@ function renderProjectStatusHistoryFlow(entries) {
             parts.push(renderProjectStatusHistoryConnector(entry.previousStatusDurationSeconds));
         }
         parts.push(renderProjectStatusHistoryStep(entry, index));
+
+        if (detailingRecord && index === lastEmProducaoIndex
+            && typeof renderProjectStatusHistoryDetailingBranch === 'function') {
+            parts.push(renderProjectStatusHistoryDetailingBranch(detailingRecord));
+        }
     });
 
     return `
@@ -509,8 +529,13 @@ async function openGestaoProjectStatusHistory(context = {}) {
     }
 
     try {
-        const entries = await fetchOrderProjectStatusHistory(orderProjectId);
-        setProjectStatusHistoryContent('gestao-project-history-flow', entries, 'flow');
+        const [entries, detailingRecord] = await Promise.all([
+            fetchOrderProjectStatusHistory(orderProjectId),
+            typeof fetchDetalhamentoByOrderProjectId === 'function'
+                ? fetchDetalhamentoByOrderProjectId(orderProjectId)
+                : Promise.resolve(null)
+        ]);
+        setProjectStatusHistoryContent('gestao-project-history-flow', entries, 'flow', detailingRecord);
     } catch (error) {
         if (flow) {
             flow.innerHTML = `<p class="text-xs text-red-500 text-center py-8">Erro ao carregar histórico: ${escapeHtml(error.message)}</p>`;
@@ -618,8 +643,13 @@ async function openProjectStatusHistoryModal(context = {}) {
     }
 
     try {
-        const entries = await fetchOrderProjectStatusHistory(orderProjectId);
-        setProjectStatusHistoryContent('project-status-history-flow', entries, 'flow');
+        const [entries, detailingRecord] = await Promise.all([
+            fetchOrderProjectStatusHistory(orderProjectId),
+            typeof fetchDetalhamentoByOrderProjectId === 'function'
+                ? fetchDetalhamentoByOrderProjectId(orderProjectId)
+                : Promise.resolve(null)
+        ]);
+        setProjectStatusHistoryContent('project-status-history-flow', entries, 'flow', detailingRecord);
     } catch (error) {
         if (flow) {
             flow.innerHTML = `<p class="text-xs text-red-500 text-center py-8">Erro ao carregar histórico: ${escapeHtml(error.message)}</p>`;

@@ -24,6 +24,12 @@ const USER_FLAG_CONFIG = [
         appliesTo: role => role === 'Projetista'
     },
     {
+        id: 'detalhamento',
+        label: 'Detalhamento',
+        hint: 'Fluxo de detalhamento em produção',
+        appliesTo: role => role === 'Projetista'
+    },
+    {
         id: 'gestor-fabrica',
         label: 'Gestor de Fábrica',
         hint: 'Aba Fábrica e Gestão',
@@ -88,6 +94,7 @@ function buildUserRoleBadges(u) {
     if ((isAdminUser || isConsultorUser) && u.gestorComercial) badges.push('<span class="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-100">Gestor comercial</span>');
     if (canHaveGestorProjetos && u.gestorProjetos) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">Gestor de projetos</span>');
     if (isProjetistaUser && u.ppcp) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">PPCP</span>');
+    if (isProjetistaUser && u.detalhamento) badges.push('<span class="text-[10px] bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-100">Detalhamento</span>');
     if (isMarceneiroUser && u.gestorFabrica) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
 
     return badges.join('');
@@ -105,7 +112,8 @@ function buildUserFlagCheckbox(u, flag) {
         'gestor-comercial': Boolean(u.gestorComercial),
         'gestor-projetos': Boolean(u.gestorProjetos),
         ppcp: Boolean(u.ppcp),
-        'gestor-fabrica': Boolean(u.gestorFabrica)
+        'gestor-fabrica': Boolean(u.gestorFabrica),
+        detalhamento: Boolean(u.detalhamento)
     };
 
     return `
@@ -150,7 +158,8 @@ function mergeUserFlagChecks(u, checks) {
         gestorComercial: checks['gestor-comercial'] ?? u.gestorComercial,
         gestorProjetos: checks['gestor-projetos'] ?? u.gestorProjetos,
         ppcp: checks.ppcp ?? u.ppcp,
-        gestorFabrica: checks['gestor-fabrica'] ?? u.gestorFabrica
+        gestorFabrica: checks['gestor-fabrica'] ?? u.gestorFabrica,
+        detalhamento: checks.detalhamento ?? u.detalhamento
     };
 }
 
@@ -309,10 +318,10 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica')
+        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento')
         .order('name', { ascending: true });
 
-    if (result.error?.message?.includes('gestorFabrica') || result.error?.message?.includes('ppcp')) {
+    if (result.error?.message?.includes('gestorFabrica') || result.error?.message?.includes('ppcp') || result.error?.message?.includes('detalhamento')) {
         result = await supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos')
@@ -376,6 +385,7 @@ async function saveUserRole(userId) {
     const gestorComercialCheck = document.getElementById(`gestor-comercial-check-${userId}`);
     const gestorProjetosCheck = document.getElementById(`gestor-projetos-check-${userId}`);
     const ppcpCheck = document.getElementById(`ppcp-check-${userId}`);
+    const detalhamentoCheck = document.getElementById(`detalhamento-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const name = nameInput?.value.trim() || '';
     const role = select?.value;
@@ -383,6 +393,7 @@ async function saveUserRole(userId) {
     const gestorComercial = (role === 'Admin' || role === 'Consultor') && Boolean(gestorComercialCheck?.checked);
     const gestorProjetos = (role === 'Admin' || role === 'Projetista') && Boolean(gestorProjetosCheck?.checked);
     const ppcp = role === 'Projetista' && Boolean(ppcpCheck?.checked);
+    const detalhamento = role === 'Projetista' && Boolean(detalhamentoCheck?.checked);
     const gestorFabrica = role === 'Marceneiro' && Boolean(gestorFabricaCheck?.checked);
 
     if (!name) {
@@ -402,13 +413,13 @@ async function saveUserRole(userId) {
         .eq('id', userId)
         .maybeSingle();
 
-    let payload = { name, role, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica };
+    let payload = { name, role, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento };
     let { error } = await supabaseClient
         .from('appUsers')
         .update(payload)
         .eq('id', userId);
 
-    if (error?.message?.includes('gestorFabrica') || error?.message?.includes('ppcp')) {
+    if (error?.message?.includes('gestorFabrica') || error?.message?.includes('ppcp') || error?.message?.includes('detalhamento')) {
         payload = { name, role, conferente, gestorComercial, gestorProjetos };
         ({ error } = await supabaseClient
             .from('appUsers')
@@ -444,7 +455,8 @@ async function saveUserRole(userId) {
             gestorComercial,
             gestorProjetos,
             ppcp,
-            gestorFabrica
+            gestorFabrica,
+            detalhamento
         };
         currentUser = normalizeAppUserProfile(currentUser);
         refreshLoggedInUserDisplay();

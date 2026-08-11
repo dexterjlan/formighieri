@@ -255,6 +255,10 @@ async function saveGestaoAlterarStatusPendingChanges() {
             change.select.dataset.currentStatusId = String(change.newStatusId);
         }
 
+        if (change.newStatusName === 'Em Produção' && typeof createDetalhamentoForProject === 'function') {
+            await createDetalhamentoForProject(change.projectId);
+        }
+
         const statusCell = change.row?.querySelector('td:nth-child(4)');
         if (statusCell) {
             statusCell.textContent = change.newStatusName;

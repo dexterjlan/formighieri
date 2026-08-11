@@ -1,5 +1,6 @@
 let orderProjectViewContext = null;
 let orderProjectViewImplantacaoContext = null;
+let orderProjectViewDetalhamentoContext = null;
 let orderProjectViewRevisionsContext = null;
 
 function formatProjectViewMontagemDate(dateStr) {
@@ -134,6 +135,9 @@ function fillProjectViewModal(project = {}, complementarChildren = []) {
     setText('project-view-delivery', typeof formatGestaoDate === 'function'
         ? formatGestaoDate(project.deliveryDate)
         : (project.deliveryDate || '—'));
+    setText('project-view-previsao-inicio', typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(project.technicalProjectForecastStartDate)
+        : (project.technicalProjectForecastStartDate || '—'));
     setText('project-view-previsao-conclusao', typeof formatGestaoDate === 'function'
         ? formatGestaoDate(project.previsaoConclusaoProjetoTecnico)
         : (project.previsaoConclusaoProjetoTecnico || '—'));
@@ -209,7 +213,7 @@ async function fetchProjectDetailsForView(projectId) {
     if (!normalizedId) return null;
 
     const selectVariants = [
-        'id, orderId, projectCode, name, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, marceneiroId, inicioMontagemInterna, fimMontagemInterna, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), marceneiro:Marceneiro(id, name), order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, marceneiroId, inicioMontagemInterna, fimMontagemInterna, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), marceneiro:Marceneiro(id, name), order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
         'id, orderId, projectCode, name, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico, statusId, designerId, caminhoRedeAprovacao, marceneiroId, inicioMontagemInterna, fimMontagemInterna, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
         'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, marceneiroId, inicioMontagemInterna, fimMontagemInterna, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)'
@@ -267,6 +271,11 @@ async function openProjectViewModal(projectOrId) {
         implantacaoRecord = await fetchImplantacaoByOrderProjectId(project.id);
     }
 
+    let detalhamentoRecord = null;
+    if (typeof fetchDetalhamentoByOrderProjectId === 'function') {
+        detalhamentoRecord = await fetchDetalhamentoByOrderProjectId(project.id);
+    }
+
     const complementarChildren = isComplementarOrderProject(project)
         ? []
         : await fetchComplementarChildrenForProject(project.id);
@@ -281,11 +290,19 @@ async function openProjectViewModal(projectOrId) {
     orderProjectViewImplantacaoContext = implantacaoRecord
         ? { projectId: project.id, projectName: project.name || 'Projeto' }
         : null;
+    orderProjectViewDetalhamentoContext = detalhamentoRecord
+        ? { projectId: project.id, projectName: project.name || 'Projeto' }
+        : null;
     orderProjectViewRevisionsContext = typeof fetchOrderProjectVerRevisoesActionContext === 'function'
         ? await fetchOrderProjectVerRevisoesActionContext(project, project.orderId)
         : null;
     document.getElementById('btn-project-view-implantacao')
         ?.classList.toggle('hidden', !orderProjectViewImplantacaoContext);
+    if (typeof renderProjectViewDetailingSection === 'function') {
+        renderProjectViewDetailingSection(detalhamentoRecord);
+    } else {
+        document.getElementById('project-view-detalhamento-wrap')?.classList.add('hidden');
+    }
     document.getElementById('btn-project-view-revisions')
         ?.classList.toggle('hidden', !orderProjectViewRevisionsContext);
     toggleModal('order-project-view-modal', true);
@@ -296,12 +313,14 @@ function bindGestaoProjectViewEvents() {
         toggleModal('order-project-view-modal', false);
         orderProjectViewContext = null;
         orderProjectViewImplantacaoContext = null;
+        orderProjectViewDetalhamentoContext = null;
         orderProjectViewRevisionsContext = null;
     });
     document.getElementById('btn-close-order-project-view-footer')?.addEventListener('click', () => {
         toggleModal('order-project-view-modal', false);
         orderProjectViewContext = null;
         orderProjectViewImplantacaoContext = null;
+        orderProjectViewDetalhamentoContext = null;
         orderProjectViewRevisionsContext = null;
     });
     document.getElementById('btn-project-view-implantacao')?.addEventListener('click', async () => {
@@ -311,6 +330,13 @@ function bindGestaoProjectViewEvents() {
             await openPpcpImplantacaoModal(projectId, projectName);
         } else if (typeof openImplantacaoModal === 'function') {
             await openImplantacaoModal(projectId, projectName, { requireExisting: true });
+        }
+    });
+    document.getElementById('project-view-detalhamento-open')?.addEventListener('click', async () => {
+        if (!orderProjectViewDetalhamentoContext) return;
+        const { projectId, projectName } = orderProjectViewDetalhamentoContext;
+        if (typeof openDetalhamentoModal === 'function') {
+            await openDetalhamentoModal(projectId, projectName);
         }
     });
     document.getElementById('btn-project-view-revisions')?.addEventListener('click', async () => {

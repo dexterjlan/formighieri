@@ -2,7 +2,7 @@ const ORDER_PT_STATUS_AGUARDANDO = 'Aguardando Projeto Técnico';
 const ORDER_PT_STATUS_PROJETO_TECNICO = 'Projeto Técnico';
 
 const ORDER_PROJETO_TECNICO_PROJECT_SELECT = `
-    id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico,
+    id, orderId, projectCode, name, designerId, statusId, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico,
     projectStatus:OrderProjectStatus(id, name),
     designer:appUsers!OrderProject_designerId_fkey(id, name)
 `;
@@ -29,14 +29,18 @@ function getOrderProjetoTecnicoPrevisaoInputValue(dateStr) {
     return String(dateStr).slice(0, 10);
 }
 
-function validateOrderProjetoTecnicoPrevisao(previsaoDate, deliveryDate) {
+function validateOrderProjetoTecnicoPrevisao(inicioDate, previsaoDate, deliveryDate) {
+    if (!inicioDate) {
+        alertAppDialog('Informe o início previsto do projeto técnico.');
+        return false;
+    }
     if (!previsaoDate) {
         alertAppDialog('Informe a previsão de conclusão do projeto técnico.');
         return false;
     }
-    if (!isPrevisaoConclusaoProjetoTecnicoValid(previsaoDate, deliveryDate)) {
+    if (!isPrevisaoProjetoTecnicoRangeValid(inicioDate, previsaoDate, deliveryDate)) {
         alertAppDialog(
-            'A previsão de conclusão deve ser anterior ou igual à data de entrega do projeto técnico.',
+            'O início deve ser anterior ou igual à previsão de conclusão, e a conclusão deve ser anterior ou igual à data de entrega do projeto técnico.',
             { variant: 'warning', title: 'Aviso' }
         );
         return false;
@@ -145,6 +149,7 @@ async function queryOrderProjetoTecnicoProjects(orderId) {
         .order('name', { ascending: true });
 
     if (result.error?.message?.includes('previsaoConclusaoProjetoTecnico')
+        || result.error?.message?.includes('technicalProjectForecastStartDate')
         || result.error?.message?.includes('projectStatus')
         || result.error?.message?.includes('designer')) {
         result = await supabaseClient
@@ -176,13 +181,27 @@ function canIniciarOrderProjetoTecnico(project) {
         && Number(project.designerId) === Number(currentUser.id);
 }
 
-function renderOrderProjetoTecnicoPrevisaoInput(project) {
+function renderOrderProjetoTecnicoPrevisaoInputs(project) {
     const maxDate = getOrderProjetoTecnicoPrevisaoInputMaxDate(project.deliveryDate);
-    return `<input type="date"
-        class="order-pt-previsao-input w-full min-w-[9rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600"
-        data-project-id="${project.id}"
-        ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
-        title="Previsão de conclusão do projeto técnico">`;
+    const inicioValue = getOrderProjetoTecnicoPrevisaoInputValue(project.technicalProjectForecastStartDate);
+    const fimValue = getOrderProjetoTecnicoPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
+
+    return `
+        <div class="space-y-1.5">
+            <input type="date"
+                class="order-pt-previsao-inicio-input w-full min-w-[9rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600"
+                data-project-id="${project.id}"
+                ${inicioValue ? `value="${escapeHtml(inicioValue)}"` : ''}
+                ${fimValue ? `max="${escapeHtml(fimValue)}"` : ''}
+                title="Início previsto do projeto técnico">
+            <input type="date"
+                class="order-pt-previsao-fim-input w-full min-w-[9rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600"
+                data-project-id="${project.id}"
+                ${fimValue ? `value="${escapeHtml(fimValue)}"` : ''}
+                ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
+                title="Previsão de conclusão do projeto técnico">
+        </div>
+    `;
 }
 
 function renderOrderProjetoTecnicoActionCell(project) {
@@ -208,10 +227,10 @@ function renderOrderProjetoTecnicoActionCell(project) {
 
 function renderOrderProjetoTecnicoPrevisaoCell(project) {
     if (canAssociarOrderProjetoTecnicoAMim(project)) {
-        return renderOrderProjetoTecnicoPrevisaoInput(project);
+        return renderOrderProjetoTecnicoPrevisaoInputs(project);
     }
 
-    return `<span class="text-xs text-slate-600 whitespace-nowrap">${escapeHtml(formatOrderProjetoTecnicoDate(project.previsaoConclusaoProjetoTecnico))}</span>`;
+    return `<span class="text-xs text-slate-600 whitespace-nowrap">${escapeHtml(formatPrevisaoProjetoTecnicoRange(project.technicalProjectForecastStartDate, project.previsaoConclusaoProjetoTecnico))}</span>`;
 }
 
 function renderOrderProjetoTecnicoProjectsTable(projects) {
@@ -250,7 +269,7 @@ function renderOrderProjetoTecnicoProjectsTable(projects) {
                         <th class="text-left p-3 font-semibold">Projeto</th>
                         <th class="text-left p-3 font-semibold">Entrega</th>
                         <th class="text-left p-3 font-semibold">Projetista</th>
-                        <th class="text-left p-3 font-semibold min-w-[9.5rem]">Previsão</th>
+                        <th class="text-left p-3 font-semibold min-w-[11rem]">Previsão</th>
                         <th class="text-left p-3 font-semibold">Status</th>
                         <th class="text-right p-3 font-semibold w-36">Ação</th>
                     </tr>
@@ -267,9 +286,11 @@ function bindOrderProjetoTecnicoTableEvents(root) {
     root.querySelectorAll('.order-pt-associar-btn').forEach(button => {
         button.addEventListener('click', () => {
             const row = button.closest('tr');
-            const previsaoDate = row?.querySelector('.order-pt-previsao-input')?.value || '';
+            const inicioDate = row?.querySelector('.order-pt-previsao-inicio-input')?.value || '';
+            const previsaoDate = row?.querySelector('.order-pt-previsao-fim-input')?.value || '';
             associarProjetoTecnicoAMim(
                 Number(button.dataset.projectId),
+                inicioDate,
                 previsaoDate,
                 button.dataset.deliveryDate || ''
             );
@@ -367,13 +388,13 @@ async function confirmIniciarProjetoTecnico(project, outrosProjetos = []) {
     });
 }
 
-async function associarProjetoTecnicoAMim(projectId, previsaoDate, deliveryDate = '') {
+async function associarProjetoTecnicoAMim(projectId, inicioDate, previsaoDate, deliveryDate = '') {
     if (!projectId || (currentUser?.role !== 'Projetista' && !isAdmin())) {
         alertAppDialog('Somente Projetista pode associar projetos.', { variant: 'warning', title: 'Aviso' });
         return false;
     }
 
-    if (!validateOrderProjetoTecnicoPrevisao(previsaoDate, deliveryDate)) {
+    if (!validateOrderProjetoTecnicoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
         return false;
     }
 
@@ -384,7 +405,7 @@ async function associarProjetoTecnicoAMim(projectId, previsaoDate, deliveryDate 
     const now = new Date().toISOString();
     const payload = {
         designerId: currentUser.id,
-        previsaoConclusaoProjetoTecnico: previsaoDate,
+        ...buildOrderProjectPrevisaoPayload(inicioDate, previsaoDate),
         updatedById: currentUser.id,
         updatedAt: now
     };
@@ -395,7 +416,7 @@ async function associarProjetoTecnicoAMim(projectId, previsaoDate, deliveryDate 
             .update(payload)
             .eq('id', projectId);
 
-        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+        if (isOrderProjectPrevisaoColumnError(error?.message)) {
             ({ error } = await supabaseClient
                 .from('OrderProject')
                 .update({
@@ -406,7 +427,7 @@ async function associarProjetoTecnicoAMim(projectId, previsaoDate, deliveryDate 
                 .eq('id', projectId));
             if (!error) {
                 alertAppDialog(
-                    'Projeto associado, mas o campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.',
+                    'Projeto associado, mas os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.',
                     { variant: 'warning', title: 'Aviso' }
                 );
             }
@@ -442,7 +463,7 @@ async function iniciarProjetoTecnico(projectId) {
 
     const { data: project, error: readError } = await supabaseClient
         .from('OrderProject')
-        .select('id, orderId, designerId, name, projectCode, deliveryDate, previsaoConclusaoProjetoTecnico, projectStatus:OrderProjectStatus(name)')
+        .select('id, orderId, designerId, name, projectCode, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, projectStatus:OrderProjectStatus(name)')
         .eq('id', projectId)
         .maybeSingle();
 
@@ -494,6 +515,7 @@ async function iniciarProjetoTecnico(projectId) {
                 orderId: project.orderId,
                 orderProjectId: project.id,
                 designerId: project.designerId,
+                technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
                 previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico
             });
         }

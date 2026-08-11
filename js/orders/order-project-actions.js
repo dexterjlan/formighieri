@@ -327,8 +327,10 @@ function renderOrderProjectActionButtons(actions) {
 function closeOrderProjectAssociarModal() {
     orderProjectAssociarPending = null;
     toggleModal('order-project-associar-modal', false);
-    const input = document.getElementById('order-project-associar-previsao');
-    if (input) input.value = '';
+    const inicioInput = document.getElementById('order-project-associar-previsao-inicio');
+    const fimInput = document.getElementById('order-project-associar-previsao');
+    if (inicioInput) inicioInput.value = '';
+    if (fimInput) fimInput.value = '';
 }
 
 function openOrderProjectAssociarModal(projectId, deliveryDate = '') {
@@ -337,15 +339,21 @@ function openOrderProjectAssociarModal(projectId, deliveryDate = '') {
         deliveryDate: deliveryDate || ''
     };
 
-    const input = document.getElementById('order-project-associar-previsao');
+    const inicioInput = document.getElementById('order-project-associar-previsao-inicio');
+    const fimInput = document.getElementById('order-project-associar-previsao');
     const maxDate = String(deliveryDate || '').slice(0, 10);
 
-    if (input) {
-        input.value = '';
+    if (inicioInput) {
+        inicioInput.value = '';
+        inicioInput.removeAttribute('max');
+    }
+
+    if (fimInput) {
+        fimInput.value = '';
         if (maxDate) {
-            input.max = maxDate;
+            fimInput.max = maxDate;
         } else {
-            input.removeAttribute('max');
+            fimInput.removeAttribute('max');
         }
     }
 
@@ -480,11 +488,12 @@ function bindOrderProjectAssociarModalEvents() {
         ?.addEventListener('click', async () => {
             if (!orderProjectAssociarPending?.projectId) return;
 
+            const inicioDate = document.getElementById('order-project-associar-previsao-inicio')?.value || '';
             const previsaoDate = document.getElementById('order-project-associar-previsao')?.value || '';
             const { projectId, deliveryDate } = orderProjectAssociarPending;
 
             if (typeof associarProjetoTecnicoAMim === 'function') {
-                const ok = await associarProjetoTecnicoAMim(projectId, previsaoDate, deliveryDate);
+                const ok = await associarProjetoTecnicoAMim(projectId, inicioDate, previsaoDate, deliveryDate);
                 if (ok) {
                     closeOrderProjectAssociarModal();
                     await refreshOrderProjectListAfterAction();

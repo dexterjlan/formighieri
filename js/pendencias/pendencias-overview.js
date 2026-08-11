@@ -14,6 +14,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         nomear: 'Projetos aguardando nomeação pelo projetista responsável.',
         'aguardando-ppcp': 'Projetos aguardando implantação PPCP.',
         implantacao: 'Implantações em aberto (não encerradas).',
+        detalhamento: 'Detalhamentos atribuídos a você aguardando início ou em andamento.',
         'aguardando-medicao': 'Pedidos com projetos aguardando medição.',
         'aguardando-planta': 'Medições com projetos aguardando planta levantada.',
         conferencias: 'Pedidos com projetos em planta levantada aguardando conferência.'
@@ -25,6 +26,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     'gestor-projetos': {
         'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.',
         'terceiros-sem-projetistas': 'Projetos de terceiros sem projetista responsável.',
+        'aguardando-detalhamento': 'Projetos em produção aguardando associação de projetista de detalhamento.',
         'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
     },
     'gestor-fabrica': {
@@ -101,6 +103,10 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 const { error, projects } = await fetchPendenciasImplantacoesAbertas();
                 return error ? null : projects.length;
             }
+            case 'projetista:detalhamento': {
+                const { error, records } = await fetchPendenciasDetalhamentosForProjetista(currentUser?.id);
+                return error ? null : records.length;
+            }
             case 'projetista:aguardando-medicao': {
                 const { error, orders } = await fetchPendenciasProjetistaAguardandoMedicaoOrders();
                 return error ? null : orders.length;
@@ -130,6 +136,10 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 if (typeof fetchThirdPartyProjectsWithoutDesigner !== 'function') return null;
                 const projects = await fetchThirdPartyProjectsWithoutDesigner();
                 return projects.length;
+            }
+            case 'gestor-projetos:aguardando-detalhamento': {
+                const { error, records } = await fetchPendenciasDetalhamentosSemProjetista();
+                return error ? null : records.length;
             }
             case 'gestor-projetos:montagem-externa': {
                 const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);

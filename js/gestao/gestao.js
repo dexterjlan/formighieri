@@ -611,6 +611,7 @@ function collectGestaoProjectFormData() {
         statusId: Number(document.getElementById('gestao-project-status')?.value) || getDefaultProjectStatusId(),
         designerId: existing?.designerId ?? null,
         previsaoConclusaoProjetoTecnico: existing?.previsaoConclusaoProjetoTecnico ?? null,
+        technicalProjectForecastStartDate: existing?.technicalProjectForecastStartDate ?? null,
         caminhoRedeAprovacao: document.getElementById('gestao-project-caminho-rede-aprovacao')?.value?.trim() || null,
         isComplementar: Boolean(document.getElementById('gestao-project-complementar')?.checked),
         parentProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-parent-code')?.value || ''),
@@ -1118,6 +1119,9 @@ function showGestaoGanttPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-gantt-panel')?.classList.remove('hidden');
     setGestaoNavActive('gantt');
+    if (typeof bindGestaoGanttEvents === 'function') {
+        bindGestaoGanttEvents();
+    }
     if (typeof loadGestaoGantt === 'function') {
         loadGestaoGantt();
     }
@@ -1388,9 +1392,6 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoImportEvents === 'function') {
         bindGestaoImportEvents();
-    }
-    if (typeof bindGestaoGanttEvents === 'function') {
-        bindGestaoGanttEvents();
     }
     if (typeof bindGestaoDashboardEvents === 'function') {
         bindGestaoDashboardEvents();

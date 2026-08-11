@@ -963,6 +963,10 @@ async function handleImplantacaoEnviarProducao() {
             IMPLANTACAO_PROJECT_STATUS_EM_PRODUCAO
         );
 
+        if (typeof createDetalhamentoForProject === 'function') {
+            await createDetalhamentoForProject(activeImplantacaoOrderProjectId);
+        }
+
         activeImplantacaoRecord = data;
         populateImplantacaoForm(data);
 

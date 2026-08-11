@@ -119,7 +119,7 @@ async function applyMissingRoleFromMetadata(profile, user) {
         .from('appUsers')
         .update({ role: metadataRole })
         .eq('id', normalized.id)
-        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica')
+        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento')
         .single();
 
     if (error) {
@@ -133,11 +133,11 @@ async function applyMissingRoleFromMetadata(profile, user) {
 async function queryAppUserByAuthId(authUserId) {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica')
+        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento')
         .eq('authId', authUserId)
         .maybeSingle();
 
-    if (result.error?.message?.includes('ppcp') || result.error?.message?.includes('gestorFabrica')) {
+    if (result.error?.message?.includes('ppcp') || result.error?.message?.includes('gestorFabrica') || result.error?.message?.includes('detalhamento')) {
         result = await supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos')
@@ -157,7 +157,7 @@ async function refreshCurrentUserProfile() {
 
     let query = supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica');
+        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento');
 
     if (authId) {
         query = query.eq('authId', authId);
@@ -167,7 +167,7 @@ async function refreshCurrentUserProfile() {
 
     let { data, error } = await query.maybeSingle();
 
-    if (error?.message?.includes('ppcp') || error?.message?.includes('gestorFabrica')) {
+    if (error?.message?.includes('ppcp') || error?.message?.includes('gestorFabrica') || error?.message?.includes('detalhamento')) {
         let fallbackQuery = supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos');

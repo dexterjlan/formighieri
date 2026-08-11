@@ -763,6 +763,43 @@ function isPrevisaoConclusaoProjetoTecnicoValid(previsaoDate, projectDeliveryDat
     return String(previsaoDate) <= String(projectDeliveryDate);
 }
 
+function isPrevisaoProjetoTecnicoRangeValid(inicioDate, previsaoDate, projectDeliveryDate) {
+    if (!inicioDate || !previsaoDate) return false;
+    if (String(inicioDate) > String(previsaoDate)) return false;
+    return isPrevisaoConclusaoProjetoTecnicoValid(previsaoDate, projectDeliveryDate);
+}
+
+function formatPrevisaoProjetoTecnicoRange(inicioDate, previsaoDate) {
+    const formatPart = (dateStr) => {
+        if (!dateStr) return '';
+        const normalized = String(dateStr).slice(0, 10);
+        const [year, month, day] = normalized.split('-');
+        if (year && month && day) return `${day}/${month}/${year}`;
+        return new Date(dateStr).toLocaleDateString('pt-BR');
+    };
+
+    const inicioLabel = formatPart(inicioDate);
+    const fimLabel = formatPart(previsaoDate);
+
+    if (inicioLabel && fimLabel) return `${inicioLabel} → ${fimLabel}`;
+    if (fimLabel) return fimLabel;
+    if (inicioLabel) return inicioLabel;
+    return '—';
+}
+
+function buildOrderProjectPrevisaoPayload(inicioDate, previsaoDate) {
+    return {
+        technicalProjectForecastStartDate: inicioDate || null,
+        previsaoConclusaoProjetoTecnico: previsaoDate || null
+    };
+}
+
+function isOrderProjectPrevisaoColumnError(message = '') {
+    const normalized = String(message);
+    return normalized.includes('previsaoConclusaoProjetoTecnico')
+        || normalized.includes('technicalProjectForecastStartDate');
+}
+
 function formatSaleValue(value) {
     if (value === null || value === undefined || value === '') return '—';
     const num = Number(value);
@@ -793,7 +830,8 @@ function normalizeAppUserProfile(profile) {
         gestorComercial: Boolean(profile.gestorComercial),
         gestorProjetos: Boolean(profile.gestorProjetos),
         ppcp: Boolean(profile.ppcp),
-        gestorFabrica: Boolean(profile.gestorFabrica)
+        gestorFabrica: Boolean(profile.gestorFabrica),
+        detalhamento: Boolean(profile.detalhamento)
     };
 }
 
@@ -813,6 +851,12 @@ function isGestorProjetos(user = currentUser) {
 
 function isPpcp(user = currentUser) {
     return user?.role === 'Projetista' && Boolean(user?.ppcp);
+}
+
+function isDetalhamento(user = currentUser) {
+    if (!user) return false;
+    if (user.role === 'Admin') return true;
+    return user.role === 'Projetista' && Boolean(user.detalhamento);
 }
 
 function isGestorFabrica(user = currentUser) {

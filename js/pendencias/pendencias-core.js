@@ -48,14 +48,14 @@ const PENDENCIAS_MINE_EXTRA_STATUSES = [
 ];
 
 const PENDENCIAS_PROJECT_SELECT = `
-    id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico, observacaoAguardandoObra,
+    id, orderId, projectCode, name, designerId, statusId, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, observacaoAguardandoObra,
     order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
 const PENDENCIAS_PROJECT_SELECT_FALLBACK = `
-    id, orderId, projectCode, name, designerId, statusId, deliveryDate, previsaoConclusaoProjetoTecnico,
+    id, orderId, projectCode, name, designerId, statusId, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico,
     order:salesOrders(${PENDENCIAS_ORDER_EMBED})
 `;
 
@@ -63,21 +63,20 @@ const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
     PENDENCIAS_STATUS_AGUARDANDO_PT,
     PENDENCIAS_STATUS_PROJETO_TECNICO,
     'Em Revisão Comercial',
-    'Em Revisão Técnica',
-    'Em Revisão',
-    'Em revisão',
+    PENDENCIAS_STATUS_EM_REVISAO_TECNICA,
     'Aguardando Aprovação',
-    'Aguardando PPCP'
+    'Aguardando PPCP',
+    PENDENCIAS_STATUS_IMPLANTACAO
 ];
 
 const PENDENCIAS_GESTOR_WORKLOAD_COLUMNS = [
     PENDENCIAS_STATUS_AGUARDANDO_PT,
     PENDENCIAS_STATUS_PROJETO_TECNICO,
     'Em Revisão Comercial',
-    'Em Revisão Técnica',
-    'Em Revisão',
+    PENDENCIAS_STATUS_EM_REVISAO_TECNICA,
     'Aguardando Aprovação',
-    'Aguardando PPCP'
+    'Aguardando PPCP',
+    PENDENCIAS_STATUS_IMPLANTACAO
 ];
 
 const PENDENCIAS_CONFERENTE_MENU_ITEM_IDS = [
@@ -160,6 +159,10 @@ function canSeePendenciasGestorProjetosMenu() {
     return canSeeAllPendenciasMenus() || isGestorProjetos();
 }
 
+function canSeePendenciasDetalhamentoProjetistaItems() {
+    return canSeeAllPendenciasMenus() || isDetalhamento();
+}
+
 function canSeePendenciasPpcpItems() {
     return canSeeAllPendenciasMenus()
         || isGestorProjetos()
@@ -189,6 +192,10 @@ function getPendenciasProjetistaMenuItems() {
                 { id: 'aguardando-ppcp', label: 'Aguardando PPCP' },
                 { id: 'implantacao', label: 'Implantação' }
             );
+        }
+
+        if (canSeePendenciasDetalhamentoProjetistaItems()) {
+            items.push({ id: 'detalhamento', label: 'Detalhamento' });
         }
     }
 
@@ -241,14 +248,20 @@ async function getPendenciasStatusIdByName(name) {
     return fallback?.id || null;
 }
 
+function getPrimaryGestorPendenciasSection() {
+    if (isGestorProjetos()) return 'gestor-projetos';
+    if (isGestorComercial()) return 'gestor-comercial';
+    if (isGestorFabrica()) return 'gestor-fabrica';
+    return null;
+}
+
 function getDefaultPendenciasSection() {
     if (canSeeAllPendenciasMenus()) return 'gestor-projetos';
+    const gestorSection = getPrimaryGestorPendenciasSection();
+    if (gestorSection) return gestorSection;
     if (canSeePendenciasConsultorMenu()) return 'consultor';
     if (canSeePendenciasProjetistaMenu()) return 'projetista';
-    if (canSeePendenciasGestorComercialMenu()) return 'gestor-comercial';
-    if (canSeePendenciasGestorProjetosMenu()) return 'gestor-projetos';
     if (canSeePendenciasComprasMenu()) return 'compras';
-    if (canSeePendenciasGestorFabricaMenu()) return 'gestor-fabrica';
     return null;
 }
 
@@ -290,6 +303,7 @@ function getPendenciasSidebarSections() {
             items: [
                 { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
                 { id: 'terceiros-sem-projetistas', label: 'Terceiros Sem Projetistas' },
+                { id: 'aguardando-detalhamento', label: 'Aguardando Detalhamento' },
                 { id: 'montagem-externa', label: 'Montagem Externa' }
             ]
         },
@@ -467,7 +481,7 @@ async function queryPendenciasProjects(filters = {}) {
 
     let result = await buildQuery(PENDENCIAS_PROJECT_SELECT);
 
-    if (result.error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+    if (result.error?.message && isOrderProjectPrevisaoColumnError(result.error.message)) {
         result = await buildQuery(`
             id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
             order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
@@ -493,7 +507,7 @@ async function queryPendenciasProjects(filters = {}) {
     }
 
     if (result.error?.message?.includes('observacaoAguardandoObra')
-        || result.error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+        || isOrderProjectPrevisaoColumnError(result.error?.message)) {
         result = await buildQuery(`
             id, orderId, projectCode, name, designerId, statusId, deliveryDate,
             order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
@@ -556,6 +570,7 @@ function getPendenciasProjectStatusBadgeClass(statusName) {
     if (statusName === PENDENCIAS_STATUS_CONFERENCIA_ENVIADA) return 'bg-sky-100 text-sky-800';
     if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PPCP) return 'bg-fuchsia-100 text-fuchsia-800';
     if (statusName === PENDENCIAS_STATUS_IMPLANTACAO) return 'bg-teal-100 text-teal-800';
+    if (statusName === 'Detalhamento' || statusName === 'Aguardando Detalhamento') return 'bg-indigo-100 text-indigo-800';
     if (statusName === PENDENCIAS_STATUS_EM_PRODUCAO) return 'bg-orange-100 text-orange-800';
     if (statusName === PENDENCIAS_STATUS_MONTAGEM_INTERNA) return 'bg-amber-100 text-amber-800';
     if (statusName === PENDENCIAS_STATUS_MONTAGEM_EXTERNA) return 'bg-purple-100 text-purple-800';
@@ -635,6 +650,11 @@ function loadPendenciasContent() {
         return;
     }
 
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'detalhamento') {
+        loadPendenciasProjetistaDetalhamento();
+        return;
+    }
+
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'aguardando-medicao') {
         loadPendenciasProjetistaAguardandoMedicao();
         return;
@@ -659,6 +679,11 @@ function loadPendenciasContent() {
         if (typeof loadPendenciasThirdPartySemProjetista === 'function') {
             loadPendenciasThirdPartySemProjetista();
         }
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'aguardando-detalhamento') {
+        loadPendenciasGestorDetalhamento();
         return;
     }
 
@@ -711,6 +736,14 @@ function showPendencias() {
     if (!canAccessPendencias()) {
         alertAppDialog('Você não tem acesso à tela de pendências.');
         return;
+    }
+
+    const gestorSection = getPrimaryGestorPendenciasSection();
+    if (gestorSection) {
+        pendenciasActiveSection = gestorSection;
+        pendenciasActiveItem = null;
+    } else if (!pendenciasActiveSection) {
+        pendenciasActiveSection = getDefaultPendenciasSection();
     }
 
     hideSubViews();

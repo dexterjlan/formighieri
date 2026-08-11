@@ -426,7 +426,7 @@ async function fetchGestaoProjectsByOrderIds(orderIds) {
     if (!normalizedIds.length) return {};
 
     const selectVariants = [
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
@@ -483,7 +483,7 @@ async function fetchGestaoOrders(filters = {}) {
     const clientName = String(filters.clientName || '').trim();
     const orderRelations = `cliente:Cliente(id, nome, ativo), consultor:appUsers!consultantUserId(id, name)`;
     const orderSelectVariants = [
-        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))`,
@@ -648,6 +648,7 @@ async function insertGestaoProject(orderId, project, now) {
             deliveryDate: project.deliveryDate,
             deliveryPhaseId,
             previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
+            technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
@@ -665,6 +666,7 @@ async function insertGestaoProject(orderId, project, now) {
             deliveryDate: project.deliveryDate,
             deliveryPhaseId,
             previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
+            technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
@@ -785,6 +787,7 @@ async function updateGestaoProject(project, now) {
             deliveryDate: project.deliveryDate,
             deliveryPhaseId,
             previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
+            technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,
@@ -800,6 +803,7 @@ async function updateGestaoProject(project, now) {
             deliveryDate: project.deliveryDate,
             deliveryPhaseId,
             previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
+            technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
             statusId,
             designerId: project.designerId,
             caminhoRedeAprovacao: project.caminhoRedeAprovacao,

@@ -963,85 +963,6 @@ body {
     }
 }
 
-.gestao-gantt-timeline-header-track {
-    position: relative;
-    min-height: 2.5rem;
-}
-
-.gestao-gantt-timeline-marker {
-    position: absolute;
-    top: 0.5rem;
-    transform: translateX(-50%);
-    font-size: 0.625rem;
-    color: #64748b;
-    white-space: nowrap;
-}
-
-.gestao-gantt-timeline-marker::before {
-    content: '';
-    position: absolute;
-    top: -0.5rem;
-    left: 50%;
-    width: 1px;
-    height: 0.375rem;
-    background: #cbd5e1;
-    transform: translateX(-50%);
-}
-
-.gestao-gantt-today-line {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: #fb7185;
-    z-index: 2;
-}
-
-.gestao-gantt-track {
-    position: relative;
-    height: 1.25rem;
-    border-radius: 0.375rem;
-    background: #f1f5f9;
-}
-
-.gestao-gantt-bar {
-    position: absolute;
-    top: 0.2rem;
-    height: 0.85rem;
-    border-radius: 0.25rem;
-    background: #6366f1;
-    min-width: 4px;
-    z-index: 1;
-}
-
-.gestao-gantt-bar--overdue {
-    background: #e11d48;
-}
-
-.gestao-gantt-bar--active {
-    background: #7c3aed;
-}
-
-.gestao-gantt-milestone {
-    position: absolute;
-    top: 0.05rem;
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-bottom: 9px solid #d97706;
-    transform: translateX(-5px);
-    z-index: 2;
-}
-
-.gestao-gantt-legend-milestone {
-    display: inline-block;
-    width: 0;
-    height: 0;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-bottom: 8px solid #d97706;
-}
 
 .gestao-dashboard-clients-grid {
     display: grid;
@@ -1706,6 +1627,92 @@ body.gestao-kanban-fullscreen-active {
 .project-view-section--boxed.project-view-section--sky {
     border-color: rgb(186 230 253);
     background: rgb(240 249 255 / 0.65);
+}
+
+.project-view-section--boxed.project-view-section--indigo {
+    border-color: rgb(199 210 254);
+    background: rgb(238 242 255 / 0.75);
+}
+
+.project-status-history-detailing-branch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 42rem;
+    margin: 0.25rem auto 0.5rem;
+}
+
+.project-status-history-detailing-branch__connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.15rem 0;
+}
+
+.project-status-history-detailing-branch__connector-line {
+    width: 0.125rem;
+    height: 0.85rem;
+    background: rgb(129 140 248);
+}
+
+.project-status-history-detailing-branch__row {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0.35rem;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.project-status-history-detailing-step {
+    flex: 1 1 7.5rem;
+    min-width: 6.5rem;
+    max-width: 11rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(248 250 252);
+    padding: 0.65rem 0.55rem;
+    text-align: center;
+}
+
+.project-status-history-detailing-step.is-current {
+    border-color: rgb(99 102 241);
+    background: rgb(238 242 255);
+    box-shadow: 0 0 0 1px rgb(199 210 254);
+}
+
+.project-status-history-detailing-step.is-done {
+    border-color: rgb(167 243 208);
+    background: rgb(236 253 245);
+}
+
+.project-status-history-detailing-step.is-pending {
+    opacity: 0.55;
+}
+
+.project-status-history-detailing-step__title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(30 41 59);
+    line-height: 1.25;
+}
+
+.project-status-history-detailing-step__meta {
+    font-size: 0.5625rem;
+    color: rgb(100 116 139);
+    margin-top: 0.25rem;
+    line-height: 1.35;
+}
+
+.project-status-history-detailing-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgb(129 140 248);
+    font-size: 0.75rem;
+    padding: 0 0.1rem;
+    align-self: center;
 }
 
 .project-view-fields {
@@ -3101,4 +3108,476 @@ body.montagem-prog-resizing {
     grid-column: 1 / -1;
     font-size: 0.6875rem;
     color: rgb(100 116 139);
+}
+
+.gestao-gantt-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+    .gestao-gantt-layout {
+        flex-direction: row;
+    }
+}
+
+.gestao-gantt-projects-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 50%;
+    max-height: 50%;
+    overflow: hidden;
+    background: rgb(255 255 255);
+    border-bottom: 1px solid rgb(226 232 240);
+}
+
+@media (min-width: 1024px) {
+    .gestao-gantt-projects-panel {
+        width: 20rem;
+        flex: 0 0 20rem;
+        max-height: 100%;
+        height: 100%;
+        border-bottom: 0;
+        border-right: 1px solid rgb(226 232 240);
+    }
+}
+
+.gestao-gantt-projects-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgb(241 245 249);
+    background: rgb(248 250 252 / 0.8);
+    flex-shrink: 0;
+}
+
+.gestao-gantt-projects-panel__title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(15 23 42);
+}
+
+.gestao-gantt-projects-panel__count {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(79 70 229);
+    background: rgb(238 242 255);
+    border: 1px solid rgb(199 210 254);
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+}
+
+.gestao-gantt-projects-panel__filters {
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid rgb(241 245 249);
+    background: rgb(255 255 255);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gestao-gantt-projects-panel__filter,
+.gestao-gantt-panel__filter {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.gestao-gantt-projects-panel__filter-label,
+.gestao-gantt-panel__filter-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: rgb(100 116 139);
+}
+
+.gestao-gantt-calendar-panel__filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid rgb(241 245 249);
+}
+
+@media (max-width: 1023px) {
+    .gestao-gantt-calendar-panel__filters {
+        grid-template-columns: 1fr;
+    }
+}
+
+.gestao-gantt-project-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+}
+
+.gestao-gantt-project-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(255 255 255);
+}
+
+.gestao-gantt-project-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.gestao-gantt-project-card__open {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.125rem;
+    text-align: left;
+    min-width: 0;
+}
+
+.gestao-gantt-project-card__open:hover .gestao-gantt-project-card__name {
+    color: rgb(79 70 229);
+}
+
+.gestao-gantt-project-card__codes {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: rgb(79 70 229);
+}
+
+.gestao-gantt-project-card__name {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(15 23 42);
+    line-height: 1.2;
+}
+
+.gestao-gantt-project-card__status {
+    flex-shrink: 0;
+    font-size: 0.5625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgb(100 116 139);
+    background: rgb(241 245 249);
+    border-radius: 9999px;
+    padding: 0.125rem 0.375rem;
+}
+
+.gestao-gantt-project-card__client {
+    font-size: 0.6875rem;
+    color: rgb(100 116 139);
+}
+
+.gestao-gantt-project-card__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.gestao-gantt-project-card__label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: rgb(100 116 139);
+}
+
+.gestao-gantt-project-card__dates {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+}
+
+.gestao-gantt-project-card--dirty {
+    border-color: rgb(199 210 254);
+    box-shadow: 0 0 0 1px rgb(199 210 254);
+}
+
+.gestao-gantt-project-card__save:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.gestao-gantt-calendar-panel {
+    flex: 1 1 50%;
+    min-width: 0;
+    min-height: 0;
+    max-height: 50%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    overflow: hidden;
+    background: rgb(248 250 252 / 0.35);
+}
+
+@media (min-width: 1024px) {
+    .gestao-gantt-calendar-panel {
+        flex: 1 1 auto;
+        max-height: 100%;
+        height: 100%;
+    }
+}
+
+.gestao-gantt-calendar-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.75rem;
+    background: rgb(255 255 255);
+}
+
+.gestao-gantt-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    font-size: 0.6875rem;
+    color: rgb(100 116 139);
+    flex-shrink: 0;
+}
+
+.gestao-gantt-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.gestao-gantt-legend-swatch {
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 0.25rem;
+    border: 1px solid rgb(226 232 240);
+}
+
+.gestao-gantt-legend-swatch--bar {
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+}
+
+.gestao-gantt-legend-swatch--today {
+    background: rgb(254 243 199);
+    border-color: rgb(252 211 77);
+}
+
+.gestao-gantt-month-grid {
+    padding: 0.75rem;
+}
+
+.gestao-gantt-month-range-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: rgb(79 70 229);
+    padding: 0 0.125rem 0.5rem;
+    border-bottom: 1px solid rgb(226 232 240);
+    margin-bottom: 0.5rem;
+}
+
+.gestao-gantt-weekday-headers {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: rgb(255 255 255 / 0.96);
+    backdrop-filter: blur(4px);
+    padding-bottom: 0.25rem;
+}
+
+.gestao-gantt-weekday-header {
+    text-align: center;
+    padding: 0.375rem 0.125rem;
+    border-radius: 0.5rem;
+    background: rgb(238 242 255);
+    border: 1px solid rgb(199 210 254);
+    font-size: 0.5625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: rgb(79 70 229);
+    line-height: 1.2;
+}
+
+.gestao-gantt-weeks {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.gestao-gantt-week-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gestao-gantt-week-block__title {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(79 70 229);
+    padding: 0 0.125rem;
+}
+
+.gestao-gantt-week-empty {
+    padding: 0.25rem 0;
+}
+
+.gestao-gantt-calendar-table {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gestao-gantt-day-headers,
+.gestao-gantt-lane {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.25rem;
+    width: 100%;
+}
+
+.gestao-gantt-week-lanes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.gestao-gantt-day-headers {
+    margin-bottom: 0.25rem;
+}
+
+.gestao-gantt-day-header {
+    text-align: center;
+    padding: 0.375rem 0.125rem;
+    border-radius: 0.5rem;
+    background: rgb(248 250 252);
+    border: 1px solid rgb(226 232 240);
+}
+
+.gestao-gantt-day-header--outside {
+    opacity: 0.45;
+    background: rgb(248 250 252 / 0.5);
+}
+
+.gestao-gantt-day-header--weekend {
+    background: rgb(241 245 249);
+    color: rgb(100 116 139);
+}
+
+.gestao-gantt-day-header--today {
+    background: rgb(254 243 199);
+    border-color: rgb(252 211 77);
+}
+
+.gestao-gantt-day-header__date {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(15 23 42);
+}
+
+.gestao-gantt-lane {
+    position: relative;
+    min-height: 2.75rem;
+    grid-template-rows: minmax(2.5rem, auto);
+}
+
+.gestao-gantt-day-slot,
+.gestao-gantt-bar {
+    grid-row: 1;
+}
+
+.gestao-gantt-day-slot {
+    min-height: 2.75rem;
+    border-radius: 0.5rem;
+    border: 1px dashed rgb(226 232 240);
+    background: rgb(248 250 252 / 0.7);
+}
+
+.gestao-gantt-day-slot--outside {
+    opacity: 0.35;
+    border-style: dotted;
+    background: rgb(248 250 252 / 0.35);
+}
+
+.gestao-gantt-day-slot--weekend {
+    background: rgb(241 245 249 / 0.8);
+}
+
+.gestao-gantt-day-slot--today {
+    border-color: rgb(252 211 77);
+    background: rgb(254 243 199 / 0.45);
+}
+
+.gestao-gantt-bar {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.0625rem;
+    min-height: 2.25rem;
+    margin: 0.125rem 0;
+    padding: 0.2rem 0.3rem;
+    border-radius: 0.5rem;
+    background: linear-gradient(135deg, var(--gestao-gantt-bar-from), var(--gestao-gantt-bar-to));
+    color: rgb(255 255 255);
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
+    overflow: hidden;
+    text-align: left;
+}
+
+.gestao-gantt-bar:hover {
+    filter: brightness(1.05);
+}
+
+.gestao-gantt-bar__title {
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gestao-gantt-bar__meta {
+    font-size: 0.5625rem;
+    line-height: 1.2;
+    opacity: 0.92;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gestao-gantt-empty-row {
+    padding: 1rem 0;
+}
+
+#gestao-gantt-panel {
+    height: calc(100vh - 180px);
+    max-height: calc(100vh - 180px);
+}
+
+#gestao-gantt-content {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
 }

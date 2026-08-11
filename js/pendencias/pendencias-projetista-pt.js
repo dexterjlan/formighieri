@@ -66,16 +66,27 @@ function getPendenciasPrevisaoInputMaxDate(deliveryDate) {
     return String(deliveryDate).slice(0, 10);
 }
 
-function validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate) {
+function validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate) {
+    if (!inicioDate) {
+        alertAppDialog('Informe o início previsto do projeto técnico.');
+        return false;
+    }
     if (!previsaoDate) {
         alertAppDialog('Informe a previsão de conclusão do projeto técnico.');
         return false;
     }
-    if (!isPrevisaoConclusaoProjetoTecnicoValid(previsaoDate, deliveryDate)) {
-        alertAppDialog('A previsão de conclusão deve ser anterior ou igual à data de entrega do projeto técnico.', { variant: 'warning', title: 'Aviso' });
+    if (!isPrevisaoProjetoTecnicoRangeValid(inicioDate, previsaoDate, deliveryDate)) {
+        alertAppDialog('O início deve ser anterior ou igual à previsão de conclusão, e a conclusão deve ser anterior ou igual à data de entrega do projeto técnico.', { variant: 'warning', title: 'Aviso' });
         return false;
     }
     return true;
+}
+
+function getPendenciasPrevisaoValuesFromContainer(container) {
+    return {
+        inicioDate: container?.querySelector('.pendencias-previsao-inicio-input')?.value || '',
+        previsaoDate: container?.querySelector('.pendencias-previsao-fim-input')?.value || ''
+    };
 }
 
 function getPendenciasPrevisaoInputValue(dateStr) {
@@ -83,13 +94,29 @@ function getPendenciasPrevisaoInputValue(dateStr) {
     return String(dateStr).slice(0, 10);
 }
 
-function renderPendenciasAssociacaoPrevisaoInput(project) {
+function renderPendenciasAssociacaoPrevisaoInputs(project) {
     const maxDate = getPendenciasPrevisaoInputMaxDate(project.deliveryDate);
-    return `<input type="date"
-        class="pendencias-previsao-input w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
-        data-project-id="${project.id}"
-        ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
-        title="Previsão de conclusão do projeto técnico">`;
+    const inicioValue = getPendenciasPrevisaoInputValue(project.technicalProjectForecastStartDate);
+    const fimValue = getPendenciasPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
+
+    return `
+        <div class="space-y-1.5">
+            <label class="block text-[10px] text-slate-500">Início</label>
+            <input type="date"
+                class="pendencias-previsao-inicio-input w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                data-project-id="${project.id}"
+                ${inicioValue ? `value="${escapeHtml(inicioValue)}"` : ''}
+                ${fimValue ? `max="${escapeHtml(fimValue)}"` : ''}
+                title="Início previsto do projeto técnico">
+            <label class="block text-[10px] text-slate-500 mt-1.5">Fim</label>
+            <input type="date"
+                class="pendencias-previsao-fim-input w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                data-project-id="${project.id}"
+                ${fimValue ? `value="${escapeHtml(fimValue)}"` : ''}
+                ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
+                title="Previsão de conclusão do projeto técnico">
+        </div>
+    `;
 }
 
 function renderPendenciasSemResponsavelProjectRow(project, characteristicsMap = new Map(), options = {}) {
@@ -117,7 +144,7 @@ function renderPendenciasSemResponsavelProjectRow(project, characteristicsMap = 
 
     const previsaoCell = showPrevisao
         ? `<td class="p-3 pendencias-sem-projetista-previsao">
-                ${renderPendenciasAssociacaoPrevisaoInput(project)}
+                ${renderPendenciasAssociacaoPrevisaoInputs(project)}
             </td>`
         : '';
 
@@ -162,7 +189,7 @@ function renderPendenciasSemResponsavelTableHead(showDesigner = true, options = 
             <th class="text-left p-3 font-semibold">Projeto</th>
             <th class="text-left p-3 font-semibold">Entrega Proj. Téc.</th>
             <th class="text-left p-3 font-semibold min-w-[10rem]">Características</th>
-            ${showPrevisao ? '<th class="text-left p-3 font-semibold min-w-[9.5rem]">Previsão</th>' : ''}
+            ${showPrevisao ? '<th class="text-left p-3 font-semibold min-w-[11rem]">Previsão</th>' : ''}
             ${showDesigner
                 ? '<th class="text-left p-3 font-semibold min-w-[11rem]">Projetista</th>'
                 : ''}
@@ -171,16 +198,31 @@ function renderPendenciasSemResponsavelTableHead(showDesigner = true, options = 
     `;
 }
 
-function renderPendenciasWorkloadPrevisaoInput(project) {
+function renderPendenciasWorkloadPrevisaoInputs(project) {
     const maxDate = getPendenciasPrevisaoInputMaxDate(project.deliveryDate);
-    const value = getPendenciasPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
-    return `<input type="date"
-        class="pendencias-workload-previsao-input w-full mt-1.5 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
-        data-project-id="${project.id}"
-        data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}"
-        ${value ? `value="${escapeHtml(value)}"` : ''}
-        ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
-        title="Previsão de conclusão do projeto técnico">`;
+    const inicioValue = getPendenciasPrevisaoInputValue(project.technicalProjectForecastStartDate);
+    const fimValue = getPendenciasPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
+
+    return `
+        <div class="space-y-1.5">
+            <label class="block text-[10px] text-slate-500">Início previsto</label>
+            <input type="date"
+                class="pendencias-workload-previsao-inicio-input w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                data-project-id="${project.id}"
+                data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}"
+                ${inicioValue ? `value="${escapeHtml(inicioValue)}"` : ''}
+                ${fimValue ? `max="${escapeHtml(fimValue)}"` : ''}
+                title="Início previsto do projeto técnico">
+            <label class="block text-[10px] text-slate-500 mt-1.5">Previsão conclusão</label>
+            <input type="date"
+                class="pendencias-workload-previsao-fim-input w-full px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                data-project-id="${project.id}"
+                data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}"
+                ${fimValue ? `value="${escapeHtml(fimValue)}"` : ''}
+                ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
+                title="Previsão de conclusão do projeto técnico">
+        </div>
+    `;
 }
 
 function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characteristicsMap = new Map()) {
@@ -258,7 +300,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 ${showPrevisaoColumn
-                    ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(formatPendenciasDeliveryDate(project.previsaoConclusaoProjetoTecnico))}</td>`
+                    ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(formatPrevisaoProjetoTecnicoRange(project.technicalProjectForecastStartDate, project.previsaoConclusaoProjetoTecnico))}</td>`
                     : ''}
                 ${statusCell}
                 ${showActionColumn ? `<td class="p-3 text-right">${actionCell}</td>` : ''}
@@ -290,7 +332,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
                                 <th class="text-left p-3 font-semibold">Cliente</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
                                 ${showPrevisaoColumn
-                                    ? '<th class="text-left p-3 font-semibold">Previsão conclusão</th>'
+                                    ? '<th class="text-left p-3 font-semibold">Previsão</th>'
                                     : ''}
                                 ${showStatusColumn
                                     ? '<th class="text-left p-3 font-semibold">Status</th>'
@@ -469,6 +511,155 @@ function getPendenciasWorkloadProjetistaOptionsHtml(currentDesignerId = null) {
         .join('');
 }
 
+async function fetchRevisionInProgressByOrderProjectIds(projectIds) {
+    const uniqueIds = [...new Set((projectIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return new Set();
+
+    if (typeof fetchCommercialApprovalsByProjectIds !== 'function'
+        || typeof fetchCommercialRevisionsByApprovalIds !== 'function'
+        || typeof getLatestTechnicalRevisionByApproval !== 'function') {
+        return new Set();
+    }
+
+    const approvalsByProject = await fetchCommercialApprovalsByProjectIds(uniqueIds);
+    const approvalIds = [...new Set(
+        Object.values(approvalsByProject).map(approval => approval?.id).filter(Boolean)
+    )];
+    if (!approvalIds.length) return new Set();
+
+    const revisionsByApproval = await fetchCommercialRevisionsByApprovalIds(approvalIds);
+    const inProgressProjectIds = new Set();
+
+    Object.entries(approvalsByProject).forEach(([projectId, approval]) => {
+        const revisions = revisionsByApproval[approval.id] || [];
+        const latestRevision = getLatestTechnicalRevisionByApproval(revisions);
+        if (latestRevision?.revisionStartedAt && !latestRevision?.revisionCompletedAt) {
+            inProgressProjectIds.add(Number(projectId));
+        }
+    });
+
+    return inProgressProjectIds;
+}
+
+async function fetchPendenciasWorkloadDetalhamentoByDesigner() {
+    const { data, error } = await supabaseClient
+        .from('Detailing')
+        .select(`
+            id, designerId, status, orderProjectId,
+            orderProject:OrderProject(
+                id, name, projectCode,
+                order:salesOrders(${PENDENCIAS_ORDER_EMBED})
+            )
+        `)
+        .not('designerId', 'is', null)
+        .in('status', [
+            typeof DETALHAMENTO_STATUS_AGUARDANDO !== 'undefined'
+                ? DETALHAMENTO_STATUS_AGUARDANDO
+                : 'Aguardando Detalhamento',
+            typeof DETALHAMENTO_STATUS_EM_ANDAMENTO !== 'undefined'
+                ? DETALHAMENTO_STATUS_EM_ANDAMENTO
+                : 'Detalhamento'
+        ]);
+
+    if (error?.message?.includes('Detailing')) {
+        return {};
+    }
+
+    if (error) {
+        console.warn('fetchPendenciasWorkloadDetalhamentoByDesigner:', error);
+        return {};
+    }
+
+    const byDesigner = {};
+    (data || []).forEach(record => {
+        const designerId = Number(record.designerId);
+        if (!designerId) return;
+
+        if (!byDesigner[designerId]) {
+            byDesigner[designerId] = { records: [], inProgressCount: 0 };
+        }
+
+        byDesigner[designerId].records.push(record);
+        const emAndamento = typeof DETALHAMENTO_STATUS_EM_ANDAMENTO !== 'undefined'
+            ? DETALHAMENTO_STATUS_EM_ANDAMENTO
+            : 'Detalhamento';
+        if (record.status === emAndamento) {
+            byDesigner[designerId].inProgressCount += 1;
+        }
+    });
+
+    Object.values(byDesigner).forEach(entry => {
+        entry.records.sort((a, b) => {
+            const nameA = a.orderProject?.name || '';
+            const nameB = b.orderProject?.name || '';
+            return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+        });
+    });
+
+    return byDesigner;
+}
+
+function renderPendenciasWorkloadDetalhamentoSection(detalhamentoEntry = null) {
+    const records = detalhamentoEntry?.records || [];
+    const inProgressCount = detalhamentoEntry?.inProgressCount || 0;
+    const statusClass = getPendenciasProjectStatusBadgeClass('Detalhamento');
+
+    const projectsHtml = records.length
+        ? records.map(record => {
+            const project = record.orderProject || {};
+            const clientName = getOrderClientName(project.order) || '—';
+            const projectName = project.name || 'Projeto';
+            const itemTitle = `${clientName} · ${projectName}`;
+            const isInProgress = record.status === (
+                typeof DETALHAMENTO_STATUS_EM_ANDAMENTO !== 'undefined'
+                    ? DETALHAMENTO_STATUS_EM_ANDAMENTO
+                    : 'Detalhamento'
+            );
+
+            return `
+                <li class="border-b border-slate-100 last:border-0 py-1.5" data-detalhamento-id="${record.id}">
+                    <div class="flex items-start gap-1.5 min-w-0">
+                        <div class="min-w-0 flex-1">
+                            <p class="text-[10px] text-slate-500 truncate" title="${escapeHtml(clientName)}">
+                                ${escapeHtml(clientName)}
+                            </p>
+                            <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
+                                ${escapeHtml(projectName)}
+                            </p>
+                        </div>
+                        ${isInProgress
+                            ? '<span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0">Em andamento</span>'
+                            : '<span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 shrink-0">Aguardando</span>'}
+                    </div>
+                </li>
+            `;
+        }).join('')
+        : '<li class="text-xs text-slate-400 py-2">Nenhum detalhamento associado.</li>';
+
+    return `
+        <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
+            <div class="collapsible-list-header px-2 py-1.5 bg-slate-50/80 border-b border-slate-100 cursor-pointer">
+                <div class="flex items-center gap-2 min-w-0">
+                    <button type="button"
+                        class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
+                        aria-label="Expandir">▶</button>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase truncate ${statusClass}">
+                        Detalhamento
+                    </span>
+                    <span class="text-[10px] text-slate-500 shrink-0">${records.length}</span>
+                    ${inProgressCount > 0
+                        ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0"
+                            title="Detalhamento em andamento">${inProgressCount} em andamento</span>`
+                        : ''}
+                </div>
+            </div>
+            <div class="collapsible-list-body hidden">
+                <ul class="px-2 py-1">${projectsHtml}</ul>
+            </div>
+        </div>
+    `;
+}
+
 function groupPendenciasProjectsByStatus(projects) {
     const grouped = Object.fromEntries(
         PENDENCIAS_GESTOR_WORKLOAD_COLUMNS.map(status => [status, []])
@@ -489,12 +680,15 @@ function groupPendenciasProjectsByStatus(projects) {
     return grouped;
 }
 
-function renderPendenciasWorkloadStatusSections(projects) {
+function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds = new Set()) {
     const grouped = groupPendenciasProjectsByStatus(projects);
 
     return PENDENCIAS_GESTOR_WORKLOAD_COLUMNS.map(statusName => {
         const statusProjects = grouped[statusName] || [];
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
+        const revisionInProgressCount = statusName === PENDENCIAS_STATUS_EM_REVISAO_TECNICA
+            ? statusProjects.filter(project => revisionInProgressIds.has(Number(project.id))).length
+            : 0;
         const projectsHtml = statusProjects.length
             ? statusProjects.map(project => {
                 const clientName = getOrderClientName(project.order) || '—';
@@ -519,8 +713,8 @@ function renderPendenciasWorkloadStatusSections(projects) {
                             </div>
                         </div>
                         <div class="collapsible-list-body hidden pl-6 pr-1 pb-2">
-                            <label class="block text-[10px] text-slate-500 mt-0.5">Previsão conclusão</label>
-                            ${renderPendenciasWorkloadPrevisaoInput(project)}
+                            <label class="block text-[10px] text-slate-500 mt-0.5">Previsão</label>
+                            ${renderPendenciasWorkloadPrevisaoInputs(project)}
                             <label class="block text-[10px] text-slate-500 mt-2">Trocar projetista</label>
                             <div class="flex items-center gap-1.5 mt-1">
                                 <select class="pendencias-workload-designer-select flex-1 min-w-0 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
@@ -554,6 +748,10 @@ function renderPendenciasWorkloadStatusSections(projects) {
                             ${escapeHtml(statusName)}
                         </span>
                         <span class="text-[10px] text-slate-500 shrink-0">${statusProjects.length}</span>
+                        ${revisionInProgressCount > 0
+                            ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0"
+                                title="Revisão técnica em andamento">${revisionInProgressCount} em andamento</span>`
+                            : ''}
                     </div>
                 </div>
                 <div class="collapsible-list-body hidden">
@@ -564,7 +762,13 @@ function renderPendenciasWorkloadStatusSections(projects) {
     }).join('');
 }
 
-function renderPendenciasProjetosSemProjetistas(workload, projects, characteristicsMap = new Map()) {
+function renderPendenciasProjetosSemProjetistas(
+    workload,
+    projects,
+    characteristicsMap = new Map(),
+    revisionInProgressIds = new Set(),
+    detalhamentoByDesigner = {}
+) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
@@ -574,8 +778,9 @@ function renderPendenciasProjetosSemProjetistas(workload, projects, characterist
                 <h4 class="font-bold text-sm text-slate-900">${escapeHtml(row.name)}</h4>
                 <p class="text-[10px] text-slate-500 mt-0.5">${row.projects.length} projeto${row.projects.length === 1 ? '' : 's'}</p>
             </div>
-            <div class="p-2 space-y-2 max-h-80 overflow-y-auto">
-                ${renderPendenciasWorkloadStatusSections(row.projects)}
+            <div class="p-2 space-y-2">
+                ${renderPendenciasWorkloadStatusSections(row.projects, revisionInProgressIds)}
+                ${renderPendenciasWorkloadDetalhamentoSection(detalhamentoByDesigner[Number(row.designerId)] || null)}
             </div>
         </article>
     `).join('');
@@ -592,7 +797,7 @@ function renderPendenciasProjetosSemProjetistas(workload, projects, characterist
                 <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                     <div>
                         <h3 class="font-bold text-sm text-slate-900">Carga por projetista</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão, Aguardando Aprovação e Aguardando PPCP.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial, Em Revisão Técnica, Aguardando Aprovação, Aguardando PPCP, Implantação e Detalhamento.</p>
                     </div>
                     <button type="button" id="btn-pendencias-refresh-sem-projetistas"
                         class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
@@ -629,11 +834,15 @@ function renderPendenciasProjetosSemProjetistas(workload, projects, characterist
     const workloadCardsRoot = content.querySelector('#pendencias-workload-cards');
     if (workloadCardsRoot) {
         bindCollapsibleListCardToggles(workloadCardsRoot, { defaultCollapsed: true });
-        workloadCardsRoot.querySelectorAll('.pendencias-workload-previsao-input').forEach(input => {
+        workloadCardsRoot.querySelectorAll('.pendencias-workload-previsao-inicio-input, .pendencias-workload-previsao-fim-input').forEach(input => {
             input.addEventListener('change', () => {
-                salvarPendenciasWorkloadPrevisaoConclusao(
+                const item = input.closest('li');
+                const inicioDate = item?.querySelector('.pendencias-workload-previsao-inicio-input')?.value || '';
+                const previsaoDate = item?.querySelector('.pendencias-workload-previsao-fim-input')?.value || '';
+                salvarPendenciasWorkloadPrevisao(
                     Number(input.dataset.projectId),
-                    input.value,
+                    inicioDate,
+                    previsaoDate,
                     input.dataset.deliveryDate || ''
                 );
             });
@@ -643,11 +852,13 @@ function renderPendenciasProjetosSemProjetistas(workload, projects, characterist
                 const projectId = Number(button.dataset.projectId);
                 const item = button.closest('li');
                 const select = item?.querySelector('.pendencias-workload-designer-select');
-                const previsaoDate = item?.querySelector('.pendencias-workload-previsao-input')?.value || '';
+                const inicioDate = item?.querySelector('.pendencias-workload-previsao-inicio-input')?.value || '';
+                const previsaoDate = item?.querySelector('.pendencias-workload-previsao-fim-input')?.value || '';
                 trocarPendenciaProjetoProjetista(
                     projectId,
                     Number(select?.value),
                     Number(button.dataset.currentDesignerId),
+                    inicioDate,
                     previsaoDate,
                     button.dataset.deliveryDate || ''
                 );
@@ -661,11 +872,12 @@ function renderPendenciasProjetosSemProjetistas(workload, projects, characterist
             const row = button.closest('tr');
             const select = row?.querySelector('.pendencias-gestor-designer-select')
                 || content.querySelector(`.pendencias-gestor-designer-select[data-project-id="${projectId}"]`);
-            const previsaoDate = row?.querySelector('.pendencias-previsao-input')?.value || '';
+            const previsaoValues = getPendenciasPrevisaoValuesFromContainer(row);
             associarPendenciaProjetoAProjetista(
                 projectId,
                 Number(select?.value),
-                previsaoDate,
+                previsaoValues.inicioDate,
+                previsaoValues.previsaoDate,
                 button.dataset.deliveryDate || ''
             );
         });
@@ -697,10 +909,25 @@ async function loadPendenciasProjetosSemProjetistas() {
         ? await fetchOrderProjectCharacteristicsMap(projectIds)
         : new Map();
 
-    renderPendenciasProjetosSemProjetistas(workloadResult.workload, projectsResult.projects, characteristicsMap);
+    const emRevisaoTecnicaProjectIds = (workloadResult.workload || []).flatMap(row => row.projects
+        .filter(project => normalizePendenciasWorkloadStatusName(
+            getPendenciasProjectStatusName(project)
+        ) === PENDENCIAS_STATUS_EM_REVISAO_TECNICA)
+        .map(project => Number(project.id))
+    );
+    const revisionInProgressIds = await fetchRevisionInProgressByOrderProjectIds(emRevisaoTecnicaProjectIds);
+    const detalhamentoByDesigner = await fetchPendenciasWorkloadDetalhamentoByDesigner();
+
+    renderPendenciasProjetosSemProjetistas(
+        workloadResult.workload,
+        projectsResult.projects,
+        characteristicsMap,
+        revisionInProgressIds,
+        detalhamentoByDesigner
+    );
 }
 
-async function salvarPendenciasWorkloadPrevisaoConclusao(projectId, previsaoDate, deliveryDate = '') {
+async function salvarPendenciasWorkloadPrevisao(projectId, inicioDate, previsaoDate, deliveryDate = '') {
     if (!canSeePendenciasGestorProjetosMenu()) {
         alertAppDialog('Somente Gestor de Projetos pode alterar a previsão.', { variant: 'warning', title: 'Aviso' });
         return;
@@ -708,14 +935,14 @@ async function salvarPendenciasWorkloadPrevisaoConclusao(projectId, previsaoDate
 
     if (!projectId) return;
 
-    if (!validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate)) {
+    if (!validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
         await loadPendenciasProjetosSemProjetistas();
         return;
     }
 
     const now = new Date().toISOString();
     const payload = {
-        previsaoConclusaoProjetoTecnico: previsaoDate,
+        ...buildOrderProjectPrevisaoPayload(inicioDate, previsaoDate),
         updatedById: currentUser.id,
         updatedAt: now
     };
@@ -728,8 +955,8 @@ async function salvarPendenciasWorkloadPrevisaoConclusao(projectId, previsaoDate
             .update(payload)
             .eq('id', projectId);
 
-        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
-            alertAppDialog('O campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+        if (isOrderProjectPrevisaoColumnError(error?.message)) {
+            alertAppDialog('Os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
             return;
         }
 
@@ -744,7 +971,7 @@ async function salvarPendenciasWorkloadPrevisaoConclusao(projectId, previsaoDate
     }
 }
 
-async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, currentDesignerId, previsaoDate, deliveryDate = '') {
+async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, currentDesignerId, inicioDate, previsaoDate, deliveryDate = '') {
     if (!canSeePendenciasGestorProjetosMenu()) {
         alertAppDialog('Somente Gestor de Projetos pode trocar responsáveis.', { variant: 'warning', title: 'Aviso' });
         return;
@@ -760,7 +987,7 @@ async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, curren
         return;
     }
 
-    if (!validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate)) {
+    if (!validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
         return;
     }
 
@@ -775,7 +1002,7 @@ async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, curren
     const now = new Date().toISOString();
     const payload = {
         designerId: newDesignerId,
-        previsaoConclusaoProjetoTecnico: previsaoDate,
+        ...buildOrderProjectPrevisaoPayload(inicioDate, previsaoDate),
         updatedById: currentUser.id,
         updatedAt: now
     };
@@ -788,7 +1015,7 @@ async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, curren
             .update(payload)
             .eq('id', projectId);
 
-        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+        if (isOrderProjectPrevisaoColumnError(error?.message)) {
             ({ error } = await supabaseClient
                 .from('OrderProject')
                 .update({
@@ -798,7 +1025,7 @@ async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, curren
                 })
                 .eq('id', projectId));
             if (!error) {
-                alertAppDialog('Projetista alterado, mas o campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+                alertAppDialog('Projetista alterado, mas os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
             }
         }
 
@@ -841,7 +1068,7 @@ async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, curren
     }
 }
 
-async function associarPendenciaProjetoAProjetista(projectId, designerId, previsaoDate, deliveryDate = '') {
+async function associarPendenciaProjetoAProjetista(projectId, designerId, inicioDate, previsaoDate, deliveryDate = '') {
     if (!canSeePendenciasGestorProjetosMenu()) {
         alertAppDialog('Somente Gestor de Projetos pode associar responsáveis.', { variant: 'warning', title: 'Aviso' });
         return;
@@ -852,7 +1079,7 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId, previs
         return;
     }
 
-    if (!validatePendenciasAssociacaoPrevisao(previsaoDate, deliveryDate)) {
+    if (!validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
         return;
     }
 
@@ -867,7 +1094,7 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId, previs
     const now = new Date().toISOString();
     const payload = {
         designerId,
-        previsaoConclusaoProjetoTecnico: previsaoDate,
+        ...buildOrderProjectPrevisaoPayload(inicioDate, previsaoDate),
         updatedById: currentUser.id,
         updatedAt: now
     };
@@ -880,7 +1107,7 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId, previs
             .update(payload)
             .eq('id', projectId);
 
-        if (error?.message?.includes('previsaoConclusaoProjetoTecnico')) {
+        if (isOrderProjectPrevisaoColumnError(error?.message)) {
             ({ error } = await supabaseClient
                 .from('OrderProject')
                 .update({
@@ -890,7 +1117,7 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId, previs
                 })
                 .eq('id', projectId));
             if (!error) {
-                alertAppDialog('Projetista associado, mas o campo de previsão ainda não existe no banco. Execute supabase/create-order-project-previsao-conclusao.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+                alertAppDialog('Projetista associado, mas os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
             }
         }
 
@@ -937,7 +1164,7 @@ async function loadPendenciasAguardandoProjetoTecnico() {
     renderPendenciasAguardandoProjetoTecnicoList([], mine, new Map());
 }
 
-async function associarPendenciaProjetoAMim(projectId, previsaoDate, deliveryDate = '') {
+async function associarPendenciaProjetoAMim(projectId, inicioDate, previsaoDate, deliveryDate = '') {
     if (typeof associarProjetoTecnicoAMim !== 'function') {
         alertAppDialog('Módulo de projeto técnico não carregado.');
         return;
@@ -945,7 +1172,7 @@ async function associarPendenciaProjetoAMim(projectId, previsaoDate, deliveryDat
 
     try {
         setPendenciasActionLoading(true, 'Associando projeto...');
-        await associarProjetoTecnicoAMim(projectId, previsaoDate, deliveryDate);
+        await associarProjetoTecnicoAMim(projectId, inicioDate, previsaoDate, deliveryDate);
     } finally {
         setPendenciasActionLoading(false);
     }

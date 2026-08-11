@@ -135,12 +135,22 @@ async function restorePendenciasView(state) {
     updateAdminNav();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
 
-    if (typeof getDefaultPendenciasSection === 'function') {
-        pendenciasActiveSection = state.pendenciasSection || getDefaultPendenciasSection();
+    const gestorSection = typeof getPrimaryGestorPendenciasSection === 'function'
+        ? getPrimaryGestorPendenciasSection()
+        : null;
+    const savedSection = state.pendenciasSection || null;
+    const gestorSections = ['gestor-projetos', 'gestor-comercial', 'gestor-fabrica'];
+
+    if (gestorSection && (!savedSection || !gestorSections.includes(savedSection))) {
+        pendenciasActiveSection = gestorSection;
+        pendenciasActiveItem = null;
+    } else if (typeof getDefaultPendenciasSection === 'function') {
+        pendenciasActiveSection = savedSection || getDefaultPendenciasSection();
+        pendenciasActiveItem = state.pendenciasItem || null;
     } else {
-        pendenciasActiveSection = state.pendenciasSection || null;
+        pendenciasActiveSection = savedSection || null;
+        pendenciasActiveItem = state.pendenciasItem || null;
     }
-    pendenciasActiveItem = state.pendenciasItem || null;
 
     if (typeof renderPendenciasSidebar === 'function') renderPendenciasSidebar();
     if (typeof loadPendenciasContent === 'function') await loadPendenciasContent();
