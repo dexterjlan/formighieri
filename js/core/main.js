@@ -42,6 +42,7 @@ function initAppEvents() {
     bindConversationsQueryEvents();
     bindCommercialApprovalQueryEvents();
     bindOrderEvents();
+    bindOrderExportEvents();
     bindOrderProjectEvents();
     bindProjectCharacteristicsEvents();
     if (typeof bindThirdPartyProjectTabEvents === 'function') {

@@ -40,7 +40,7 @@ function validateOrderProjetoTecnicoPrevisao(inicioDate, previsaoDate, deliveryD
     }
     if (!isPrevisaoProjetoTecnicoRangeValid(inicioDate, previsaoDate, deliveryDate)) {
         alertAppDialog(
-            'O início deve ser anterior ou igual à previsão de conclusão, e a conclusão deve ser anterior ou igual à data de entrega do projeto técnico.',
+            'O início deve ser anterior ou igual à previsão de conclusão.',
             { variant: 'warning', title: 'Aviso' }
         );
         return false;
@@ -182,7 +182,6 @@ function canIniciarOrderProjetoTecnico(project) {
 }
 
 function renderOrderProjetoTecnicoPrevisaoInputs(project) {
-    const maxDate = getOrderProjetoTecnicoPrevisaoInputMaxDate(project.deliveryDate);
     const inicioValue = getOrderProjetoTecnicoPrevisaoInputValue(project.technicalProjectForecastStartDate);
     const fimValue = getOrderProjetoTecnicoPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
 
@@ -198,7 +197,6 @@ function renderOrderProjetoTecnicoPrevisaoInputs(project) {
                 class="order-pt-previsao-fim-input w-full min-w-[9rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600"
                 data-project-id="${project.id}"
                 ${fimValue ? `value="${escapeHtml(fimValue)}"` : ''}
-                ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
                 title="Previsão de conclusão do projeto técnico">
         </div>
     `;

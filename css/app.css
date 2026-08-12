@@ -1726,6 +1726,10 @@ body.gestao-kanban-fullscreen-active {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.project-view-fields--stack {
+    grid-template-columns: 1fr;
+}
+
 .project-view-field {
     margin: 0;
     padding: 0.75rem 0.875rem;
@@ -3033,6 +3037,181 @@ body.montagem-prog-resizing {
     }
 }
 
+.order-export-print-root {
+    display: none;
+}
+
+.order-export-document {
+    color: #0f172a;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.order-export-header {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #0f172a;
+}
+
+.order-export-header__title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.order-export-header__meta {
+    margin: 0.35rem 0 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.order-export-header__meta--muted {
+    font-weight: 400;
+    color: #64748b;
+    font-size: 0.75rem;
+}
+
+.order-export-section {
+    margin-bottom: 1.25rem;
+    break-inside: avoid-page;
+}
+
+.order-export-section__title {
+    margin: 0 0 0.6rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #334155;
+    border-bottom: 1px solid #cbd5e1;
+    padding-bottom: 0.25rem;
+}
+
+.order-export-subheading {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.order-export-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.order-export-fields--grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem 1rem;
+}
+
+.order-export-field__label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+}
+
+.order-export-field__value {
+    font-size: 0.8rem;
+    color: #0f172a;
+    word-break: break-word;
+}
+
+.order-export-card {
+    margin-bottom: 0.85rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.35rem;
+    background: #fff;
+}
+
+.order-export-card--nested {
+    margin-top: 0.5rem;
+    background: #f8fafc;
+}
+
+.order-export-note,
+.order-export-meta {
+    margin: 0.35rem 0 0.5rem;
+    font-size: 0.78rem;
+    color: #334155;
+    white-space: pre-wrap;
+}
+
+.order-export-meta {
+    color: #64748b;
+}
+
+.order-export-empty {
+    margin: 0;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    font-style: italic;
+}
+
+.order-export-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+}
+
+.order-export-table th,
+.order-export-table td {
+    border: 1px solid #e2e8f0;
+    padding: 0.35rem 0.45rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.order-export-table th {
+    background: #f1f5f9;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #475569;
+}
+
+@media print {
+    @page {
+        size: A4;
+        margin: 12mm 10mm;
+    }
+
+    body.order-export-printing * {
+        visibility: hidden;
+    }
+
+    body.order-export-printing #order-export-print-root,
+    body.order-export-printing #order-export-print-root * {
+        visibility: visible;
+    }
+
+    body.order-export-printing #order-export-print-root {
+        display: block;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0;
+        background: #fff;
+    }
+
+    body.order-export-printing .order-export-section--page-break {
+        break-before: page;
+        page-break-before: always;
+    }
+
+    body.order-export-printing .order-export-card {
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+    }
+}
+
 .order-code-field {
     display: flex;
     align-items: stretch;
@@ -3311,6 +3490,74 @@ body.montagem-prog-resizing {
 .gestao-gantt-project-card__save:disabled {
     opacity: 0.7;
     cursor: not-allowed;
+}
+
+.gestao-gantt-project-card__value {
+    font-size: 0.75rem;
+    color: rgb(15 23 42);
+}
+
+.gestao-gantt-project-card__dates--readonly {
+    grid-template-columns: 1fr;
+}
+
+.gestao-gantt-layout--calendar-only {
+    flex-direction: column;
+}
+
+.gestao-gantt-layout--calendar-only .gestao-gantt-calendar-panel {
+    flex: 1 1 auto;
+    max-height: 100%;
+    width: 100%;
+}
+
+.gestao-view-layout--full > :not(#gestao-sidebar) {
+    width: 100%;
+}
+
+.montagem-prog-readonly .montagem-prog-layout {
+    display: block;
+}
+
+.montagem-prog-readonly #montagem-prog-palette {
+    display: none !important;
+}
+
+.montagem-prog-readonly #montagem-prog-palette-label {
+    display: none;
+}
+
+.montagem-prog-readonly #montagem-prog-palette-aside {
+    display: block;
+    width: 100%;
+    max-width: none;
+    border-right: 0;
+    border-bottom: 1px solid rgb(241 245 249);
+    padding: 0.5rem 1rem;
+    background: rgb(248 250 252 / 0.8);
+}
+
+.montagem-prog-readonly #montagem-prog-palette-filter-wrap {
+    margin-bottom: 0;
+    justify-content: flex-end;
+}
+
+.montagem-prog-readonly #montagem-prog-montador-filter {
+    max-width: 12rem;
+}
+
+.montagem-prog-readonly .montagem-prog-calendar {
+    width: 100%;
+}
+
+.montagem-prog-readonly .montagem-prog-bar-resize,
+.montagem-prog-readonly .montagem-prog-bar-body {
+    pointer-events: none;
+    cursor: default;
+}
+
+.montagem-prog-readonly .montagem-prog-day-slot {
+    cursor: default;
 }
 
 .gestao-gantt-calendar-panel {

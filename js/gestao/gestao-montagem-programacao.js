@@ -780,6 +780,11 @@ function renderMontagemProgPaletteItem(workerType, worker) {
 function bindMontagemProgPaletteItems(palette) {
     palette.querySelectorAll('.montagem-prog-palette-item').forEach(item => {
         item.addEventListener('dragstart', event => {
+            if (isMontagemProgramacaoReadOnly()) {
+                event.preventDefault();
+                return;
+            }
+
             montagemProgDragWorker = {
                 type: item.dataset.workerType,
                 id: Number(item.dataset.workerId)
@@ -801,6 +806,7 @@ function bindMontagemProgPaletteItems(palette) {
                 .forEach(element => element.classList.remove('is-drop-target'));
         });
         item.addEventListener('dblclick', () => {
+            if (isMontagemProgramacaoReadOnly()) return;
             openMontagemProgModal(null, getMontagemProgWeekStartKey(), {
                 type: item.dataset.workerType,
                 id: Number(item.dataset.workerId)
@@ -1019,6 +1025,8 @@ function updateMontagemProgDropTargetHighlight(event, grid) {
 }
 
 async function handleMontagemProgCalendarDrop(event, grid) {
+    if (isMontagemProgramacaoReadOnly()) return;
+
     event.preventDefault();
     event.stopPropagation();
     clearMontagemProgDropTargets(grid);
@@ -1065,6 +1073,8 @@ function bindMontagemProgWeekInteractions(grid) {
     });
 
     grid.addEventListener('click', event => {
+        if (isMontagemProgramacaoReadOnly()) return;
+
         const slot = event.target.closest('.montagem-prog-day-slot');
         if (slot?.dataset.date) {
             openMontagemProgModal(null, slot.dataset.date);
@@ -1073,6 +1083,8 @@ function bindMontagemProgWeekInteractions(grid) {
     });
 
     grid.addEventListener('pointerdown', event => {
+        if (isMontagemProgramacaoReadOnly()) return;
+
         const handle = event.target.closest('.montagem-prog-bar-resize');
         if (handle) {
             event.preventDefault();
@@ -1181,6 +1193,8 @@ function getMontagemProgLaneFromPointer(clientY, grid) {
 }
 
 function startMontagemProgResize(handle, event) {
+    if (isMontagemProgramacaoReadOnly()) return;
+
     const programacaoId = Number(handle.dataset.programacaoId);
     const edge = handle.dataset.edge;
     const prog = montagemProgCache.find(item => Number(item.id) === programacaoId);
@@ -1270,6 +1284,8 @@ function updateMontagemProgResizePreview() {
 let montagemProgMoveState = null;
 
 function startMontagemProgMoveBar(button, event) {
+    if (isMontagemProgramacaoReadOnly()) return;
+
     const programacaoId = Number(button.dataset.programacaoId);
     const prog = montagemProgCache.find(item => Number(item.id) === programacaoId);
     if (!prog) return;
@@ -1376,7 +1392,7 @@ function updateMontagemProgMovePreview() {
 }
 
 async function updateMontagemProgDates(programacaoId, startDate, endDate) {
-    if (!canAccessMontagemProgramacao()) return;
+    if (!canEditProgramacaoMontagem()) return;
 
     const now = new Date().toISOString();
     const { error } = await supabaseClient
@@ -1479,7 +1495,7 @@ async function persistMontagemProgCrew(programacaoId, montadorIds, marceneiroIds
 }
 
 async function createMontagemProgFromDrop(worker, dateKey, targetProgramacaoId = null) {
-    if (!canAccessMontagemProgramacao() || !worker?.type || !worker?.id) return;
+    if (!canEditProgramacaoMontagem() || !worker?.type || !worker?.id) return;
 
     try {
         if (targetProgramacaoId) {
@@ -1679,7 +1695,7 @@ function syncMontagemProgCrewExclusivity() {
 }
 
 async function openMontagemProgModal(prog = null, presetDate = null, presetWorker = null) {
-    if (!canAccessMontagemProgramacao()) return;
+    if (!canEditProgramacaoMontagem()) return;
 
     hideMontagemProgFloatingTooltip();
 
@@ -1731,7 +1747,7 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetWorke
 
 async function saveMontagemProg(event) {
     event.preventDefault();
-    if (!canAccessMontagemProgramacao()) return;
+    if (!canEditProgramacaoMontagem()) return;
 
     const startDate = document.getElementById('montagem-prog-start-date')?.value;
     const endDate = document.getElementById('montagem-prog-end-date')?.value;
@@ -1841,7 +1857,7 @@ async function saveMontagemProg(event) {
 }
 
 async function deleteMontagemProg() {
-    if (!editingMontagemProgId || !canAccessMontagemProgramacao()) return;
+    if (!editingMontagemProgId || !canEditProgramacaoMontagem()) return;
     if (!(await confirmAppDialog('Excluir esta programação de montagem?'))) return;
 
     const { error } = await supabaseClient
@@ -1870,7 +1886,7 @@ function warnMontagemProgConflictsIfNeeded() {
 }
 
 async function copyMontagemProgPreviousWeek() {
-    if (!canAccessMontagemProgramacao()) return;
+    if (!canEditProgramacaoMontagem()) return;
 
     const prevWeekStartKey = montagemProgToDateKey(montagemProgAddDays(montagemProgWeekAnchor, -7));
     const prevProgramacoes = await loadMontagemProgramacoesForWeek(prevWeekStartKey, false);
@@ -1964,6 +1980,8 @@ async function loadMontagemProgramacaoView() {
         weekLabel.textContent = formatMontagemProgWeekLabel(montagemProgWeekAnchor);
     }
 
+    const readOnly = isMontagemProgramacaoReadOnly();
+
     if (typeof loadGestaoMontadores === 'function') {
         await loadGestaoMontadores(true);
     }
@@ -1973,26 +1991,50 @@ async function loadMontagemProgramacaoView() {
 
     await loadMontagemProgramacoesForWeek();
     renderMontagemProgWorkerFilter();
-    renderMontagemProgPalette();
+    if (!readOnly) {
+        renderMontagemProgPalette();
+    }
     renderMontagemProgWeekGrid();
+    applyMontagemProgramacaoReadOnlyUi();
+}
+
+function isMontagemProgramacaoReadOnly() {
+    return typeof canEditProgramacaoMontagem === 'function'
+        ? !canEditProgramacaoMontagem()
+        : !canAccessMontagemProgramacao();
+}
+
+function applyMontagemProgramacaoReadOnlyUi() {
+    const panel = document.getElementById('gestao-montagem-programacao-panel');
+    const readOnly = isMontagemProgramacaoReadOnly();
+    panel?.classList.toggle('montagem-prog-readonly', readOnly);
+    document.getElementById('montagem-prog-readonly-notice')?.classList.toggle('hidden', !readOnly);
+    document.getElementById('btn-montagem-prog-copy-prev-week')?.classList.toggle('hidden', readOnly);
+    const subtitle = document.getElementById('montagem-prog-panel-subtitle');
+    if (subtitle) {
+        subtitle.textContent = readOnly
+            ? 'Visualização da escala semanal de montadores e marceneiros.'
+            : 'Arraste montadores ou marceneiros para a semana. Solte sobre outra barra para formar dupla (somente do mesmo tipo).';
+    }
 }
 
 function showGestaoMontagemProgramacaoPanel() {
-    if (!canAccessMontagemProgramacao()) {
-        alertAppDialog('Somente administradores e gestores de projetos podem acessar a programação de montagem.', { variant: 'warning', title: 'Aviso' });
+    if (!canViewProgramacaoMontagem()) {
+        alertAppDialog('Faça login para acessar a programação de montagem.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     hideAllGestaoPanels();
     document.getElementById('gestao-montagem-programacao-panel')?.classList.remove('hidden');
     setGestaoNavActive('montagem-programacao');
+    applyMontagemProgramacaoReadOnlyUi();
     loadMontagemProgramacaoView();
 }
 
 function updateMontagemProgramacaoNavVisibility() {
     const button = document.getElementById('gestao-nav-montagem-programacao');
     if (button) {
-        button.classList.toggle('hidden', !canAccessMontagemProgramacao());
+        button.classList.toggle('hidden', !canViewProgramacaoMontagem());
     }
 }
 
@@ -2000,7 +2042,11 @@ function bindMontagemProgramacaoEvents() {
     bindMontagemProgTooltipEvents();
 
     document.getElementById('gestao-nav-montagem-programacao')?.addEventListener('click', () => {
-        showGestaoMontagemProgramacaoPanel();
+        if (typeof showProgramacaoMontagemView === 'function') {
+            showProgramacaoMontagemView({ fromGestao: true });
+        } else {
+            showGestaoMontagemProgramacaoPanel();
+        }
     });
 
     document.getElementById('btn-montagem-prog-prev-week')?.addEventListener('click', async () => {

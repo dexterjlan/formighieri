@@ -23,6 +23,31 @@ let gestaoGanttCalendarDesignerFilter = '';
 let gestaoGanttEventsBound = false;
 let gestaoGanttSaving = false;
 
+function isProgramacaoProjetosReadOnly() {
+    return typeof canEditProgramacaoProjetos === 'function'
+        ? !canEditProgramacaoProjetos()
+        : !canAccessGestao();
+}
+
+function applyProgramacaoProjetosReadOnlyUi() {
+    const panel = document.getElementById('gestao-gantt-panel');
+    const readOnly = isProgramacaoProjetosReadOnly();
+    panel?.classList.toggle('gestao-gantt-readonly', readOnly);
+    document.getElementById('gestao-gantt-readonly-notice')?.classList.toggle('hidden', !readOnly);
+    document.querySelector('#gestao-gantt-content .gestao-gantt-layout')
+        ?.classList.toggle('gestao-gantt-layout--calendar-only', readOnly);
+}
+
+function updateProgramacaoProjetosNavVisibility() {
+    const button = document.getElementById('gestao-nav-gantt');
+    if (button) {
+        button.classList.toggle('hidden', !canViewProgramacaoProjetos());
+    }
+}
+
+window.applyProgramacaoProjetosReadOnlyUi = applyProgramacaoProjetosReadOnlyUi;
+window.updateProgramacaoProjetosNavVisibility = updateProgramacaoProjetosNavVisibility;
+
 const GESTAO_GANTT_DESIGNER_FILTER_NONE = 'none';
 
 function startOfGestaoGanttMonth(date) {
@@ -263,7 +288,7 @@ function validateGestaoGanttPrevisao(inicioDate, previsaoDate, deliveryDate) {
     }
     if (!isPrevisaoProjetoTecnicoRangeValid(inicioDate, previsaoDate, deliveryDate)) {
         alertAppDialog(
-            'O início deve ser anterior ou igual à previsão de conclusão, e a conclusão deve ser anterior ou igual à data de entrega do projeto técnico.',
+            'O início deve ser anterior ou igual à previsão de conclusão.',
             { variant: 'warning', title: 'Aviso' }
         );
         return false;
@@ -454,6 +479,40 @@ function renderGestaoGanttProjectCard(entry) {
     const deliveryDate = getGestaoGanttPrevisaoInputMaxDate(project.deliveryDate);
     const inicioValue = getGestaoGanttPrevisaoInputValue(project.technicalProjectForecastStartDate);
     const fimValue = getGestaoGanttPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
+    const designerName = getGestaoGanttDesignerName(project);
+    const readOnly = isProgramacaoProjetosReadOnly();
+
+    if (readOnly) {
+        return `
+        <article class="gestao-gantt-project-card gestao-gantt-project-card--readonly" data-order-project-id="${project.id}">
+            <div class="gestao-gantt-project-card__header">
+                <button type="button"
+                    class="gestao-gantt-project-card__open"
+                    data-order-project-id="${project.id}"
+                    title="Abrir projeto">
+                    <span class="gestao-gantt-project-card__codes">${escapeHtml(orderCode)} · ${escapeHtml(projectCode)}</span>
+                    <span class="gestao-gantt-project-card__name">${escapeHtml(project.name || 'Projeto')}</span>
+                </button>
+                <span class="gestao-gantt-project-card__status">${escapeHtml(statusName)}</span>
+            </div>
+            <p class="gestao-gantt-project-card__client">${escapeHtml(clientName)}</p>
+            <div class="gestao-gantt-project-card__dates gestao-gantt-project-card__dates--readonly">
+                <div class="gestao-gantt-project-card__field">
+                    <span class="gestao-gantt-project-card__label">Projetista</span>
+                    <span class="gestao-gantt-project-card__value">${escapeHtml(designerName)}</span>
+                </div>
+                <div class="gestao-gantt-project-card__field">
+                    <span class="gestao-gantt-project-card__label">Início previsto</span>
+                    <span class="gestao-gantt-project-card__value">${escapeHtml(formatGestaoDate(project.technicalProjectForecastStartDate))}</span>
+                </div>
+                <div class="gestao-gantt-project-card__field">
+                    <span class="gestao-gantt-project-card__label">Fim previsto</span>
+                    <span class="gestao-gantt-project-card__value">${escapeHtml(formatGestaoDate(project.previsaoConclusaoProjetoTecnico))}</span>
+                </div>
+            </div>
+        </article>
+    `;
+    }
 
     return `
         <article class="gestao-gantt-project-card" data-order-project-id="${project.id}">
@@ -493,8 +552,7 @@ function renderGestaoGanttProjectCard(entry) {
                         class="gestao-gantt-previsao-fim-input w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-500"
                         data-order-project-id="${project.id}"
                         data-delivery-date="${escapeHtml(deliveryDate)}"
-                        ${fimValue ? `value="${escapeHtml(fimValue)}"` : ''}
-                        ${deliveryDate ? `max="${escapeHtml(deliveryDate)}"` : ''}>
+                        ${fimValue ? `value="${escapeHtml(fimValue)}"` : ''}>
                 </label>
             </div>
             <button type="button"
@@ -662,7 +720,9 @@ function renderGestaoGanttLegend() {
 }
 
 function renderGestaoGanttViews() {
-    renderGestaoGanttProjectList();
+    if (!isProgramacaoProjetosReadOnly()) {
+        renderGestaoGanttProjectList();
+    }
     renderGestaoGanttMonthGrid();
 }
 
@@ -691,6 +751,11 @@ function hasGestaoGanttCardChanges(card, project) {
 }
 
 async function saveGestaoGanttProjectCard(card) {
+    if (isProgramacaoProjetosReadOnly()) {
+        alertAppDialog('Visualização somente leitura.', { variant: 'warning', title: 'Aviso' });
+        return false;
+    }
+
     if (!canAccessGestao()) {
         alertAppDialog('Sem permissão para alterar o projeto.', { variant: 'warning', title: 'Aviso' });
         return false;
@@ -852,8 +917,8 @@ async function loadGestaoGantt() {
     const content = document.getElementById('gestao-gantt-content');
     if (!content) return;
 
-    content.innerHTML = `
-        <div class="gestao-gantt-layout">
+    const readOnly = isProgramacaoProjetosReadOnly();
+    const projectsPanelHtml = readOnly ? '' : `
             <aside class="gestao-gantt-projects-panel">
                 <div class="gestao-gantt-projects-panel__header">
                     <h4 class="gestao-gantt-projects-panel__title">Projetos</h4>
@@ -880,7 +945,11 @@ async function loadGestaoGantt() {
                 <div id="gestao-gantt-project-list" class="gestao-gantt-project-list">
                     <p class="text-xs text-slate-400 text-center py-8 px-3">Carregando projetos...</p>
                 </div>
-            </aside>
+            </aside>`;
+
+    content.innerHTML = `
+        <div class="gestao-gantt-layout${readOnly ? ' gestao-gantt-layout--calendar-only' : ''}">
+            ${projectsPanelHtml}
             <section class="gestao-gantt-calendar-panel">
                 <div class="gestao-gantt-calendar-panel__filters">
                     <label class="gestao-gantt-panel__filter">
@@ -921,7 +990,7 @@ async function loadGestaoGantt() {
     if (ordersResult.error) {
         const list = document.getElementById('gestao-gantt-project-list');
         const grid = document.getElementById('gestao-gantt-month-grid');
-        const message = `Erro ao carregar Gantt: ${escapeHtml(ordersResult.error.message)}`;
+        const message = `Erro ao carregar programação: ${escapeHtml(ordersResult.error.message)}`;
         if (list) list.innerHTML = `<p class="text-xs text-red-500 text-center py-8 px-3">${message}</p>`;
         if (grid) grid.innerHTML = `<p class="text-xs text-red-500 text-center py-8">${message}</p>`;
         return;
@@ -939,6 +1008,7 @@ async function loadGestaoGantt() {
 
     gestaoGanttProjectsCache = buildGestaoGanttProjects(orders, statuses);
     renderGestaoGanttFilterSelects();
+    applyProgramacaoProjetosReadOnlyUi();
     renderGestaoGanttViews();
 }
 
@@ -966,6 +1036,15 @@ function bindGestaoGanttEvents() {
     });
 
     document.getElementById('gestao-gantt-content')?.addEventListener('click', async event => {
+        if (isProgramacaoProjetosReadOnly()) {
+            const openButton = event.target.closest('.gestao-gantt-project-card__open, .gestao-gantt-bar');
+            if (!openButton) return;
+            const projectId = Number(openButton.dataset.orderProjectId);
+            if (!projectId || typeof openProjectViewModal !== 'function') return;
+            openProjectViewModal(projectId);
+            return;
+        }
+
         const saveButton = event.target.closest('.gestao-gantt-project-card__save');
         if (saveButton) {
             if (gestaoGanttSaving) return;
@@ -983,17 +1062,19 @@ function bindGestaoGanttEvents() {
     });
 
     document.getElementById('gestao-gantt-content')?.addEventListener('input', event => {
-        const projectClientFilter = event.target.closest('#gestao-gantt-project-client-filter');
-        if (projectClientFilter) {
-            gestaoGanttProjectClientFilter = projectClientFilter.value || '';
-            renderGestaoGanttProjectList();
-            return;
-        }
-
         const calendarClientFilter = event.target.closest('#gestao-gantt-calendar-client-filter');
         if (calendarClientFilter) {
             gestaoGanttCalendarClientFilter = calendarClientFilter.value || '';
             renderGestaoGanttMonthGrid();
+            return;
+        }
+
+        if (isProgramacaoProjetosReadOnly()) return;
+
+        const projectClientFilter = event.target.closest('#gestao-gantt-project-client-filter');
+        if (projectClientFilter) {
+            gestaoGanttProjectClientFilter = projectClientFilter.value || '';
+            renderGestaoGanttProjectList();
             return;
         }
 
@@ -1012,17 +1093,19 @@ function bindGestaoGanttEvents() {
     });
 
     document.getElementById('gestao-gantt-content')?.addEventListener('change', event => {
-        const projectDesignerFilter = event.target.closest('#gestao-gantt-project-designer-filter');
-        if (projectDesignerFilter) {
-            gestaoGanttProjectDesignerFilter = projectDesignerFilter.value || '';
-            renderGestaoGanttProjectList();
-            return;
-        }
-
         const calendarDesignerFilter = event.target.closest('#gestao-gantt-calendar-designer-filter');
         if (calendarDesignerFilter) {
             gestaoGanttCalendarDesignerFilter = calendarDesignerFilter.value || '';
             renderGestaoGanttMonthGrid();
+            return;
+        }
+
+        if (isProgramacaoProjetosReadOnly()) return;
+
+        const projectDesignerFilter = event.target.closest('#gestao-gantt-project-designer-filter');
+        if (projectDesignerFilter) {
+            gestaoGanttProjectDesignerFilter = projectDesignerFilter.value || '';
+            renderGestaoGanttProjectList();
             return;
         }
 

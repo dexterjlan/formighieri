@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '20260811u';
+const APP_CACHE_VERSION = '20260812d';
 
 const PARTIALS = [
     'partials/login.html',
@@ -84,6 +84,7 @@ const SCRIPTS = [
     'js/commercial/commercial-revision.js',
     'js/commercial/revision-activity-attachments.js',
     'js/commercial/commercial-approval-query.js',
+    'js/orders/order-export.js',
     'js/core/main.js'
 ];
 

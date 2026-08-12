@@ -1136,43 +1136,40 @@
                         </div>
                     </dl>
                 </div>
-                <div id="project-view-detalhamento-wrap"
-                    class="hidden project-view-section project-view-section--boxed project-view-section--indigo">
-                    <div class="flex flex-wrap items-start justify-between gap-2 mb-1">
+                <section id="project-view-detalhamento-wrap" class="hidden project-view-section">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
                         <h4 class="project-view-section__title mb-0">Detalhamento</h4>
                         <span id="project-view-detalhamento-status" class="text-[10px] px-2 py-0.5 rounded-full font-semibold"></span>
                     </div>
+                    <div class="project-view-field project-view-field--full">
+                        <p class="project-view-field__label">Projetista</p>
+                        <p id="project-view-detalhamento-designer" class="project-view-path">—</p>
+                    </div>
+                    <div class="project-view-field project-view-field--full">
+                        <p class="project-view-field__label">Pasta (implantação)</p>
+                        <p id="project-view-detalhamento-projeto-path" class="project-view-path">—</p>
+                    </div>
+                    <div class="project-view-field project-view-field--full">
+                        <p class="project-view-field__label">Pasta no servidor</p>
+                        <p id="project-view-detalhamento-server-path" class="project-view-path">—</p>
+                    </div>
                     <dl class="project-view-fields">
-                        <div class="project-view-field">
-                            <dt>Projetista</dt>
-                            <dd id="project-view-detalhamento-designer">—</dd>
-                        </div>
-                        <div class="project-view-field">
-                            <dt>Pasta (implantação)</dt>
-                            <dd id="project-view-detalhamento-projeto-path" class="project-view-path">—</dd>
+                        <div class="project-view-field project-view-field--full">
+                            <p class="project-view-field__label">Início</p>
+                            <p id="project-view-detalhamento-started-at" class="project-view-path">—</p>
                         </div>
                         <div class="project-view-field project-view-field--full">
-                            <dt>Pasta no servidor</dt>
-                            <dd id="project-view-detalhamento-server-path" class="project-view-path">—</dd>
+                            <p class="project-view-field__label">Fim</p>
+                            <p id="project-view-detalhamento-completed-at" class="project-view-path">—</p>
                         </div>
                     </dl>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3 text-xs">
-                        <div>
-                            <div class="text-[10px] font-semibold text-slate-500 uppercase">Início</div>
-                            <div id="project-view-detalhamento-started-at" class="text-slate-800 mt-1">—</div>
-                        </div>
-                        <div>
-                            <div class="text-[10px] font-semibold text-slate-500 uppercase">Conclusão</div>
-                            <div id="project-view-detalhamento-completed-at" class="text-slate-800 mt-1">—</div>
-                        </div>
-                        <div class="flex items-end justify-start sm:justify-end">
-                            <button type="button" id="project-view-detalhamento-open"
-                                class="text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline underline-offset-2">
-                                Abrir detalhamento
-                            </button>
-                        </div>
+                    <div class="mt-2">
+                        <button type="button" id="project-view-detalhamento-open"
+                            class="text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline underline-offset-2">
+                            Abrir detalhamento
+                        </button>
                     </div>
-                </div>
+                </section>
                 <span id="project-view-code" class="hidden" aria-hidden="true"></span>
                 <span id="project-view-name" class="hidden" aria-hidden="true"></span>
                 <span id="project-view-status" class="hidden" aria-hidden="true"></span>

@@ -105,7 +105,71 @@ function updateGestaoCadastrosNavVisibility() {
     if (typeof updateMontagemProgramacaoNavVisibility === 'function') {
         updateMontagemProgramacaoNavVisibility();
     }
+    if (typeof updateProgramacaoProjetosNavVisibility === 'function') {
+        updateProgramacaoProjetosNavVisibility();
+    }
 }
+
+function updateGestaoCalendarLayout(options = {}) {
+    const fromGestao = Boolean(options.fromGestao);
+    const sidebar = document.getElementById('gestao-sidebar');
+    const layout = document.getElementById('gestao-view-layout');
+    const showSidebar = fromGestao && canAccessGestao();
+
+    sidebar?.classList.toggle('hidden', !showSidebar);
+    layout?.classList.toggle('gestao-view-layout--full', !showSidebar);
+}
+
+async function showProgramacaoProjetosView(options = {}) {
+    if (!canViewProgramacaoProjetos()) return;
+
+    if (typeof hideSubViews === 'function') hideSubViews();
+    document.getElementById('gestao-view')?.classList.remove('hidden');
+    updateGestaoCalendarLayout(options);
+    if (typeof updateMainNavActive === 'function') {
+        updateMainNavActive(options.fromGestao ? 'gestao' : 'programacao-projetos');
+    }
+    if (typeof updateAdminNav === 'function') updateAdminNav();
+    if (options.fromGestao) {
+        updateGestaoCadastrosNavVisibility();
+    }
+
+    showGestaoGanttPanel();
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({
+            view: options.fromGestao ? 'gestao' : 'programacao-projetos',
+            gestaoNav: 'gantt'
+        });
+    }
+}
+
+async function showProgramacaoMontagemView(options = {}) {
+    if (!canViewProgramacaoMontagem()) return;
+
+    if (typeof hideSubViews === 'function') hideSubViews();
+    document.getElementById('gestao-view')?.classList.remove('hidden');
+    updateGestaoCalendarLayout(options);
+    if (typeof updateMainNavActive === 'function') {
+        updateMainNavActive(options.fromGestao ? 'gestao' : 'programacao-montagem');
+    }
+    if (typeof updateAdminNav === 'function') updateAdminNav();
+    if (options.fromGestao) {
+        updateGestaoCadastrosNavVisibility();
+    }
+
+    if (typeof showGestaoMontagemProgramacaoPanel === 'function') {
+        showGestaoMontagemProgramacaoPanel();
+    }
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({
+            view: options.fromGestao ? 'gestao' : 'programacao-montagem',
+            gestaoNav: 'montagem-programacao'
+        });
+    }
+}
+
+window.showProgramacaoProjetosView = showProgramacaoProjetosView;
+window.showProgramacaoMontagemView = showProgramacaoMontagemView;
 
 function hideAllGestaoPanels() {
     document.getElementById('gestao-pedido-list-panel')?.classList.add('hidden');
@@ -1119,6 +1183,9 @@ function showGestaoGanttPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-gantt-panel')?.classList.remove('hidden');
     setGestaoNavActive('gantt');
+    if (typeof applyProgramacaoProjetosReadOnlyUi === 'function') {
+        applyProgramacaoProjetosReadOnlyUi();
+    }
     if (typeof bindGestaoGanttEvents === 'function') {
         bindGestaoGanttEvents();
     }
@@ -1153,6 +1220,7 @@ function showGestao() {
 
     if (typeof hideSubViews === 'function') hideSubViews();
     document.getElementById('gestao-view')?.classList.remove('hidden');
+    updateGestaoCalendarLayout({ fromGestao: true });
     if (typeof updateMainNavActive === 'function') updateMainNavActive('gestao');
     if (typeof updateAdminNav === 'function') updateAdminNav();
     updateGestaoCadastrosNavVisibility();
@@ -1349,7 +1417,7 @@ function bindGestaoEvents() {
     });
     document.getElementById('gestao-nav-gantt')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
-        showGestaoGanttPanel();
+        showProgramacaoProjetosView({ fromGestao: true });
     });
     document.getElementById('gestao-nav-relatorios')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;

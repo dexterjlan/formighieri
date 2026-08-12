@@ -76,7 +76,7 @@ function validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, delivery
         return false;
     }
     if (!isPrevisaoProjetoTecnicoRangeValid(inicioDate, previsaoDate, deliveryDate)) {
-        alertAppDialog('O início deve ser anterior ou igual à previsão de conclusão, e a conclusão deve ser anterior ou igual à data de entrega do projeto técnico.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('O início deve ser anterior ou igual à previsão de conclusão.', { variant: 'warning', title: 'Aviso' });
         return false;
     }
     return true;
@@ -95,7 +95,6 @@ function getPendenciasPrevisaoInputValue(dateStr) {
 }
 
 function renderPendenciasAssociacaoPrevisaoInputs(project) {
-    const maxDate = getPendenciasPrevisaoInputMaxDate(project.deliveryDate);
     const inicioValue = getPendenciasPrevisaoInputValue(project.technicalProjectForecastStartDate);
     const fimValue = getPendenciasPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
 
@@ -113,7 +112,6 @@ function renderPendenciasAssociacaoPrevisaoInputs(project) {
                 class="pendencias-previsao-fim-input w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
                 data-project-id="${project.id}"
                 ${fimValue ? `value="${escapeHtml(fimValue)}"` : ''}
-                ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
                 title="Previsão de conclusão do projeto técnico">
         </div>
     `;
@@ -199,7 +197,6 @@ function renderPendenciasSemResponsavelTableHead(showDesigner = true, options = 
 }
 
 function renderPendenciasWorkloadPrevisaoInputs(project) {
-    const maxDate = getPendenciasPrevisaoInputMaxDate(project.deliveryDate);
     const inicioValue = getPendenciasPrevisaoInputValue(project.technicalProjectForecastStartDate);
     const fimValue = getPendenciasPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
 
@@ -219,7 +216,6 @@ function renderPendenciasWorkloadPrevisaoInputs(project) {
                 data-project-id="${project.id}"
                 data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}"
                 ${fimValue ? `value="${escapeHtml(fimValue)}"` : ''}
-                ${maxDate ? `max="${escapeHtml(maxDate)}"` : ''}
                 title="Previsão de conclusão do projeto técnico">
         </div>
     `;

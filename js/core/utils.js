@@ -759,14 +759,12 @@ function isProjectTechnicalDeliveryBeforeOrderDelivery(projectDeliveryDate, orde
 
 function isPrevisaoConclusaoProjetoTecnicoValid(previsaoDate, projectDeliveryDate) {
     if (!previsaoDate) return false;
-    if (!projectDeliveryDate) return true;
-    return String(previsaoDate) <= String(projectDeliveryDate);
+    return true;
 }
 
 function isPrevisaoProjetoTecnicoRangeValid(inicioDate, previsaoDate, projectDeliveryDate) {
     if (!inicioDate || !previsaoDate) return false;
-    if (String(inicioDate) > String(previsaoDate)) return false;
-    return isPrevisaoConclusaoProjetoTecnicoValid(previsaoDate, projectDeliveryDate);
+    return String(inicioDate) <= String(previsaoDate);
 }
 
 function formatPrevisaoProjetoTecnicoRange(inicioDate, previsaoDate) {
@@ -922,6 +920,22 @@ function canAccessGestao(user = currentUser) {
 
 function canAccessMontagemProgramacao(user = currentUser) {
     return isAdmin(user) || isGestorProjetos(user);
+}
+
+function canViewProgramacaoProjetos(user = currentUser) {
+    return Boolean(user);
+}
+
+function canEditProgramacaoProjetos(user = currentUser) {
+    return canAccessGestao(user);
+}
+
+function canViewProgramacaoMontagem(user = currentUser) {
+    return Boolean(user);
+}
+
+function canEditProgramacaoMontagem(user = currentUser) {
+    return canAccessMontagemProgramacao(user);
 }
 
 function canAccessCalendar(user = currentUser) {

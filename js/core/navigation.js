@@ -104,7 +104,8 @@ async function restoreGestaoView(state) {
             if (typeof showGestaoKanbanPanel === 'function') showGestaoKanbanPanel();
         },
         gantt: () => {
-            if (typeof showGestaoGanttPanel === 'function') showGestaoGanttPanel();
+            if (typeof showProgramacaoProjetosView === 'function') showProgramacaoProjetosView({ fromGestao: true });
+            else if (typeof showGestaoGanttPanel === 'function') showGestaoGanttPanel();
         },
         relatorios: () => {
             if (typeof showGestaoRelatoriosPanel === 'function') showGestaoRelatoriosPanel();
@@ -113,7 +114,8 @@ async function restoreGestaoView(state) {
             if (typeof showGestaoPerformancePanel === 'function') showGestaoPerformancePanel();
         },
         'montagem-programacao': () => {
-            if (typeof showGestaoMontagemProgramacaoPanel === 'function') showGestaoMontagemProgramacaoPanel();
+            if (typeof showProgramacaoMontagemView === 'function') showProgramacaoMontagemView({ fromGestao: true });
+            else if (typeof showGestaoMontagemProgramacaoPanel === 'function') showGestaoMontagemProgramacaoPanel();
         },
         'programacao-producao': () => {
             if (typeof showGestaoProgramacaoProducaoPanel === 'function') showGestaoProgramacaoProducaoPanel();
@@ -189,6 +191,18 @@ async function restoreAppNavState() {
             case 'calendar':
                 if (typeof showCalendar === 'function') showCalendar();
                 return true;
+            case 'programacao-projetos':
+                if (typeof showProgramacaoProjetosView === 'function') {
+                    await showProgramacaoProjetosView();
+                    return true;
+                }
+                return false;
+            case 'programacao-montagem':
+                if (typeof showProgramacaoMontagemView === 'function') {
+                    await showProgramacaoMontagemView();
+                    return true;
+                }
+                return false;
             case 'requests':
                 showConversationsQuery();
                 return true;
@@ -224,6 +238,8 @@ function updateAdminNav() {
     document.getElementById("btn-conversations-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-approvals-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-calendario").classList.toggle("hidden", !canAccessCalendar());
+    document.getElementById("btn-programacao-projetos")?.classList.toggle("hidden", !canViewProgramacaoProjetos());
+    document.getElementById("btn-programacao-montagem")?.classList.toggle("hidden", !canViewProgramacaoMontagem());
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
@@ -239,6 +255,8 @@ function updateMainNavActive(activeView) {
         requests: document.getElementById('btn-conversations-query'),
         approvals: document.getElementById('btn-approvals-query'),
         calendar: document.getElementById('btn-calendario'),
+        'programacao-projetos': document.getElementById('btn-programacao-projetos'),
+        'programacao-montagem': document.getElementById('btn-programacao-montagem'),
         gestao: document.getElementById('btn-gestao'),
         pendencias: document.getElementById('btn-pendencias'),
         settings: document.getElementById('btn-system-settings')
@@ -315,4 +333,10 @@ function bindNavigationEvents() {
     document.getElementById("btn-back-dashboard").addEventListener("click", showDashboard);
     document.getElementById("btn-conversations-query").addEventListener("click", showConversationsQuery);
     document.getElementById("btn-approvals-query").addEventListener("click", showApprovalsQuery);
+    document.getElementById("btn-programacao-projetos")?.addEventListener("click", () => {
+        if (typeof showProgramacaoProjetosView === 'function') showProgramacaoProjetosView();
+    });
+    document.getElementById("btn-programacao-montagem")?.addEventListener("click", () => {
+        if (typeof showProgramacaoMontagemView === 'function') showProgramacaoMontagemView();
+    });
 }
