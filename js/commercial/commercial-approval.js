@@ -630,6 +630,29 @@ async function getOpenRequestsForProjects(orderId, projectIds) {
     return (data || []).filter(isRequestOpen);
 }
 
+async function blockCommercialApprovalWhenOpenRequests(orderId, projectIds) {
+    const openRequests = await getOpenRequestsForProjects(orderId, projectIds);
+    if (!openRequests.length) {
+        return true;
+    }
+
+    const projects = typeof fetchOrderProjectsForOrder === 'function'
+        ? await fetchOrderProjectsForOrder(orderId)
+        : [];
+    const lines = openRequests.map(req => {
+        const project = projects.find(item => Number(item.id) === Number(req.orderProjectId));
+        const name = project?.name || 'Projeto';
+        const status = normalizeRequestStatus(req);
+        return `• ${name} (${status})`;
+    });
+
+    alertAppDialog(
+        `Não é possível enviar para aprovação comercial enquanto houver requisições em aberto:\n\n${lines.join('\n')}`,
+        { variant: 'warning', title: 'Requisições em aberto' }
+    );
+    return false;
+}
+
 async function confirmApprovalDespiteOpenRequests(openRequests, projects) {
     const lines = openRequests.map(req => {
         const project = projects.find(p => p.id === req.orderProjectId);
@@ -678,48 +701,6 @@ async function getOpenCommercialApprovalsForProject(orderId, orderProjectId) {
 
     return (data || []).filter(a => normalizeCommercialApproval(a).status !== 'Aprovado');
 }
-
-async function syncOpenCommercialApprovalDesignerForProject(orderProjectId, newDesignerId) {
-    const projectId = Number(orderProjectId);
-    const designerId = Number(newDesignerId);
-    if (!projectId || !designerId) {
-        return { updated: 0, error: null };
-    }
-
-    const { data: project, error: projectError } = await supabaseClient
-        .from('OrderProject')
-        .select('orderId')
-        .eq('id', projectId)
-        .maybeSingle();
-
-    if (projectError) {
-        return { updated: 0, error: projectError };
-    }
-
-    const orderId = project?.orderId;
-    if (!orderId) {
-        return { updated: 0, error: null };
-    }
-
-    const openApprovals = await getOpenCommercialApprovalsForProject(orderId, projectId);
-    const approvalIds = openApprovals
-        .filter(approval => Number(approval.designerId) !== designerId)
-        .map(approval => approval.id)
-        .filter(Boolean);
-
-    if (!approvalIds.length) {
-        return { updated: 0, error: null };
-    }
-
-    const { error } = await supabaseClient
-        .from('CommercialApproval')
-        .update({ designerId })
-        .in('id', approvalIds);
-
-    return { updated: approvalIds.length, error: error || null };
-}
-
-window.syncOpenCommercialApprovalDesignerForProject = syncOpenCommercialApprovalDesignerForProject;
 
 async function validateConsultorRequestAgainstOpenApproval(orderProjectId, existingRequest) {
     if (currentUser?.role !== 'Consultor' || !orderProjectId || !activeOrderId) {
@@ -937,11 +918,11 @@ async function submitCommercialApprovalFromPendencias(projectId) {
 
     const openRequests = await getOpenRequestsForProjects(enrichedProject.orderId, [normalizedId]);
     if (openRequests.length) {
-        const allOrderProjects = typeof fetchOrderProjectsForOrder === 'function'
-            ? await fetchOrderProjectsForOrder(enrichedProject.orderId)
-            : [enrichedProject];
-        const shouldContinue = await confirmApprovalDespiteOpenRequests(openRequests, allOrderProjects);
-        if (!shouldContinue) return;
+        const canProceed = await blockCommercialApprovalWhenOpenRequests(
+            enrichedProject.orderId,
+            [normalizedId]
+        );
+        if (!canProceed) return;
     }
 
     try {
@@ -1753,12 +1734,11 @@ function bindCommercialApprovalEvents() {
                 return;
             }
 
-            const allOrderProjects = await fetchOrderProjectsForOrder(activeOrderId);
             const openRequests = await getOpenRequestsForProjects(activeOrderId, selectedProjectIds);
 
             if (openRequests.length) {
-                const shouldContinue = await confirmApprovalDespiteOpenRequests(openRequests, allOrderProjects);
-                if (!shouldContinue) return;
+                const canProceed = await blockCommercialApprovalWhenOpenRequests(activeOrderId, selectedProjectIds);
+                if (!canProceed) return;
             }
 
             const selectedProjects = selectedProjectIds

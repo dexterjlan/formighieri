@@ -185,7 +185,8 @@ function normalizeModuleObservations(observations) {
                 id: obs.id || null,
                 text: String(obs.text || obs.observation?.text || '').trim(),
                 sortOrder: obs.sortOrder ?? 0,
-                consultorChecked: Boolean(obs.consultorChecked),
+                consultorDisposition: normalizeConsultorDisposition(obs),
+                consultorChecked: normalizeConsultorDisposition(obs) === ANTEPROJETO_DISPOSITION_OK,
                 consultorResponse: obs.consultorResponse || ''
             };
         })
@@ -255,20 +256,38 @@ function renderObservationItem(observation = {}, options = {}) {
 
     item.appendChild(header);
 
+    const dispositionGroupName = `anteprojeto-disposition-${data.id || `new-${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+    const disposition = normalizeConsultorDisposition(data);
+    const disabledAttr = disabledConsultor ? 'disabled' : '';
+
     const consultorWrap = document.createElement('div');
     consultorWrap.className = 'space-y-1.5 pt-1 border-t border-slate-100';
     consultorWrap.innerHTML = `
-        <label class="flex items-center gap-2 text-[10px] text-slate-600">
-            <input type="checkbox" class="anteprojeto-observation-checked h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
-                ${data.consultorChecked ? 'checked' : ''} ${disabledConsultor}>
-            Conferido
-        </label>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-600">
+            <label class="inline-flex items-center gap-1">
+                <input type="radio" name="${dispositionGroupName}" class="anteprojeto-observation-disposition h-3.5 w-3.5 border-slate-300 text-sky-600 focus:ring-sky-500"
+                    value="${ANTEPROJETO_DISPOSITION_REQ_PROJ}" ${disposition === ANTEPROJETO_DISPOSITION_REQ_PROJ ? 'checked' : ''} ${disabledAttr}>
+                Req. Proj.
+            </label>
+            <label class="inline-flex items-center gap-1">
+                <input type="radio" name="${dispositionGroupName}" class="anteprojeto-observation-disposition h-3.5 w-3.5 border-slate-300 text-sky-600 focus:ring-sky-500"
+                    value="${ANTEPROJETO_DISPOSITION_REQ_CONS}" ${disposition === ANTEPROJETO_DISPOSITION_REQ_CONS ? 'checked' : ''} ${disabledAttr}>
+                Req. Cons.
+            </label>
+            <label class="inline-flex items-center gap-1">
+                <input type="radio" name="${dispositionGroupName}" class="anteprojeto-observation-disposition h-3.5 w-3.5 border-slate-300 text-sky-600 focus:ring-sky-500"
+                    value="${ANTEPROJETO_DISPOSITION_OK}" ${disposition === ANTEPROJETO_DISPOSITION_OK ? 'checked' : ''} ${disabledAttr}>
+                OK
+            </label>
+        </div>
         <textarea rows="2" class="anteprojeto-observation-response w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-sky-600 disabled:bg-slate-50"
             placeholder="Resposta do consultor" ${disabledConsultor}></textarea>
     `;
     consultorWrap.querySelector('.anteprojeto-observation-response').value = data.consultorResponse || '';
-    consultorWrap.querySelector('.anteprojeto-observation-checked')
-        ?.addEventListener('change', refreshAnteprojetoModalConfirmButton);
+    consultorWrap.querySelectorAll('.anteprojeto-observation-disposition, .anteprojeto-observation-response')
+        .forEach(element => element.addEventListener('change', refreshAnteprojetoModalConfirmButton));
+    consultorWrap.querySelector('.anteprojeto-observation-response')
+        ?.addEventListener('input', refreshAnteprojetoModalConfirmButton);
     item.appendChild(consultorWrap);
 
     return item;
@@ -286,11 +305,15 @@ function addObservationToModule(card, text, options = {}) {
 
     list.appendChild(renderObservationItem({
         text: trimmed,
+        consultorDisposition: null,
         consultorChecked: false,
         consultorResponse: ''
     }, options));
     card.querySelector('.anteprojeto-observations-empty-msg')?.classList.add('hidden');
     updateModuleObservationToggleLabel(card);
+    if (typeof refreshAnteprojetoModalConfirmButton === 'function') {
+        refreshAnteprojetoModalConfirmButton();
+    }
     return true;
 }
 
@@ -421,14 +444,18 @@ function collectAnteprojetoModulesFromDom() {
                 orderProjectId,
                 name: card.querySelector('.anteprojeto-module-name-display')?.textContent.trim() || '',
                 observations: Array.from(card.querySelectorAll('.module-observation-item'))
-                    .map(item => ({
-                        id: item.dataset.moduleObservationId ? Number(item.dataset.moduleObservationId) : null,
-                        text: item.querySelector('.anteprojeto-observation-text')?.textContent.trim()
-                            || item.querySelector('.anteprojeto-module-observation')?.value.trim()
-                            || '',
-                        consultorChecked: Boolean(item.querySelector('.anteprojeto-observation-checked')?.checked),
-                        consultorResponse: item.querySelector('.anteprojeto-observation-response')?.value.trim() || ''
-                    }))
+                    .map(item => {
+                        const disposition = item.querySelector('.anteprojeto-observation-disposition:checked')?.value || null;
+                        return {
+                            id: item.dataset.moduleObservationId ? Number(item.dataset.moduleObservationId) : null,
+                            text: item.querySelector('.anteprojeto-observation-text')?.textContent.trim()
+                                || item.querySelector('.anteprojeto-module-observation')?.value.trim()
+                                || '',
+                            consultorDisposition: disposition,
+                            consultorChecked: disposition === ANTEPROJETO_DISPOSITION_OK,
+                            consultorResponse: item.querySelector('.anteprojeto-observation-response')?.value.trim() || ''
+                        };
+                    })
                     .filter(obs => obs.text),
                 sortOrder: sortOrder++
             });

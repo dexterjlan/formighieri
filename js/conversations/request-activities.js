@@ -108,7 +108,7 @@ async function saveRequestActivitiesFromCard(requestId) {
     setRequestActivitiesSaveLoading(requestId, true, 'Salvando...');
 
     try {
-        if (activities.length) {
+        if (activities.length && canPersistRequestActivities(conv)) {
             await persistRequestActivities(requestId, activities);
         }
 
@@ -148,6 +148,45 @@ function setConvActivitiesSaveLoading(isLoading, message = 'Salvando...') {
     btn.classList.toggle('cursor-not-allowed', isLoading);
 }
 
+function getConvModalDraftResponseText(conv) {
+    if (!conv) return '';
+    if (canRespondAsConsultor(conv)) {
+        return document.getElementById('conv-response')?.value.trim() || '';
+    }
+    if (canRespondAsProjetista(conv)) {
+        return document.getElementById('conv-designer-response')?.value.trim() || '';
+    }
+    return '';
+}
+
+function canEncerrarConvModalRequest(conv) {
+    if (!conv || isRequestClosed(conv) || !isConvRespondOnlyMode(conv)) {
+        return false;
+    }
+
+    const activities = collectRequestActivitiesFromDom().filter(activity => activity.description);
+    if (activities.length && !allRequestActivitiesCompleted(activities)) {
+        return false;
+    }
+
+    return Boolean(getConvModalDraftResponseText(conv));
+}
+
+function updateConvModalEncerrarButton() {
+    const button = document.getElementById('conv-form-encerrar');
+    const wrap = document.getElementById('conv-form-encerrar-wrap');
+    if (!button || !wrap) return;
+
+    const conv = getCurrentEditingRequest();
+    const show = Boolean(conv && isConvRespondOnlyMode(conv));
+    wrap.classList.toggle('hidden', !show);
+
+    const enabled = canEncerrarConvModalRequest(conv);
+    button.disabled = !enabled;
+    button.classList.toggle('opacity-50', !enabled);
+    button.classList.toggle('cursor-not-allowed', !enabled);
+}
+
 function updateConvModalActivitiesHint() {
     const conv = getCurrentEditingRequest();
     const hint = document.getElementById('conv-activities-reply-hint');
@@ -162,6 +201,7 @@ function updateConvModalActivitiesHint() {
     );
 
     hint.classList.toggle('hidden', !hasActivities || allComplete || !hasResponse);
+    updateConvModalEncerrarButton();
 }
 
 async function saveRequestActivitiesFromModal() {
@@ -190,7 +230,7 @@ async function saveRequestActivitiesFromModal() {
     setConvActivitiesSaveLoading(true, 'Salvando...');
 
     try {
-        if (activities.length) {
+        if (activities.length && canPersistRequestActivities(conv)) {
             await persistRequestActivities(editingConversationId, activities);
         }
 
@@ -225,6 +265,7 @@ function validateRequestActivitiesBeforeReply(activities) {
 }
 
 function canEditRequestActivityDescriptions(conv) {
+    if (isRequestFromConference(conv)) return false;
     if (conv && isRequestClosed(conv)) return false;
     if (isConvRespondOnlyMode(conv)) return false;
     if (currentUser?.role === 'Admin') return true;
@@ -256,6 +297,10 @@ function canEditRequestActivityCompletion(conv) {
     return false;
 }
 
+function canPersistRequestActivities(conv) {
+    return canEditRequestActivityCompletion(conv) || canEditRequestActivityDescriptions(conv);
+}
+
 function resetConvActivities() {
     requestActivityRowCounter = 0;
     const tbody = document.getElementById('conv-activities-list');
@@ -279,6 +324,9 @@ function updateRequestActivityModalControls(conv) {
     }
     if (saveWrap) {
         saveWrap.classList.toggle('hidden', !canSaveProgress);
+    }
+    if (typeof updateConvModalEncerrarButton === 'function') {
+        updateConvModalEncerrarButton();
     }
     const emptyMsg = document.getElementById('conv-activities-empty-msg');
     const hasRows = document.querySelectorAll('#conv-activities-list tr').length > 0;
@@ -333,6 +381,7 @@ function renderRequestActivityRow(activity, conv) {
             completedAtEl.textContent = '—';
         }
         updateConvModalActivitiesHint();
+        updateConvModalEncerrarButton();
     });
 
     return tr;
@@ -348,6 +397,9 @@ function addRequestActivityRow(activity = {}, conv = null) {
     document.getElementById('conv-activities-list').appendChild(renderRequestActivityRow(activity, request));
     document.getElementById('conv-activities-empty-msg').classList.add('hidden');
     updateRequestActivityModalControls(request);
+    if (typeof updateConvModalEncerrarButton === 'function') {
+        updateConvModalEncerrarButton();
+    }
 }
 
 function collectRequestActivitiesFromDom() {
@@ -544,9 +596,10 @@ function appendRequestActivitiesToCard(container, conv, activities) {
 
     const canComplete = canEditRequestActivityCompletion(conv);
     const isClosed = isRequestClosed(conv);
-    const rowsHtml = isClosed || !canComplete
+    const isReadOnly = isClosed || !canComplete;
+    const rowsHtml = isReadOnly
         ? activities.map(renderRequestActivityReadonlyRow).join('')
-        : activities.map(a => renderRequestActivityCardRow(a, conv, canComplete)).join('');
+        : activities.map(activity => renderRequestActivityCardRow(activity, conv, canComplete)).join('');
 
     const section = document.createElement('div');
     section.className = 'bg-violet-50/60 border border-violet-100 rounded-xl overflow-hidden';
@@ -596,8 +649,15 @@ function bindRequestActivityEvents() {
     document.getElementById('btn-save-conv-activities')?.addEventListener('click', saveRequestActivitiesFromModal);
 
     ['conv-response', 'conv-designer-response'].forEach(id => {
-        document.getElementById(id)?.addEventListener('input', updateConvModalActivitiesHint);
+        document.getElementById(id)?.addEventListener('input', () => {
+            updateConvModalActivitiesHint();
+            updateConvModalEncerrarButton();
+        });
     });
+
+    document.getElementById('conv-form-encerrar')?.addEventListener('click', encerrarConversationFromModal);
 }
+
+window.updateConvModalEncerrarButton = updateConvModalEncerrarButton;
 
 window.saveRequestActivitiesFromCard = saveRequestActivitiesFromCard;

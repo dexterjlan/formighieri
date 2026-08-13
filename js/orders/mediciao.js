@@ -14,6 +14,15 @@ const MEDICAO_ELIGIBLE_STATUSES_UP_TO_PT = [
     'Projeto Técnico'
 ];
 const MEDICAO_EDITABLE_PROJECT_STATUSES = ['Medição Realizada', 'Planta Levantada'];
+const MEDICAO_REALIZADA_SOURCE_STATUSES = [
+    'Vendido',
+    'Aguardando Obra',
+    'Aguardando Medição'
+];
+
+function isMedicaoRealizadaSourceStatus(statusName) {
+    return MEDICAO_REALIZADA_SOURCE_STATUSES.includes(statusName);
+}
 
 function getProjectStatusName(project) {
     return project?.projectStatus?.name || '';
@@ -129,18 +138,22 @@ async function applyMedicaoRealizadaStatusToProjects(orderProjectIds) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
-    let { data: projectsToFilter } = await supabaseClient
+    let { data: projectsToFilter, error: fetchError } = await supabaseClient
         .from('OrderProject')
-        .select('id, projectStatus:OrderProjectStatus(name)')
+        .select('id, statusId, projectStatus:OrderProjectStatus(name)')
         .in('id', uniqueIds);
 
-    if (projectsToFilter?.some(p => p.statusId && !p.projectStatus)) {
+    if (fetchError) throw fetchError;
+
+    if (projectsToFilter?.some(project => project.statusId && !project.projectStatus)) {
         projectsToFilter = await enrichProjectsWithStatus(projectsToFilter);
     }
 
     const eligibleIds = (projectsToFilter || [])
-        .filter(p => (p.projectStatus?.name || getProjectStatusName(p)) === 'Aguardando Medição')
-        .map(p => p.id);
+        .filter(project => isMedicaoRealizadaSourceStatus(
+            project.projectStatus?.name || getProjectStatusName(project)
+        ))
+        .map(project => project.id);
 
     if (!eligibleIds.length) return;
 

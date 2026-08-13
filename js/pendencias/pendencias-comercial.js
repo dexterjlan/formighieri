@@ -247,12 +247,8 @@ async function fetchPendenciasConsultorConferenciaProjects() {
         projects.map(project => project.id),
         'Em andamento'
     );
-    const conferenceIds = [...new Set(
-        Object.values(conferenceByProjectId).map(conference => conference?.id).filter(Boolean)
-    )];
-    const conferenceDetailsById = await fetchPendenciasConferenceDetailsByIds(conferenceIds);
 
-    return { error: null, overviewMode, projects, conferenceByProjectId, conferenceDetailsById };
+    return { error: null, overviewMode, projects, conferenceByProjectId };
 }
 
 function groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId) {
@@ -301,13 +297,6 @@ function getPendenciasConsultorConferenciaProjectSummary(projects) {
     return (projects || []).map(labelFn).join(separator);
 }
 
-function isPendenciasConferenceAllConsultorChecked(conference) {
-    if (!conference || typeof getConferenceModuleObservations !== 'function') return false;
-    const moduleObservations = getConferenceModuleObservations(conference);
-    return moduleObservations.length > 0
-        && moduleObservations.every(obs => obs.consultorChecked);
-}
-
 async function fetchPendenciasConferenceDetailsByIds(conferenceIds) {
     const detailsById = {};
     if (!conferenceIds.length || typeof fetchAnteprojetoConferenceById !== 'function') {
@@ -325,7 +314,7 @@ async function fetchPendenciasConferenceDetailsByIds(conferenceIds) {
     return detailsById;
 }
 
-function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectId, conferenceDetailsById, overviewMode) {
+function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectId, overviewMode) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
@@ -345,21 +334,11 @@ function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectI
         const deliveryDate = formatPendenciasDeliveryDate(deliveryDates[0]);
         const conference = group.conference;
         const canView = Boolean(conference?.id);
-        const fullConference = conference?.id ? conferenceDetailsById?.[conference.id] || null : null;
-        const canConfirm = fullConference
-            && typeof canConfirmAnteprojetoConference === 'function'
-            && canConfirmAnteprojetoConference(fullConference);
-        const allChecked = isPendenciasConferenceAllConsultorChecked(fullConference);
         const actionButtons = [];
 
         if (canView) {
             actionButtons.push(`<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
                 class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`);
-        }
-        if (canConfirm) {
-            actionButtons.push(`<button type="button" onclick="confirmAnteprojetoConferenceFromPendencias(${conference.id})"
-                class="text-xs px-2.5 py-1 rounded-lg font-medium ${allChecked ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}"
-                ${allChecked ? '' : 'disabled'}>Confirmar Conferência</button>`);
         }
 
         const actionCell = actionButtons.length
@@ -427,7 +406,7 @@ async function loadPendenciasConsultorConferencia() {
         return;
     }
 
-    const { error, overviewMode, projects, conferenceByProjectId, conferenceDetailsById } =
+    const { error, overviewMode, projects, conferenceByProjectId } =
         await fetchPendenciasConsultorConferenciaProjects();
 
     if (error) {
@@ -435,7 +414,7 @@ async function loadPendenciasConsultorConferencia() {
         return;
     }
 
-    renderPendenciasConsultorConferenciaList(projects, conferenceByProjectId, conferenceDetailsById, overviewMode);
+    renderPendenciasConsultorConferenciaList(projects, conferenceByProjectId, overviewMode);
 }
 
 function enrichPendenciasApprovalWithProject(approval, project) {

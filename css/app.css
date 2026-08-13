@@ -2528,6 +2528,21 @@ body.gestao-kanban-fullscreen-active {
     border: 1px solid rgb(241 245 249);
 }
 
+.conv-attachment-item__preview-wrap--openable {
+    cursor: zoom-in;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.conv-attachment-item__preview-wrap--openable:hover {
+    border-color: rgb(148 163 184);
+    box-shadow: 0 0 0 2px rgb(199 210 254 / 0.5);
+}
+
+.conv-attachment-item__preview-wrap--openable:focus-visible {
+    outline: 2px solid rgb(99 102 241);
+    outline-offset: 2px;
+}
+
 .conv-attachment-item__preview,
 .conv-attachment-thumb img {
     display: block;

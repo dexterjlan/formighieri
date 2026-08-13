@@ -1033,9 +1033,12 @@ async function removeGestaoProjectDraft() {
 
 window.openGestaoProjectForm = openGestaoProjectForm;
 
-async function loadGestaoConsultants(selectedName = '') {
+async function loadGestaoConsultants(options = {}) {
     const select = document.getElementById('gestao-ord-consultant');
     if (!select) return;
+
+    const selectedUserId = Number(options.selectedUserId) || null;
+    const selectedName = String(options.selectedName || '').trim();
 
     const { data: consultants, error } = await supabaseClient
         .from('appUsers')
@@ -1044,16 +1047,48 @@ async function loadGestaoConsultants(selectedName = '') {
         .eq('isActive', true)
         .order('name', { ascending: true });
 
-    select.innerHTML = '<option value="">Selecione...</option>';
+    const consultantList = [...(consultants || [])];
 
-    if (error || !consultants?.length) {
-        select.innerHTML += '<option value="" disabled>Nenhum consultor cadastrado</option>';
+    if (selectedUserId && !consultantList.some(consultant => Number(consultant.id) === selectedUserId)) {
+        const currentConsultant = await fetchConsultantUserById(selectedUserId);
+        if (currentConsultant?.name) {
+            consultantList.push({ id: currentConsultant.id, name: currentConsultant.name });
+            consultantList.sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR', { sensitivity: 'base' }));
+        }
+    }
+
+    select.innerHTML = '';
+
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Selecione...';
+    select.appendChild(placeholder);
+
+    if (error || !consultantList.length) {
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.disabled = true;
+        emptyOption.textContent = 'Nenhum consultor cadastrado';
+        select.appendChild(emptyOption);
         return;
     }
 
-    consultants.forEach(consultant => {
-        const selected = consultant.name === selectedName ? 'selected' : '';
-        select.innerHTML += `<option value="${escapeHtml(consultant.name)}" ${selected}>${escapeHtml(consultant.name)}</option>`;
+    let resolvedSelectedId = selectedUserId;
+    if (!resolvedSelectedId && selectedName) {
+        const match = consultantList.find(
+            consultant => normalizeConsultantNameKey(consultant.name) === normalizeConsultantNameKey(selectedName)
+        );
+        resolvedSelectedId = match?.id || null;
+    }
+
+    consultantList.forEach(consultant => {
+        const option = document.createElement('option');
+        option.value = String(consultant.id);
+        option.textContent = consultant.name;
+        if (resolvedSelectedId && Number(consultant.id) === Number(resolvedSelectedId)) {
+            option.selected = true;
+        }
+        select.appendChild(option);
     });
 }
 

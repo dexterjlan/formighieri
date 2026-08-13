@@ -279,6 +279,24 @@ async function fetchActiveGestorFabricaRecipientEmails() {
     return unique.length ? unique : [NOTIFICATION_TEST_EMAIL];
 }
 
+async function fetchActiveGestorProjetosUser() {
+    let { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, name, email, role, gestorProjetos')
+        .eq('isActive', true);
+
+    if (error?.message?.includes('gestorProjetos')) {
+        return null;
+    }
+
+    if (error) throw error;
+
+    const users = (data || [])
+        .filter(user => (user.role === 'Admin' || user.role === 'Projetista') && user.gestorProjetos);
+
+    return users[0] || null;
+}
+
 async function fetchActiveGestorProjetosRecipientEmails() {
     if (NOTIFICATION_TEST_MODE) {
         return [NOTIFICATION_TEST_EMAIL];

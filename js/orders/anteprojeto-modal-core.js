@@ -105,26 +105,34 @@ function setAnteprojetoModalFields(conference, options = {}) {
     }
 }
 
-function areAllAnteprojetoModalObservationsChecked() {
-    const checkboxes = document.querySelectorAll(
-        '#anteprojeto-projects-structure .anteprojeto-observation-checked'
-    );
-    if (!checkboxes.length) return false;
-    return [...checkboxes].every(checkbox => checkbox.checked);
+function areAllAnteprojetoModalObservationsReady() {
+    const items = document.querySelectorAll('#anteprojeto-projects-structure .module-observation-item');
+    if (!items.length) return false;
+
+    const observations = Array.from(items).map(item => {
+        const disposition = item.querySelector('.anteprojeto-observation-disposition:checked')?.value || null;
+        return {
+            consultorDisposition: disposition,
+            consultorChecked: disposition === ANTEPROJETO_DISPOSITION_OK,
+            consultorResponse: item.querySelector('.anteprojeto-observation-response')?.value.trim() || ''
+        };
+    });
+
+    return validateConsultorObservationDispositions(observations).valid;
 }
 
 function refreshAnteprojetoModalConfirmButton() {
     const btn = document.getElementById('btn-anteprojeto-modal-confirm');
     if (!btn) return;
 
-    const allChecked = areAllAnteprojetoModalObservationsChecked();
-    btn.disabled = !allChecked;
-    btn.classList.toggle('bg-emerald-700', allChecked);
-    btn.classList.toggle('text-white', allChecked);
-    btn.classList.toggle('hover:bg-emerald-800', allChecked);
-    btn.classList.toggle('bg-slate-200', !allChecked);
-    btn.classList.toggle('text-slate-500', !allChecked);
-    btn.classList.toggle('cursor-not-allowed', !allChecked);
+    const allReady = areAllAnteprojetoModalObservationsReady();
+    btn.disabled = !allReady;
+    btn.classList.toggle('bg-emerald-700', allReady);
+    btn.classList.toggle('text-white', allReady);
+    btn.classList.toggle('hover:bg-emerald-800', allReady);
+    btn.classList.toggle('bg-slate-200', !allReady);
+    btn.classList.toggle('text-slate-500', !allReady);
+    btn.classList.toggle('cursor-not-allowed', !allReady);
 }
 
 function updateAnteprojetoModalConfirmControls(conference) {
@@ -539,12 +547,9 @@ async function confirmAnteprojetoConference(conferenceId, options = {}) {
     }
 
     const moduleObservations = getConferenceModuleObservations(conference);
-    if (!moduleObservations.length) {
-        alertAppDialog('A conferência precisa ter ao menos uma observação.');
-        return;
-    }
-    if (!moduleObservations.every(obs => obs.consultorChecked)) {
-        alertAppDialog('Marque todas as observações como conferidas antes de confirmar.');
+    const validation = validateConsultorObservationDispositions(moduleObservations);
+    if (!validation.valid) {
+        alertAppDialog(validation.message, { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -601,8 +606,8 @@ async function confirmAnteprojetoConferenceFromModal() {
     const conference = anteprojetoConferencesCache.find(c => Number(c.id) === Number(conferenceId));
     if (!conference || !canConfirmAnteprojetoConference(conference)) return;
 
-    if (!areAllAnteprojetoModalObservationsChecked()) {
-        alertAppDialog('Marque todas as observações como conferidas antes de confirmar.');
+    if (!areAllAnteprojetoModalObservationsReady()) {
+        alertAppDialog('Classifique todas as observações (Req. Proj., Req. Cons. ou OK) e preencha as respostas obrigatórias antes de confirmar.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 

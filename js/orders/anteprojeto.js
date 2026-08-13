@@ -4,6 +4,89 @@ let editingAnteprojetoConferenceId = null;
 let pendingAnteprojetoReturnConferenceId = null;
 let pendingAnteprojetoApproveConferenceId = null;
 
+const ANTEPROJETO_DISPOSITION_REQ_PROJ = 'req_proj';
+const ANTEPROJETO_DISPOSITION_REQ_CONS = 'req_cons';
+const ANTEPROJETO_DISPOSITION_OK = 'ok';
+const ANTEPROJETO_CONFERENCE_REQUEST_TEXT = 'Requisição criada a partir da conferência.';
+
+function normalizeConsultorDisposition(observation) {
+    const disposition = observation?.consultorDisposition;
+    if (disposition === ANTEPROJETO_DISPOSITION_REQ_PROJ
+        || disposition === ANTEPROJETO_DISPOSITION_REQ_CONS
+        || disposition === ANTEPROJETO_DISPOSITION_OK) {
+        return disposition;
+    }
+    if (observation?.consultorChecked) {
+        return ANTEPROJETO_DISPOSITION_OK;
+    }
+    return null;
+}
+
+function getConsultorDispositionLabel(disposition) {
+    if (disposition === ANTEPROJETO_DISPOSITION_REQ_PROJ) return 'Req. Proj.';
+    if (disposition === ANTEPROJETO_DISPOSITION_REQ_CONS) return 'Req. Cons.';
+    if (disposition === ANTEPROJETO_DISPOSITION_OK) return 'OK';
+    return '—';
+}
+
+function getObservationConferenteText(observation) {
+    return observation?.observation?.text
+        || observation?.text
+        || '';
+}
+
+function buildConferenceRequestActivityDescription(moduleName, conferenteText, consultorResponse) {
+    return [
+        `Módulo: ${moduleName || '—'}`,
+        `Conferente: ${conferenteText || '—'}`,
+        `Resp. Consultor: ${consultorResponse || '—'}`
+    ].join('\n');
+}
+
+function validateConsultorObservationDispositions(observations) {
+    if (!observations.length) {
+        return { valid: false, message: 'A conferência precisa ter ao menos uma observação.' };
+    }
+
+    for (const observation of observations) {
+        const disposition = normalizeConsultorDisposition(observation);
+        if (!disposition) {
+            return {
+                valid: false,
+                message: 'Para cada observação, selecione Req. Proj., Req. Cons. ou OK.'
+            };
+        }
+
+        if ((disposition === ANTEPROJETO_DISPOSITION_REQ_PROJ
+                || disposition === ANTEPROJETO_DISPOSITION_REQ_CONS)
+            && !String(observation.consultorResponse || '').trim()) {
+            return {
+                valid: false,
+                message: 'Informe a resposta do consultor nas observações marcadas como Req. Proj. ou Req. Cons.'
+            };
+        }
+    }
+
+    return { valid: true, message: '' };
+}
+
+function getConferenceProjectObservations(conference) {
+    return (conference?.conferenceProjects || []).flatMap(conferenceProject => {
+        const orderProjectId = Number(conferenceProject.orderProjectId);
+        return (conferenceProject.modules || []).flatMap(module => {
+            const raw = module.observations;
+            const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+            return list.map(obs => ({
+                ...obs,
+                moduleId: module.id,
+                moduleName: module.name,
+                orderProjectId,
+                text: getObservationConferenteText(obs)
+            }));
+        });
+    });
+}
+
 function isAdminOrOrderConsultorForOrder(orderId, consultantInfo = null) {
     if (currentUser?.role === 'Admin') return true;
     if (currentUser?.role !== 'Consultor') return false;

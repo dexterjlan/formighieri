@@ -711,7 +711,7 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                         <div class="collapsible-list-body hidden pl-6 pr-1 pb-2">
                             <label class="block text-[10px] text-slate-500 mt-0.5">Previsão</label>
                             ${renderPendenciasWorkloadPrevisaoInputs(project)}
-                            <label class="block text-[10px] text-slate-500 mt-2">Trocar projetista</label>
+                            <label class="block text-[10px] text-slate-500 mt-2">Projetista</label>
                             <div class="flex items-center gap-1.5 mt-1">
                                 <select class="pendencias-workload-designer-select flex-1 min-w-0 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
                                     data-project-id="${project.id}"
@@ -720,11 +720,11 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                                     ${getPendenciasWorkloadProjetistaOptionsHtml(project.designerId)}
                                 </select>
                                 <button type="button"
-                                    class="pendencias-workload-trocar-projetista-btn shrink-0 text-[10px] bg-violet-700 text-white hover:bg-violet-800 px-2 py-1 rounded-lg font-medium whitespace-nowrap"
+                                    class="pendencias-workload-atualizar-btn shrink-0 text-[10px] bg-violet-700 text-white hover:bg-violet-800 px-2 py-1 rounded-lg font-medium whitespace-nowrap"
                                     data-project-id="${project.id}"
                                     data-current-designer-id="${project.designerId || ''}"
                                     data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
-                                    Trocar
+                                    Atualizar
                                 </button>
                             </div>
                         </div>
@@ -830,30 +830,17 @@ function renderPendenciasProjetosSemProjetistas(
     const workloadCardsRoot = content.querySelector('#pendencias-workload-cards');
     if (workloadCardsRoot) {
         bindCollapsibleListCardToggles(workloadCardsRoot, { defaultCollapsed: true });
-        workloadCardsRoot.querySelectorAll('.pendencias-workload-previsao-inicio-input, .pendencias-workload-previsao-fim-input').forEach(input => {
-            input.addEventListener('change', () => {
-                const item = input.closest('li');
-                const inicioDate = item?.querySelector('.pendencias-workload-previsao-inicio-input')?.value || '';
-                const previsaoDate = item?.querySelector('.pendencias-workload-previsao-fim-input')?.value || '';
-                salvarPendenciasWorkloadPrevisao(
-                    Number(input.dataset.projectId),
-                    inicioDate,
-                    previsaoDate,
-                    input.dataset.deliveryDate || ''
-                );
-            });
-        });
-        workloadCardsRoot.querySelectorAll('.pendencias-workload-trocar-projetista-btn').forEach(button => {
+        workloadCardsRoot.querySelectorAll('.pendencias-workload-atualizar-btn').forEach(button => {
             button.addEventListener('click', () => {
                 const projectId = Number(button.dataset.projectId);
                 const item = button.closest('li');
                 const select = item?.querySelector('.pendencias-workload-designer-select');
                 const inicioDate = item?.querySelector('.pendencias-workload-previsao-inicio-input')?.value || '';
                 const previsaoDate = item?.querySelector('.pendencias-workload-previsao-fim-input')?.value || '';
-                trocarPendenciaProjetoProjetista(
+                atualizarPendenciaProjetoWorkload(
                     projectId,
-                    Number(select?.value),
-                    Number(button.dataset.currentDesignerId),
+                    Number(select?.value) || null,
+                    Number(button.dataset.currentDesignerId) || null,
                     inicioDate,
                     previsaoDate,
                     button.dataset.deliveryDate || ''
@@ -923,17 +910,29 @@ async function loadPendenciasProjetosSemProjetistas() {
     );
 }
 
-async function salvarPendenciasWorkloadPrevisao(projectId, inicioDate, previsaoDate, deliveryDate = '') {
+async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, currentDesignerId, inicioDate, previsaoDate, deliveryDate = '') {
     if (!canSeePendenciasGestorProjetosMenu()) {
-        alertAppDialog('Somente Gestor de Projetos pode alterar a previsão.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente Gestor de Projetos pode atualizar projetos.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     if (!projectId) return;
 
     if (!validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
-        await loadPendenciasProjetosSemProjetistas();
         return;
+    }
+
+    const shouldChangeDesigner = Boolean(newDesignerId) && Number(newDesignerId) !== Number(currentDesignerId);
+    let projetista = null;
+
+    if (shouldChangeDesigner) {
+        projetista = pendenciasProjetistasCache.find(item => Number(item.id) === Number(newDesignerId));
+        if (!projetista) {
+            alertAppDialog('Projetista inválido.');
+            return;
+        }
+
+        if (!(await confirmAppDialog(`Transferir este projeto para ${projetista.name}?`))) return;
     }
 
     const now = new Date().toISOString();
@@ -943,68 +942,14 @@ async function salvarPendenciasWorkloadPrevisao(projectId, inicioDate, previsaoD
         updatedAt: now
     };
 
-    try {
-        setPendenciasActionLoading(true, 'Salvando previsão...');
-
-        const { error } = await supabaseClient
-            .from('OrderProject')
-            .update(payload)
-            .eq('id', projectId);
-
-        if (isOrderProjectPrevisaoColumnError(error?.message)) {
-            alertAppDialog('Os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
-            return;
-        }
-
-        if (error) {
-            alertAppDialog('Erro ao salvar previsão: ' + error.message);
-            return;
-        }
-
-        await loadPendenciasProjetosSemProjetistas();
-    } finally {
-        setPendenciasActionLoading(false);
-    }
-}
-
-async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, currentDesignerId, inicioDate, previsaoDate, deliveryDate = '') {
-    if (!canSeePendenciasGestorProjetosMenu()) {
-        alertAppDialog('Somente Gestor de Projetos pode trocar responsáveis.', { variant: 'warning', title: 'Aviso' });
-        return;
+    if (shouldChangeDesigner) {
+        payload.designerId = newDesignerId;
     }
 
-    if (!projectId || !newDesignerId) {
-        alertAppDialog('Selecione o novo projetista.');
-        return;
-    }
-
-    if (Number(newDesignerId) === Number(currentDesignerId)) {
-        alertAppDialog('Selecione um projetista diferente do responsável atual.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
-
-    if (!validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
-        return;
-    }
-
-    const projetista = pendenciasProjetistasCache.find(item => Number(item.id) === Number(newDesignerId));
-    if (!projetista) {
-        alertAppDialog('Projetista inválido.');
-        return;
-    }
-
-    if (!(await confirmAppDialog(`Transferir este projeto para ${projetista.name}?`))) return;
-
-    const now = new Date().toISOString();
-    const payload = {
-        designerId: newDesignerId,
-        ...buildOrderProjectPrevisaoPayload(inicioDate, previsaoDate),
-        updatedById: currentUser.id,
-        updatedAt: now
-    };
+    const loadingMessage = shouldChangeDesigner ? 'Atualizando projeto...' : 'Salvando previsão...';
 
     try {
-        setPendenciasActionLoading(true, 'Trocando projetista...');
+        setPendenciasActionLoading(true, loadingMessage);
 
         let { error } = await supabaseClient
             .from('OrderProject')
@@ -1012,50 +957,43 @@ async function trocarPendenciaProjetoProjetista(projectId, newDesignerId, curren
             .eq('id', projectId);
 
         if (isOrderProjectPrevisaoColumnError(error?.message)) {
-            ({ error } = await supabaseClient
-                .from('OrderProject')
-                .update({
-                    designerId: newDesignerId,
-                    updatedById: currentUser.id,
-                    updatedAt: now
-                })
-                .eq('id', projectId));
-            if (!error) {
-                alertAppDialog('Projetista alterado, mas os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+            if (shouldChangeDesigner) {
+                ({ error } = await supabaseClient
+                    .from('OrderProject')
+                    .update({
+                        designerId: newDesignerId,
+                        updatedById: currentUser.id,
+                        updatedAt: now
+                    })
+                    .eq('id', projectId));
+                if (!error) {
+                    alertAppDialog('Projetista alterado, mas os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+                }
+            } else {
+                alertAppDialog('Os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+                return;
             }
         }
 
         if (error) {
-            alertAppDialog('Erro ao trocar projetista: ' + error.message);
+            alertAppDialog('Erro ao atualizar projeto: ' + error.message);
             return;
         }
 
-        if (typeof syncOpenCommercialApprovalDesignerForProject === 'function') {
-            const { error: approvalError } = await syncOpenCommercialApprovalDesignerForProject(
-                projectId,
-                newDesignerId
-            );
-            if (approvalError) {
-                alertAppDialog(
-                    'Projetista alterado no projeto, mas não foi possível atualizar a aprovação comercial: '
-                    + approvalError.message,
-                    { variant: 'warning', title: 'Aviso' }
-                );
+        if (shouldChangeDesigner && typeof notifyDesignerAssignedToProjectEmail === 'function') {
+            const { data: projectMeta } = await supabaseClient
+                .from('OrderProject')
+                .select('orderId')
+                .eq('id', projectId)
+                .maybeSingle();
+
+            if (projectMeta?.orderId) {
+                await notifyDesignerAssignedToProjectEmail({
+                    orderId: projectMeta.orderId,
+                    orderProjectIds: [projectId],
+                    designerId: newDesignerId
+                });
             }
-        }
-
-        const { data: projectMeta } = await supabaseClient
-            .from('OrderProject')
-            .select('orderId')
-            .eq('id', projectId)
-            .maybeSingle();
-
-        if (typeof notifyDesignerAssignedToProjectEmail === 'function' && projectMeta?.orderId) {
-            await notifyDesignerAssignedToProjectEmail({
-                orderId: projectMeta.orderId,
-                orderProjectIds: [projectId],
-                designerId: newDesignerId
-            });
         }
 
         await loadPendenciasProjetosSemProjetistas();

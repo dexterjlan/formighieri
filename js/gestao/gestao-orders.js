@@ -36,7 +36,10 @@ async function openGestaoEditOrderForm(orderId) {
     document.getElementById('gestao-ord-client-delivery').value = toGestaoInputDate(order.clientDeliveryDate);
 
     await loadGestaoFormOptions();
-    await loadGestaoConsultants(getOrderConsultantNameFromRecord(order));
+    await loadGestaoConsultants({
+        selectedUserId: order.consultantUserId || order.consultor?.id,
+        selectedName: getOrderConsultantNameFromRecord(order)
+    });
 
     setGestaoOrderProjectsDraft(order.projects || []);
     await loadGestaoOrderPhasesForOrder(orderId);
@@ -1007,8 +1010,9 @@ async function saveGestaoOrder(event) {
 
     const orderCode = document.getElementById('gestao-ord-code')?.value.trim();
     const clientName = document.getElementById('gestao-ord-client')?.value.trim();
-    const consultantName = document.getElementById('gestao-ord-consultant')?.value.trim();
-    const projects = gestaoOrderProjectsDraft || [];
+    const consultantUserId = Number(document.getElementById('gestao-ord-consultant')?.value) || null;
+    const consultantName = document.getElementById('gestao-ord-consultant')?.selectedOptions?.[0]?.textContent?.trim()
+        || await resolveConsultantNameById(consultantUserId);
 
     if (!orderCode) {
         alertAppDialog('Informe o código do pedido.');
@@ -1018,11 +1022,12 @@ async function saveGestaoOrder(event) {
         alertAppDialog('Informe o nome do cliente.');
         return;
     }
-    if (!consultantName) {
+    if (!consultantUserId) {
         alertAppDialog('Selecione o consultor.');
         return;
     }
 
+    const projects = gestaoOrderProjectsDraft || [];
     const isEditingOrder = Boolean(resolveGestaoOrderIdForSave());
 
     if (!isEditingOrder) {
@@ -1068,12 +1073,6 @@ async function saveGestaoOrder(event) {
     }
 
     const now = new Date().toISOString();
-    const consultantUserId = await resolveConsultantUserIdByNameAsync(consultantName);
-
-    if (!consultantUserId) {
-        alertAppDialog('Consultor não encontrado entre os usuários ativos.');
-        return;
-    }
 
     try {
         let orderId = resolveGestaoOrderIdForSave();
@@ -1171,12 +1170,21 @@ async function saveGestaoOrder(event) {
             return;
         }
 
+        const previousConsultantName = isEditingOrder
+            ? getOrderConsultantNameFromRecord(gestaoOrdersCache.find(item => Number(item.id) === Number(orderId)))
+            : '';
+
         await updateSalesOrderRecord(orderId, {
             clientId,
             consultantUserId,
+            consultantName,
             updatedById: currentUser?.id || null,
             updatedAt: now
         });
+
+        if (typeof syncSalesOrdersConsultantName === 'function') {
+            await syncSalesOrdersConsultantName(previousConsultantName, consultantName, consultantUserId);
+        }
 
         if (deliveryDateToSave) {
             await persistSalesOrderClientDeliveryDate(orderId, deliveryDateToSave, {

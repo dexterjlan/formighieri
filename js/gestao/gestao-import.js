@@ -418,8 +418,11 @@ function getGestaoImportExampleRow(consultantName = '') {
     const status = gestaoProjectStatusesCache.find(item => item.name === 'Vendido')?.name
         || gestaoProjectStatusesCache[0]?.name
         || 'Vendido';
+    const consultantSelect = document.getElementById('gestao-ord-consultant');
+    const selectedConsultantOption = consultantSelect?.selectedOptions?.[0]
+        || consultantSelect?.querySelector('option[value]:not([value=""])');
     const consultant = consultantName
-        || document.querySelector('#gestao-ord-consultant option[value]:not([value=""])')?.value
+        || selectedConsultantOption?.textContent?.trim()
         || 'Nome do Consultor';
     const designer = gestaoProjetistasCache[0]?.name || '';
 

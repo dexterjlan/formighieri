@@ -856,20 +856,6 @@ async function saveGestaoGanttProjectCard(card) {
             return false;
         }
 
-        if (designerChanged && typeof syncOpenCommercialApprovalDesignerForProject === 'function') {
-            const { error: approvalError } = await syncOpenCommercialApprovalDesignerForProject(
-                projectId,
-                values.designerId
-            );
-            if (approvalError) {
-                alertAppDialog(
-                    'Projeto atualizado, mas não foi possível atualizar a aprovação comercial: '
-                    + approvalError.message,
-                    { variant: 'warning', title: 'Aviso' }
-                );
-            }
-        }
-
         if (designerChanged && projetista) {
             project.designerId = values.designerId;
             project.designer = { id: values.designerId, name: projetista.name };

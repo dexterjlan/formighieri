@@ -70,7 +70,10 @@ async function upsertModuleObservationRow(payload) {
         .single();
 
     let { data, error } = await attempt(payload);
-    if (error?.message?.includes('consultorChecked') || error?.message?.includes('consultorResponse')) {
+    if (error?.message?.includes('consultorDisposition')) {
+        const { consultorDisposition: _d, consultorChecked: _c, consultorResponse: _r, ...fallback } = payload;
+        ({ data, error } = await attempt(fallback));
+    } else if (error?.message?.includes('consultorChecked') || error?.message?.includes('consultorResponse')) {
         const { consultorChecked: _c, consultorResponse: _r, ...fallback } = payload;
         ({ data, error } = await attempt(fallback));
     }
@@ -85,11 +88,23 @@ async function updateModuleObservationRow(id, payload) {
         .eq('id', id);
 
     let { error } = await attempt(payload);
-    if (error?.message?.includes('consultorChecked') || error?.message?.includes('consultorResponse')) {
+    if (error?.message?.includes('consultorDisposition')) {
+        const { consultorDisposition: _d, consultorChecked: _c, consultorResponse: _r, ...fallback } = payload;
+        ({ error } = await attempt(fallback));
+    } else if (error?.message?.includes('consultorChecked') || error?.message?.includes('consultorResponse')) {
         const { consultorChecked: _c, consultorResponse: _r, ...fallback } = payload;
         ({ error } = await attempt(fallback));
     }
     if (error) throw error;
+}
+
+function buildModuleObservationConsultorPayload(obs) {
+    const disposition = normalizeConsultorDisposition(obs);
+    return {
+        consultorDisposition: disposition,
+        consultorChecked: disposition === ANTEPROJETO_DISPOSITION_OK,
+        consultorResponse: obs.consultorResponse || null
+    };
 }
 
 async function persistModuleObservations(moduleId, observations, options = {}) {
@@ -99,10 +114,7 @@ async function persistModuleObservations(moduleId, observations, options = {}) {
     if (canEditConsultor && !canEditStructure) {
         for (const obs of rows) {
             if (!obs.id) continue;
-            await updateModuleObservationRow(obs.id, {
-                consultorChecked: obs.consultorChecked,
-                consultorResponse: obs.consultorResponse || null
-            });
+            await updateModuleObservationRow(obs.id, buildModuleObservationConsultorPayload(obs));
         }
         return;
     }
@@ -136,8 +148,7 @@ async function persistModuleObservations(moduleId, observations, options = {}) {
         const payload = {
             observationId,
             sortOrder: index,
-            consultorChecked: obs.consultorChecked || false,
-            consultorResponse: obs.consultorResponse || null
+            ...buildModuleObservationConsultorPayload(obs)
         };
 
         if (obs.id) {

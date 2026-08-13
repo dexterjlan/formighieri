@@ -59,10 +59,24 @@ function getOrderClientName(order) {
 
 function getOrderConsultantNameFromRecord(order) {
     if (order?.consultor?.name) return order.consultor.name;
+
+    const consultantUserId = Number(order?.consultantUserId || order?.consultor?.id);
+    if (consultantUserId) {
+        const cachedConsultant = (consultantUsersCache || []).find(
+            consultant => Number(consultant.id) === consultantUserId
+        );
+        if (cachedConsultant?.name) return cachedConsultant.name;
+    }
+
+    if (order?.consultantName) return String(order.consultantName).trim();
+
     if (order?.id && typeof ordersCache !== 'undefined') {
         const cached = ordersCache.find(item => Number(item.id) === Number(order.id));
-        if (cached?.consultor?.name) return cached.consultor.name;
+        if (cached && cached !== order) {
+            return getOrderConsultantNameFromRecord(cached);
+        }
     }
+
     return '';
 }
 
@@ -126,6 +140,28 @@ function resolveConsultantUserIdByName(consultantName, consultants = consultantU
 async function resolveConsultantUserIdByNameAsync(consultantName) {
     await loadConsultantUsersCache();
     return resolveConsultantUserIdByName(consultantName);
+}
+
+async function fetchConsultantUserById(consultantUserId) {
+    const normalizedId = Number(consultantUserId);
+    if (!normalizedId) return null;
+
+    const cached = (consultantUsersCache || []).find(consultant => Number(consultant.id) === normalizedId);
+    if (cached) return cached;
+
+    const { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, name, role, isActive')
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (error || !data) return null;
+    return data;
+}
+
+async function resolveConsultantNameById(consultantUserId) {
+    const consultant = await fetchConsultantUserById(consultantUserId);
+    return consultant?.name || '';
 }
 
 async function syncSalesOrdersConsultantName(oldName, newName, consultantUserId = null) {
@@ -215,6 +251,14 @@ function isRequestWaitingConsultor(conv) {
 
 function isRequestWaitingProjetista(conv) {
     return normalizeRequestStatus(conv) === 'Aguardando Projetista';
+}
+
+const ORDER_REQUEST_FROM_CONFERENCE_TEXT = 'Requisição criada a partir da conferência.';
+
+function isRequestFromConference(conv) {
+    if (!conv) return false;
+    if (conv.fromConference === 'Y' || conv.fromConference === true) return true;
+    return conv.designerRequest === ORDER_REQUEST_FROM_CONFERENCE_TEXT;
 }
 
 function getRequestStatusBadgeClass(status) {
@@ -706,10 +750,17 @@ async function updateSalesOrderRecord(orderId, payload = {}, options = {}) {
     );
     if (!Object.keys(basePayload).length) return;
 
-    const attemptPayloads = [
+        const attemptPayloads = [
         basePayload,
         (() => {
             const next = { ...basePayload };
+            delete next.updatedById;
+            delete next.updatedAt;
+            return next;
+        })(),
+        (() => {
+            const next = { ...basePayload };
+            delete next.consultantName;
             delete next.updatedById;
             delete next.updatedAt;
             return next;

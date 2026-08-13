@@ -110,7 +110,11 @@ function renderConvAttachmentsPreview() {
 
     const existingHtml = visibleExisting.map(item => `
         <div class="conv-attachment-item" data-attachment-existing-id="${item.id}">
-            <div class="conv-attachment-item__preview-wrap">
+            <div class="conv-attachment-item__preview-wrap conv-attachment-item__preview-wrap--openable"
+                role="button"
+                tabindex="0"
+                title="Abrir imagem"
+                aria-label="Abrir imagem ${escapeHtml(item.fileName || '')}">
                 <img alt="${escapeHtml(item.fileName || 'Imagem')}"
                     class="conv-attachment-item__preview"
                     data-attachment-storage-path="${escapeHtml(item.storagePath)}">
@@ -129,7 +133,11 @@ function renderConvAttachmentsPreview() {
 
     const draftHtml = convAttachmentDraftFiles.map(item => `
         <div class="conv-attachment-item" data-attachment-draft-id="${item.tempId}">
-            <div class="conv-attachment-item__preview-wrap">
+            <div class="conv-attachment-item__preview-wrap conv-attachment-item__preview-wrap--openable"
+                role="button"
+                tabindex="0"
+                title="Abrir imagem"
+                aria-label="Abrir imagem ${escapeHtml(item.file.name)}">
                 <img src="${item.previewUrl}" alt="${escapeHtml(item.file.name)}"
                     class="conv-attachment-item__preview">
             </div>
@@ -444,7 +452,35 @@ function bindConvAttachmentEvents() {
         const removeExistingBtn = event.target.closest('[data-remove-existing-attachment]');
         if (removeExistingBtn) {
             markConvAttachmentExistingRemoved(Number(removeExistingBtn.dataset.removeExistingAttachment));
+            return;
         }
+
+        const previewWrap = event.target.closest('.conv-attachment-item__preview-wrap--openable');
+        if (!previewWrap) return;
+
+        const item = previewWrap.closest('.conv-attachment-item');
+        const img = previewWrap.querySelector('img');
+        const storagePath = img?.dataset.attachmentStoragePath;
+        const fileName = img?.alt
+            || item?.querySelector('.conv-attachment-item__name')?.textContent?.trim()
+            || 'Imagem';
+
+        if (storagePath) {
+            openOrderRequestAttachmentPreview(storagePath, fileName);
+            return;
+        }
+
+        if (img?.src) {
+            openImageAttachmentLightbox(img.src, fileName);
+        }
+    });
+
+    document.getElementById('conv-attachments-list')?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const previewWrap = event.target.closest('.conv-attachment-item__preview-wrap--openable');
+        if (!previewWrap) return;
+        event.preventDefault();
+        previewWrap.click();
     });
 
     document.getElementById('conversations-list')?.addEventListener('click', event => {

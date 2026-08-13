@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '20260812d';
+const APP_CACHE_VERSION = '20260812r';
 
 const PARTIALS = [
     'partials/login.html',
@@ -68,6 +68,7 @@ const SCRIPTS = [
     'js/orders/anteprojeto-modal-return.js',
     'js/orders/anteprojeto-modal-persist.js',
     'js/orders/anteprojeto-modal-approve.js',
+    'js/orders/anteprojeto-conference-requests.js',
     'js/orders/anteprojeto-tab.js',
     'js/orders/mediciao.js',
     'js/orders/order-project-montagem.js',

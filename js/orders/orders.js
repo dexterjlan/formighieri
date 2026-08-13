@@ -434,7 +434,7 @@ async function loadConsultants() {
     });
 }
 
-function updateOrderTabCounts(projectsCount, openAnteprojetoCount, medicoesCount, openRequestsCount, comprasCount) {
+function updateOrderTabCounts(projectsCount, anteprojetoCount, medicoesCount, requestsCount, comprasCount) {
     const projectsCountEl = document.getElementById('order-projects-count');
     const anteprojetoCountEl = document.getElementById('order-tab-anteprojeto-count');
     const medicaoCountEl = document.getElementById('order-tab-medicao-count');
@@ -444,14 +444,14 @@ function updateOrderTabCounts(projectsCount, openAnteprojetoCount, medicoesCount
     if (projectsCountEl && projectsCount !== undefined) {
         projectsCountEl.textContent = `(${projectsCount})`;
     }
-    if (anteprojetoCountEl && openAnteprojetoCount !== undefined) {
-        anteprojetoCountEl.textContent = `(${openAnteprojetoCount})`;
+    if (anteprojetoCountEl && anteprojetoCount !== undefined) {
+        anteprojetoCountEl.textContent = `(${anteprojetoCount})`;
     }
     if (medicaoCountEl && medicoesCount !== undefined) {
         medicaoCountEl.textContent = `(${medicoesCount})`;
     }
-    if (requestsCountEl && openRequestsCount !== undefined) {
-        requestsCountEl.textContent = `(${openRequestsCount})`;
+    if (requestsCountEl && requestsCount !== undefined) {
+        requestsCountEl.textContent = `(${requestsCount})`;
     }
     if (comprasCountEl && comprasCount !== undefined) {
         comprasCountEl.textContent = `(${comprasCount})`;

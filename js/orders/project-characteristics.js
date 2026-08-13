@@ -4,6 +4,7 @@ const GESTAO_THIRD_PARTY_IMPLANTACAO_STATUS_ABERTO = 'Aberto';
 
 let projectCharacteristicsCache = [];
 let pendingConferenceCharacteristicsConfirm = null;
+let pendingProjectCharacteristicsSelections = null;
 let gestaoProjectCharacteristicsInitialIds = [];
 
 async function loadProjectCharacteristics(activeOnly = true) {
@@ -749,24 +750,22 @@ async function openProjectCharacteristicsModalForConference(conference, onComple
     return true;
 }
 
-async function saveProjectCharacteristicsModal(event) {
-    event?.preventDefault();
-
-    const selections = collectProjectCharacteristicsSelections();
-    if (!validateProjectCharacteristicsSelections(selections)) return;
-
+async function finalizeProjectCharacteristicsSave(selections, { continueFlow = true } = {}) {
     try {
         await saveProjectCharacteristicsSelections(selections);
+        toggleModal('project-characteristics-third-party-budget-modal', false);
         toggleModal('project-characteristics-modal', false);
+        document.getElementById('project-characteristics-modal-third-party-hint')?.classList.add('hidden');
 
-        const onComplete = pendingConferenceCharacteristicsConfirm;
+        const onComplete = continueFlow ? pendingConferenceCharacteristicsConfirm : null;
         pendingConferenceCharacteristicsConfirm = null;
+        pendingProjectCharacteristicsSelections = null;
 
         if (typeof onComplete === 'function') {
             await onComplete();
         }
     } catch (error) {
-        console.error('saveProjectCharacteristicsModal:', error);
+        console.error('finalizeProjectCharacteristicsSave:', error);
         const sqlHint = error.message?.includes('OrderProjectCharacteristic') || error.message?.includes('ProjectCharacteristic')
             ? '\n\nExecute supabase/create-project-characteristic.sql e supabase/create-order-project-characteristic.sql no Supabase.'
             : '';
@@ -774,9 +773,42 @@ async function saveProjectCharacteristicsModal(event) {
     }
 }
 
+function openProjectCharacteristicsThirdPartyBudgetModal() {
+    toggleModal('project-characteristics-third-party-budget-modal', true);
+}
+
+function closeProjectCharacteristicsThirdPartyBudgetModal() {
+    pendingProjectCharacteristicsSelections = null;
+    toggleModal('project-characteristics-third-party-budget-modal', false);
+}
+
+async function confirmProjectCharacteristicsThirdPartyBudget(continueFlow) {
+    const selections = pendingProjectCharacteristicsSelections;
+    if (!selections) return;
+
+    await finalizeProjectCharacteristicsSave(selections, { continueFlow });
+}
+
+async function saveProjectCharacteristicsModal(event) {
+    event?.preventDefault();
+
+    const selections = collectProjectCharacteristicsSelections();
+    if (!validateProjectCharacteristicsSelections(selections)) return;
+
+    if (pendingConferenceCharacteristicsConfirm) {
+        pendingProjectCharacteristicsSelections = selections;
+        openProjectCharacteristicsThirdPartyBudgetModal();
+        return;
+    }
+
+    await finalizeProjectCharacteristicsSave(selections, { continueFlow: true });
+}
+
 function closeProjectCharacteristicsModal() {
     pendingConferenceCharacteristicsConfirm = null;
+    pendingProjectCharacteristicsSelections = null;
     document.getElementById('project-characteristics-modal-third-party-hint')?.classList.add('hidden');
+    toggleModal('project-characteristics-third-party-budget-modal', false);
     toggleModal('project-characteristics-modal', false);
     if (typeof setAnteprojetoConferenceActionLoading === 'function') {
         setAnteprojetoConferenceActionLoading(false);
@@ -789,6 +821,12 @@ function closeProjectCharacteristicsModal() {
 function bindProjectCharacteristicsEvents() {
     document.getElementById('project-characteristics-form')?.addEventListener('submit', saveProjectCharacteristicsModal);
     document.getElementById('btn-project-characteristics-cancel')?.addEventListener('click', closeProjectCharacteristicsModal);
+    document.getElementById('btn-project-characteristics-third-party-budget-yes')?.addEventListener('click', async () => {
+        await confirmProjectCharacteristicsThirdPartyBudget(true);
+    });
+    document.getElementById('btn-project-characteristics-third-party-budget-no')?.addEventListener('click', async () => {
+        await confirmProjectCharacteristicsThirdPartyBudget(false);
+    });
 }
 
 window.closeProjectCharacteristicsModal = closeProjectCharacteristicsModal;

@@ -16,22 +16,20 @@ function bindAnteprojetoTreeToggles(root) {
 
 function renderAnteprojetoObservationTableHeader() {
     return `
-        <div class="anteprojeto-obs-table-header grid grid-cols-[1fr_5rem_1fr] gap-2 px-2 py-1.5 bg-slate-50 text-[10px] uppercase text-slate-500 font-semibold border-b border-slate-200">
+        <div class="anteprojeto-obs-table-header grid grid-cols-[1fr_7rem_1fr] gap-2 px-2 py-1.5 bg-slate-50 text-[10px] uppercase text-slate-500 font-semibold border-b border-slate-200">
             <span>Observação</span>
-            <span class="text-center">Conferido</span>
+            <span class="text-center">Classificação</span>
             <span>Resposta</span>
         </div>
     `;
 }
 
 function renderAnteprojetoObservationLeaf(obs) {
+    const disposition = normalizeConsultorDisposition(obs);
     return `
-        <div class="anteprojeto-tree-leaf grid grid-cols-[1fr_5rem_1fr] gap-2 items-start px-2 py-1.5 text-xs border-b border-slate-100 last:border-0">
+        <div class="anteprojeto-tree-leaf grid grid-cols-[1fr_7rem_1fr] gap-2 items-start px-2 py-1.5 text-xs border-b border-slate-100 last:border-0">
             <span class="text-slate-700 whitespace-pre-wrap text-left">${escapeHtml(obs.text)}</span>
-            <div class="flex justify-center pt-0.5">
-                <input type="checkbox" class="h-3.5 w-3.5 rounded border-slate-300 text-sky-600" disabled
-                    ${obs.consultorChecked ? 'checked' : ''}>
-            </div>
+            <span class="text-center text-slate-600 font-medium">${escapeHtml(getConsultorDispositionLabel(disposition))}</span>
             <span class="text-slate-500 whitespace-pre-wrap text-left">${escapeHtml(obs.consultorResponse || '—')}</span>
         </div>
     `;
@@ -41,12 +39,12 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const confirmed = isAnteprojetoConferenceConfirmed(conference);
     const approved = isAnteprojetoConferenceApproved(conference);
     const moduleObservations = getConferenceModuleObservations(conference);
-    const checkedCount = moduleObservations.filter(obs => obs.consultorChecked).length;
+    const classifiedCount = moduleObservations.filter(obs => normalizeConsultorDisposition(obs)).length;
     const canEdit = canEditAnteprojetoConference(conference) || canEditAnteprojetoConsultorFields(conference);
     const canConfirm = canConfirmAnteprojetoConference(conference);
     const canOpen = confirmed || canEdit;
-    const allChecked = moduleObservations.length > 0
-        && moduleObservations.every(obs => obs.consultorChecked);
+    const allClassified = moduleObservations.length > 0
+        && validateConsultorObservationDispositions(moduleObservations).valid;
     const projetistaName = projetistaNames[conference.designerId] || '-';
     const statusClass = approved
         ? 'bg-indigo-100 text-indigo-800'
@@ -74,7 +72,7 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
                     </span>
                 </div>
                 <div class="text-[10px] text-slate-500">
-                    Conferidas: ${checkedCount}/${moduleObservations.length}
+                    Classificadas: ${classifiedCount}/${moduleObservations.length}
                     · ${projectCount} projeto${projectCount === 1 ? '' : 's'}
                     · ${moduleCount} módulo${moduleCount === 1 ? '' : 's'}
                 </div>
@@ -179,11 +177,16 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
 
     if (canConfirm) {
         const confirmWrap = document.createElement('div');
-        confirmWrap.className = 'flex justify-end gap-2 pt-2 border-t border-slate-100';
+        confirmWrap.className = 'flex flex-col items-end gap-1.5 pt-2 border-t border-slate-100';
         confirmWrap.innerHTML = `
+            <p class="text-[10px] text-slate-500 text-right leading-relaxed max-w-md">
+                <span class="text-red-500">*</span>
+                O botão Confirmar Conferência só é liberado após selecionar Req. Proj., Req. Cons. ou OK em cada observação.
+                Se marcar Req. Proj. ou Req. Cons., a resposta do consultor deve estar preenchida.
+            </p>
             <button type="button" onclick="confirmAnteprojetoConference(${conference.id})"
-                class="text-xs px-3 py-1.5 rounded-lg font-medium ${allChecked ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
-                ${allChecked ? '' : 'disabled'}>
+                class="text-xs px-3 py-1.5 rounded-lg font-medium ${allClassified ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
+                ${allClassified ? '' : 'disabled'}>
                 Confirmar Conferência
             </button>
         `;
@@ -309,8 +312,7 @@ async function loadAnteprojetoConferences(orderId) {
     conferences = await enrichAnteprojetoConferences(conferences, orderId);
     anteprojetoConferencesCache = conferences;
 
-    const openCount = conferences.filter(conference => conference.status === 'Em andamento').length;
-    updateOrderTabCounts(undefined, openCount);
+    updateOrderTabCounts(undefined, conferences.length);
 
     const designerIds = [...new Set(conferences.map(conference => conference.designerId).filter(Boolean))];
     const projetistaNames = {};

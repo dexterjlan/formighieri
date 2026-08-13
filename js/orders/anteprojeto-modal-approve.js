@@ -378,6 +378,11 @@ async function approveAnteprojetoConference(conferenceId) {
 
         if (conferenceError) throw conferenceError;
 
+        if (typeof createConferenceOrderRequestsFromApproval === 'function') {
+            setAnteprojetoConferenceActionLoading(true, 'Criando requisições da conferência...');
+            await createConferenceOrderRequestsFromApproval(conference, currentUser.id);
+        }
+
         let thirdPartyCreationResult = { created: [] };
         if (typeof createThirdPartyProjectsForConferenceApproval === 'function') {
             setAnteprojetoConferenceActionLoading(true, 'Criando projetos de terceiros...');
