@@ -824,10 +824,38 @@ function getGestaoKanbanExportProjectSaleValue(project) {
     return Number.isFinite(value) ? value : 0;
 }
 
+async function ensureGestaoProjetistasCacheForExport() {
+    if ((gestaoProjetistasCache || []).length) return;
+
+    const { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, name')
+        .eq('role', 'Projetista')
+        .eq('isActive', true)
+        .order('name', { ascending: true });
+
+    if (error) {
+        console.warn('ensureGestaoProjetistasCacheForExport:', error);
+        return;
+    }
+
+    gestaoProjetistasCache = data || [];
+}
+
+function getGestaoKanbanExportDesignerName(project) {
+    if (project?.designer?.name) return project.designer.name;
+
+    const designerId = Number(project?.designerId);
+    if (!designerId) return '';
+
+    const fromCache = (gestaoProjetistasCache || []).find(item => Number(item.id) === designerId);
+    return fromCache?.name || '';
+}
+
 function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplementar = false) {
     const orderDeliveryDate = phase?.deliveryDate || order.clientDeliveryDate || '';
     const projectDeliveryDate = project.deliveryDate || '';
-    const designerName = project.designer?.name || '';
+    const designerName = getGestaoKanbanExportDesignerName(project);
     const saleValue = getGestaoKanbanExportProjectSaleValue(project);
 
     return [
@@ -945,6 +973,7 @@ async function exportGestaoKanbanToExcel() {
         }
 
         const { orders, statuses } = await resolveGestaoKanbanExportData();
+        await ensureGestaoProjetistasCacheForExport();
         if (!statuses.length) {
             alertAppDialog('Nenhum status disponível para exportação.', { variant: 'warning', title: 'Aviso' });
             return;
