@@ -317,10 +317,11 @@ async function loadCalendarUsers() {
 async function loadCalendarEventsForVisibleRange(viewMode = calendarViewMode, anchor = calendarViewAnchor) {
     const { startDate, endDate } = getCalendarVisibleRange(viewMode, anchor);
 
-    const { data, error } = await supabaseClient
+    let result = await supabaseClient
         .from('CalendarEvent')
         .select(`
             id, eventDate, eventTime, eventTypeId, description, orderCode, orderId, clientName, responsibleId,
+            googleCalendarEventId,
             eventType:CalendarEventType(id, name, clientRequired, orderRequired),
             order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
         `)
@@ -328,6 +329,22 @@ async function loadCalendarEventsForVisibleRange(viewMode = calendarViewMode, an
         .lte('eventDate', endDate)
         .order('eventDate', { ascending: true })
         .order('eventTime', { ascending: true });
+
+    if (result.error?.message?.includes('googleCalendarEventId')) {
+        result = await supabaseClient
+            .from('CalendarEvent')
+            .select(`
+                id, eventDate, eventTime, eventTypeId, description, orderCode, orderId, clientName, responsibleId,
+                eventType:CalendarEventType(id, name, clientRequired, orderRequired),
+                order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            `)
+            .gte('eventDate', startDate)
+            .lte('eventDate', endDate)
+            .order('eventDate', { ascending: true })
+            .order('eventTime', { ascending: true });
+    }
+
+    const { data, error } = result;
 
     if (error) {
         console.error('loadCalendarEventsForVisibleRange:', error);
@@ -790,16 +807,8 @@ async function deleteCalendarEvent() {
     }
 
     try {
-        const eventToDelete = calendarEventsCache.find(item => Number(item.id) === Number(editingCalendarEventId))
-            || await (typeof fetchCalendarEventForGoogleSync === 'function'
-                ? fetchCalendarEventForGoogleSync(editingCalendarEventId)
-                : null);
-
         if (typeof deleteCalendarEventFromGoogle === 'function') {
-            await deleteCalendarEventFromGoogle({
-                id: editingCalendarEventId,
-                googleCalendarEventId: eventToDelete?.googleCalendarEventId || ''
-            });
+            await deleteCalendarEventFromGoogle({ id: editingCalendarEventId });
         }
 
         const { error } = await supabaseClient

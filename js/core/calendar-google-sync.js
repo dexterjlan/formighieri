@@ -124,6 +124,28 @@ async function fetchCalendarEventForGoogleSync(eventId) {
     return event;
 }
 
+async function fetchGoogleCalendarEventId(eventId) {
+    const normalizedId = Number(eventId);
+    if (!normalizedId) return '';
+
+    const { data, error } = await supabaseClient
+        .from('CalendarEvent')
+        .select('googleCalendarEventId')
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (error?.message?.includes('googleCalendarEventId')) {
+        return '';
+    }
+
+    if (error) {
+        console.warn('fetchGoogleCalendarEventId:', error);
+        return '';
+    }
+
+    return data?.googleCalendarEventId || '';
+}
+
 async function sendCalendarGoogleSyncRequest(action, calendarPayload) {
     if (!isGoogleCalendarSyncEnabled()) {
         console.info('sendCalendarGoogleSyncRequest: sincronização com Google Calendar desabilitada ou Apps Script não configurado.');
@@ -145,6 +167,7 @@ async function sendCalendarGoogleSyncRequest(action, calendarPayload) {
             action,
             'env=', FORMIGHIERI_APP_ENV,
             'fgpEventId=', calendarPayload?.fgpEventId,
+            'googleCalendarEventId=', calendarPayload?.googleCalendarEventId || '(vazio)',
             'calendar=', calendarPayload?.calendarName
         );
         await fetch(GOOGLE_APPS_SCRIPT_URL, {
@@ -172,12 +195,21 @@ async function syncCalendarEventToGoogle(eventId) {
 }
 
 async function deleteCalendarEventFromGoogle(event) {
-    if (!event?.id && !event?.googleCalendarEventId) return;
+    if (!event?.id) return;
+    if (!isGoogleCalendarSyncEnabled()) return;
+
+    const googleCalendarEventId = event.googleCalendarEventId
+        || await fetchGoogleCalendarEventId(event.id);
+
+    if (!googleCalendarEventId) {
+        console.info('deleteCalendarEventFromGoogle: evento', event.id, 'sem googleCalendarEventId — nada a remover no Google.');
+        return;
+    }
 
     await sendCalendarGoogleSyncRequest('calendar_delete', {
         calendarName: getGoogleCalendarSyncCalendarName(),
         fgpEventId: event.id,
-        googleCalendarEventId: event.googleCalendarEventId || ''
+        googleCalendarEventId
     });
 }
 
@@ -249,4 +281,5 @@ function updateCalendarGoogleSyncControls() {
 window.syncAllCalendarEventsToGoogle = syncAllCalendarEventsToGoogle;
 window.syncCalendarEventToGoogle = syncCalendarEventToGoogle;
 window.deleteCalendarEventFromGoogle = deleteCalendarEventFromGoogle;
+window.fetchGoogleCalendarEventId = fetchGoogleCalendarEventId;
 window.updateCalendarGoogleSyncControls = updateCalendarGoogleSyncControls;

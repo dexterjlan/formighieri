@@ -40,11 +40,11 @@ function handleCalendarSyncRequest_(body) {
     }
 
     if (action === 'calendar_delete') {
-      deleteFgpCalendarEvent_(calendar);
-      if (calendar.fgpEventId) {
-        clearFgpCalendarEventId_(calendar.fgpEventId, environment);
+      var deleteResult = deleteFgpCalendarEvent_(calendar);
+      if (calendar.fgpEventId && deleteResult.ok) {
+        deleteResult.supabaseUpdate = clearFgpCalendarEventId_(calendar.fgpEventId, environment);
       }
-      return jsonResponse_({ ok: true });
+      return jsonResponse_(deleteResult);
     }
 
     return jsonResponse_({ ok: false, error: 'Unknown calendar action' }, 400);
@@ -108,11 +108,33 @@ function upsertFgpCalendarEvent_(calendar) {
 }
 
 function deleteFgpCalendarEvent_(calendar) {
-  if (!calendar.googleCalendarEventId) return;
+  var eventId = String(calendar.googleCalendarEventId || '').trim();
+  if (!eventId) {
+    return { ok: false, error: 'googleCalendarEventId ausente no payload' };
+  }
+
+  if (calendar.calendarName) {
+    try {
+      var cal = getOrCreateFgpGoogleCalendar_(calendar.calendarName);
+      var fromCalendar = cal.getEventById(eventId);
+      if (fromCalendar) {
+        fromCalendar.deleteEvent();
+        return { ok: true, deleted: true, googleCalendarEventId: eventId };
+      }
+    } catch (ignored) {}
+  }
+
   try {
-    var event = CalendarApp.getEventById(calendar.googleCalendarEventId);
-    if (event) event.deleteEvent();
-  } catch (ignored) {}
+    var event = CalendarApp.getEventById(eventId);
+    if (event) {
+      event.deleteEvent();
+      return { ok: true, deleted: true, googleCalendarEventId: eventId };
+    }
+  } catch (err) {
+    return { ok: false, error: String(err), googleCalendarEventId: eventId };
+  }
+
+  return { ok: false, error: 'Evento não encontrado no Google Calendar', googleCalendarEventId: eventId };
 }
 
 function updateFgpCalendarEventId_(fgpEventId, googleCalendarEventId, environment) {
@@ -236,6 +258,24 @@ function testarSyncCalendarioDev() {
       eventTime: '14:00:00',
       summary: 'Teste Apps Script FGP',
       description: 'Executado manualmente no editor'
+    }
+  });
+  Logger.log(output.getContent());
+}
+
+/**
+ * Teste manual de exclusão (Executar → testarDeleteCalendarioDev).
+ * Troque googleCalendarEventId por um ID real de evento no Google Calendar.
+ */
+function testarDeleteCalendarioDev() {
+  var output = handleCalendarSyncRequest_({
+    secret: getNotificationScriptSecret_(),
+    action: 'calendar_delete',
+    environment: 'dev',
+    calendar: {
+      calendarName: 'FGP - Comercial (Testes)',
+      fgpEventId: 1,
+      googleCalendarEventId: 'COLE_O_ID_DO_GOOGLE_AQUI'
     }
   });
   Logger.log(output.getContent());
