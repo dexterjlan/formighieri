@@ -722,6 +722,8 @@ async function saveCalendarEvent(event) {
     }
 
     try {
+        let savedEventId = editingCalendarEventId;
+
         if (editingCalendarEventId) {
             const { error } = await supabaseClient
                 .from('CalendarEvent')
@@ -736,11 +738,18 @@ async function saveCalendarEvent(event) {
                 createdById: currentUser?.id || null
             };
 
-            const { error } = await supabaseClient
+            const { data: created, error } = await supabaseClient
                 .from('CalendarEvent')
-                .insert(insertPayload);
+                .insert(insertPayload)
+                .select('id')
+                .single();
 
             if (error) throw error;
+            savedEventId = created?.id || null;
+        }
+
+        if (savedEventId && typeof syncCalendarEventToGoogle === 'function') {
+            syncCalendarEventToGoogle(savedEventId);
         }
 
         toggleModal('calendar-event-modal', false);
@@ -781,6 +790,18 @@ async function deleteCalendarEvent() {
     }
 
     try {
+        const eventToDelete = calendarEventsCache.find(item => Number(item.id) === Number(editingCalendarEventId))
+            || await (typeof fetchCalendarEventForGoogleSync === 'function'
+                ? fetchCalendarEventForGoogleSync(editingCalendarEventId)
+                : null);
+
+        if (typeof deleteCalendarEventFromGoogle === 'function') {
+            await deleteCalendarEventFromGoogle({
+                id: editingCalendarEventId,
+                googleCalendarEventId: eventToDelete?.googleCalendarEventId || ''
+            });
+        }
+
         const { error } = await supabaseClient
             .from('CalendarEvent')
             .delete()
@@ -1035,6 +1056,9 @@ function showCalendar() {
     document.getElementById('calendar-view')?.classList.remove('hidden');
     updateMainNavActive('calendar');
     updateAdminNav();
+    if (typeof updateCalendarGoogleSyncControls === 'function') {
+        updateCalendarGoogleSyncControls();
+    }
     if (typeof saveAppNavState === 'function') saveAppNavState({ view: 'calendar' });
     refreshCalendarView();
 }
@@ -1086,6 +1110,11 @@ function bindCalendarEvents() {
     document.getElementById('btn-calendar-today')?.addEventListener('click', goToCalendarToday);
     document.getElementById('btn-calendar-new')?.addEventListener('click', () => openCalendarEventModal());
     document.getElementById('btn-calendar-export-ics')?.addEventListener('click', exportCalendarToIcs);
+    document.getElementById('btn-calendar-sync-google')?.addEventListener('click', () => {
+        if (typeof syncAllCalendarEventsToGoogle === 'function') {
+            syncAllCalendarEventsToGoogle();
+        }
+    });
     document.getElementById('calendar-filter-responsible')?.addEventListener('change', applyCalendarFilters);
     document.getElementById('calendar-filter-type')?.addEventListener('change', applyCalendarFilters);
     document.getElementById('cal-event-type')?.addEventListener('change', syncCalendarEventTypeRequirements);

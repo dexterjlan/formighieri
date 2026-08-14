@@ -5,5 +5,7 @@ window.FORMIGHIERI_CONFIG_PROD = {
     SUPABASE_KEY: 'sb_publishable_ts8vXjQPV6BL5lTts9Ny_Q_R0O3vvjh',
     APP_PUBLIC_URL: 'https://dexterjlan.github.io/formighieri',
     NOTIFICATION_TEST_MODE: false,
-    NOTIFICATION_TEST_EMAIL: ''
+    NOTIFICATION_TEST_EMAIL: '',
+    GOOGLE_CALENDAR_SYNC_ENABLED: false,
+    GOOGLE_CALENDAR_SYNC_CALENDAR_NAME: 'FGP - Comercial'
 };

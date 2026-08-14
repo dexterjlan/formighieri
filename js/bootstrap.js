@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '20260812r';
+const APP_CACHE_VERSION = '20260814d';
 
 const PARTIALS = [
     'partials/login.html',
@@ -19,6 +19,7 @@ const SCRIPTS = [
     'js/core/navigation.js',
     'js/core/responsive.js',
     'js/core/calendar.js',
+    'js/core/calendar-google-sync.js',
     'js/core/welcome.js',
     'js/conversations/conversations-query.js',
     'js/admin/users-admin.js',
