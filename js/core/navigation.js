@@ -243,6 +243,7 @@ function updateAdminNav() {
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
+    if (typeof updateCalendarGoogleSyncControls === 'function') updateCalendarGoogleSyncControls();
 }
 
 const MAIN_NAV_ACTIVE_CLASS = 'text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg';

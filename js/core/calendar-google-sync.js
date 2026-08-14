@@ -21,9 +21,8 @@ const CALENDAR_GOOGLE_SYNC_SELECT = `
 `;
 
 function isGoogleCalendarSyncEnabled() {
-    return typeof isGoogleAppsScriptConfigured === 'function'
-        && isGoogleAppsScriptConfigured()
-        && FORMIGHIERI_ENV_CONFIG?.GOOGLE_CALENDAR_SYNC_ENABLED !== false;
+    return Boolean(GOOGLE_APPS_SCRIPT_URL && NOTIFICATION_SCRIPT_SECRET)
+        && FORMIGHIERI_ENV_CONFIG?.GOOGLE_CALENDAR_SYNC_ENABLED === true;
 }
 
 function buildCalendarGoogleSyncPayload(event) {
@@ -239,7 +238,7 @@ function updateCalendarGoogleSyncControls() {
     const syncBtn = document.getElementById('btn-calendar-sync-google');
     if (!syncBtn) return;
 
-    const show = currentUser?.role === 'Admin' && isGoogleCalendarSyncEnabled();
+    const show = typeof isAdmin === 'function' && isAdmin() && isGoogleCalendarSyncEnabled();
     syncBtn.classList.toggle('hidden', !show);
     if (show) {
         const calendarName = getGoogleCalendarSyncCalendarName();
