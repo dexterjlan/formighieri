@@ -33,6 +33,10 @@ function addCronogramaPedidoDays(date, days) {
     return next;
 }
 
+function cronogramaPedidoEndOfDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
 function formatCronogramaPedidoAxisDate(date) {
     if (!date) return '—';
     const day = String(date.getDate()).padStart(2, '0');
@@ -97,7 +101,7 @@ function buildCronogramaPedidoPrevisaoSegment(project, history) {
     return {
         kind: 'previsao',
         start,
-        end: end.getTime() >= start.getTime() ? end : start,
+        end: cronogramaPedidoEndOfDay(end.getTime() >= start.getTime() ? end : start),
         label: CRONOGRAMA_PEDIDO_SEGMENT_LABELS.previsao
     };
 }
@@ -140,23 +144,26 @@ function buildCronogramaPedidoHistorySegments(history, deliveryDate) {
         const { kind, day: start } = collapsed[index];
 
         if (kind === 'entregue') {
+            const inclusiveEnd = delivery || start;
             segments.push({
                 kind,
                 start,
-                end: delivery || start,
+                end: cronogramaPedidoEndOfDay(inclusiveEnd),
                 label: CRONOGRAMA_PEDIDO_SEGMENT_LABELS.entregue
             });
             break;
         }
 
         const nextDay = collapsed[index + 1]?.day;
-        let end = nextDay ? addCronogramaPedidoDays(nextDay, -1) : today;
+        let lastInclusiveDay = nextDay ? addCronogramaPedidoDays(nextDay, -1) : today;
+        let end = cronogramaPedidoEndOfDay(lastInclusiveDay);
 
-        if (delivery && end.getTime() > delivery.getTime()) {
-            end = delivery;
+        if (delivery && lastInclusiveDay.getTime() > delivery.getTime()) {
+            end = cronogramaPedidoEndOfDay(delivery);
+            lastInclusiveDay = delivery;
         }
 
-        if (end.getTime() < start.getTime()) continue;
+        if (lastInclusiveDay.getTime() < start.getTime()) continue;
 
         segments.push({
             kind,
