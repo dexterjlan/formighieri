@@ -103,6 +103,9 @@ async function restoreGestaoView(state) {
         kanban: () => {
             if (typeof showGestaoKanbanPanel === 'function') showGestaoKanbanPanel();
         },
+        'cronograma-pedido': () => {
+            if (typeof showGestaoCronogramaPedidoPanel === 'function') showGestaoCronogramaPedidoPanel();
+        },
         gantt: () => {
             if (typeof showProgramacaoProjetosView === 'function') showProgramacaoProjetosView({ fromGestao: true });
             else if (typeof showGestaoGanttPanel === 'function') showGestaoGanttPanel();

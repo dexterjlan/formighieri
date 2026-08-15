@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '20260814h';
+const APP_CACHE_VERSION = '20260814l';
 
 const PARTIALS = [
     'partials/login.html',
@@ -29,6 +29,7 @@ const SCRIPTS = [
     'js/gestao/gestao-orders.js',
     'js/gestao/gestao-import.js',
     'js/gestao/gestao-kanban.js',
+    'js/gestao/gestao-cronograma-pedido.js',
     'js/gestao/gestao-gantt.js',
     'js/gestao/gestao-cadastros.js',
     'js/gestao/gestao-alterar-status-projeto.js',

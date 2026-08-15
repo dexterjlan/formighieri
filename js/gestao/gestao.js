@@ -63,6 +63,7 @@ function setGestaoNavActive(navKey) {
         'programacao-producao': document.getElementById('gestao-nav-programacao-producao'),
         dashboard: document.getElementById('gestao-nav-dashboard'),
         kanban: document.getElementById('gestao-nav-kanban'),
+        'cronograma-pedido': document.getElementById('gestao-nav-cronograma-pedido'),
         gantt: document.getElementById('gestao-nav-gantt'),
         relatorios: document.getElementById('gestao-nav-relatorios'),
         performance: document.getElementById('gestao-nav-performance')
@@ -189,6 +190,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-usuarios-panel')?.classList.add('hidden');
     document.getElementById('gestao-dashboard-panel')?.classList.add('hidden');
     document.getElementById('gestao-kanban-panel')?.classList.add('hidden');
+    document.getElementById('gestao-cronograma-pedido-panel')?.classList.add('hidden');
     document.getElementById('gestao-gantt-panel')?.classList.add('hidden');
     document.getElementById('gestao-relatorios-panel')?.classList.add('hidden');
     document.getElementById('gestao-performance-panel')?.classList.add('hidden');
@@ -1214,6 +1216,12 @@ function showGestaoKanbanPanel() {
     loadGestaoKanban();
 }
 
+function showGestaoCronogramaPedidoPanelFromGestao() {
+    if (typeof showGestaoCronogramaPedidoPanel === 'function') {
+        showGestaoCronogramaPedidoPanel();
+    }
+}
+
 function showGestaoGanttPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-gantt-panel')?.classList.remove('hidden');
@@ -1450,6 +1458,10 @@ function bindGestaoEvents() {
         editingGestaoOrderId = null;
         showGestaoKanbanPanel();
     });
+    document.getElementById('gestao-nav-cronograma-pedido')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoCronogramaPedidoPanelFromGestao();
+    });
     document.getElementById('gestao-nav-gantt')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showProgramacaoProjetosView({ fromGestao: true });
@@ -1501,6 +1513,9 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoKanbanEvents === 'function') {
         bindGestaoKanbanEvents();
+    }
+    if (typeof bindGestaoCronogramaPedidoEvents === 'function') {
+        bindGestaoCronogramaPedidoEvents();
     }
     if (typeof bindGestaoPhasesEvents === 'function') {
         bindGestaoPhasesEvents();

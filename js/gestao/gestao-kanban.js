@@ -544,6 +544,7 @@ async function openGestaoProjectStatusHistory(context = {}) {
 }
 
 window.openGestaoProjectStatusHistory = openGestaoProjectStatusHistory;
+window.fetchOrderProjectStatusHistory = fetchOrderProjectStatusHistory;
 
 function getGestaoProjectHistoryContext(orderProjectId) {
     const normalizedId = Number(orderProjectId);
