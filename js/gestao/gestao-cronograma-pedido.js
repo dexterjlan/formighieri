@@ -323,14 +323,19 @@ function renderCronogramaPedidoDeliveryMarker(deliveryDate, axisStart, axisEnd, 
     `;
 }
 
+function getCronogramaPedidoProjectStatusName(project) {
+    return project?.projectStatus?.name || 'Sem status';
+}
+
 function renderCronogramaPedidoProjectRow(project, history, axisStart, axisEnd) {
     const deliveryDate = project.deliveryDate;
+    const statusName = getCronogramaPedidoProjectStatusName(project);
     if (!deliveryDate) {
         return `
             <div class="gestao-cronograma-pedido__row gestao-cronograma-pedido__row--invalid">
                 <div class="gestao-cronograma-pedido__row-label">
                     <div class="gestao-cronograma-pedido__project-name">${escapeHtml(project.name || 'Projeto')}</div>
-                    <div class="gestao-cronograma-pedido__project-code">${escapeHtml(project.projectCode || '')}</div>
+                    <div class="gestao-cronograma-pedido__project-status">${escapeHtml(statusName)}</div>
                 </div>
                 <div class="gestao-cronograma-pedido__row-message">
                     Não é possível gerar — sem data de entrega do projeto.
@@ -364,7 +369,7 @@ function renderCronogramaPedidoProjectRow(project, history, axisStart, axisEnd) 
         <div class="gestao-cronograma-pedido__row">
             <div class="gestao-cronograma-pedido__row-label">
                 <div class="gestao-cronograma-pedido__project-name">${escapeHtml(project.name || 'Projeto')}</div>
-                <div class="gestao-cronograma-pedido__project-code">${escapeHtml(project.projectCode || '')}</div>
+                <div class="gestao-cronograma-pedido__project-status">${escapeHtml(statusName)}</div>
                 ${previsaoHint}
             </div>
             <div class="gestao-cronograma-pedido__track">

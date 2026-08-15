@@ -1449,9 +1449,10 @@ body.gestao-kanban-fullscreen-active {
     line-height: 1.3;
 }
 
-.gestao-cronograma-pedido__project-code {
+.gestao-cronograma-pedido__project-status {
     font-size: 0.625rem;
-    color: rgb(100 116 139);
+    color: rgb(79 70 229);
+    font-weight: 600;
     margin-top: 0.125rem;
 }
 
