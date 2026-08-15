@@ -8,7 +8,7 @@ const CRONOGRAMA_PEDIDO_SEGMENT_COLORS = {
 
 const CRONOGRAMA_PEDIDO_SEGMENT_LABELS = {
     previsao: 'Previsão',
-    andamento: 'Em andamento',
+    andamento: 'Projeto Técnico',
     'rev-comercial': 'Revisão comercial',
     'rev-tecnica': 'Revisão técnica',
     entregue: 'Entregue'
@@ -102,43 +102,61 @@ function buildCronogramaPedidoPrevisaoSegment(project, history) {
     };
 }
 
-function buildCronogramaPedidoHistorySegments(history, deliveryDate) {
-    const segments = [];
-    const delivery = parseCronogramaPedidoDateOnly(deliveryDate);
-    const entries = history || [];
+function cronogramaPedidoDateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
 
-    for (let index = 0; index < entries.length; index += 1) {
-        const entry = entries[index];
+function collapseCronogramaPedidoHistoryByDay(entries) {
+    const byDay = new Map();
+
+    for (const entry of entries || []) {
         const statusName = entry.newStatus?.name || '';
         const kind = mapCronogramaPedidoStatusKind(statusName);
         if (!kind) continue;
 
-        const start = new Date(entry.changedAt);
-        if (Number.isNaN(start.getTime())) continue;
+        const changedAt = new Date(entry.changedAt);
+        if (Number.isNaN(changedAt.getTime())) continue;
+
+        const dayKey = cronogramaPedidoDateKey(changedAt);
+        byDay.set(dayKey, {
+            kind,
+            day: new Date(changedAt.getFullYear(), changedAt.getMonth(), changedAt.getDate())
+        });
+    }
+
+    return [...byDay.values()].sort((left, right) => left.day.getTime() - right.day.getTime());
+}
+
+function buildCronogramaPedidoHistorySegments(history, deliveryDate) {
+    const segments = [];
+    const delivery = parseCronogramaPedidoDateOnly(deliveryDate);
+    const collapsed = collapseCronogramaPedidoHistoryByDay(history);
+    const today = getCronogramaPedidoToday();
+
+    for (let index = 0; index < collapsed.length; index += 1) {
+        const { kind, day: start } = collapsed[index];
 
         if (kind === 'entregue') {
-            const end = delivery || start;
             segments.push({
                 kind,
                 start,
-                end,
+                end: delivery || start,
                 label: CRONOGRAMA_PEDIDO_SEGMENT_LABELS.entregue
             });
             break;
         }
 
-        let end;
-        if (index + 1 < entries.length) {
-            end = new Date(entries[index + 1].changedAt);
-        } else {
-            end = new Date();
-        }
+        const nextDay = collapsed[index + 1]?.day;
+        let end = nextDay ? addCronogramaPedidoDays(nextDay, -1) : today;
 
         if (delivery && end.getTime() > delivery.getTime()) {
             end = delivery;
         }
 
-        if (end.getTime() <= start.getTime()) continue;
+        if (end.getTime() < start.getTime()) continue;
 
         segments.push({
             kind,
