@@ -42,10 +42,10 @@ function getConvProjectStatusSortOrder(project, statuses = []) {
 }
 
 function isProjectEligibleForConvPicker(project, statuses, maxSortOrder) {
-    if (typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project)) {
+    if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
         return false;
     }
-    if (typeof isSubstituidoOrderProject === 'function' && isSubstituidoOrderProject(project)) {
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
         return false;
     }
     if (maxSortOrder == null) return true;
@@ -153,7 +153,7 @@ async function loadConvOrderProjects(selectedId) {
         .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
         .forEach(p => {
             const env = p.environmentType?.name ? ` (${p.environmentType.name})` : '';
-            const complementar = isComplementarOrderProject(p);
+            const complementar = isComplementaryOrderProject(p);
             const label = `${p.name}${env}${complementar ? ' — complementar' : ''}`;
             select.innerHTML += `<option value="${p.id}" ${complementar ? 'disabled' : ''}>${escapeHtml(label)}</option>`;
         });

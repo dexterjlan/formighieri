@@ -1,9 +1,9 @@
 const DETALHAMENTO_PENDENCIAS_SELECT = `
-    id, orderProjectId, status, projetoPath, serverFolderPath, designerId, startedAt, completedAt,
+    id, orderProjectId, status, projectFilePath, serverFolderPath, designerId, startedAt, completedAt,
     designer:appUsers!Detailing_designerId_fkey(id, name),
     orderProject:OrderProject(
         id, orderId, projectCode, name, statusId, deliveryDate,
-        order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
+        order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
         projectStatus:OrderProjectStatus(id, name)
     )
 `;
@@ -61,7 +61,7 @@ function mapPendenciasDetalhamentoRow(record) {
     return {
         detalhamentoId: record.id,
         detalhamentoStatus: record.status,
-        projetoPath: record.projetoPath,
+        projectFilePath: record.projectFilePath,
         designerName: record.designer?.name || '—',
         id: project.id,
         orderId: project.orderId,
@@ -112,7 +112,7 @@ function renderPendenciasGestorDetalhamentoList(rows) {
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-xs text-slate-600 max-w-[12rem] truncate" title="${escapeHtml(row.projetoPath || '')}">${escapeHtml(row.projetoPath || '—')}</td>
+                <td class="p-3 text-xs text-slate-600 max-w-[12rem] truncate" title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</td>
                 <td class="p-3">
                     <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${statusClass}">${escapeHtml(row.detalhamentoStatus)}</span>
                 </td>
@@ -210,7 +210,7 @@ async function associarPendenciaDetalhamentoProjetista(detalhamentoId, designerI
                 updatedAt: now
             })
             .eq('id', detalhamentoId)
-            .select('orderProjectId, projetoPath')
+            .select('orderProjectId, projectFilePath')
             .maybeSingle();
 
         if (error) throw error;
@@ -220,7 +220,7 @@ async function associarPendenciaDetalhamentoProjetista(detalhamentoId, designerI
             await notifyDetalhamentoProjetistaAssociadoEmail({
                 orderProjectId: resolvedOrderProjectId,
                 designerId,
-                projetoPath: data?.projetoPath || ''
+                projectFilePath: data?.projectFilePath || ''
             });
         }
 
@@ -275,7 +275,7 @@ function renderPendenciasProjetistaDetalhamentoList(rows) {
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-xs text-slate-600 max-w-[12rem] truncate" title="${escapeHtml(row.projetoPath || '')}">${escapeHtml(row.projetoPath || '—')}</td>
+                <td class="p-3 text-xs text-slate-600 max-w-[12rem] truncate" title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</td>
                 <td class="p-3">
                     <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${statusClass}">${escapeHtml(row.detalhamentoStatus)}</span>
                 </td>

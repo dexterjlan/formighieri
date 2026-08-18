@@ -23,11 +23,11 @@ function renderPendenciasMontagemExternaList(projects) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const canAct = canSeePendenciasGestorProjetosMenu();
+    const canAct = canActPendenciasGestorProjetosMontagemExterna();
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
         const clientName = getOrderClientName(project.order) || '—';
-        const projectName = project.name || getPendenciasProjectLabel(project);
+        const projectName = getPendenciasProjectLabel(project);
         const statusName = getPendenciasProjectStatusName(project);
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
         const actionCell = canAct
@@ -70,9 +70,9 @@ function renderPendenciasMontagemExternaList(projects) {
                     <table class="w-full text-sm min-w-[760px]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
-                                <th class="text-left p-3 font-semibold">Código do Pedido</th>
+                                <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Nome do projeto</th>
+                                <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Status</th>
                                 <th class="text-right p-3 font-semibold w-36">Ação</th>
                             </tr>
@@ -95,84 +95,9 @@ function renderPendenciasMontagemExternaList(projects) {
 }
 
 async function finalizePendenciasMontagemExterna(projectId) {
-    if (!canSeePendenciasGestorProjetosMenu()) {
-        alertAppDialog('Sem permissão para finalizar montagem externa.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
+    if (typeof finalizeMontagemExternaForProject !== 'function') return;
 
-    if (!projectId) return;
-
-    const { data: rawProject, error: readError } = await supabaseClient
-        .from('OrderProject')
-        .select('id, orderId, name, statusId, projectStatus:OrderProjectStatus(id, name)')
-        .eq('id', projectId)
-        .maybeSingle();
-
-    let project = rawProject;
-
-    if (readError?.message?.includes('projectStatus')) {
-        const fallback = await supabaseClient
-            .from('OrderProject')
-            .select('id, orderId, name, statusId')
-            .eq('id', projectId)
-            .maybeSingle();
-
-        if (fallback.error || !fallback.data) {
-            alertAppDialog('Projeto não encontrado.');
-            return;
-        }
-
-        project = (await enrichPendenciasProjectsWithStatus([fallback.data]))[0];
-    } else if (readError || !project) {
-        alertAppDialog('Projeto não encontrado.');
-        return;
-    }
-
-    const currentStatusName = getPendenciasProjectStatusName(project);
-    if (currentStatusName !== PENDENCIAS_STATUS_MONTAGEM_EXTERNA) {
-        alertAppDialog('O status do projeto foi alterado. Atualize a lista.');
-        await loadPendenciasMontagemExterna();
-        return;
-    }
-
-    const projectLabel = project.name || getPendenciasProjectLabel(project);
-    const confirmMessage = `Finalizar montagem externa de "${projectLabel}" e enviar para aguardando entrega técnica?`;
-
-    if (!(await confirmAppDialog(confirmMessage))) return;
-
-    const targetStatusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA);
-    if (!targetStatusId) {
-        alertAppDialog(`Status "${PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA}" não encontrado.`);
-        return;
-    }
-
-    try {
-        setPendenciasActionLoading(true, 'Finalizando montagem externa...');
-
-        const now = new Date().toISOString();
-        const { error } = await supabaseClient
-            .from('OrderProject')
-            .update({
-                statusId: targetStatusId,
-                updatedById: currentUser.id,
-                updatedAt: now
-            })
-            .eq('id', projectId);
-
-        if (error) {
-            alertAppDialog('Erro ao alterar status: ' + error.message);
-            return;
-        }
-
-        if (typeof notifyMontagemExternaFinalizadaEmail === 'function') {
-            await notifyMontagemExternaFinalizadaEmail({
-                orderId: project.orderId,
-                orderProjectId: projectId
-            });
-        }
-
-        await loadPendenciasMontagemExterna();
-    } finally {
-        setPendenciasActionLoading(false);
-    }
+    await finalizeMontagemExternaForProject(projectId, {
+        onSuccess: loadPendenciasMontagemExterna
+    });
 }

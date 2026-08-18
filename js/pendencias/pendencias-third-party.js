@@ -1,21 +1,14 @@
 let pendenciasThirdPartyProjectsCache = [];
 
-function renderPendenciasThirdPartyProjectMeta(project) {
+function renderPendenciasThirdPartyProjectIdentityCells(project) {
     const orderCode = project.order?.orderCode || '—';
     const clientName = getOrderClientName(project.order) || '—';
     const projectName = project.orderProject?.name || 'Projeto';
-    const subtypeName = project.thirdPartySubtype?.name || '—';
-    const statusLabel = getThirdPartyProjectStatusLabel(project.status);
-    const statusClass = getThirdPartyProjectStatusBadgeClass(project.status);
 
     return `
-        <div class="min-w-0">
-            <p class="text-[10px] text-slate-500 truncate">${escapeHtml(orderCode)} · ${escapeHtml(clientName)}</p>
-            <p class="text-xs font-medium text-slate-800 truncate">${escapeHtml(projectName)} · ${escapeHtml(subtypeName)}</p>
-            <span class="inline-flex mt-1 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
-                ${escapeHtml(statusLabel)}
-            </span>
-        </div>
+            <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
+            <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+            <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectName)}</td>
     `;
 }
 
@@ -26,7 +19,7 @@ function renderPendenciasThirdPartyGestorRow(project, projetistas = []) {
 
     return `
         <tr data-third-party-project-id="${project.id}">
-            <td class="p-3">${renderPendenciasThirdPartyProjectMeta(project)}</td>
+            ${renderPendenciasThirdPartyProjectIdentityCells(project)}
             <td class="p-3 text-slate-600">${escapeHtml(project.projectCharacteristic?.name || '—')}</td>
             <td class="p-3">
                 <select class="pendencias-third-party-designer-select w-full min-w-[10rem] px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white"
@@ -86,7 +79,7 @@ function renderPendenciasThirdPartyProjetistaRow(project) {
 
     return `
         <tr data-third-party-project-id="${project.id}">
-            <td class="p-3">${renderPendenciasThirdPartyProjectMeta(project)}</td>
+            ${renderPendenciasThirdPartyProjectIdentityCells(project)}
             <td class="p-3">
                 <input type="text"
                     class="pendencias-third-party-path-input w-full min-w-[12rem] px-2 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-violet-600"
@@ -112,7 +105,7 @@ function renderPendenciasThirdPartyConsultorRow(project) {
 
     return `
         <tr data-third-party-project-id="${project.id}">
-            <td class="p-3">${renderPendenciasThirdPartyProjectMeta(project)}</td>
+            ${renderPendenciasThirdPartyProjectIdentityCells(project)}
             <td class="p-3 text-slate-600">${escapeHtml(project.designer?.name || 'Sem projetista')}</td>
             <td class="p-3 text-xs font-mono text-slate-600 break-all">${escapeHtml(project.filePath || '—')}</td>
             <td class="p-3">
@@ -327,6 +320,8 @@ async function loadPendenciasThirdPartySemProjetista() {
                     <table class="w-full text-sm">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
+                                <th class="text-left p-3 font-semibold">Pedido</th>
+                                <th class="text-left p-3 font-semibold">Cliente</th>
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Característica</th>
                                 <th class="text-left p-3 font-semibold min-w-[12rem]">Projetista</th>
@@ -384,6 +379,8 @@ async function loadPendenciasThirdPartyProjetista() {
                     <table class="w-full text-sm">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
+                                <th class="text-left p-3 font-semibold">Pedido</th>
+                                <th class="text-left p-3 font-semibold">Cliente</th>
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold min-w-[12rem]">Caminho do arquivo</th>
                                 <th class="text-left p-3 font-semibold w-44">Ações</th>
@@ -438,6 +435,8 @@ async function loadPendenciasThirdPartyConsultor() {
                     <table class="w-full text-sm">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
+                                <th class="text-left p-3 font-semibold">Pedido</th>
+                                <th class="text-left p-3 font-semibold">Cliente</th>
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Projetista</th>
                                 <th class="text-left p-3 font-semibold min-w-[12rem]">Caminho</th>

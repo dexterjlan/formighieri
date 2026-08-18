@@ -300,10 +300,10 @@ function resolveGestaoProjectStatusId(project = {}) {
 
 function getOrderProjectStatusOptionsHtml(selectedId = null) {
     const activeStatuses = gestaoProjectStatusesCache.filter(status =>
-        status.isActive !== false && !isSubstituidoStatusName(status.name)
+        status.isActive !== false && !isReplacedStatusName(status.name)
     );
     const selectedStatus = gestaoProjectStatusesCache.find(status => String(status.id) === String(selectedId));
-    const statuses = selectedStatus && isSubstituidoStatusName(selectedStatus.name)
+    const statuses = selectedStatus && isReplacedStatusName(selectedStatus.name)
         ? [...activeStatuses, selectedStatus]
         : activeStatuses;
     const defaultId = selectedId ?? getDefaultProjectStatusId();
@@ -426,24 +426,24 @@ function bindGestaoSubstituidoToggle() {
     const complementarCheckbox = document.getElementById('gestao-project-complementar');
     if (!checkbox || !statusSelect) return;
 
-    const isSubstituido = checkbox.checked;
+    const isReplaced = checkbox.checked;
 
-    if (isSubstituido && complementarCheckbox?.checked) {
+    if (isReplaced && complementarCheckbox?.checked) {
         complementarCheckbox.checked = false;
         bindGestaoComplementarToggle();
     }
 
-    if (replacementCodeInput) replacementCodeInput.disabled = !isSubstituido;
-    if (replacementDisplayInput) replacementDisplayInput.disabled = !isSubstituido;
-    if (replacementPickerBtn) replacementPickerBtn.disabled = !isSubstituido;
+    if (replacementCodeInput) replacementCodeInput.disabled = !isReplaced;
+    if (replacementDisplayInput) replacementDisplayInput.disabled = !isReplaced;
+    if (replacementPickerBtn) replacementPickerBtn.disabled = !isReplaced;
 
-    if (!isSubstituido) {
+    if (!isReplaced) {
         if (replacementCodeInput) replacementCodeInput.value = '';
         if (replacementDisplayInput) replacementDisplayInput.value = '';
     }
 
-    if (isSubstituido) {
-        const substituidoStatusId = getSubstituidoStatusId(gestaoProjectStatusesCache);
+    if (isReplaced) {
+        const substituidoStatusId = getReplacedStatusId(gestaoProjectStatusesCache);
         if (substituidoStatusId) {
             statusSelect.value = String(substituidoStatusId);
         }
@@ -452,7 +452,7 @@ function bindGestaoSubstituidoToggle() {
 }
 
 function bindGestaoProjectRelationToggles(project = {}) {
-    const locked = isSubstituidoOrderProject(project);
+    const locked = isReplacedOrderProject(project);
     const relationInputs = [
         'gestao-project-complementar',
         'gestao-project-parent-code',
@@ -479,7 +479,7 @@ function bindGestaoProjectRelationToggles(project = {}) {
 
     document.getElementById('gestao-project-form-submit')?.removeAttribute('disabled');
     const phaseSelect = document.getElementById('gestao-project-phase');
-    if (phaseSelect && !isSubstituidoOrderProject(project)) {
+    if (phaseSelect && !isReplacedOrderProject(project)) {
         phaseSelect.disabled = false;
     }
     bindGestaoComplementarToggle();
@@ -590,8 +590,8 @@ function fillGestaoProjectForm(project = {}) {
     document.getElementById('gestao-project-name').value = project.name || '';
     document.getElementById('gestao-project-sale-value').value = formatSaleValueAsCurrencyInput(project.saleValue);
     document.getElementById('gestao-project-delivery').value = toGestaoInputDate(project.deliveryDate);
-    document.getElementById('gestao-project-caminho-rede-aprovacao').value = project.caminhoRedeAprovacao || '';
-    document.getElementById('gestao-project-complementar').checked = Boolean(project.isComplementar);
+    document.getElementById('gestao-project-caminho-rede-aprovacao').value = project.approvalNetworkPath || '';
+    document.getElementById('gestao-project-complementar').checked = Boolean(project.isComplementary);
     
     const parentCode = normalizeProjectCodeInput(
         project.parentProject?.projectCode || project.parentProjectCode || ''
@@ -620,12 +620,12 @@ function fillGestaoProjectForm(project = {}) {
         lookupAndSetParentProjectDisplay(parentCode);
     }
 
-    document.getElementById('gestao-project-substituido').checked = Boolean(project.isSubstituido);
+    document.getElementById('gestao-project-substituido').checked = Boolean(project.isReplaced);
     const replacementCode = normalizeProjectCodeInput(
-        project.substituidoPorProject?.projectCode || project.substituidoPorProjectCode || ''
+        project.replacedByProject?.projectCode || project.replacedByProjectCode || ''
     );
-    const replacementOrderCode = project.substituidoPorProject?.order?.orderCode || project.substituidoPorOrderCode || '';
-    const replacementName = project.substituidoPorProject?.name || project.substituidoPorName || '';
+    const replacementOrderCode = project.replacedByProject?.order?.orderCode || project.replacedByOrderCode || '';
+    const replacementName = project.replacedByProject?.name || project.replacedByName || '';
 
     if (document.getElementById('gestao-project-substituido-por-code')) {
         document.getElementById('gestao-project-substituido-por-code').value = replacementCode;
@@ -676,20 +676,20 @@ function collectGestaoProjectFormData() {
             : null,
         statusId: Number(document.getElementById('gestao-project-status')?.value) || getDefaultProjectStatusId(),
         designerId: existing?.designerId ?? null,
-        previsaoConclusaoProjetoTecnico: existing?.previsaoConclusaoProjetoTecnico ?? null,
+        technicalProjectForecastEndDate: existing?.technicalProjectForecastEndDate ?? null,
         technicalProjectForecastStartDate: existing?.technicalProjectForecastStartDate ?? null,
-        caminhoRedeAprovacao: document.getElementById('gestao-project-caminho-rede-aprovacao')?.value?.trim() || null,
-        isComplementar: Boolean(document.getElementById('gestao-project-complementar')?.checked),
+        approvalNetworkPath: document.getElementById('gestao-project-caminho-rede-aprovacao')?.value?.trim() || null,
+        isComplementary: Boolean(document.getElementById('gestao-project-complementar')?.checked),
         parentProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-parent-code')?.value || ''),
-        isSubstituido: Boolean(document.getElementById('gestao-project-substituido')?.checked),
-        substituidoPorProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-substituido-por-code')?.value || ''),
-        isSubstituicao: Boolean(existing?.isSubstituicao),
-        substituiProjectId: existing?.substituiProjectId || null,
-        substituiProjectCode: normalizeProjectCodeInput(
-            existing?.substituiProject?.projectCode || existing?.substituiProjectCode || ''
+        isReplaced: Boolean(document.getElementById('gestao-project-substituido')?.checked),
+        replacedByProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-substituido-por-code')?.value || ''),
+        isReplacement: Boolean(existing?.isReplacement),
+        replacesProjectId: existing?.replacesProjectId || null,
+        replacesProjectCode: normalizeProjectCodeInput(
+            existing?.replacesProject?.projectCode || existing?.replacesProjectCode || ''
         ),
-        substituiProject: existing?.substituiProject || null,
-        substituiOriginalSaleValue: existing?.substituiOriginalSaleValue,
+        replacesProject: existing?.replacesProject || existing?.replaces || null,
+        replacesOriginalSaleValue: existing?.replacesOriginalSaleValue,
         parentProject: editingGestaoProjectDraftIndex != null
             ? gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex]?.parentProject || null
             : null
@@ -853,22 +853,22 @@ async function saveGestaoProjectDraftAsync() {
         return;
     }
 
-    if (project.isComplementar && !project.parentProjectCode) {
+    if (project.isComplementary && !project.parentProjectCode) {
         alertAppDialog('Informe o código do projeto pai para projetos complementares.');
         return;
     }
 
-    if (project.isSubstituido && !project.substituidoPorProjectCode) {
+    if (project.isReplaced && !project.replacedByProjectCode) {
         alertAppDialog('Informe o código do projeto substituto.');
         return;
     }
 
-    if (project.isComplementar && project.isSubstituido) {
+    if (project.isComplementary && project.isReplaced) {
         alertAppDialog('O projeto não pode ser complementar e substituído ao mesmo tempo.');
         return;
     }
 
-    if (project.isSubstituido && !canMarkProjectAsSubstituido(
+    if (project.isReplaced && !canMarkProjectAsReplaced(
         editingGestaoProjectDraftIndex != null
             ? gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex]
             : project
@@ -902,7 +902,7 @@ async function saveGestaoProjectDraftAsync() {
         return;
     }
 
-    if (project.isComplementar && project.parentProjectCode) {
+    if (project.isComplementary && project.parentProjectCode) {
         const parents = await fetchGestaoParentProjectsByCodes([project.parentProjectCode]);
         const parent = parents[project.parentProjectCode];
         if (parent) {
@@ -913,19 +913,19 @@ async function saveGestaoProjectDraftAsync() {
         }
     }
 
-    if (project.isSubstituido && project.substituidoPorProjectCode) {
-        const replacements = await fetchGestaoParentProjectsByCodes([project.substituidoPorProjectCode]);
-        const replacement = replacements[project.substituidoPorProjectCode];
+    if (project.isReplaced && project.replacedByProjectCode) {
+        const replacements = await fetchGestaoParentProjectsByCodes([project.replacedByProjectCode]);
+        const replacement = replacements[project.replacedByProjectCode];
         if (replacement) {
-            project.substituidoPorProject = {
+            project.replacedByProject = {
                 projectCode: replacement.projectCode,
                 order: replacement.order || null
             };
         }
     }
 
-    if (project.isSubstituido) {
-        const substituidoStatusId = getSubstituidoStatusId();
+    if (project.isReplaced) {
+        const substituidoStatusId = getReplacedStatusId();
         if (substituidoStatusId) {
             project.statusId = substituidoStatusId;
             project.projectStatus = gestaoProjectStatusesCache.find(status => status.id === substituidoStatusId) || {
@@ -1317,7 +1317,7 @@ function bindGestaoEvents() {
         openClientePickerModal(cliente => {
             const input = document.getElementById('ord-client');
             const idInput = document.getElementById('ord-client-id');
-            if (input) input.value = cliente.nome;
+            if (input) input.value = cliente.name;
             if (idInput) idInput.value = cliente.id;
         });
     };
@@ -1328,7 +1328,7 @@ function bindGestaoEvents() {
         openClientePickerModal(cliente => {
             const input = document.getElementById('gestao-ord-client');
             const idInput = document.getElementById('gestao-ord-client-id');
-            if (input) input.value = cliente.nome;
+            if (input) input.value = cliente.name;
             if (idInput) idInput.value = cliente.id;
         });
     };
@@ -1514,8 +1514,8 @@ function bindGestaoEvents() {
     if (typeof bindGestaoKanbanEvents === 'function') {
         bindGestaoKanbanEvents();
     }
-    if (typeof bindGestaoCronogramaPedidoEvents === 'function') {
-        bindGestaoCronogramaPedidoEvents();
+    if (typeof bindGestaoOrderScheduleEvents === 'function') {
+        bindGestaoOrderScheduleEvents();
     }
     if (typeof bindGestaoPhasesEvents === 'function') {
         bindGestaoPhasesEvents();
@@ -1675,8 +1675,8 @@ async function openProjectRelationPickerModal(target = 'parent') {
     if (!orderIds.length && clientName) {
         const { data: nameOrders } = await supabaseClient
             .from('salesOrders')
-            .select('id, cliente:Cliente!inner(nome)')
-            .ilike('cliente.nome', clientName.trim());
+            .select('id, client:Client!inner(name)')
+            .ilike('client.name', clientName.trim());
         if (nameOrders?.length) {
             orderIds = nameOrders.map(o => o.id);
         }
@@ -1698,14 +1698,14 @@ async function openProjectRelationPickerModal(target = 'parent') {
 
     let { data: projects, error } = await supabaseClient
         .from('OrderProject')
-        .select('id, projectCode, name, orderId, isComplementar, isSubstituido, projectStatus:OrderProjectStatus(name, sortOrder), order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
+        .select('id, projectCode, name, orderId, isComplementary, isReplaced, projectStatus:OrderProjectStatus(name, sortOrder), order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))')
         .in('orderId', orderIds)
         .order('createdAt', { ascending: false });
 
     if (error?.message?.includes('projectStatus')) {
         ({ data: projects } = await supabaseClient
             .from('OrderProject')
-            .select('id, projectCode, name, orderId, isComplementar, isSubstituido, order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
+            .select('id, projectCode, name, orderId, isComplementary, isReplaced, order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))')
             .in('orderId', orderIds)
             .order('createdAt', { ascending: false }));
     }
@@ -1728,8 +1728,8 @@ async function openProjectRelationPickerModal(target = 'parent') {
 
     const currentProjectDraftCode = document.getElementById('gestao-project-code')?.value.trim();
     const availableProjects = (projects || []).filter(p => {
-        if (p.isComplementar) return false;
-        if (p.isSubstituido) return false;
+        if (p.isComplementary) return false;
+        if (p.isReplaced) return false;
         if (currentOrderId && Number(p.orderId) === currentOrderId) return false;
         if (currentProjectDraftCode && String(p.projectCode) === String(currentProjectDraftCode)) return false;
 
@@ -1794,13 +1794,13 @@ async function saveClienteCreateFromPicker(event) {
 
     const now = new Date().toISOString();
     const { data, error } = await supabaseClient
-        .from('Cliente')
+        .from('Client')
         .insert({
-            nome,
-            ativo: true,
+            name: nome,
+            isActive: true,
             updatedAt: now
         })
-        .select('id, nome, ativo')
+        .select('id, name, isActive')
         .single();
 
     if (error) {
@@ -1816,10 +1816,10 @@ async function saveClienteCreateFromPicker(event) {
     }
 
     clientePickerCache = [...(clientePickerCache || []), data]
-        .sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' }));
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
 
     document.getElementById('cliente-create-form')?.reset();
-    selectClienteFromPicker({ id: data.id, nome: data.nome });
+    selectClienteFromPicker({ id: data.id, name: data.name });
 }
 
 window.openClienteCreateModal = openClienteCreateModal;
@@ -1840,10 +1840,10 @@ async function openClientePickerModal(onSelectCallback) {
     toggleModal('cliente-picker-modal', true);
 
     const { data: clientes, error } = await supabaseClient
-        .from('Cliente')
-        .select('id, nome, ativo')
-        .eq('ativo', true)
-        .order('nome', { ascending: true });
+        .from('Client')
+        .select('id, name, isActive')
+        .eq('isActive', true)
+        .order('name', { ascending: true });
 
     if (error || !clientes || !clientes.length) {
         tbody.innerHTML = `
@@ -1874,7 +1874,7 @@ function renderClientePickerList() {
 
     const filtered = (clientePickerCache || []).filter(c => {
         if (!filterText) return true;
-        return (c.nome || '').toLowerCase().includes(filterText);
+        return (c.name || '').toLowerCase().includes(filterText);
     });
 
     if (!filtered.length) {
@@ -1897,10 +1897,10 @@ function renderClientePickerList() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td class="p-2.5 font-mono text-slate-400">#${cliente.id}</td>
-            <td class="p-2.5 font-medium text-slate-900">${escapeHtml(cliente.nome)}</td>
+            <td class="p-2.5 font-medium text-slate-900">${escapeHtml(cliente.name)}</td>
             <td class="p-2.5 text-center">
                 <button type="button" class="select-cliente-btn px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-lg text-xs font-medium transition-colors"
-                    data-cliente-id="${cliente.id}" data-cliente-nome="${escapeHtml(cliente.nome)}">
+                    data-cliente-id="${cliente.id}" data-cliente-nome="${escapeHtml(cliente.name)}">
                     Selecionar
                 </button>
             </td>
@@ -1912,7 +1912,7 @@ function renderClientePickerList() {
         btn.addEventListener('click', (e) => {
             const id = Number(e.currentTarget.dataset.clienteId);
             const nome = e.currentTarget.dataset.clienteNome;
-            selectClienteFromPicker({ id, nome });
+            selectClienteFromPicker({ id, name: nome });
         });
     });
 }

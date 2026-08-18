@@ -10,13 +10,13 @@ const CALENDAR_GOOGLE_SYNC_SELECT = `
     eventDate,
     eventTime,
     description,
-    orderCode,
     orderId,
-    clientName,
+    clientId,
     responsibleId,
     googleCalendarEventId,
     eventType:CalendarEventType(id, name),
-    order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
+    client:Client(id, name),
+    order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name)),
     responsible:appUsers!responsibleId(id, name)
 `;
 
@@ -30,8 +30,8 @@ function buildCalendarGoogleSyncPayload(event) {
 
     const typeName = event.eventType?.name || getCalendarEventTypeName?.(event) || 'Evento';
     const responsibleName = event.responsible?.name || getCalendarEventResponsibleLabel?.(event) || '—';
-    const clientLabel = getCalendarEventClientLabel?.(event) || event.clientName || '';
-    const orderLabel = getCalendarEventOrderLabel?.(event) || event.orderCode || event.order?.orderCode || '';
+    const clientLabel = getCalendarEventClientLabel?.(event) || '';
+    const orderLabel = getCalendarEventOrderLabel?.(event) || '';
 
     const clientPart = clientLabel || (orderLabel ? `Pedido ${orderLabel}` : '');
 
@@ -80,12 +80,12 @@ async function fetchCalendarEventForGoogleSync(eventId) {
                 eventDate,
                 eventTime,
                 description,
-                orderCode,
                 orderId,
-                clientName,
+                clientId,
                 responsibleId,
                 eventType:CalendarEventType(id, name),
-                order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+                client:Client(id, name),
+                order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))
             `)
             .eq('id', normalizedId)
             .maybeSingle();
@@ -99,13 +99,13 @@ async function fetchCalendarEventForGoogleSync(eventId) {
                 eventDate,
                 eventTime,
                 description,
-                orderCode,
                 orderId,
-                clientName,
+                clientId,
                 responsibleId,
                 googleCalendarEventId,
                 eventType:CalendarEventType(id, name),
-                order:salesOrders(orderCode, cliente:Cliente(nome))
+                client:Client(id, name),
+                order:salesOrders(orderCode, client:Client(name))
             `)
             .eq('id', normalizedId)
             .maybeSingle();

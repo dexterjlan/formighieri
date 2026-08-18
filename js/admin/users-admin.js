@@ -90,12 +90,12 @@ function buildUserRoleBadges(u) {
         badges.push('<span class="text-[10px] font-semibold uppercase bg-slate-100 text-slate-400 px-2 py-0.5 rounded">Sem perfil</span>');
     }
 
-    if (isProjetistaUser && u.conferente) badges.push('<span class="text-[10px] bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-100">Conferente</span>');
-    if ((isAdminUser || isConsultorUser) && u.gestorComercial) badges.push('<span class="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-100">Gestor comercial</span>');
-    if (canHaveGestorProjetos && u.gestorProjetos) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">Gestor de projetos</span>');
-    if (isProjetistaUser && u.ppcp) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">PPCP</span>');
-    if (isProjetistaUser && u.detalhamento) badges.push('<span class="text-[10px] bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-100">Detalhamento</span>');
-    if (isMarceneiroUser && u.gestorFabrica) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
+    if (isProjetistaUser && u.isConferenceReviewer) badges.push('<span class="text-[10px] bg-amber-50 text-amber-800 px-2 py-0.5 rounded border border-amber-100">Conferente</span>');
+    if ((isAdminUser || isConsultorUser) && u.isCommercialManager) badges.push('<span class="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-100">Gestor comercial</span>');
+    if (canHaveGestorProjetos && u.isProjectsManager) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">Gestor de projetos</span>');
+    if (isProjetistaUser && u.isPpcp) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">PPCP</span>');
+    if (isProjetistaUser && u.isDetailing) badges.push('<span class="text-[10px] bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-100">Detalhamento</span>');
+    if (isMarceneiroUser && u.isFactoryManager) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
 
     return badges.join('');
 }
@@ -108,12 +108,12 @@ function getApplicableFlags(role) {
 function buildUserFlagCheckbox(u, flag) {
     const checkId = `${flag.id}-check-${u.id}`;
     const checkedMap = {
-        conferente: Boolean(u.conferente),
-        'gestor-comercial': Boolean(u.gestorComercial),
-        'gestor-projetos': Boolean(u.gestorProjetos),
-        ppcp: Boolean(u.ppcp),
-        'gestor-fabrica': Boolean(u.gestorFabrica),
-        detalhamento: Boolean(u.detalhamento)
+        conferente: Boolean(u.isConferenceReviewer),
+        'gestor-comercial': Boolean(u.isCommercialManager),
+        'gestor-projetos': Boolean(u.isProjectsManager),
+        ppcp: Boolean(u.isPpcp),
+        'gestor-fabrica': Boolean(u.isFactoryManager),
+        detalhamento: Boolean(u.isDetailing)
     };
 
     return `
@@ -154,12 +154,12 @@ function readUserFlagChecks(userId) {
 function mergeUserFlagChecks(u, checks) {
     return {
         ...u,
-        conferente: checks.conferente ?? u.conferente,
-        gestorComercial: checks['gestor-comercial'] ?? u.gestorComercial,
-        gestorProjetos: checks['gestor-projetos'] ?? u.gestorProjetos,
-        ppcp: checks.ppcp ?? u.ppcp,
-        gestorFabrica: checks['gestor-fabrica'] ?? u.gestorFabrica,
-        detalhamento: checks.detalhamento ?? u.detalhamento
+        isConferenceReviewer: checks.conferente ?? u.isConferenceReviewer,
+        isCommercialManager: checks['gestor-comercial'] ?? u.isCommercialManager,
+        isProjectsManager: checks['gestor-projetos'] ?? u.isProjectsManager,
+        isPpcp: checks.ppcp ?? u.isPpcp,
+        isFactoryManager: checks['gestor-fabrica'] ?? u.isFactoryManager,
+        isDetailing: checks.detalhamento ?? u.isDetailing
     };
 }
 
@@ -318,20 +318,20 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isFactoryManager, isDetailing')
         .order('name', { ascending: true });
 
-    if (result.error?.message?.includes('gestorFabrica') || result.error?.message?.includes('ppcp') || result.error?.message?.includes('detalhamento')) {
+    if (result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isDetailing')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager')
             .order('name', { ascending: true });
     }
 
-    if (result.error?.message?.includes('gestorProjetos') || result.error?.message?.includes('gestorComercial')) {
+    if (result.error?.message?.includes('isProjectsManager') || result.error?.message?.includes('isCommercialManager')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, conferente')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer')
             .order('name', { ascending: true });
     }
 
@@ -389,12 +389,12 @@ async function saveUserRole(userId) {
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const name = nameInput?.value.trim() || '';
     const role = select?.value;
-    const conferente = role === 'Projetista' && Boolean(conferenteCheck?.checked);
-    const gestorComercial = (role === 'Admin' || role === 'Consultor') && Boolean(gestorComercialCheck?.checked);
-    const gestorProjetos = (role === 'Admin' || role === 'Projetista') && Boolean(gestorProjetosCheck?.checked);
-    const ppcp = role === 'Projetista' && Boolean(ppcpCheck?.checked);
-    const detalhamento = role === 'Projetista' && Boolean(detalhamentoCheck?.checked);
-    const gestorFabrica = role === 'Marceneiro' && Boolean(gestorFabricaCheck?.checked);
+    const isConferenceReviewer = role === 'Projetista' && Boolean(conferenteCheck?.checked);
+    const isCommercialManager = (role === 'Admin' || role === 'Consultor') && Boolean(gestorComercialCheck?.checked);
+    const isProjectsManager = (role === 'Admin' || role === 'Projetista') && Boolean(gestorProjetosCheck?.checked);
+    const isPpcp = role === 'Projetista' && Boolean(ppcpCheck?.checked);
+    const isDetailing = role === 'Projetista' && Boolean(detalhamentoCheck?.checked);
+    const isFactoryManager = role === 'Marceneiro' && Boolean(gestorFabricaCheck?.checked);
 
     if (!name) {
         alertAppDialog('Informe o nome do usuário.');
@@ -413,24 +413,24 @@ async function saveUserRole(userId) {
         .eq('id', userId)
         .maybeSingle();
 
-    let payload = { name, role, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento };
+    let payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isFactoryManager, isDetailing };
     let { error } = await supabaseClient
         .from('appUsers')
         .update(payload)
         .eq('id', userId);
 
-    if (error?.message?.includes('gestorFabrica') || error?.message?.includes('ppcp') || error?.message?.includes('detalhamento')) {
-        payload = { name, role, conferente, gestorComercial, gestorProjetos };
+    if (error?.message?.includes('isFactoryManager') || error?.message?.includes('isPpcp') || error?.message?.includes('isDetailing')) {
+        payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager };
         ({ error } = await supabaseClient
             .from('appUsers')
             .update(payload)
             .eq('id', userId));
     }
 
-    if (error?.message?.includes('gestorProjetos') || error?.message?.includes('gestorComercial')) {
+    if (error?.message?.includes('isProjectsManager') || error?.message?.includes('isCommercialManager')) {
         ({ error } = await supabaseClient
             .from('appUsers')
-            .update({ name, role, conferente })
+            .update({ name, role, isConferenceReviewer })
             .eq('id', userId));
     }
 
@@ -451,12 +451,12 @@ async function saveUserRole(userId) {
             ...currentUser,
             name,
             role,
-            conferente,
-            gestorComercial,
-            gestorProjetos,
-            ppcp,
-            gestorFabrica,
-            detalhamento
+            isConferenceReviewer,
+            isCommercialManager,
+            isProjectsManager,
+            isPpcp,
+            isFactoryManager,
+            isDetailing
         };
         currentUser = normalizeAppUserProfile(currentUser);
         refreshLoggedInUserDisplay();

@@ -31,7 +31,7 @@ async function openGestaoEditOrderForm(orderId) {
     document.getElementById('gestao-ord-code').disabled = true;
     document.getElementById('gestao-ord-client').value = getOrderClientName(order);
     if (document.getElementById('gestao-ord-client-id')) {
-        document.getElementById('gestao-ord-client-id').value = order.clientId || order.cliente?.id || '';
+        document.getElementById('gestao-ord-client-id').value = order.clientId || order.client?.id || '';
     }
     document.getElementById('gestao-ord-client-delivery').value = toGestaoInputDate(order.clientDeliveryDate);
 
@@ -91,7 +91,7 @@ function groupGestaoProjectsByOrderId(projects) {
         const p = {
             ...project,
             parentProjectCode: project.parentProjectCode || project.parentProject?.projectCode || '',
-            substituidoPorProjectCode: project.substituidoPorProjectCode || project.substituidoPor?.projectCode || ''
+            replacedByProjectCode: project.replacedByProjectCode || project.replacedBy?.projectCode || ''
         };
         const orderId = Number(p.orderId);
         if (!byOrderId[orderId]) byOrderId[orderId] = [];
@@ -105,12 +105,12 @@ async function fetchGestaoParentProjectsByCodes(projectCodes) {
     if (!codes.length) return {};
 
     const selectVariants = [
-        'id, projectCode, statusId, saleValue, isComplementar, isSubstituido, isSubstituicao, projectStatus:OrderProjectStatus(id, name, sortOrder), order:salesOrders(orderCode)',
-        'id, projectCode, statusId, saleValue, isComplementar, isSubstituido, isSubstituicao, projectStatus:OrderProjectStatus(id, name, sortOrder)',
-        'id, projectCode, statusId, isComplementar, isSubstituido, isSubstituicao, projectStatus:OrderProjectStatus(id, name, sortOrder), order:salesOrders(orderCode)',
-        'id, projectCode, statusId, isComplementar, isSubstituido, isSubstituicao, projectStatus:OrderProjectStatus(id, name, sortOrder)',
-        'id, projectCode, statusId, isComplementar, isSubstituido, isSubstituicao',
-        'id, projectCode, statusId, isComplementar',
+        'id, projectCode, statusId, saleValue, isComplementary, isReplaced, isReplacement, projectStatus:OrderProjectStatus(id, name, sortOrder), order:salesOrders(orderCode)',
+        'id, projectCode, statusId, saleValue, isComplementary, isReplaced, isReplacement, projectStatus:OrderProjectStatus(id, name, sortOrder)',
+        'id, projectCode, statusId, isComplementary, isReplaced, isReplacement, projectStatus:OrderProjectStatus(id, name, sortOrder), order:salesOrders(orderCode)',
+        'id, projectCode, statusId, isComplementary, isReplaced, isReplacement, projectStatus:OrderProjectStatus(id, name, sortOrder)',
+        'id, projectCode, statusId, isComplementary, isReplaced, isReplacement',
+        'id, projectCode, statusId, isComplementary',
         'id, projectCode, statusId'
     ];
 
@@ -143,7 +143,7 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
 
     const missingParentIdSet = new Set();
     for (const project of projects || []) {
-        if (project.isComplementar && !project.parentProjectCode && project.parentProjectId) {
+        if (project.isComplementary && !project.parentProjectCode && project.parentProjectId) {
             missingParentIdSet.add(project.parentProjectId);
         }
     }
@@ -157,7 +157,7 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
         if (parentsById?.length) {
             const parentMap = Object.fromEntries(parentsById.map(p => [p.id, p]));
             for (const project of projects || []) {
-                if (project.isComplementar && !project.parentProjectCode && project.parentProjectId) {
+                if (project.isComplementary && !project.parentProjectCode && project.parentProjectId) {
                     const parentObj = parentMap[project.parentProjectId];
                     if (parentObj) {
                         project.parentProjectCode = parentObj.projectCode;
@@ -173,7 +173,7 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
 
     const dbLookupCodes = new Set();
     for (const project of projects) {
-        if (!project.isComplementar) {
+        if (!project.isComplementary) {
             project.parentProjectId = null;
             continue;
         }
@@ -195,7 +195,7 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
     const dbParentsByCode = await fetchGestaoParentProjectsByCodes([...dbLookupCodes]);
 
     for (const project of projects) {
-        if (!project.isComplementar) continue;
+        if (!project.isComplementary) continue;
 
         let parent = dbParentsByCode[project.parentProjectCode] || byCode.get(project.parentProjectCode);
 
@@ -203,13 +203,13 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
             throw new Error(`Projeto "${project.name}": projeto pai "${project.parentProjectCode}" não encontrado.`);
         }
 
-        if (parent.isComplementar) {
+        if (parent.isComplementary) {
             throw new Error(`Projeto "${project.name}": o projeto pai não pode ser complementar.`);
         }
 
         const statusName = parent.projectStatus?.name || '';
         const sortOrder = parent.projectStatus?.sortOrder ?? null;
-        if (!isComplementarParentStatusAllowed(statusName, sortOrder)) {
+        if (!isComplementaryParentStatusAllowed(statusName, sortOrder)) {
             throw new Error(
                 `Projeto "${project.name}": o projeto pai não pode estar em "${statusName || 'Aguardando Aprovação'}" ou status posterior.`
             );
@@ -239,15 +239,15 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
 
 async function validateAndResolveGestaoSubstituidoProjects(projects) {
     (projects || []).forEach(project => {
-        if (!project.substituidoPorProjectCode && project.substituidoPorProject?.projectCode) {
-            project.substituidoPorProjectCode = project.substituidoPorProject.projectCode;
+        if (!project.replacedByProjectCode && project.replacedByProject?.projectCode) {
+            project.replacedByProjectCode = project.replacedByProject.projectCode;
         }
     });
 
     const missingReplacementIdSet = new Set();
     for (const project of projects || []) {
-        if (project.isSubstituido && !project.substituidoPorProjectCode && project.substituidoPorProjectId) {
-            missingReplacementIdSet.add(project.substituidoPorProjectId);
+        if (project.isReplaced && !project.replacedByProjectCode && project.replacedByProjectId) {
+            missingReplacementIdSet.add(project.replacedByProjectId);
         }
     }
 
@@ -260,11 +260,11 @@ async function validateAndResolveGestaoSubstituidoProjects(projects) {
         if (replacementsById?.length) {
             const replacementMap = Object.fromEntries(replacementsById.map(p => [p.id, p]));
             for (const project of projects || []) {
-                if (project.isSubstituido && !project.substituidoPorProjectCode && project.substituidoPorProjectId) {
-                    const replacementObj = replacementMap[project.substituidoPorProjectId];
+                if (project.isReplaced && !project.replacedByProjectCode && project.replacedByProjectId) {
+                    const replacementObj = replacementMap[project.replacedByProjectId];
                     if (replacementObj) {
-                        project.substituidoPorProjectCode = replacementObj.projectCode;
-                        project.substituidoPorProject = replacementObj;
+                        project.replacedByProjectCode = replacementObj.projectCode;
+                        project.replacedByProject = replacementObj;
                     }
                 }
             }
@@ -274,64 +274,64 @@ async function validateAndResolveGestaoSubstituidoProjects(projects) {
     const dbLookupCodes = new Set();
 
     for (const project of projects) {
-        if (project.isComplementar && project.isSubstituido) {
+        if (project.isComplementary && project.isReplaced) {
             throw new Error(`Projeto "${project.name}": não pode ser complementar e substituído ao mesmo tempo.`);
         }
 
-        if (!project.isSubstituido) {
-            project.substituidoPorProjectId = null;
+        if (!project.isReplaced) {
+            project.replacedByProjectId = null;
         }
 
-        if (!project.isSubstituicao) {
-            project.substituiProjectId = null;
+        if (!project.isReplacement) {
+            project.replacesProjectId = null;
         }
 
-        if (project.isSubstituido) {
-            if (!project.substituidoPorProjectCode) {
+        if (project.isReplaced) {
+            if (!project.replacedByProjectCode) {
                 throw new Error(`Projeto "${project.name}": informe o código do projeto substituto.`);
             }
 
-            if (project.substituidoPorProjectCode === project.projectCode) {
+            if (project.replacedByProjectCode === project.projectCode) {
                 throw new Error(`Projeto "${project.name}": o código do projeto substituto não pode ser o próprio projeto.`);
             }
 
-            if (!isSubstituidoEligibleStatus(project)) {
+            if (!isReplacedEligibleStatus(project)) {
                 throw new Error(
                     `Projeto "${project.name}": só pode ser marcado como substituído até "Aguardando Projeto Técnico".`
                 );
             }
 
-            dbLookupCodes.add(project.substituidoPorProjectCode);
+            dbLookupCodes.add(project.replacedByProjectCode);
         }
     }
 
     const linkedByCode = await fetchGestaoParentProjectsByCodes([...dbLookupCodes]);
-    const substituidoStatusId = getSubstituidoStatusId();
+    const substituidoStatusId = getReplacedStatusId();
 
     if (!substituidoStatusId) {
-        const needsSubstituidoStatus = projects.some(project => project.isSubstituido);
+        const needsSubstituidoStatus = projects.some(project => project.isReplaced);
         if (needsSubstituidoStatus) {
             throw new Error('Status "Projeto Substituído" não encontrado. Execute supabase/create-order-project-substituido.sql no Supabase.');
         }
     }
 
     for (const project of projects) {
-        if (project.isSubstituido) {
-            const replacement = linkedByCode[project.substituidoPorProjectCode];
+        if (project.isReplaced) {
+            const replacement = linkedByCode[project.replacedByProjectCode];
             if (!replacement) {
-                throw new Error(`Projeto "${project.name}": projeto substituto "${project.substituidoPorProjectCode}" não encontrado.`);
+                throw new Error(`Projeto "${project.name}": projeto substituto "${project.replacedByProjectCode}" não encontrado.`);
             }
 
-            if (replacement.isComplementar) {
+            if (replacement.isComplementary) {
                 throw new Error(`Projeto "${project.name}": o projeto substituto não pode ser complementar.`);
             }
 
-            if (replacement.isSubstituido) {
+            if (replacement.isReplaced) {
                 throw new Error(`Projeto "${project.name}": o projeto substituto já está marcado como substituído.`);
             }
 
-            project.substituidoPorProjectId = replacement.id;
-            project.substituidoPorProject = {
+            project.replacedByProjectId = replacement.id;
+            project.replacedByProject = {
                 projectCode: replacement.projectCode,
                 order: replacement.order || null
             };
@@ -347,12 +347,12 @@ async function validateAndResolveGestaoSubstituidoProjects(projects) {
 }
 
 async function protectGestaoSubstituicaoFields(projects) {
-    const persistedSubstituicao = (projects || []).filter(project => project.id && project.isSubstituicao);
+    const persistedSubstituicao = (projects || []).filter(project => project.id && project.isReplacement);
     if (!persistedSubstituicao.length) return projects;
 
     const selectVariants = [
-        'id, isSubstituicao, substituiProjectId, substitui:substituiProjectId(projectCode)',
-        'id, isSubstituicao, substituiProjectId'
+        'id, isReplacement, replacesProjectId, replaces:replacesProjectId(projectCode)',
+        'id, isReplacement, replacesProjectId'
     ];
 
     let rows = [];
@@ -372,12 +372,12 @@ async function protectGestaoSubstituicaoFields(projects) {
 
     return (projects || []).map(project => {
         const original = byId[Number(project.id)];
-        if (!original?.isSubstituicao) return project;
+        if (!original?.isReplacement) return project;
 
-        const originalCode = normalizeProjectCodeInput(original.substitui?.projectCode || '');
-        const incomingCode = normalizeProjectCodeInput(project.substituiProjectCode || '');
+        const originalCode = normalizeProjectCodeInput(original.replaces?.projectCode || '');
+        const incomingCode = normalizeProjectCodeInput(project.replacesProjectCode || '');
 
-        if (!project.isSubstituicao) {
+        if (!project.isReplacement) {
             throw new Error(`Projeto "${project.name}": a flag de substituição não pode ser removida.`);
         }
 
@@ -387,21 +387,21 @@ async function protectGestaoSubstituicaoFields(projects) {
 
         return {
             ...project,
-            isSubstituicao: true,
-            substituiProjectId: original.substituiProjectId || project.substituiProjectId || null,
-            substituiProjectCode: originalCode || incomingCode,
-            substituiProject: original.substitui || project.substituiProject || null
+            isReplacement: true,
+            replacesProjectId: original.replacesProjectId || project.replacesProjectId || null,
+            replacesProjectCode: originalCode || incomingCode,
+            replacesProject: original.replaces || project.replacesProject || null
         };
     });
 }
 
 async function syncGestaoSubstituidoCrossLinks(projects, now) {
     for (const project of projects) {
-        if (!project.isSubstituido || !project.substituidoPorProjectId) continue;
+        if (!project.isReplaced || !project.replacedByProjectId) continue;
 
         const payload = {
-            isSubstituicao: true,
-            substituiProjectId: project.id,
+            isReplacement: true,
+            replacesProjectId: project.id,
             updatedById: currentUser.id,
             updatedAt: now
         };
@@ -409,15 +409,15 @@ async function syncGestaoSubstituidoCrossLinks(projects, now) {
         let { error } = await supabaseClient
             .from('OrderProject')
             .update(payload)
-            .eq('id', project.substituidoPorProjectId);
+            .eq('id', project.replacedByProjectId);
 
-        if (error?.message?.includes('isSubstituicao') || error?.message?.includes('substituiProjectId')) {
-            delete payload.isSubstituicao;
-            delete payload.substituiProjectId;
+        if (error?.message?.includes('isReplacement') || error?.message?.includes('replacesProjectId')) {
+            delete payload.isReplacement;
+            delete payload.replacesProjectId;
             ({ error } = await supabaseClient
                 .from('OrderProject')
                 .update(payload)
-                .eq('id', project.substituidoPorProjectId));
+                .eq('id', project.replacedByProjectId));
         }
 
         if (error) throw error;
@@ -429,14 +429,14 @@ async function fetchGestaoProjectsByOrderIds(orderIds) {
     if (!normalizedIds.length) return {};
 
     const selectVariants = [
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name)',
-        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
-        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name)',
-        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, deliveryPhaseId, approvalNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, approvalNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, isComplementary, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, environmentType:EnvironmentType(name)',
+        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, approvalNetworkPath, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, approvalNetworkPath, environmentType:EnvironmentType(name)',
+        'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, approvalNetworkPath',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name)',
         'id, orderId, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
@@ -484,15 +484,15 @@ async function enrichGestaoOrdersWithProjectStatuses(orders) {
 async function fetchGestaoOrders(filters = {}) {
     const orderCode = String(filters.orderCode || '').trim();
     const clientName = String(filters.clientName || '').trim();
-    const orderRelations = `cliente:Cliente(id, nome, ativo), consultor:appUsers!consultantUserId(id, name)`;
+    const orderRelations = `client:Client(id, name, isActive), consultor:appUsers!consultantUserId(id, name)`;
     const orderSelectVariants = [
-        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
-        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, caminhoRedeAprovacao, isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
-        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, isComplementar, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
-        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))`,
-        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
-        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao, environmentType:EnvironmentType(name))`,
-        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, caminhoRedeAprovacao)`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, deliveryPhaseId, approvalNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, approvalNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, isComplementary, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, environmentType:EnvironmentType(name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, approvalNetworkPath, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, approvalNetworkPath, environmentType:EnvironmentType(name))`,
+        `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, approvalNetworkPath)`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, deliveryDate, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
@@ -631,15 +631,15 @@ async function insertGestaoProject(orderId, project, now) {
     const deliveryPhaseId = typeof resolveGestaoDeliveryPhaseIdForPersist === 'function'
         ? resolveGestaoDeliveryPhaseIdForPersist(project.deliveryPhaseId)
         : (project.deliveryPhaseId || null);
-    const complementarFields = {
-        isComplementar: Boolean(project.isComplementar),
+    const complementaryFields = {
+        isComplementary: Boolean(project.isComplementary),
         parentProjectId: project.parentProjectId || null
     };
-    const substituidoFields = {
-        isSubstituido: Boolean(project.isSubstituido),
-        substituidoPorProjectId: project.isSubstituido ? (project.substituidoPorProjectId || null) : null,
-        isSubstituicao: Boolean(project.isSubstituicao),
-        substituiProjectId: project.isSubstituicao ? (project.substituiProjectId || null) : null
+    const replacedFields = {
+        isReplaced: Boolean(project.isReplaced),
+        replacedByProjectId: project.isReplaced ? (project.replacedByProjectId || null) : null,
+        isReplacement: Boolean(project.isReplacement),
+        replacesProjectId: project.isReplacement ? (project.replacesProjectId || null) : null
     };
     const payloadVariants = [
         {
@@ -650,13 +650,13 @@ async function insertGestaoProject(orderId, project, now) {
             saleValue: project.saleValue,
             deliveryDate: project.deliveryDate,
             deliveryPhaseId,
-            previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
+            technicalProjectForecastEndDate: project.technicalProjectForecastEndDate,
             technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
             statusId,
             designerId: project.designerId,
-            caminhoRedeAprovacao: project.caminhoRedeAprovacao,
-            ...complementarFields,
-            ...substituidoFields,
+            approvalNetworkPath: project.approvalNetworkPath,
+            ...complementaryFields,
+            ...replacedFields,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -668,13 +668,13 @@ async function insertGestaoProject(orderId, project, now) {
             environmentTypeId: project.environmentTypeId,
             deliveryDate: project.deliveryDate,
             deliveryPhaseId,
-            previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
+            technicalProjectForecastEndDate: project.technicalProjectForecastEndDate,
             technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
             statusId,
             designerId: project.designerId,
-            caminhoRedeAprovacao: project.caminhoRedeAprovacao,
-            ...complementarFields,
-            ...substituidoFields,
+            approvalNetworkPath: project.approvalNetworkPath,
+            ...complementaryFields,
+            ...replacedFields,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -725,8 +725,8 @@ async function insertGestaoProject(orderId, project, now) {
             return finishGestaoProjectInsert(insertResult.data?.id || null);
         }
 
-        if (insertResult.error.message?.includes('isComplementar') || insertResult.error.message?.includes('parentProjectId')) {
-            delete cleanPayload.isComplementar;
+        if (insertResult.error.message?.includes('isComplementary') || insertResult.error.message?.includes('parentProjectId')) {
+            delete cleanPayload.isComplementary;
             delete cleanPayload.parentProjectId;
             const retry = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
             if (!retry.error) return finishGestaoProjectInsert(retry.data?.id || null);
@@ -734,14 +734,14 @@ async function insertGestaoProject(orderId, project, now) {
             continue;
         }
 
-        if (insertResult.error.message?.includes('isSubstituido')
-            || insertResult.error.message?.includes('substituidoPorProjectId')
-            || insertResult.error.message?.includes('isSubstituicao')
-            || insertResult.error.message?.includes('substituiProjectId')) {
-            delete cleanPayload.isSubstituido;
-            delete cleanPayload.substituidoPorProjectId;
-            delete cleanPayload.isSubstituicao;
-            delete cleanPayload.substituiProjectId;
+        if (insertResult.error.message?.includes('isReplaced')
+            || insertResult.error.message?.includes('replacedByProjectId')
+            || insertResult.error.message?.includes('isReplacement')
+            || insertResult.error.message?.includes('replacesProjectId')) {
+            delete cleanPayload.isReplaced;
+            delete cleanPayload.replacedByProjectId;
+            delete cleanPayload.isReplacement;
+            delete cleanPayload.replacesProjectId;
             const retry = await supabaseClient.from('OrderProject').insert(cleanPayload).select('id').single();
             if (!retry.error) return finishGestaoProjectInsert(retry.data?.id || null);
             lastError = retry.error;
@@ -771,15 +771,15 @@ async function updateGestaoProject(project, now) {
     const deliveryPhaseId = typeof resolveGestaoDeliveryPhaseIdForPersist === 'function'
         ? resolveGestaoDeliveryPhaseIdForPersist(project.deliveryPhaseId)
         : (project.deliveryPhaseId || null);
-    const complementarFields = {
-        isComplementar: Boolean(project.isComplementar),
-        parentProjectId: project.isComplementar ? (project.parentProjectId || null) : null
+    const complementaryFields = {
+        isComplementary: Boolean(project.isComplementary),
+        parentProjectId: project.isComplementary ? (project.parentProjectId || null) : null
     };
-    const substituidoFields = {
-        isSubstituido: Boolean(project.isSubstituido),
-        substituidoPorProjectId: project.isSubstituido ? (project.substituidoPorProjectId || null) : null,
-        isSubstituicao: Boolean(project.isSubstituicao),
-        substituiProjectId: project.isSubstituicao ? (project.substituiProjectId || null) : null
+    const replacedFields = {
+        isReplaced: Boolean(project.isReplaced),
+        replacedByProjectId: project.isReplaced ? (project.replacedByProjectId || null) : null,
+        isReplacement: Boolean(project.isReplacement),
+        replacesProjectId: project.isReplacement ? (project.replacesProjectId || null) : null
     };
     const payloadVariants = [
         {
@@ -789,13 +789,13 @@ async function updateGestaoProject(project, now) {
             saleValue: project.saleValue,
             deliveryDate: project.deliveryDate,
             deliveryPhaseId,
-            previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
+            technicalProjectForecastEndDate: project.technicalProjectForecastEndDate,
             technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
             statusId,
             designerId: project.designerId,
-            caminhoRedeAprovacao: project.caminhoRedeAprovacao,
-            ...complementarFields,
-            ...substituidoFields,
+            approvalNetworkPath: project.approvalNetworkPath,
+            ...complementaryFields,
+            ...replacedFields,
             updatedById: currentUser.id,
             updatedAt: now
         },
@@ -805,13 +805,13 @@ async function updateGestaoProject(project, now) {
             environmentTypeId: project.environmentTypeId,
             deliveryDate: project.deliveryDate,
             deliveryPhaseId,
-            previsaoConclusaoProjetoTecnico: project.previsaoConclusaoProjetoTecnico,
+            technicalProjectForecastEndDate: project.technicalProjectForecastEndDate,
             technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
             statusId,
             designerId: project.designerId,
-            caminhoRedeAprovacao: project.caminhoRedeAprovacao,
-            ...complementarFields,
-            ...substituidoFields,
+            approvalNetworkPath: project.approvalNetworkPath,
+            ...complementaryFields,
+            ...replacedFields,
             updatedById: currentUser.id,
             updatedAt: now
         },
@@ -852,8 +852,8 @@ async function updateGestaoProject(project, now) {
             break;
         }
 
-        if (error.message?.includes('isComplementar') || error.message?.includes('parentProjectId')) {
-            delete cleanPayload.isComplementar;
+        if (error.message?.includes('isComplementary') || error.message?.includes('parentProjectId')) {
+            delete cleanPayload.isComplementary;
             delete cleanPayload.parentProjectId;
             const retry = await supabaseClient
                 .from('OrderProject')
@@ -867,14 +867,14 @@ async function updateGestaoProject(project, now) {
             continue;
         }
 
-        if (error.message?.includes('isSubstituido')
-            || error.message?.includes('substituidoPorProjectId')
-            || error.message?.includes('isSubstituicao')
-            || error.message?.includes('substituiProjectId')) {
-            delete cleanPayload.isSubstituido;
-            delete cleanPayload.substituidoPorProjectId;
-            delete cleanPayload.isSubstituicao;
-            delete cleanPayload.substituiProjectId;
+        if (error.message?.includes('isReplaced')
+            || error.message?.includes('replacedByProjectId')
+            || error.message?.includes('isReplacement')
+            || error.message?.includes('replacesProjectId')) {
+            delete cleanPayload.isReplaced;
+            delete cleanPayload.replacedByProjectId;
+            delete cleanPayload.isReplacement;
+            delete cleanPayload.replacesProjectId;
             const retry = await supabaseClient
                 .from('OrderProject')
                 .update(cleanPayload)
@@ -1041,11 +1041,11 @@ async function saveGestaoOrder(event) {
                 alertAppDialog('Preencha código, nome, ambiente e status de todos os projetos.');
                 return;
             }
-            if (project.isComplementar && !project.parentProjectCode) {
+            if (project.isComplementary && !project.parentProjectCode) {
                 alertAppDialog(`Projeto "${project.name}": informe o código do projeto pai.`);
                 return;
             }
-            if (project.isSubstituido && !project.substituidoPorProjectCode) {
+            if (project.isReplaced && !project.replacedByProjectCode) {
                 alertAppDialog(`Projeto "${project.name}": informe o código do projeto substituto.`);
                 return;
             }
@@ -1177,7 +1177,6 @@ async function saveGestaoOrder(event) {
         await updateSalesOrderRecord(orderId, {
             clientId,
             consultantUserId,
-            consultantName,
             updatedById: currentUser?.id || null,
             updatedAt: now
         });
@@ -1208,7 +1207,7 @@ async function saveGestaoOrder(event) {
             || error.message?.includes('statusId')
             || error.message?.includes('OrderProjectStatus')
             || error.message?.includes('saleValue')
-            || error.message?.includes('isComplementar')
+            || error.message?.includes('isComplementary')
             || error.message?.includes('parentProjectId')
             || error.message?.includes('OrderDeliveryPhase')
             || error.message?.includes('deliveryPhaseId')

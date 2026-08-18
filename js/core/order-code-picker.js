@@ -9,8 +9,8 @@ async function searchOrdersByClientName(clientName, limit = 50) {
 
     const { data, error } = await supabaseClient
         .from('salesOrders')
-        .select(`id, orderCode, clientId, consultantUserId, cliente:Cliente!inner(nome), consultor:appUsers!consultantUserId(name)`)
-        .ilike('cliente.nome', `%${term}%`)
+        .select(`id, orderCode, clientId, consultantUserId, client:Client!inner(name), consultor:appUsers!consultantUserId(name)`)
+        .ilike('client.name', `%${term}%`)
         .order('orderCode', { ascending: false })
         .limit(limit);
 

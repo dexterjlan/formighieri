@@ -10,13 +10,13 @@ const ANTEPROJETO_DISPOSITION_OK = 'ok';
 const ANTEPROJETO_CONFERENCE_REQUEST_TEXT = 'Requisição criada a partir da conferência.';
 
 function normalizeConsultorDisposition(observation) {
-    const disposition = observation?.consultorDisposition;
+    const disposition = observation?.consultantDisposition;
     if (disposition === ANTEPROJETO_DISPOSITION_REQ_PROJ
         || disposition === ANTEPROJETO_DISPOSITION_REQ_CONS
         || disposition === ANTEPROJETO_DISPOSITION_OK) {
         return disposition;
     }
-    if (observation?.consultorChecked) {
+    if (observation?.consultantChecked) {
         return ANTEPROJETO_DISPOSITION_OK;
     }
     return null;
@@ -35,11 +35,11 @@ function getObservationConferenteText(observation) {
         || '';
 }
 
-function buildConferenceRequestActivityDescription(moduleName, conferenteText, consultorResponse) {
+function buildConferenceRequestActivityDescription(moduleName, conferenteText, consultantResponse) {
     return [
         `Módulo: ${moduleName || '—'}`,
         `Conferente: ${conferenteText || '—'}`,
-        `Resp. Consultor: ${consultorResponse || '—'}`
+        `Resp. Consultor: ${consultantResponse || '—'}`
     ].join('\n');
 }
 
@@ -59,7 +59,7 @@ function validateConsultorObservationDispositions(observations) {
 
         if ((disposition === ANTEPROJETO_DISPOSITION_REQ_PROJ
                 || disposition === ANTEPROJETO_DISPOSITION_REQ_CONS)
-            && !String(observation.consultorResponse || '').trim()) {
+            && !String(observation.consultantResponse || '').trim()) {
             return {
                 valid: false,
                 message: 'Informe a resposta do consultor nas observações marcadas como Req. Proj. ou Req. Cons.'
@@ -141,7 +141,7 @@ function canApproveAnteprojetoConference(conference) {
     return isGestorComercial();
 }
 
-function canReturnAnteprojetoConferenceToConsultor(conference) {
+function canReturnPreliminaryDesignConferenceToConsultor(conference) {
     if (!conference || conference.status !== 'Confirmada') return false;
     if (currentUser?.role === 'Admin') return true;
     return isGestorComercial();
@@ -353,7 +353,7 @@ function getUsedOrderProjectIds(editingConferenceId = null) {
 
 async function loadAnteprojetoObservations() {
     const { data, error } = await supabaseClient
-        .from('AnteprojetoObservation')
+        .from('PreliminaryDesignObservation')
         .select('id, text')
         .order('text', { ascending: true });
 
@@ -385,14 +385,14 @@ async function upsertAnteprojetoObservation(text) {
     if (existing) return existing.id;
 
     const { data, error } = await supabaseClient
-        .from('AnteprojetoObservation')
+        .from('PreliminaryDesignObservation')
         .insert({ text: trimmed, createdById: currentUser.id })
         .select('id, text')
         .single();
 
     if (error?.code === '23505') {
         const { data: found } = await supabaseClient
-            .from('AnteprojetoObservation')
+            .from('PreliminaryDesignObservation')
             .select('id, text')
             .eq('text', trimmed)
             .maybeSingle();
@@ -457,26 +457,26 @@ function canShowOrderProjectVerConferenciaAction(project, orderId, conferenceCon
     return false;
 }
 
-async function fetchAnteprojetoConferenceContextByProjectIds(projectIds, orderId) {
+async function fetchPreliminaryDesignConferenceContextByProjectIds(projectIds, orderId) {
     const normalizedProjectIds = [...new Set(projectIds.map(id => Number(id)).filter(Boolean))];
     const normalizedOrderId = Number(orderId);
     if (!normalizedProjectIds.length || !normalizedOrderId) return {};
 
     let result = await supabaseClient
-        .from('AnteprojetoConferenceProject')
-        .select('orderProjectId, conference:AnteprojetoConference(id, orderId, createdAt)')
+        .from('PreliminaryDesignConferenceProject')
+        .select('orderProjectId, conference:PreliminaryDesignConference(id, orderId, createdAt)')
         .in('orderProjectId', normalizedProjectIds);
 
     let rows = result.data || [];
 
-    if (result.error?.message?.includes('AnteprojetoConference')) {
+    if (result.error?.message?.includes('PreliminaryDesignConference')) {
         const fallback = await supabaseClient
-            .from('AnteprojetoConferenceProject')
+            .from('PreliminaryDesignConferenceProject')
             .select('orderProjectId, conferenceId')
             .in('orderProjectId', normalizedProjectIds);
 
         if (fallback.error) {
-            console.error('fetchAnteprojetoConferenceContextByProjectIds:', fallback.error);
+            console.error('fetchPreliminaryDesignConferenceContextByProjectIds:', fallback.error);
             return {};
         }
 
@@ -486,12 +486,12 @@ async function fetchAnteprojetoConferenceContextByProjectIds(projectIds, orderId
 
         if (conferenceIds.length) {
             const { data: conferences, error } = await supabaseClient
-                .from('AnteprojetoConference')
+                .from('PreliminaryDesignConference')
                 .select('id, orderId, createdAt')
                 .in('id', conferenceIds);
 
             if (error) {
-                console.error('fetchAnteprojetoConferenceContextByProjectIds:', error);
+                console.error('fetchPreliminaryDesignConferenceContextByProjectIds:', error);
                 return {};
             }
 
@@ -505,7 +505,7 @@ async function fetchAnteprojetoConferenceContextByProjectIds(projectIds, orderId
             conference: conferenceById[Number(row.conferenceId)] || null
         }));
     } else if (result.error) {
-        console.error('fetchAnteprojetoConferenceContextByProjectIds:', result.error);
+        console.error('fetchPreliminaryDesignConferenceContextByProjectIds:', result.error);
         return {};
     }
 
@@ -552,11 +552,11 @@ async function openOrderProjectConferenciaModal(projectId, orderId = activeOrder
 
     activeOrderId = normalizedOrderId;
 
-    if (typeof loadAnteprojetoConferences === 'function') {
-        await loadAnteprojetoConferences(normalizedOrderId);
+    if (typeof loadPreliminaryDesignConferences === 'function') {
+        await loadPreliminaryDesignConferences(normalizedOrderId);
     }
 
-    await openAnteprojetoModal();
+    await openPreliminaryDesignModal();
 }
 
 async function enrichAnteprojetoProjectsWithStatus(projects) {
@@ -586,28 +586,19 @@ async function enrichAnteprojetoProjectsWithStatus(projects) {
 }
 
 
-window.approveAnteprojetoConference = approveAnteprojetoConference;
-window.approveAnteprojetoConferenceFromPendencias = approveAnteprojetoConferenceFromPendencias;
-window.showAnteprojetoApproveDeliveryModal = showAnteprojetoApproveDeliveryModal;
-window.closeAnteprojetoApproveDeliveryModal = closeAnteprojetoApproveDeliveryModal;
-window.canReturnAnteprojetoConferenceToConsultor = canReturnAnteprojetoConferenceToConsultor;
-window.showAnteprojetoReturnObservationForm = showAnteprojetoReturnObservationForm;
-window.returnAnteprojetoConferenceToConsultor = returnAnteprojetoConferenceToConsultor;
-window.closeAnteprojetoReturnModal = closeAnteprojetoReturnModal;
 
-
-function bindAnteprojetoEvents() {
-    document.getElementById('btn-new-anteprojeto')?.addEventListener('click', () => openAnteprojetoModal());
+function bindPreliminaryDesignEvents() {
+    document.getElementById('btn-new-anteprojeto')?.addEventListener('click', () => openPreliminaryDesignModal());
     document.getElementById('btn-anteprojeto-modal-confirm')?.addEventListener('click', async () => {
-        confirmAnteprojetoConferenceFromModal();
+        confirmPreliminaryDesignConferenceFromModal();
     });
     document.getElementById('btn-anteprojeto-modal-approve')?.addEventListener('click', async () => {
         if (!editingAnteprojetoConferenceId) return;
-        await showAnteprojetoApproveDeliveryModal(editingAnteprojetoConferenceId);
+        await showPreliminaryDesignApproveDeliveryModal(editingAnteprojetoConferenceId);
     });
     document.getElementById('btn-anteprojeto-modal-return')?.addEventListener('click', () => {
         if (!editingAnteprojetoConferenceId) return;
-        showAnteprojetoReturnObservationForm(editingAnteprojetoConferenceId);
+        showPreliminaryDesignReturnObservationForm(editingAnteprojetoConferenceId);
     });
     document.getElementById('btn-anteprojeto-return-modal-cancel')?.addEventListener('click', closeAnteprojetoReturnModal);
     document.getElementById('btn-anteprojeto-return-modal-submit')?.addEventListener('click', submitAnteprojetoReturnModal);
@@ -636,3 +627,5 @@ function bindAnteprojetoEvents() {
         await saveAnteprojetoConference();
     });
 }
+
+const bindAnteprojetoEvents = bindPreliminaryDesignEvents;

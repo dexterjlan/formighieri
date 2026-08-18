@@ -39,7 +39,7 @@ const IMPLANTACAO_STANDARD_PURCHASE_UI = [
 let activeImplantacaoOrderProjectId = null;
 let activeImplantacaoRecord = null;
 let activeImplantacaoProjectName = '';
-let activeImplantacaoPurchaseItems = [];
+let activeImplementationPurchaseItems = [];
 let activeImplantacaoThirdPartyProjects = [];
 let implantacaoThirdPartySubtypesCache = [];
 
@@ -51,12 +51,6 @@ function canAccessImplantacaoModal() {
 
 function canActImplantacao() {
     return canActPendenciasPpcpStatus();
-}
-
-function getImplantacaoStatusBadgeClass(status) {
-    if (status === IMPLANTACAO_STATUS_ENVIADO_PRODUCAO) return 'bg-violet-100 text-violet-800';
-    if (status === IMPLANTACAO_STATUS_ENCERRADO) return 'bg-slate-200 text-slate-700';
-    return 'bg-teal-100 text-teal-800';
 }
 
 function formatImplantacaoComercialDate(dateStr) {
@@ -77,16 +71,16 @@ function updateImplantacaoComercialDateLabel(checkboxId, dateLabelId, dateValue)
     }
 }
 
-function getImplantacaoPurchaseItemsByType(purchaseType) {
-    return (activeImplantacaoPurchaseItems || []).filter(item => item.purchaseType === purchaseType);
+function getImplementationPurchaseItemsByType(purchaseType) {
+    return (activeImplementationPurchaseItems || []).filter(item => item.purchaseType === purchaseType);
 }
 
 function getImplantacaoStandardPurchaseItem(purchaseType) {
-    return getImplantacaoPurchaseItemsByType(purchaseType)[0] || null;
+    return getImplementationPurchaseItemsByType(purchaseType)[0] || null;
 }
 
 function getImplantacaoTerceiroPurchaseItems() {
-    return getImplantacaoPurchaseItemsByType(IMPLANTACAO_PURCHASE_TYPE_TERCEIRO);
+    return getImplementationPurchaseItemsByType(IMPLANTACAO_PURCHASE_TYPE_TERCEIRO);
 }
 
 function getImplantacaoTerceirosSharedPath() {
@@ -123,7 +117,7 @@ function readImplantacaoTerceiroSubtypeRowsFromForm() {
 
     return (implantacaoThirdPartySubtypesCache || []).map(subtype => {
         const subtypeId = Number(subtype.id);
-        const existing = activeImplantacaoPurchaseItems.find(item => (
+        const existing = activeImplementationPurchaseItems.find(item => (
             item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO
             && Number(item.thirdPartySubtypeId) === subtypeId
         )) || {};
@@ -145,7 +139,7 @@ function readImplantacaoTerceiroSubtypeRowsFromForm() {
     });
 }
 
-function readImplantacaoPurchaseItemsFromForm() {
+function readImplementationPurchaseItemsFromForm() {
     const items = [];
 
     IMPLANTACAO_STANDARD_PURCHASE_UI.forEach(config => {
@@ -165,10 +159,10 @@ function readImplantacaoPurchaseItemsFromForm() {
     return items;
 }
 
-function getImplantacaoPurchaseItemsForSave() {
+function getImplementationPurchaseItemsForSave() {
     const sharedPath = getImplantacaoTerceirosSharedPath();
 
-    return readImplantacaoPurchaseItemsFromForm()
+    return readImplementationPurchaseItemsFromForm()
         .filter(item => item.purchaseType !== IMPLANTACAO_PURCHASE_TYPE_TERCEIRO || item.id)
         .map(item => (
             item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO
@@ -178,11 +172,11 @@ function getImplantacaoPurchaseItemsForSave() {
 }
 
 function readImplantacaoFormValues() {
-    const purchaseItems = readImplantacaoPurchaseItemsFromForm();
+    const purchaseItems = readImplementationPurchaseItemsFromForm();
 
     return {
-        projetoPath: document.getElementById('implantacao-projeto-path')?.value?.trim() || '',
-        projetoChecked: Boolean(document.getElementById('implantacao-projeto-checked')?.checked),
+        projectFilePath: document.getElementById('implantacao-projeto-path')?.value?.trim() || '',
+        isProjectChecked: Boolean(document.getElementById('implantacao-projeto-checked')?.checked),
         wpsOpCode: document.getElementById('implantacao-wps-op-code')?.value?.trim() || '',
         purchaseItems
     };
@@ -300,8 +294,8 @@ async function loadImplantacaoThirdPartySubtypes(activeOnly = true) {
 }
 
 function populateImplantacaoForm(record) {
-    document.getElementById('implantacao-projeto-path').value = record?.projetoPath || '';
-    document.getElementById('implantacao-projeto-checked').checked = Boolean(record?.projetoChecked);
+    document.getElementById('implantacao-projeto-path').value = record?.projectFilePath || '';
+    document.getElementById('implantacao-projeto-checked').checked = Boolean(record?.isProjectChecked);
     document.getElementById('implantacao-wps-op-code').value = record?.wpsOpCode || '';
 
     const terceiroItems = getImplantacaoTerceiroPurchaseItems();
@@ -381,7 +375,7 @@ function canSendImplantacaoTerceiroItem(item) {
     return true;
 }
 
-function canSendImplantacaoPurchaseItem(item) {
+function canSendImplementationPurchaseItem(item) {
     if (item?.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO) {
         return canSendImplantacaoTerceiroItem(item);
     }
@@ -431,12 +425,12 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
 
     const canEnviarProducao = canAct
         && !isEnviadoProducao
-        && values.projetoChecked
-        && Boolean(values.projetoPath)
+        && values.isProjectChecked
+        && Boolean(values.projectFilePath)
         && Boolean(values.wpsOpCode);
 
     const canEnviarCompras = canAct
-        && (values.purchaseItems || []).some(canSendImplantacaoPurchaseItem);
+        && (values.purchaseItems || []).some(canSendImplementationPurchaseItem);
 
     const standardItems = IMPLANTACAO_STANDARD_PURCHASE_UI.map(config => (
         values.purchaseItems.find(item => item.purchaseType === config.purchaseType)
@@ -444,7 +438,7 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
     const allStandardChecked = standardItems.every(item => Boolean(item?.isChecked));
 
     const canEncerrar = canAct
-        && values.projetoChecked
+        && values.isProjectChecked
         && allStandardChecked
         && allImplantacaoThirdPartyProjectsApprovedAndSent();
 
@@ -457,11 +451,11 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
     setImplantacaoProjetoFieldsDisabled(isEnviadoProducao || !canAct);
 }
 
-async function fetchImplantacaoPurchaseItems(implantacaoId) {
+async function fetchImplementationPurchaseItems(implementationId) {
     const { data, error } = await supabaseClient
-        .from('ImplantacaoPurchaseItem')
+        .from('ImplementationPurchaseItem')
         .select('*, thirdPartySubtype:ThirdPartySubtype(id, name, isActive)')
-        .eq('implantacaoId', implantacaoId)
+        .eq('implementationId', implementationId)
         .order('purchaseType', { ascending: true })
         .order('id', { ascending: true });
 
@@ -469,15 +463,15 @@ async function fetchImplantacaoPurchaseItems(implantacaoId) {
     return data || [];
 }
 
-async function ensureStandardImplantacaoPurchaseItems(implantacaoId) {
-    const existing = await fetchImplantacaoPurchaseItems(implantacaoId);
+async function ensureStandardImplementationPurchaseItems(implementationId) {
+    const existing = await fetchImplementationPurchaseItems(implementationId);
     const missingTypes = [IMPLANTACAO_PURCHASE_TYPE_MATERIAL, IMPLANTACAO_PURCHASE_TYPE_FERRAGEM, IMPLANTACAO_PURCHASE_TYPE_TINTA]
         .filter(type => !existing.some(item => item.purchaseType === type));
 
     if (missingTypes.length) {
         const now = new Date().toISOString();
         const rows = missingTypes.map(purchaseType => ({
-            implantacaoId,
+            implementationId,
             purchaseType,
             createdById: currentUser?.id || null,
             updatedById: currentUser?.id || null,
@@ -485,24 +479,24 @@ async function ensureStandardImplantacaoPurchaseItems(implantacaoId) {
         }));
 
         const { error } = await supabaseClient
-            .from('ImplantacaoPurchaseItem')
+            .from('ImplementationPurchaseItem')
             .insert(rows);
 
         if (error) throw error;
-        return fetchImplantacaoPurchaseItems(implantacaoId);
+        return fetchImplementationPurchaseItems(implementationId);
     }
 
     return existing;
 }
 
-async function loadActiveImplantacaoPurchaseItems(implantacaoId) {
-    activeImplantacaoPurchaseItems = await ensureStandardImplantacaoPurchaseItems(implantacaoId);
-    return activeImplantacaoPurchaseItems;
+async function loadActiveImplementationPurchaseItems(implementationId) {
+    activeImplementationPurchaseItems = await ensureStandardImplementationPurchaseItems(implementationId);
+    return activeImplementationPurchaseItems;
 }
 
-async function fetchImplantacaoByOrderProjectId(orderProjectId) {
+async function fetchImplementationByOrderProjectId(orderProjectId) {
     const { data, error } = await supabaseClient
-        .from('Implantacao')
+        .from('Implementation')
         .select('*')
         .eq('orderProjectId', orderProjectId)
         .maybeSingle();
@@ -511,12 +505,13 @@ async function fetchImplantacaoByOrderProjectId(orderProjectId) {
     return data;
 }
 
-window.fetchImplantacaoByOrderProjectId = fetchImplantacaoByOrderProjectId;
+window.fetchImplementationByOrderProjectId = fetchImplementationByOrderProjectId;
+window.fetchImplantacaoByOrderProjectId = fetchImplementationByOrderProjectId;
 
 async function createImplantacaoRecord(orderProjectId) {
     const now = new Date().toISOString();
     const { data, error } = await supabaseClient
-        .from('Implantacao')
+        .from('Implementation')
         .insert({
             orderProjectId,
             status: IMPLANTACAO_STATUS_ABERTO,
@@ -529,14 +524,14 @@ async function createImplantacaoRecord(orderProjectId) {
 
     if (error) throw error;
 
-    await ensureStandardImplantacaoPurchaseItems(data.id);
+    await ensureStandardImplementationPurchaseItems(data.id);
     return data;
 }
 
 async function ensureImplantacaoRecord(orderProjectId) {
-    const existing = await fetchImplantacaoByOrderProjectId(orderProjectId);
+    const existing = await fetchImplementationByOrderProjectId(orderProjectId);
     if (existing) {
-        await ensureStandardImplantacaoPurchaseItems(existing.id);
+        await ensureStandardImplementationPurchaseItems(existing.id);
         return existing;
     }
     return createImplantacaoRecord(orderProjectId);
@@ -558,7 +553,7 @@ async function isOrderProjectInImplantacaoStatus(orderProjectId) {
         || data?.projectStatus?.name === IMPLANTACAO_PROJECT_STATUS_IMPLANTACAO;
 }
 
-async function fetchOrderProjectsInImplantacaoStatus() {
+async function fetchOrderProjectsInImplementationStatus() {
     const statusId = await getOrderProjectStatusIdForImplantacao(IMPLANTACAO_PROJECT_STATUS_IMPLANTACAO);
     if (!statusId) return [];
 
@@ -577,14 +572,14 @@ async function fetchOrderProjectsInImplantacaoStatus() {
     }
 
     if (result.error) {
-        console.error('fetchOrderProjectsInImplantacaoStatus:', result.error);
+        console.error('fetchOrderProjectsInImplementationStatus:', result.error);
         return [];
     }
 
     return result.data || [];
 }
 
-async function ensureImplantacaoRecordsForProjects(projects = []) {
+async function ensureImplementationRecordsForProjects(projects = []) {
     const recordsByProjectId = {};
 
     for (const project of projects) {
@@ -595,14 +590,14 @@ async function ensureImplantacaoRecordsForProjects(projects = []) {
             const record = await ensureImplantacaoRecord(projectId);
             if (record) recordsByProjectId[projectId] = record;
         } catch (error) {
-            console.warn('ensureImplantacaoRecordsForProjects:', projectId, error);
+            console.warn('ensureImplementationRecordsForProjects:', projectId, error);
         }
     }
 
     return recordsByProjectId;
 }
 
-async function syncImplantacaoRecordsMapForProjects(projects = [], implantacaoByProjectId = {}) {
+async function syncImplementationRecordsMapForProjects(projects = [], implantacaoByProjectId = {}) {
     const syncedMap = { ...implantacaoByProjectId };
     const missingProjects = (projects || []).filter(project => {
         const statusName = project?.projectStatus?.name || '';
@@ -611,15 +606,15 @@ async function syncImplantacaoRecordsMapForProjects(projects = [], implantacaoBy
 
     if (!missingProjects.length) return syncedMap;
 
-    const createdMap = await ensureImplantacaoRecordsForProjects(missingProjects);
+    const createdMap = await ensureImplementationRecordsForProjects(missingProjects);
     return { ...syncedMap, ...createdMap };
 }
 
 function buildImplantacaoUpdatePayload(formValues, extra = {}) {
     const now = new Date().toISOString();
     return {
-        projetoPath: formValues.projetoPath || null,
-        projetoChecked: formValues.projetoChecked,
+        projectFilePath: formValues.projectFilePath || null,
+        isProjectChecked: formValues.isProjectChecked,
         wpsOpCode: formValues.wpsOpCode || null,
         updatedById: currentUser?.id || null,
         updatedAt: now,
@@ -627,10 +622,10 @@ function buildImplantacaoUpdatePayload(formValues, extra = {}) {
     };
 }
 
-function buildImplantacaoPurchaseItemPayload(item, implantacaoId) {
+function buildImplementationPurchaseItemPayload(item, implementationId) {
     const now = new Date().toISOString();
     return {
-        implantacaoId,
+        implementationId,
         purchaseType: item.purchaseType,
         thirdPartySubtypeId: item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO
             ? (item.thirdPartySubtypeId || null)
@@ -644,18 +639,18 @@ function buildImplantacaoPurchaseItemPayload(item, implantacaoId) {
     };
 }
 
-async function saveImplantacaoPurchaseItems(purchaseItems = [], implantacaoId = activeImplantacaoRecord?.id) {
-    if (!implantacaoId || !purchaseItems.length) return activeImplantacaoPurchaseItems;
+async function saveImplementationPurchaseItems(purchaseItems = [], implementationId = activeImplantacaoRecord?.id) {
+    if (!implementationId || !purchaseItems.length) return activeImplementationPurchaseItems;
 
     const now = new Date().toISOString();
     const savedItems = [];
 
     for (const item of purchaseItems) {
-        const payload = buildImplantacaoPurchaseItemPayload(item, implantacaoId);
+        const payload = buildImplementationPurchaseItemPayload(item, implementationId);
 
         if (item.id) {
             const { data, error } = await supabaseClient
-                .from('ImplantacaoPurchaseItem')
+                .from('ImplementationPurchaseItem')
                 .update(payload)
                 .eq('id', item.id)
                 .select('*, thirdPartySubtype:ThirdPartySubtype(id, name, isActive)')
@@ -667,7 +662,7 @@ async function saveImplantacaoPurchaseItems(purchaseItems = [], implantacaoId = 
         }
 
         const { data, error } = await supabaseClient
-            .from('ImplantacaoPurchaseItem')
+            .from('ImplementationPurchaseItem')
             .insert({
                 ...payload,
                 createdById: currentUser?.id || null,
@@ -680,8 +675,8 @@ async function saveImplantacaoPurchaseItems(purchaseItems = [], implantacaoId = 
         savedItems.push(data);
     }
 
-    const refreshed = await fetchImplantacaoPurchaseItems(implantacaoId);
-    activeImplantacaoPurchaseItems = refreshed;
+    const refreshed = await fetchImplementationPurchaseItems(implementationId);
+    activeImplementationPurchaseItems = refreshed;
     return refreshed;
 }
 
@@ -694,7 +689,7 @@ async function saveImplantacaoFormFields(options = {}) {
     const payload = buildImplantacaoUpdatePayload(formValues);
 
     const { data, error } = await supabaseClient
-        .from('Implantacao')
+        .from('Implementation')
         .update(payload)
         .eq('id', activeImplantacaoRecord.id)
         .select('*')
@@ -708,12 +703,12 @@ async function saveImplantacaoFormFields(options = {}) {
     }
 
     activeImplantacaoRecord = data;
-    await saveImplantacaoPurchaseItems(getImplantacaoPurchaseItemsForSave(), data.id);
+    await saveImplementationPurchaseItems(getImplementationPurchaseItemsForSave(), data.id);
     return data;
 }
 
-async function getImplantacaoPurchaseItemsForComprasSend(formValues) {
-    const itemsToSend = (formValues.purchaseItems || []).filter(canSendImplantacaoPurchaseItem);
+async function getImplementationPurchaseItemsForComprasSend(formValues) {
+    const itemsToSend = (formValues.purchaseItems || []).filter(canSendImplementationPurchaseItem);
     const itemsToPersist = (formValues.purchaseItems || []).filter(item => {
         if (item.purchaseType !== IMPLANTACAO_PURCHASE_TYPE_TERCEIRO) return true;
         if (item.id) return true;
@@ -722,9 +717,9 @@ async function getImplantacaoPurchaseItemsForComprasSend(formValues) {
         );
     });
 
-    await saveImplantacaoPurchaseItems(itemsToPersist, activeImplantacaoRecord.id);
+    await saveImplementationPurchaseItems(itemsToPersist, activeImplantacaoRecord.id);
 
-    return activeImplantacaoPurchaseItems.filter(item => (
+    return activeImplementationPurchaseItems.filter(item => (
         itemsToSend.some(row => (
             (row.id && Number(row.id) === Number(item.id))
             || (
@@ -732,7 +727,7 @@ async function getImplantacaoPurchaseItemsForComprasSend(formValues) {
                 && Number(item.thirdPartySubtypeId) === Number(row.thirdPartySubtypeId)
             )
         ))
-    )).filter(canSendImplantacaoPurchaseItem);
+    )).filter(canSendImplementationPurchaseItem);
 }
 
 async function getOrderProjectStatusIdForImplantacao(statusName) {
@@ -807,7 +802,7 @@ async function refreshImplantacaoRelatedViews(orderProjectId) {
     }
 }
 
-async function openImplantacaoModal(orderProjectId, projectName = '', options = {}) {
+async function openImplementationModal(orderProjectId, projectName = '', options = {}) {
     const { requireExisting = false } = options;
     if (!orderProjectId) return;
 
@@ -822,7 +817,7 @@ async function openImplantacaoModal(orderProjectId, projectName = '', options = 
         await loadImplantacaoThirdPartySubtypes(true);
 
         if (requireExisting) {
-            activeImplantacaoRecord = await fetchImplantacaoByOrderProjectId(activeImplantacaoOrderProjectId);
+            activeImplantacaoRecord = await fetchImplementationByOrderProjectId(activeImplantacaoOrderProjectId);
             if (!activeImplantacaoRecord) {
                 const inImplantacaoStatus = await isOrderProjectInImplantacaoStatus(activeImplantacaoOrderProjectId);
                 if (inImplantacaoStatus && canActImplantacao()) {
@@ -836,7 +831,7 @@ async function openImplantacaoModal(orderProjectId, projectName = '', options = 
             activeImplantacaoRecord = await ensureImplantacaoRecord(activeImplantacaoOrderProjectId);
         }
 
-        await loadActiveImplantacaoPurchaseItems(activeImplantacaoRecord.id);
+        await loadActiveImplementationPurchaseItems(activeImplantacaoRecord.id);
 
         if (typeof fetchThirdPartyProjectsByOrderProjectId === 'function') {
             activeImplantacaoThirdPartyProjects = await fetchThirdPartyProjectsByOrderProjectId(
@@ -851,30 +846,42 @@ async function openImplantacaoModal(orderProjectId, projectName = '', options = 
         updateImplantacaoActionButtons(activeImplantacaoRecord);
         toggleModal('implantacao-modal', true);
     } catch (error) {
-        if (error.message?.includes('ImplantacaoPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
+        if (error.message?.includes('ImplementationPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
             alertAppDialog('Execute supabase/create-third-party-subtype.sql e supabase/create-implantacao-purchase-item.sql no Supabase.');
-        } else if (error.message?.includes('Implantacao') || error.message?.includes('does not exist')) {
-            alertAppDialog('Tabela Implantacao não encontrada. Execute supabase/create-implantacao.sql no Supabase.');
+        } else if (error.message?.includes('Implementation') || error.message?.includes('does not exist')) {
+            alertAppDialog('Tabela Implementation não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.');
         } else {
             alertAppDialog('Erro ao abrir implantação: ' + error.message);
         }
     }
 }
 
-function closeImplantacaoModal() {
+function closeImplementationModal() {
     setImplantacaoModalLoading(false);
     toggleModal('implantacao-modal', false);
     activeImplantacaoOrderProjectId = null;
     activeImplantacaoRecord = null;
     activeImplantacaoProjectName = '';
-    activeImplantacaoPurchaseItems = [];
+    activeImplementationPurchaseItems = [];
     activeImplantacaoThirdPartyProjects = [];
 }
-window.closeImplantacaoModal = closeImplantacaoModal;
-window.openImplantacaoModal = openImplantacaoModal;
-window.ensureImplantacaoRecordsForProjects = ensureImplantacaoRecordsForProjects;
-window.fetchOrderProjectsInImplantacaoStatus = fetchOrderProjectsInImplantacaoStatus;
-window.syncImplantacaoRecordsMapForProjects = syncImplantacaoRecordsMapForProjects;
+window.closeImplementationModal = closeImplementationModal;
+window.openImplementationModal = openImplementationModal;
+window.ensureImplementationRecordsForProjects = ensureImplementationRecordsForProjects;
+window.fetchOrderProjectsInImplementationStatus = fetchOrderProjectsInImplementationStatus;
+window.syncImplementationRecordsMapForProjects = syncImplementationRecordsMapForProjects;
+window.closeImplantacaoModal = closeImplementationModal;
+window.openImplantacaoModal = openImplementationModal;
+window.ensureImplantacaoRecordsForProjects = ensureImplementationRecordsForProjects;
+window.fetchOrderProjectsInImplantacaoStatus = fetchOrderProjectsInImplementationStatus;
+window.syncImplantacaoRecordsMapForProjects = syncImplementationRecordsMapForProjects;
+
+const fetchImplantacaoByOrderProjectId = fetchImplementationByOrderProjectId;
+const openImplantacaoModal = openImplementationModal;
+const closeImplantacaoModal = closeImplementationModal;
+const ensureImplantacaoRecordsForProjects = ensureImplementationRecordsForProjects;
+const fetchOrderProjectsInImplantacaoStatus = fetchOrderProjectsInImplementationStatus;
+const syncImplantacaoRecordsMapForProjects = syncImplementationRecordsMapForProjects;
 
 const IMPLANTACAO_MODAL_OVERLAY = createModalOverlayConfig('implantacao-modal', {
     disableElementIds: [
@@ -926,7 +933,7 @@ async function handleImplantacaoEnviarProducao() {
     if (!activeImplantacaoRecord?.id || !activeImplantacaoOrderProjectId) return;
 
     const formValues = readImplantacaoFormValues();
-    if (!formValues.projetoChecked || !formValues.projetoPath || !formValues.wpsOpCode) {
+    if (!formValues.isProjectChecked || !formValues.projectFilePath || !formValues.wpsOpCode) {
         alertAppDialog('Marque o checklist de Projeto, informe o caminho da pasta e o código da OP no WPS.');
         return;
     }
@@ -942,14 +949,14 @@ async function handleImplantacaoEnviarProducao() {
 
     try {
         setImplantacaoModalLoading(true, 'Salvando e enviando para produção...');
-        await saveImplantacaoPurchaseItems(getImplantacaoPurchaseItemsForSave(), activeImplantacaoRecord.id);
+        await saveImplementationPurchaseItems(getImplementationPurchaseItemsForSave(), activeImplantacaoRecord.id);
 
         const payload = buildImplantacaoUpdatePayload(formValues, {
             status: IMPLANTACAO_STATUS_ENVIADO_PRODUCAO
         });
 
         const { data, error } = await supabaseClient
-            .from('Implantacao')
+            .from('Implementation')
             .update(payload)
             .eq('id', activeImplantacaoRecord.id)
             .select('*')
@@ -988,7 +995,7 @@ async function handleImplantacaoEnviarProducao() {
                 orderProjectId: activeImplantacaoOrderProjectId,
                 designerId,
                 wpsOpCode: formValues.wpsOpCode,
-                projetoPath: formValues.projetoPath
+                projectFilePath: formValues.projectFilePath
             });
         }
 
@@ -1010,7 +1017,7 @@ async function handleImplantacaoEnviarCompras() {
     if (!activeImplantacaoRecord?.id) return;
 
     const formValues = readImplantacaoFormValues();
-    const itemsToSend = (formValues.purchaseItems || []).filter(canSendImplantacaoPurchaseItem);
+    const itemsToSend = (formValues.purchaseItems || []).filter(canSendImplementationPurchaseItem);
 
     if (!itemsToSend.length) {
         const pendingApproval = (formValues.purchaseItems || []).filter(item => {
@@ -1043,15 +1050,15 @@ async function handleImplantacaoEnviarCompras() {
         setImplantacaoModalLoading(true, 'Registrando solicitações de compra...');
         const now = new Date().toISOString();
 
-        const purchaseItemsForCompras = await getImplantacaoPurchaseItemsForComprasSend(formValues);
+        const purchaseItemsForCompras = await getImplementationPurchaseItemsForComprasSend(formValues);
 
         await createComprasRecordsFromImplantacaoSend({
-            implantacaoId: activeImplantacaoRecord.id,
+            implementationId: activeImplantacaoRecord.id,
             orderProjectId: activeImplantacaoOrderProjectId,
             purchaseItems: purchaseItemsForCompras
         });
 
-        const updatedPurchaseItems = activeImplantacaoPurchaseItems.map(item => {
+        const updatedPurchaseItems = activeImplementationPurchaseItems.map(item => {
             if (!purchaseItemsForCompras.some(row => Number(row.id) === Number(item.id))) {
                 return item;
             }
@@ -1062,15 +1069,15 @@ async function handleImplantacaoEnviarCompras() {
             };
         });
 
-        await saveImplantacaoPurchaseItems(updatedPurchaseItems, activeImplantacaoRecord.id);
+        await saveImplementationPurchaseItems(updatedPurchaseItems, activeImplantacaoRecord.id);
 
         setImplantacaoModalLoading(true, 'Salvando implantação...');
         const payload = buildImplantacaoUpdatePayload(formValues, {
-            comprasEnviadoAt: now
+            purchasesSentAt: now
         });
 
         const { data, error } = await supabaseClient
-            .from('Implantacao')
+            .from('Implementation')
             .update(payload)
             .eq('id', activeImplantacaoRecord.id)
             .select('*')
@@ -1110,7 +1117,7 @@ async function handleImplantacaoEncerrar() {
         formValues.purchaseItems.find(item => item.purchaseType === config.purchaseType)
     ));
 
-    if (!formValues.projetoChecked || !standardItems.every(item => item?.isChecked)) {
+    if (!formValues.isProjectChecked || !standardItems.every(item => item?.isChecked)) {
         alertAppDialog('Marque todos os checklists para encerrar a implantação.');
         return;
     }
@@ -1132,14 +1139,14 @@ async function handleImplantacaoEncerrar() {
 
     try {
         setImplantacaoModalLoading(true, 'Encerrando implantação...');
-        await saveImplantacaoPurchaseItems(getImplantacaoPurchaseItemsForSave(), activeImplantacaoRecord.id);
+        await saveImplementationPurchaseItems(getImplementationPurchaseItemsForSave(), activeImplantacaoRecord.id);
 
         const payload = buildImplantacaoUpdatePayload(formValues, {
             status: IMPLANTACAO_STATUS_ENCERRADO
         });
 
         const { data, error } = await supabaseClient
-            .from('Implantacao')
+            .from('Implementation')
             .update(payload)
             .eq('id', activeImplantacaoRecord.id)
             .select('*')
@@ -1164,7 +1171,7 @@ async function handleImplantacaoEncerrar() {
     }
 }
 
-function bindImplantacaoEvents() {
+function bindImplementationEvents() {
     [
         'implantacao-projeto-path',
         'implantacao-compras-path',
@@ -1204,3 +1211,5 @@ function bindImplantacaoEvents() {
     document.getElementById('btn-implantacao-salvar')
         ?.addEventListener('click', handleImplantacaoSalvar);
 }
+
+const bindImplantacaoEvents = bindImplementationEvents;

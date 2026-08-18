@@ -213,7 +213,7 @@ async function applyPlantaLevantadaStatusToProjects(orderProjectIds) {
 async function syncPlantaLevantadaToOtherMedicoes(projects, currentMedicaoId) {
     const plantaByProjectId = new Map(
         projects
-            .filter(project => project.plantaLevantada)
+            .filter(project => project.isFloorPlanRaised)
             .map(project => [Number(project.orderProjectId), project])
     );
 
@@ -221,16 +221,16 @@ async function syncPlantaLevantadaToOtherMedicoes(projects, currentMedicaoId) {
     if (!orderProjectIds.length) return;
 
     const { data: siblings, error } = await supabaseClient
-        .from('MedicaoProject')
-        .select('id, orderProjectId, medicaoId, plantaLevantada')
+        .from('MeasurementProject')
+        .select('id, orderProjectId, measurementId, isFloorPlanRaised')
         .in('orderProjectId', orderProjectIds)
-        .eq('plantaLevantada', false);
+        .eq('isFloorPlanRaised', false);
 
-    if (error?.message?.includes('plantaLevantada')) return;
+    if (error?.message?.includes('isFloorPlanRaised')) return;
     if (error) throw error;
 
     const rowsToUpdate = (siblings || []).filter(row =>
-        Number(row.medicaoId) !== Number(currentMedicaoId)
+        Number(row.measurementId) !== Number(currentMedicaoId)
     );
 
     for (const row of rowsToUpdate) {
@@ -238,16 +238,16 @@ async function syncPlantaLevantadaToOtherMedicoes(projects, currentMedicaoId) {
         if (!source) continue;
 
         const payload = {
-            plantaLevantada: true,
-            plantaLevantadaDate: source.plantaLevantadaDate || null
+            isFloorPlanRaised: true,
+            floorPlanRaisedDate: source.floorPlanRaisedDate || null
         };
 
         let { error: updateError } = await supabaseClient
-            .from('MedicaoProject')
+            .from('MeasurementProject')
             .update(payload)
             .eq('id', row.id);
 
-        if (updateError?.message?.includes('plantaLevantada')) continue;
+        if (updateError?.message?.includes('isFloorPlanRaised')) continue;
         if (updateError) throw updateError;
     }
 }
@@ -274,21 +274,21 @@ function canCreateMedicao() {
     return canCreateAsAdminOrConferente();
 }
 
-function getMedicaoProjectStatusName(medicaoProject) {
+function getMeasurementProjectStatusName(medicaoProject) {
     return getProjectStatusName(medicaoProject?.orderProject)
         || medicaoProject?.orderProject?.projectStatus?.name
         || '';
 }
 
 function medicaoProjectIsEditableForMedicao(medicaoProject) {
-    const statusName = getMedicaoProjectStatusName(medicaoProject);
+    const statusName = getMeasurementProjectStatusName(medicaoProject);
     if (MEDICAO_EDITABLE_PROJECT_STATUSES.includes(statusName)) return true;
     // Fallback quando o status do projeto não veio enriquecido na consulta.
     return !statusName && Boolean(medicaoProject?.measurementDate);
 }
 
 function medicaoHasProjectsInMedicaoRealizadaStatus(medicao) {
-    const projects = getMedicaoProjects(medicao);
+    const projects = getMeasurementProjects(medicao);
     if (!projects.length) return false;
 
     return projects.every(medicaoProjectIsEditableForMedicao);
@@ -306,40 +306,40 @@ function canShowOrderProjectEditarMedicaoAction(project, medicaoInfo) {
     return isConferente();
 }
 
-async function fetchMedicaoContextByProjectIds(projectIds, orderId) {
+async function fetchMeasurementContextByProjectIds(projectIds, orderId) {
     const normalizedProjectIds = [...new Set(projectIds.map(id => Number(id)).filter(Boolean))];
     const normalizedOrderId = Number(orderId);
     if (!normalizedProjectIds.length || !normalizedOrderId) return {};
 
     let result = await supabaseClient
-        .from('MedicaoProject')
-        .select('orderProjectId, medicaoId, medicao:Medicao(id, orderId, createdById, createdAt)')
+        .from('MeasurementProject')
+        .select('orderProjectId, measurementId, measurement:Measurement(id, orderId, createdById, createdAt)')
         .in('orderProjectId', normalizedProjectIds);
 
-    if (result.error?.message?.includes('Medicao')) {
+    if (result.error?.message?.includes('Measurement')) {
         result = await supabaseClient
-            .from('MedicaoProject')
-            .select('orderProjectId, medicaoId')
+            .from('MeasurementProject')
+            .select('orderProjectId, measurementId')
             .in('orderProjectId', normalizedProjectIds);
     }
 
     if (result.error) {
-        console.error('fetchMedicaoContextByProjectIds:', result.error);
+        console.error('fetchMeasurementContextByProjectIds:', result.error);
         return {};
     }
 
     let rows = result.data || [];
-    const medicaoIds = [...new Set(rows.map(row => Number(row.medicaoId)).filter(Boolean))];
+    const measurementIds = [...new Set(rows.map(row => Number(row.measurementId)).filter(Boolean))];
     const medicaoById = {};
 
-    if (medicaoIds.length && rows.some(row => !row.medicao)) {
+    if (measurementIds.length && rows.some(row => !row.measurement)) {
         const { data: medicoes, error } = await supabaseClient
-            .from('Medicao')
+            .from('Measurement')
             .select('id, orderId, createdById, createdAt')
-            .in('id', medicaoIds);
+            .in('id', measurementIds);
 
         if (error) {
-            console.error('fetchMedicaoContextByProjectIds:', error);
+            console.error('fetchMeasurementContextByProjectIds:', error);
             return {};
         }
 
@@ -352,7 +352,7 @@ async function fetchMedicaoContextByProjectIds(projectIds, orderId) {
 
     rows.forEach(row => {
         const projectId = Number(row.orderProjectId);
-        const medicao = row.medicao || medicaoById[Number(row.medicaoId)];
+        const medicao = row.measurement || medicaoById[Number(row.measurementId)];
         if (!medicao || Number(medicao.orderId) !== normalizedOrderId) return;
 
         const existing = byProjectId[projectId];
@@ -372,14 +372,14 @@ async function fetchMedicaoContextByProjectIds(projectIds, orderId) {
     return byProjectId;
 }
 
-async function openOrderProjectEditarMedicao(medicaoId, orderId = activeOrderId) {
+async function openOrderProjectEditarMedicao(measurementId, orderId = activeOrderId) {
     if (!canCreateAsAdminOrConferente()) {
         alertAppDialog('Sem permissão para editar medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     const normalizedOrderId = Number(orderId);
-    const normalizedMedicaoId = Number(medicaoId);
+    const normalizedMedicaoId = Number(measurementId);
     if (!normalizedOrderId || !normalizedMedicaoId) return;
 
     activeOrderId = normalizedOrderId;
@@ -399,7 +399,7 @@ async function openOrderProjectEditarMedicao(medicaoId, orderId = activeOrderId)
         return;
     }
 
-    await openMedicaoModal(normalizedMedicaoId);
+    await openMeasurementModal(normalizedMedicaoId);
 }
 
 function canDeleteMedicao(medicao) {
@@ -424,12 +424,12 @@ function setMedicaoDateInputMax(input) {
     input.max = getTodayInputDate();
 }
 
-function getMedicaoProjects(medicao) {
-    return medicao?.medicaoProjects || [];
+function getMeasurementProjects(medicao) {
+    return medicao?.measurementProjects || [];
 }
 
 function getMedicaoPrimaryDate(medicao) {
-    const projects = getMedicaoProjects(medicao);
+    const projects = getMeasurementProjects(medicao);
     if (!projects.length) return null;
     const dates = projects.map(item => item.measurementDate).filter(Boolean).sort();
     return dates[0] || null;
@@ -439,17 +439,17 @@ async function resolveOrderProjectsForMedicao(orderId) {
     return fetchOrderProjectsWithStatusForMedicao(orderId);
 }
 
-function renderMedicaoProjectEditRow(project, medicaoProject) {
+function renderMeasurementProjectEditRow(project, medicaoProject) {
     const env = project.environmentType?.name ? ` (${project.environmentType.name})` : '';
     const measurementDate = toInputDateValue(medicaoProject.measurementDate);
-    const plantaLocked = Boolean(medicaoProject.plantaLevantada);
-    const plantaDateValue = toInputDateValue(medicaoProject.plantaLevantadaDate);
+    const plantaLocked = Boolean(medicaoProject.isFloorPlanRaised);
+    const plantaDateValue = toInputDateValue(medicaoProject.floorPlanRaisedDate);
 
     const plantaSectionHtml = plantaLocked
         ? `
         <div class="medicao-project-planta-wrap flex flex-wrap items-center gap-2">
             <span class="text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-full">
-                Planta levantada · ${formatDateOnly(medicaoProject.plantaLevantadaDate)}
+                Planta levantada · ${formatDateOnly(medicaoProject.floorPlanRaisedDate)}
             </span>
             <input type="hidden" class="medicao-project-planta-locked" value="1">
             <input type="hidden" class="medicao-project-planta-check" value="1">
@@ -476,8 +476,8 @@ function renderMedicaoProjectEditRow(project, medicaoProject) {
             <div class="flex flex-wrap items-center gap-2 min-w-0">
                 <span class="font-medium text-xs text-slate-700">${escapeHtml(project.name || 'Projeto')}${escapeHtml(env)}</span>
                 ${renderComplementarProjectNoticeHtml(project)}
-                ${renderSubstituidoProjectNoticeHtml(project)}
-                ${renderSubstituicaoProjectNoticeHtml(project)}
+                ${renderReplacedProjectNoticeHtml(project)}
+                ${renderReplacementProjectNoticeHtml(project)}
             </div>
             <div class="flex items-center gap-1.5 shrink-0">
                 <span class="text-[10px] text-slate-500">Data medição:</span>
@@ -513,14 +513,14 @@ function renderMedicaoProjectEditRow(project, medicaoProject) {
     return row;
 }
 
-function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '', allowPlantaLevantada = false) {
+function renderMeasurementProjectPickerRow(project, selected = null, defaultDate = '', allowPlantaLevantada = false) {
     const env = project.environmentType?.name ? ` (${project.environmentType.name})` : '';
     const checked = Boolean(selected);
     const dateValue = selected?.measurementDate
         ? toInputDateValue(selected.measurementDate)
         : defaultDate;
-    const plantaChecked = Boolean(selected?.plantaLevantada);
-    const plantaDateValue = toInputDateValue(selected?.plantaLevantadaDate);
+    const plantaChecked = Boolean(selected?.isFloorPlanRaised);
+    const plantaDateValue = toInputDateValue(selected?.floorPlanRaisedDate);
 
     const plantaSectionHtml = allowPlantaLevantada
         ? `
@@ -548,8 +548,8 @@ function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '
                     ${checked ? 'checked' : ''} ${!canActOnOrderProject(project) ? 'disabled' : ''}>
                 <span class="font-medium">${escapeHtml(project.name)}${escapeHtml(env)}</span>
                 ${renderComplementarProjectNoticeHtml(project)}
-                ${renderSubstituidoProjectNoticeHtml(project)}
-                ${renderSubstituicaoProjectNoticeHtml(project)}
+                ${renderReplacedProjectNoticeHtml(project)}
+                ${renderReplacementProjectNoticeHtml(project)}
             </label>
             <div class="flex items-center gap-1.5 shrink-0">
                 <span class="text-[10px] text-slate-500">Data medição:</span>
@@ -605,7 +605,7 @@ function renderMedicaoProjectPickerRow(project, selected = null, defaultDate = '
     return row;
 }
 
-async function populateMedicaoProjectsPicker(medicao = null) {
+async function populateMeasurementProjectsPicker(medicao = null) {
     const picker = document.getElementById('medicao-projects-picker');
     const emptyMsg = document.getElementById('medicao-projects-empty-msg');
     if (!picker) return;
@@ -613,7 +613,7 @@ async function populateMedicaoProjectsPicker(medicao = null) {
     picker.innerHTML = '';
 
     if (medicao) {
-        const measuredProjects = getMedicaoProjects(medicao);
+        const measuredProjects = getMeasurementProjects(medicao);
 
         if (!measuredProjects.length) {
             emptyMsg?.classList.remove('hidden');
@@ -639,7 +639,7 @@ async function populateMedicaoProjectsPicker(medicao = null) {
                     || medicaoProject.orderProject
                     || { id: medicaoProject.orderProjectId, name: 'Projeto' };
 
-                picker.appendChild(renderMedicaoProjectEditRow(project, medicaoProject));
+                picker.appendChild(renderMeasurementProjectEditRow(project, medicaoProject));
             });
 
         return;
@@ -671,7 +671,7 @@ async function populateMedicaoProjectsPicker(medicao = null) {
 
     emptyMsg?.classList.add('hidden');
     projects.forEach(project => {
-        picker.appendChild(renderMedicaoProjectPickerRow(
+        picker.appendChild(renderMeasurementProjectPickerRow(
             project,
             selectedByProjectId[Number(project.id)],
             defaultDate,
@@ -680,7 +680,7 @@ async function populateMedicaoProjectsPicker(medicao = null) {
     });
 }
 
-function syncMedicaoProjectDatesFromDefault() {
+function syncMeasurementProjectDatesFromDefault() {
     if (editingMedicaoId) return;
 
     const defaultDate = document.getElementById('medicao-default-date')?.value;
@@ -695,7 +695,7 @@ function syncMedicaoProjectDatesFromDefault() {
     });
 }
 
-function collectMedicaoProjectsFromDom() {
+function collectMeasurementProjectsFromDom() {
     const projects = [];
     const isEdit = Boolean(editingMedicaoId);
 
@@ -709,8 +709,8 @@ function collectMedicaoProjectsFromDom() {
 
         const orderProjectId = Number(row.dataset.orderProjectId);
         const measurementDate = row.querySelector('.medicao-project-date')?.value || '';
-        const plantaLevantada = isMedicaoPlantaLevantadaChecked(row);
-        const plantaLevantadaDate = plantaLevantada
+        const isFloorPlanRaised = isMedicaoPlantaLevantadaChecked(row);
+        const floorPlanRaisedDate = isFloorPlanRaised
             ? getMedicaoPlantaLevantadaDate(row)
             : null;
 
@@ -719,28 +719,28 @@ function collectMedicaoProjectsFromDom() {
         projects.push({
             orderProjectId,
             measurementDate,
-            plantaLevantada,
-            plantaLevantadaDate
+            isFloorPlanRaised,
+            floorPlanRaisedDate
         });
     });
 
     return projects;
 }
 
-async function openMedicaoModal(medicaoId = null, options = {}) {
+async function openMeasurementModal(measurementId = null, options = {}) {
     if (!activeOrderId) {
         alertAppDialog('Selecione um pedido primeiro.');
         return;
     }
 
-    if (!medicaoId && !canCreateMedicao()) {
+    if (!measurementId && !canCreateMedicao()) {
         alertAppDialog('Somente Admin ou usuários marcados como Conferente podem criar medições.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    editingMedicaoId = medicaoId;
-    const medicao = medicaoId
-        ? medicoesCache.find(item => item.id === medicaoId)
+    editingMedicaoId = measurementId;
+    const medicao = measurementId
+        ? medicoesCache.find(item => item.id === measurementId)
         : null;
 
     if (medicao && !canEditMedicao(medicao)) {
@@ -766,7 +766,7 @@ async function openMedicaoModal(medicaoId = null, options = {}) {
     medicaoPickerPreselectProjectId = !isEdit && options?.preselectProjectId
         ? Number(options.preselectProjectId)
         : null;
-    await populateMedicaoProjectsPicker(medicao);
+    await populateMeasurementProjectsPicker(medicao);
     medicaoPickerPreselectProjectId = null;
 
     const title = document.getElementById('medicao-modal-title');
@@ -783,20 +783,22 @@ async function openMedicaoModal(medicaoId = null, options = {}) {
     toggleModal('medicao-modal', true);
 }
 
-window.openMedicaoModal = openMedicaoModal;
+window.openMeasurementModal = openMeasurementModal;
+window.openMedicaoModal = openMeasurementModal;
 
-function closeMedicaoModal() {
+function closeMeasurementModal() {
     setMedicaoModalLoading(false);
     editingMedicaoId = null;
     toggleModal('medicao-modal', false);
 }
 
-window.closeMedicaoModal = closeMedicaoModal;
+window.closeMeasurementModal = closeMeasurementModal;
+window.closeMedicaoModal = closeMeasurementModal;
 
 const MEDICAO_MODAL_OVERLAY = createModalOverlayConfig('medicao-modal', {
     disableElementIds: ['medicao-form-submit'],
     reenableElementIdsOnHide: ['medicao-form-submit'],
-    closeButtonSelector: '#medicao-modal button[onclick="closeMedicaoModal()"]',
+    closeButtonSelector: '#medicao-modal button[onclick="closeMeasurementModal()"]',
     disableFormSelector: '#medicao-modal input:not([disabled]), #medicao-modal textarea:not([disabled])',
     disableDatasetKey: 'medicaoLoadingDisabled'
 });
@@ -814,11 +816,11 @@ async function refreshMedicaoRelatedViews() {
     await loadPendenciasContent();
 }
 
-async function persistMedicaoProjects(medicaoId, projects) {
+async function persistMeasurementProjects(measurementId, projects) {
     const { data: current } = await supabaseClient
-        .from('MedicaoProject')
+        .from('MeasurementProject')
         .select('id, orderProjectId')
-        .eq('medicaoId', medicaoId);
+        .eq('measurementId', measurementId);
 
     const keepOrderProjectIds = projects.map(project => Number(project.orderProjectId));
     const deleteIds = (current || [])
@@ -827,7 +829,7 @@ async function persistMedicaoProjects(medicaoId, projects) {
 
     if (deleteIds.length) {
         const { error } = await supabaseClient
-            .from('MedicaoProject')
+            .from('MeasurementProject')
             .delete()
             .in('id', deleteIds);
         if (error) throw error;
@@ -837,19 +839,19 @@ async function persistMedicaoProjects(medicaoId, projects) {
         const existing = (current || []).find(row => Number(row.orderProjectId) === Number(project.orderProjectId));
         const payload = {
             measurementDate: project.measurementDate,
-            plantaLevantada: project.plantaLevantada || false,
-            plantaLevantadaDate: project.plantaLevantada ? project.plantaLevantadaDate : null
+            isFloorPlanRaised: project.isFloorPlanRaised || false,
+            floorPlanRaisedDate: project.isFloorPlanRaised ? project.floorPlanRaisedDate : null
         };
 
         if (existing) {
             let { error } = await supabaseClient
-                .from('MedicaoProject')
+                .from('MeasurementProject')
                 .update(payload)
                 .eq('id', existing.id);
 
-            if (error?.message?.includes('plantaLevantada')) {
+            if (error?.message?.includes('isFloorPlanRaised')) {
                 ({ error } = await supabaseClient
-                    .from('MedicaoProject')
+                    .from('MeasurementProject')
                     .update({ measurementDate: project.measurementDate })
                     .eq('id', existing.id));
             }
@@ -859,18 +861,18 @@ async function persistMedicaoProjects(medicaoId, projects) {
         }
 
         let { error } = await supabaseClient
-            .from('MedicaoProject')
+            .from('MeasurementProject')
             .insert({
-                medicaoId,
+                measurementId,
                 orderProjectId: project.orderProjectId,
                 ...payload
             });
 
-        if (error?.message?.includes('plantaLevantada')) {
+        if (error?.message?.includes('isFloorPlanRaised')) {
             ({ error } = await supabaseClient
-                .from('MedicaoProject')
+                .from('MeasurementProject')
                 .insert({
-                    medicaoId,
+                    measurementId,
                     orderProjectId: project.orderProjectId,
                     measurementDate: project.measurementDate
                 }));
@@ -894,7 +896,7 @@ async function saveMedicao() {
 
     const defaultDate = document.getElementById('medicao-default-date')?.value;
     const observation = document.getElementById('medicao-observation')?.value.trim() || null;
-    const projects = collectMedicaoProjectsFromDom();
+    const projects = collectMeasurementProjectsFromDom();
 
     if (!editingMedicaoId && !defaultDate) {
         alertAppDialog('Informe a data da medição.');
@@ -924,13 +926,13 @@ async function saveMedicao() {
             alertAppDialog('A data de medição não pode ser no futuro.', { variant: 'warning', title: 'Aviso' });
             return;
         }
-        if (editingMedicaoId && project.plantaLevantada && !project.plantaLevantadaDate) {
+        if (editingMedicaoId && project.isFloorPlanRaised && !project.floorPlanRaisedDate) {
             const row = document.querySelector(`.medicao-project-row[data-order-project-id="${project.orderProjectId}"]`);
             const projectName = row?.querySelector('.font-medium')?.textContent?.trim() || 'um projeto';
             alertAppDialog(`Informe a data da planta para o projeto "${projectName}".`);
             return;
         }
-        if (editingMedicaoId && project.plantaLevantada && isFutureInputDate(project.plantaLevantadaDate)) {
+        if (editingMedicaoId && project.isFloorPlanRaised && isFutureInputDate(project.floorPlanRaisedDate)) {
             const row = document.querySelector(`.medicao-project-row[data-order-project-id="${project.orderProjectId}"]`);
             const projectName = row?.querySelector('.font-medium')?.textContent?.trim() || 'um projeto';
             alertAppDialog(`A data da planta do projeto "${projectName}" não pode ser no futuro.`, { variant: 'warning', title: 'Aviso' });
@@ -943,30 +945,30 @@ async function saveMedicao() {
 
     if (medicao?.id) {
         const { data: previousRows } = await supabaseClient
-            .from('MedicaoProject')
-            .select('orderProjectId, plantaLevantada')
-            .eq('medicaoId', medicao.id);
+            .from('MeasurementProject')
+            .select('orderProjectId, isFloorPlanRaised')
+            .eq('measurementId', medicao.id);
 
         previousPlantaProjectIds = new Set(
             (previousRows || [])
-                .filter(row => row.plantaLevantada)
+                .filter(row => row.isFloorPlanRaised)
                 .map(row => Number(row.orderProjectId))
         );
     }
 
     const newlyPlantaProjects = projects.filter(project => (
-        project.plantaLevantada
+        project.isFloorPlanRaised
         && !previousPlantaProjectIds.has(Number(project.orderProjectId))
     ));
     const willSendEmail = !medicao || newlyPlantaProjects.length > 0;
 
     try {
         setMedicaoModalLoading(true, medicao ? 'Salvando medição...' : 'Registrando medição...');
-        let medicaoId = medicao?.id;
+        let measurementId = medicao?.id;
 
         if (medicao) {
             const { error } = await supabaseClient
-                .from('Medicao')
+                .from('Measurement')
                 .update({
                     observation,
                     updatedAt: now,
@@ -976,7 +978,7 @@ async function saveMedicao() {
             if (error) throw error;
         } else {
             const { data: created, error } = await supabaseClient
-                .from('Medicao')
+                .from('Measurement')
                 .insert({
                     orderId: activeOrderId,
                     observation,
@@ -987,11 +989,11 @@ async function saveMedicao() {
                 .select('id')
                 .single();
             if (error) throw error;
-            medicaoId = created.id;
+            measurementId = created.id;
         }
 
         setMedicaoModalLoading(true, 'Salvando projetos medidos...');
-        await persistMedicaoProjects(medicaoId, projects);
+        await persistMeasurementProjects(measurementId, projects);
         if (!medicao) {
             setMedicaoModalLoading(true, 'Atualizando status dos projetos...');
             await applyMedicaoRealizadaStatusToProjects(projects.map(project => project.orderProjectId));
@@ -1003,10 +1005,10 @@ async function saveMedicao() {
                 });
             }
         } else {
-            const plantaProjects = projects.filter(project => project.plantaLevantada);
+            const plantaProjects = projects.filter(project => project.isFloorPlanRaised);
             if (plantaProjects.length) {
                 setMedicaoModalLoading(true, 'Sincronizando planta levantada...');
-                await syncPlantaLevantadaToOtherMedicoes(plantaProjects, medicaoId);
+                await syncPlantaLevantadaToOtherMedicoes(plantaProjects, measurementId);
             }
             const plantaProjectIds = plantaProjects.map(project => project.orderProjectId);
             if (plantaProjectIds.length) {
@@ -1035,7 +1037,7 @@ async function saveMedicao() {
             'success'
         );
         await new Promise(resolve => setTimeout(resolve, 900));
-        closeMedicaoModal();
+        closeMeasurementModal();
     } catch (error) {
         setMedicaoModalLoading(true, `Erro ao salvar medição: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));
@@ -1043,8 +1045,8 @@ async function saveMedicao() {
     }
 }
 
-async function deleteMedicao(medicaoId) {
-    const medicao = medicoesCache.find(item => item.id === medicaoId);
+async function deleteMeasurement(measurementId) {
+    const medicao = medicoesCache.find(item => item.id === measurementId);
     if (!medicao || !canDeleteMedicao(medicao)) {
         alertAppDialog('Você não tem permissão para excluir esta medição.', { variant: 'warning', title: 'Aviso' });
         return;
@@ -1053,9 +1055,9 @@ async function deleteMedicao(medicaoId) {
     if (!(await confirmAppDialog('Excluir esta medição e os projetos vinculados?'))) return;
 
     const { error } = await supabaseClient
-        .from('Medicao')
+        .from('Measurement')
         .delete()
-        .eq('id', medicaoId);
+        .eq('id', measurementId);
 
     if (error) {
         alertAppDialog('Erro ao excluir medição: ' + error.message);
@@ -1065,10 +1067,11 @@ async function deleteMedicao(medicaoId) {
     await loadMedicoes(activeOrderId);
 }
 
-window.deleteMedicao = deleteMedicao;
+window.deleteMeasurement = deleteMeasurement;
+window.deleteMedicao = deleteMeasurement;
 
 function renderMedicaoCard(medicao, creatorNames = {}) {
-    const projects = getMedicaoProjects(medicao)
+    const projects = getMeasurementProjects(medicao)
         .slice()
         .sort((a, b) => String(a.measurementDate).localeCompare(String(b.measurementDate))
             || String(a.orderProject?.name || '').localeCompare(String(b.orderProject?.name || ''), 'pt-BR'));
@@ -1083,8 +1086,8 @@ function renderMedicaoCard(medicao, creatorNames = {}) {
 
     const projectsHtml = projects.length
         ? projects.map(item => {
-            const plantaBadge = item.plantaLevantada
-                ? `<span class="text-[10px] text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">Planta: sim · ${formatDateOnly(item.plantaLevantadaDate)}</span>`
+            const plantaBadge = item.isFloorPlanRaised
+                ? `<span class="text-[10px] text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold whitespace-nowrap">Planta: sim · ${formatDateOnly(item.floorPlanRaisedDate)}</span>`
                 : `<span class="text-[10px] text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full font-medium whitespace-nowrap">Planta: não</span>`;
             return `
                 <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 bg-white border border-teal-200/80 rounded-lg shadow-sm">
@@ -1115,11 +1118,11 @@ function renderMedicaoCard(medicao, creatorNames = {}) {
                 <div class="flex gap-1.5 shrink-0">
                     ${canEdit
                         ? `<button type="button" class="text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium"
-                            onclick="openMedicaoModal(${medicao.id})">Editar</button>`
+                            onclick="openMeasurementModal(${medicao.id})">Editar</button>`
                         : ''}
                     ${canDelete
                         ? `<button type="button" class="text-xs bg-white border border-red-200 text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg font-medium"
-                            onclick="deleteMedicao(${medicao.id})">Excluir</button>`
+                            onclick="deleteMeasurement(${medicao.id})">Excluir</button>`
                         : ''}
                 </div>
             </div>
@@ -1145,7 +1148,7 @@ async function enrichMedicoes(medicoes, orderId) {
 
     return medicoes.map(medicao => ({
         ...medicao,
-        medicaoProjects: (medicao.medicaoProjects || []).map(item => ({
+        measurementProjects: (medicao.measurementProjects || []).map(item => ({
             ...item,
             orderProject: orderProjectById[Number(item.orderProjectId)] || item.orderProject || null
         }))
@@ -1157,10 +1160,10 @@ async function loadMedicoes(orderId) {
     if (!list) return;
 
     let result = await supabaseClient
-        .from('Medicao')
+        .from('Measurement')
         .select(`
             *,
-            medicaoProjects:MedicaoProject(
+            measurementProjects:MeasurementProject(
                 *,
                 orderProject:OrderProject(id, name, environmentType:EnvironmentType(name))
             )
@@ -1168,16 +1171,16 @@ async function loadMedicoes(orderId) {
         .eq('orderId', orderId)
         .order('createdAt', { ascending: false });
 
-    if (result.error?.message?.includes('MedicaoProject')) {
+    if (result.error?.message?.includes('MeasurementProject')) {
         result = await supabaseClient
-            .from('Medicao')
+            .from('Measurement')
             .select('*')
             .eq('orderId', orderId)
             .order('createdAt', { ascending: false });
     }
 
-    if (result.error?.message?.includes('Medicao')) {
-        list.innerHTML = '<p class="text-xs text-amber-700 text-center py-6 bg-amber-50 rounded-xl border border-amber-100">Execute o SQL <code>supabase/create-mediciao.sql</code> no Supabase.</p>';
+    if (result.error?.message?.includes('Measurement')) {
+        list.innerHTML = '<p class="text-xs text-amber-700 text-center py-6 bg-amber-50 rounded-xl border border-amber-100">Execute o SQL <code>supabase/rename/phase-04-measurement.sql</code> no Supabase.</p>';
         updateOrderTabCounts(undefined, undefined, 0);
         return;
     }
@@ -1190,25 +1193,25 @@ async function loadMedicoes(orderId) {
 
     let medicoes = result.data || [];
 
-    const moduleIdsMissingProjects = medicoes.some(medicao => !medicao.medicaoProjects);
+    const moduleIdsMissingProjects = medicoes.some(medicao => !medicao.measurementProjects);
     if (moduleIdsMissingProjects) {
-        const medicaoIds = medicoes.map(item => item.id).filter(Boolean);
-        if (medicaoIds.length) {
+        const measurementIds = medicoes.map(item => item.id).filter(Boolean);
+        if (measurementIds.length) {
             const { data: projectRows } = await supabaseClient
-                .from('MedicaoProject')
+                .from('MeasurementProject')
                 .select('*')
-                .in('medicaoId', medicaoIds)
+                .in('measurementId', measurementIds)
                 .order('measurementDate', { ascending: true });
 
             const byMedicaoId = {};
             (projectRows || []).forEach(row => {
-                if (!byMedicaoId[row.medicaoId]) byMedicaoId[row.medicaoId] = [];
-                byMedicaoId[row.medicaoId].push(row);
+                if (!byMedicaoId[row.measurementId]) byMedicaoId[row.measurementId] = [];
+                byMedicaoId[row.measurementId].push(row);
             });
 
             medicoes = medicoes.map(medicao => ({
                 ...medicao,
-                medicaoProjects: medicao.medicaoProjects || byMedicaoId[medicao.id] || []
+                measurementProjects: medicao.measurementProjects || byMedicaoId[medicao.id] || []
             }));
         }
     }
@@ -1255,11 +1258,18 @@ function updateMedicaoActionButtons() {
     }
 }
 
-function bindMedicaoEvents() {
-    document.getElementById('btn-new-medicao')?.addEventListener('click', () => openMedicaoModal());
+function bindMeasurementEvents() {
+    document.getElementById('btn-new-medicao')?.addEventListener('click', () => openMeasurementModal());
     document.getElementById('medicao-form')?.addEventListener('submit', async function (e) {
         e.preventDefault();
         await saveMedicao();
     });
-    document.getElementById('medicao-default-date')?.addEventListener('change', syncMedicaoProjectDatesFromDefault);
+    document.getElementById('medicao-default-date')?.addEventListener('change', syncMeasurementProjectDatesFromDefault);
 }
+
+const fetchMedicaoContextByProjectIds = fetchMeasurementContextByProjectIds;
+const openMedicaoModal = openMeasurementModal;
+const closeMedicaoModal = closeMeasurementModal;
+const deleteMedicao = deleteMeasurement;
+
+const bindMedicaoEvents = bindMeasurementEvents;

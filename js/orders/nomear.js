@@ -1,7 +1,7 @@
 const ORDER_NOMEAR_STATUS = 'Nomear';
 const ORDER_AGUARDANDO_PPCP_STATUS = 'Aguardando PPCP';
 
-const ORDER_NOMEAR_PROJECT_SELECT = 'id, orderId, name, projectCode, statusId, designerId, nomeado, isComplementar, parentProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)';
+const ORDER_NOMEAR_PROJECT_SELECT = 'id, orderId, name, projectCode, statusId, designerId, isNamed, isComplementary, parentProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)';
 const ORDER_NOMEAR_PROJECT_SELECT_FALLBACK = 'id, orderId, name, projectCode, statusId, designerId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name)';
 
 let orderProjectNomeadoColumnAvailable = true;
@@ -48,8 +48,8 @@ async function getAguardandoPpcpProjectStatusIdForNomear() {
 function isOrderProjectNomeado(project) {
     if (!project) return false;
     if (orderNomeadoProjectIdsCache.has(Number(project.id))) return true;
-    if (project.nomeado === true) return true;
-    if (project.nomeado === false) return false;
+    if (project.isNamed === true) return true;
+    if (project.isNamed === false) return false;
 
     if (!orderProjectNomeadoColumnAvailable
         && getOrderProjectStatusName(project) === ORDER_AGUARDANDO_PPCP_STATUS) {
@@ -86,14 +86,14 @@ async function queryOrderNomearProjects(orderId) {
         .eq('orderId', orderId)
         .order('name', { ascending: true });
 
-    if (result.error?.message?.includes('nomeado')) {
+    if (result.error?.message?.includes('isNamed')) {
         orderProjectNomeadoColumnAvailable = false;
         result = await supabaseClient
             .from('OrderProject')
             .select(ORDER_NOMEAR_PROJECT_SELECT_FALLBACK)
             .eq('orderId', orderId)
             .order('name', { ascending: true });
-    } else if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementar')) {
+    } else if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementary')) {
         result = await supabaseClient
             .from('OrderProject')
             .select(ORDER_NOMEAR_PROJECT_SELECT_FALLBACK)
@@ -106,7 +106,7 @@ async function queryOrderNomearProjects(orderId) {
     if (!result.error) {
         resetOrderNomeadoProjectIdsCache(
             (result.data || [])
-                .filter(project => project.nomeado === true)
+                .filter(project => project.isNamed === true)
                 .map(project => project.id)
         );
     }
@@ -167,7 +167,7 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
         .eq('id', projectId)
         .maybeSingle();
 
-    if (result.error?.message?.includes('nomeado')) {
+    if (result.error?.message?.includes('isNamed')) {
         result = await supabaseClient
             .from('OrderProject')
             .select(ORDER_NOMEAR_PROJECT_SELECT_FALLBACK)
@@ -210,7 +210,7 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
         const now = new Date().toISOString();
         const updatePayload = {
             statusId: aguardandoPpcpStatusId,
-            nomeado: true,
+            isNamed: true,
             updatedById: currentUser.id,
             updatedAt: now
         };
@@ -219,20 +219,20 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
             .from('OrderProject')
             .update(updatePayload)
             .eq('id', projectId)
-            .select('id, nomeado, statusId')
+            .select('id, isNamed, statusId')
             .maybeSingle();
 
         if (error) {
-            const message = error.message?.includes('nomeado')
-                ? 'Coluna nomeado não encontrada. Execute supabase/create-gestao-order-fields.sql no Supabase.'
+            const message = error.message?.includes('isNamed')
+                ? 'Coluna isNamed não encontrada. Execute supabase/create-gestao-order-fields.sql no Supabase.'
                 : `Erro ao confirmar projeto como nomeado: ${error.message}`;
             setNomearActionLoading(true, message, 'error');
             await waitNomearActionStatus(2200);
             return false;
         }
 
-        if (updatedProject?.nomeado !== true) {
-            setNomearActionLoading(true, 'Não foi possível marcar o projeto como nomeado. Verifique a coluna nomeado no Supabase.', 'error');
+        if (updatedProject?.isNamed !== true) {
+            setNomearActionLoading(true, 'Não foi possível marcar o projeto como nomeado. Verifique a coluna isNamed no Supabase.', 'error');
             await waitNomearActionStatus(2200);
             return false;
         }
@@ -296,8 +296,8 @@ function renderOrderNomearProjectCard(project) {
             <div class="flex flex-wrap items-center gap-2 mb-1">
                 <p class="text-sm font-semibold text-slate-900">${escapeHtml(project.name)}</p>
                 ${renderComplementarProjectNoticeHtml(project)}
-                ${renderSubstituidoProjectNoticeHtml(project)}
-                ${renderSubstituicaoProjectNoticeHtml(project)}
+                ${renderReplacedProjectNoticeHtml(project)}
+                ${renderReplacementProjectNoticeHtml(project)}
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
                     ${escapeHtml(statusName)}
                 </span>
@@ -355,7 +355,7 @@ async function loadNomearProjects(orderId) {
     if (!orderProjectNomeadoColumnAvailable) {
         list.innerHTML = `
             <p class="text-xs text-amber-700 text-center py-4 mb-3 bg-amber-50 rounded-xl border border-amber-100">
-                Coluna <code>nomeado</code> não encontrada. Execute <code>supabase/create-gestao-order-fields.sql</code> no Supabase.
+                Coluna <code>isNamed</code> não encontrada. Execute <code>supabase/create-gestao-order-fields.sql</code> no Supabase.
             </p>
         `;
     }

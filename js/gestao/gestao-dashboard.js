@@ -3,19 +3,19 @@ const GESTAO_DASHBOARD_STATUS_PROJETOS_END = 'Projeto Técnico';
 const GESTAO_DASHBOARD_STATUS_FABRICA_END = 'Montagem Interna';
 
 const GESTAO_DASHBOARD_PROJECT_SELECT = `
-    id, orderId, projectCode, name, deliveryDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico,
-    fimMontagemInterna, statusId, designerId, marceneiroId, deliveryPhaseId,
-    isComplementar, parentProjectId, isSubstituido,
-    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
+    id, orderId, projectCode, name, deliveryDate, technicalProjectForecastEndDate, technicalProjectCompletedDate,
+    internalAssemblyEndDate, statusId, designerId, cabinetMakerId, deliveryPhaseId,
+    isComplementary, parentProjectId, isReplaced,
+    order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
-    marceneiro:Marceneiro(id, name),
+    cabinetMaker:CabinetMaker(id, name),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
 
 const GESTAO_DASHBOARD_PROJECT_SELECT_FALLBACK = `
-    id, orderId, projectCode, name, deliveryDate, previsaoConclusaoProjetoTecnico, statusId, designerId, deliveryPhaseId,
-    isComplementar, parentProjectId, isSubstituido,
-    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
+    id, orderId, projectCode, name, deliveryDate, technicalProjectForecastEndDate, statusId, designerId, deliveryPhaseId,
+    isComplementary, parentProjectId, isReplaced,
+    order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
@@ -209,8 +209,8 @@ function isGestaoDashboardStatusInRange(project, minSort, maxSort, statusById) {
 }
 
 function isGestaoDashboardActiveProject(project) {
-    if (typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project)) return false;
-    if (typeof isSubstituidoOrderProject === 'function' && isSubstituidoOrderProject(project)) return false;
+    if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) return false;
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) return false;
     return true;
 }
 
@@ -222,13 +222,13 @@ function filterGestaoDashboardProjetosTab(projects, statuses, monthBounds) {
         if (!isGestaoDashboardActiveProject(project)) return false;
 
         const finalizedThisMonth = isGestaoDashboardDateInMonth(
-            project.conclusaoProjetoTecnico,
+            project.technicalProjectCompletedDate,
             monthBounds.start,
             monthBounds.end
         );
         if (finalizedThisMonth) return true;
 
-        const notFinalized = !project.conclusaoProjetoTecnico;
+        const notFinalized = !project.technicalProjectCompletedDate;
         const inStatusRange = isGestaoDashboardStatusInRange(project, minSort, maxSort, statusById);
         const deliveryUntilMonth = isGestaoDashboardDateOnOrBefore(project.deliveryDate, monthBounds.end);
 
@@ -244,13 +244,13 @@ function filterGestaoDashboardFabricaTab(projects, statuses, monthBounds, phases
         if (!isGestaoDashboardActiveProject(project)) return false;
 
         const finishedThisMonth = isGestaoDashboardDateInMonth(
-            project.fimMontagemInterna,
+            project.internalAssemblyEndDate,
             monthBounds.start,
             monthBounds.end
         );
         if (finishedThisMonth) return true;
 
-        const withoutFinishDate = !project.fimMontagemInterna;
+        const withoutFinishDate = !project.internalAssemblyEndDate;
         const inStatusRange = isGestaoDashboardStatusInRange(project, minSort, maxSort, statusById);
         const orderDeliveryUntilMonth = isGestaoDashboardDateOnOrBefore(
             getGestaoDashboardFabricaDeliveryDate(project, phasesByOrderId),
@@ -270,7 +270,7 @@ function getGestaoDashboardDeliveryDate(project, tabId, phasesByOrderId = gestao
 
 function getGestaoDashboardResponsibleName(project, tabId) {
     if (tabId === 'fabrica') {
-        return project.marceneiro?.name || '—';
+        return project.cabinetMaker?.name || '—';
     }
     return project.designer?.name || '—';
 }
@@ -351,9 +351,9 @@ function getGestaoDashboardGroupClientDeliveryDate(group, tabId, phasesByOrderId
 
 function isGestaoDashboardProjectFinalizedInMonth(project, tabId, monthBounds) {
     if (tabId === 'fabrica') {
-        return isGestaoDashboardDateInMonth(project.fimMontagemInterna, monthBounds.start, monthBounds.end);
+        return isGestaoDashboardDateInMonth(project.internalAssemblyEndDate, monthBounds.start, monthBounds.end);
     }
-    return isGestaoDashboardDateInMonth(project.conclusaoProjetoTecnico, monthBounds.start, monthBounds.end);
+    return isGestaoDashboardDateInMonth(project.technicalProjectCompletedDate, monthBounds.start, monthBounds.end);
 }
 
 function renderGestaoDashboardProjectRow(project, tabConfig, monthBounds) {
@@ -361,8 +361,8 @@ function renderGestaoDashboardProjectRow(project, tabConfig, monthBounds) {
     const statusDotColor = getGestaoDashboardStatusDotColor(statusName);
     const deliveryDate = formatGestaoDate(getGestaoDashboardDeliveryDate(project, tabConfig.id));
     const responsible = getGestaoDashboardResponsibleName(project, tabConfig.id);
-    const previsaoDate = formatGestaoDate(project.previsaoConclusaoProjetoTecnico);
-    const fimMontagemDate = formatGestaoDate(project.fimMontagemInterna);
+    const previsaoDate = formatGestaoDate(project.technicalProjectForecastEndDate);
+    const fimMontagemDate = formatGestaoDate(project.internalAssemblyEndDate);
     const finalizedInMonth = isGestaoDashboardProjectFinalizedInMonth(project, tabConfig.id, monthBounds);
     const projectLabel = project.name || 'Projeto';
 
@@ -509,13 +509,14 @@ async function fetchGestaoDashboardProjects() {
         .select(GESTAO_DASHBOARD_PROJECT_SELECT)
         .order('name', { ascending: true });
 
-    if (result.error?.message?.includes('conclusaoProjetoTecnico')
-        || result.error?.message?.includes('fimMontagemInterna')
-        || result.error?.message?.includes('marceneiro')
+    if (result.error?.message?.includes('technicalProjectCompletedDate')
+        || result.error?.message?.includes('internalAssemblyEndDate')
+        || result.error?.message?.includes('cabinetMaker')
+        || result.error?.message?.includes('CabinetMaker')
         || result.error?.message?.includes('clientDeliveryDate')
-        || result.error?.message?.includes('previsaoConclusaoProjetoTecnico')
-        || result.error?.message?.includes('isComplementar')
-        || result.error?.message?.includes('isSubstituido')
+        || result.error?.message?.includes('technicalProjectForecastEndDate')
+        || result.error?.message?.includes('isComplementary')
+        || result.error?.message?.includes('isReplaced')
         || result.error?.message?.includes('deliveryPhaseId')
         || result.error?.message?.includes('projectStatus')
         || result.error?.message?.includes('designer')) {

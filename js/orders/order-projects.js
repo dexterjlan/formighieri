@@ -130,14 +130,14 @@ async function fetchOrderProjectActionContext(orderId, projectIds, projects = nu
 async function fetchOrderProjectsForOrder(orderId) {
     let result = await supabaseClient
         .from('OrderProject')
-        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), deliveryPhaseId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
+        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), deliveryPhaseId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
         .eq('orderId', orderId)
         .order('createdAt', { ascending: true });
 
     if (result.error?.message?.includes('deliveryPhaseId')) {
         result = await supabaseClient
             .from('OrderProject')
-            .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
+            .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
             .eq('orderId', orderId)
             .order('createdAt', { ascending: true });
     }
@@ -145,14 +145,14 @@ async function fetchOrderProjectsForOrder(orderId) {
     if (result.error?.message?.includes('designer')) {
         result = await supabaseClient
             .from('OrderProject')
-            .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)), substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
+            .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
             .eq('orderId', orderId)
             .order('createdAt', { ascending: true });
     }
 
-    if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementar')
+    if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementary')
         || result.error?.message?.includes('substituidoPor') || result.error?.message?.includes('substitui')
-        || result.error?.message?.includes('isSubstituido') || result.error?.message?.includes('isSubstituicao')) {
+        || result.error?.message?.includes('isReplaced') || result.error?.message?.includes('isReplacement')) {
         result = await supabaseClient
             .from('OrderProject')
             .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
@@ -233,8 +233,8 @@ async function enrichOrderProjectsWithSubstitutionRelations(projects) {
 
     const relatedIds = new Set();
     projects.forEach(project => {
-        if (project.substituidoPorProjectId) relatedIds.add(Number(project.substituidoPorProjectId));
-        if (project.substituiProjectId) relatedIds.add(Number(project.substituiProjectId));
+        if (project.replacedByProjectId) relatedIds.add(Number(project.replacedByProjectId));
+        if (project.replacesProjectId) relatedIds.add(Number(project.replacesProjectId));
         if (project.parentProjectId) relatedIds.add(Number(project.parentProjectId));
     });
 
@@ -281,28 +281,28 @@ async function enrichOrderProjectsWithSubstitutionRelations(projects) {
     return projects.map(project => {
         const enriched = { ...project };
 
-        if (project.substituidoPorProjectId && relatedById[project.substituidoPorProjectId]) {
-            const related = relatedById[project.substituidoPorProjectId];
+        if (project.replacedByProjectId && relatedById[project.replacedByProjectId]) {
+            const related = relatedById[project.replacedByProjectId];
             const orderCode = related.order?.orderCode || orderCodeById[related.orderId] || '';
-            enriched.substituidoPorProject = {
-                ...(enriched.substituidoPorProject || {}),
+            enriched.replacedByProject = {
+                ...(enriched.replacedByProject || {}),
                 projectCode: related.projectCode,
                 order: { orderCode }
             };
-            enriched.substituidoPorProjectCode = related.projectCode || enriched.substituidoPorProjectCode;
-            enriched.substituidoPorOrderCode = orderCode || enriched.substituidoPorOrderCode;
+            enriched.replacedByProjectCode = related.projectCode || enriched.replacedByProjectCode;
+            enriched.replacedByOrderCode = orderCode || enriched.replacedByOrderCode;
         }
 
-        if (project.substituiProjectId && relatedById[project.substituiProjectId]) {
-            const related = relatedById[project.substituiProjectId];
+        if (project.replacesProjectId && relatedById[project.replacesProjectId]) {
+            const related = relatedById[project.replacesProjectId];
             const orderCode = related.order?.orderCode || orderCodeById[related.orderId] || '';
-            enriched.substituiProject = {
-                ...(enriched.substituiProject || {}),
+            enriched.replacesProject = {
+                ...(enriched.replacesProject || {}),
                 projectCode: related.projectCode,
                 order: { orderCode }
             };
-            enriched.substituiProjectCode = related.projectCode || enriched.substituiProjectCode;
-            enriched.substituiOrderCode = orderCode || enriched.substituiOrderCode;
+            enriched.replacesProjectCode = related.projectCode || enriched.replacesProjectCode;
+            enriched.replacesOrderCode = orderCode || enriched.replacesOrderCode;
         }
 
         if (project.parentProjectId && relatedById[project.parentProjectId]) {
@@ -413,8 +413,8 @@ async function loadOrderProjects(orderId) {
                                 Detalhes
                             </button>
                             ${renderComplementarProjectNoticeHtml(p)}
-                            ${renderSubstituidoProjectNoticeHtml(p)}
-                            ${renderSubstituicaoProjectNoticeHtml(p)}
+                            ${renderReplacedProjectNoticeHtml(p)}
+                            ${renderReplacementProjectNoticeHtml(p)}
                         </div>
                     </div>
                     <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
@@ -510,9 +510,9 @@ function bindOrderProjectEvents() {
             payload.saleValue = saleValue;
         }
 
-        const caminhoRedeAprovacao = document.getElementById('project-caminho-rede-aprovacao')?.value?.trim();
-        if (caminhoRedeAprovacao) {
-            payload.caminhoRedeAprovacao = caminhoRedeAprovacao;
+        const approvalNetworkPath = document.getElementById('project-caminho-rede-aprovacao')?.value?.trim();
+        if (approvalNetworkPath) {
+            payload.approvalNetworkPath = approvalNetworkPath;
         }
 
         let { error } = await supabaseClient.from('OrderProject').insert([payload]);
@@ -522,8 +522,8 @@ function bindOrderProjectEvents() {
             ({ error } = await supabaseClient.from('OrderProject').insert([payload]));
         }
 
-        if (error?.message?.includes('caminhoRedeAprovacao')) {
-            delete payload.caminhoRedeAprovacao;
+        if (error?.message?.includes('approvalNetworkPath')) {
+            delete payload.approvalNetworkPath;
             ({ error } = await supabaseClient.from('OrderProject').insert([payload]));
         }
 

@@ -358,14 +358,14 @@ async function fetchThirdPartyCharacteristicIdsSentToComprasForOrderProject(orde
     if (!implantacao?.id) return new Set();
 
     const { data, error } = await supabaseClient
-        .from('ImplantacaoPurchaseItem')
+        .from('ImplementationPurchaseItem')
         .select('sentToCommercial, thirdPartySubtype:ThirdPartySubtype(id, projectCharacteristicId)')
-        .eq('implantacaoId', implantacao.id)
+        .eq('implementationId', implantacao.id)
         .eq('purchaseType', 'Terceiro')
         .eq('sentToCommercial', true);
 
     if (error) {
-        if (error.message?.includes('ImplantacaoPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
+        if (error.message?.includes('ImplementationPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
             return new Set();
         }
         console.warn('fetchThirdPartyCharacteristicIdsSentToComprasForOrderProject:', error);

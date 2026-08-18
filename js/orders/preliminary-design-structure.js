@@ -17,7 +17,7 @@ async function loadAnteprojetoAvailableProjects(conference = null, editingConfer
             const id = Number(project.id);
             if (selectedMap[id]) return true;
             if (usedProjectIds.has(id)) return false;
-            if (isComplementarOrderProject(project) || isSubstituidoOrderProject(project)) return false;
+            if (isComplementaryOrderProject(project) || isReplacedOrderProject(project)) return false;
             return isProjectPlantaLevantada(project);
         })
         .map(project => ({
@@ -177,17 +177,17 @@ function normalizeModuleObservations(observations) {
                 return {
                     id: null,
                     text: obs.trim(),
-                    consultorChecked: false,
-                    consultorResponse: ''
+                    consultantChecked: false,
+                    consultantResponse: ''
                 };
             }
             return {
                 id: obs.id || null,
                 text: String(obs.text || obs.observation?.text || '').trim(),
                 sortOrder: obs.sortOrder ?? 0,
-                consultorDisposition: normalizeConsultorDisposition(obs),
-                consultorChecked: normalizeConsultorDisposition(obs) === ANTEPROJETO_DISPOSITION_OK,
-                consultorResponse: obs.consultorResponse || ''
+                consultantDisposition: normalizeConsultorDisposition(obs),
+                consultantChecked: normalizeConsultorDisposition(obs) === ANTEPROJETO_DISPOSITION_OK,
+                consultantResponse: obs.consultantResponse || ''
             };
         })
         .filter(obs => obs.text);
@@ -213,7 +213,7 @@ function updateModuleObservationToggleLabel(card) {
 function renderObservationItem(observation = {}, options = {}) {
     const { canEditStructure = true, canEditConsultor = false, readOnly = false } = options;
     const data = typeof observation === 'string'
-        ? { id: null, text: observation, consultorChecked: false, consultorResponse: '' }
+        ? { id: null, text: observation, consultantChecked: false, consultantResponse: '' }
         : observation;
     const canRemove = canEditStructure && !readOnly;
     const disabledConsultor = readOnly || !canEditConsultor ? 'disabled' : '';
@@ -283,7 +283,7 @@ function renderObservationItem(observation = {}, options = {}) {
         <textarea rows="2" class="anteprojeto-observation-response w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-sky-600 disabled:bg-slate-50"
             placeholder="Resposta do consultor" ${disabledConsultor}></textarea>
     `;
-    consultorWrap.querySelector('.anteprojeto-observation-response').value = data.consultorResponse || '';
+    consultorWrap.querySelector('.anteprojeto-observation-response').value = data.consultantResponse || '';
     consultorWrap.querySelectorAll('.anteprojeto-observation-disposition, .anteprojeto-observation-response')
         .forEach(element => element.addEventListener('change', refreshAnteprojetoModalConfirmButton));
     consultorWrap.querySelector('.anteprojeto-observation-response')
@@ -305,9 +305,9 @@ function addObservationToModule(card, text, options = {}) {
 
     list.appendChild(renderObservationItem({
         text: trimmed,
-        consultorDisposition: null,
-        consultorChecked: false,
-        consultorResponse: ''
+        consultantDisposition: null,
+        consultantChecked: false,
+        consultantResponse: ''
     }, options));
     card.querySelector('.anteprojeto-observations-empty-msg')?.classList.add('hidden');
     updateModuleObservationToggleLabel(card);
@@ -451,9 +451,9 @@ function collectAnteprojetoModulesFromDom() {
                             text: item.querySelector('.anteprojeto-observation-text')?.textContent.trim()
                                 || item.querySelector('.anteprojeto-module-observation')?.value.trim()
                                 || '',
-                            consultorDisposition: disposition,
-                            consultorChecked: disposition === ANTEPROJETO_DISPOSITION_OK,
-                            consultorResponse: item.querySelector('.anteprojeto-observation-response')?.value.trim() || ''
+                            consultantDisposition: disposition,
+                            consultantChecked: disposition === ANTEPROJETO_DISPOSITION_OK,
+                            consultantResponse: item.querySelector('.anteprojeto-observation-response')?.value.trim() || ''
                         };
                     })
                     .filter(obs => obs.text),

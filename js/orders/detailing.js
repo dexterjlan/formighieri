@@ -8,12 +8,6 @@ let activeDetalhamentoRecord = null;
 let activeDetalhamentoProjectName = '';
 let detalhamentoProjetistasCache = [];
 
-function getDetalhamentoStatusBadgeClass(status) {
-    if (status === DETALHAMENTO_STATUS_PRONTO) return 'bg-emerald-100 text-emerald-800';
-    if (status === DETALHAMENTO_STATUS_EM_ANDAMENTO) return 'bg-violet-100 text-violet-800';
-    return 'bg-amber-100 text-amber-800';
-}
-
 function canActDetalhamentoGestor() {
     return isAdmin() || isGestorProjetos();
 }
@@ -27,7 +21,7 @@ function canAccessDetalhamentoModal() {
     return Boolean(activeDetalhamentoRecord?.id);
 }
 
-async function fetchDetalhamentoByOrderProjectId(orderProjectId) {
+async function fetchDetailingByOrderProjectId(orderProjectId) {
     const { data, error } = await supabaseClient
         .from('Detailing')
         .select('*, designer:appUsers!Detailing_designerId_fkey(id, name)')
@@ -39,16 +33,17 @@ async function fetchDetalhamentoByOrderProjectId(orderProjectId) {
     return data;
 }
 
-window.fetchDetalhamentoByOrderProjectId = fetchDetalhamentoByOrderProjectId;
+window.fetchDetailingByOrderProjectId = fetchDetailingByOrderProjectId;
+window.fetchDetalhamentoByOrderProjectId = fetchDetailingByOrderProjectId;
 
 async function fetchDetalhamentoProjetoPathFromImplantacao(orderProjectId) {
     if (typeof fetchImplantacaoByOrderProjectId !== 'function') return '';
     const implantacao = await fetchImplantacaoByOrderProjectId(orderProjectId);
-    return implantacao?.projetoPath?.trim() || '';
+    return implantacao?.projectFilePath?.trim() || '';
 }
 
 async function createDetalhamentoRecord(orderProjectId) {
-    const projetoPath = await fetchDetalhamentoProjetoPathFromImplantacao(orderProjectId);
+    const projectFilePath = await fetchDetalhamentoProjetoPathFromImplantacao(orderProjectId);
     const now = new Date().toISOString();
 
     const { data, error } = await supabaseClient
@@ -56,7 +51,7 @@ async function createDetalhamentoRecord(orderProjectId) {
         .insert({
             orderProjectId,
             status: DETALHAMENTO_STATUS_AGUARDANDO,
-            projetoPath: projetoPath || null,
+            projectFilePath: projectFilePath || null,
             createdById: currentUser?.id || null,
             updatedById: currentUser?.id || null,
             updatedAt: now
@@ -69,14 +64,14 @@ async function createDetalhamentoRecord(orderProjectId) {
 }
 
 async function ensureDetalhamentoRecord(orderProjectId) {
-    const existing = await fetchDetalhamentoByOrderProjectId(orderProjectId);
+    const existing = await fetchDetailingByOrderProjectId(orderProjectId);
     if (existing) return existing;
     return createDetalhamentoRecord(orderProjectId);
 }
 
-async function createDetalhamentoForProject(orderProjectId) {
+async function createDetailingForProject(orderProjectId) {
     try {
-        const existing = await fetchDetalhamentoByOrderProjectId(orderProjectId);
+        const existing = await fetchDetailingByOrderProjectId(orderProjectId);
         if (existing) return existing;
 
         const record = await createDetalhamentoRecord(orderProjectId);
@@ -84,18 +79,19 @@ async function createDetalhamentoForProject(orderProjectId) {
         if (record && typeof notifyAguardandoDetalhamentoEmail === 'function') {
             await notifyAguardandoDetalhamentoEmail({
                 orderProjectId,
-                projetoPath: record.projetoPath || ''
+                projectFilePath: record.projectFilePath || ''
             });
         }
 
         return record;
     } catch (error) {
-        console.warn('createDetalhamentoForProject:', orderProjectId, error);
+        console.warn('createDetailingForProject:', orderProjectId, error);
         return null;
     }
 }
 
-window.createDetalhamentoForProject = createDetalhamentoForProject;
+window.createDetailingForProject = createDetailingForProject;
+window.createDetalhamentoForProject = createDetailingForProject;
 
 async function fetchDetalhamentoProjetistas(force = false) {
     if (!force && detalhamentoProjetistasCache.length) {
@@ -104,13 +100,13 @@ async function fetchDetalhamentoProjetistas(force = false) {
 
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, detalhamento')
+        .select('id, name, isDetailing')
         .eq('role', 'Projetista')
         .eq('isActive', true)
-        .eq('detalhamento', true)
+        .eq('isDetailing', true)
         .order('name', { ascending: true });
 
-    if (result.error?.message?.includes('detalhamento')) {
+    if (result.error?.message?.includes('isDetailing')) {
         detalhamentoProjetistasCache = [];
         return detalhamentoProjetistasCache;
     }
@@ -149,20 +145,10 @@ async function countDetalhamentosEmAndamentoForDesigner(designerId) {
     return count || 0;
 }
 
+const DETALHAMENTO_MODAL_OVERLAY = createModalOverlayConfig('detalhamento-modal');
+
 function setDetalhamentoModalLoading(visible, message = 'Processando...', variant = 'loading') {
-    const overlay = document.getElementById('detalhamento-modal-loading');
-    const spinner = document.getElementById('detalhamento-modal-loading-spinner');
-    const success = document.getElementById('detalhamento-modal-loading-success');
-    const errorEl = document.getElementById('detalhamento-modal-loading-error');
-    const msg = document.getElementById('detalhamento-modal-loading-msg');
-
-    if (!overlay) return;
-
-    overlay.classList.toggle('hidden', !visible);
-    if (msg) msg.textContent = message;
-    spinner?.classList.toggle('hidden', variant !== 'loading');
-    success?.classList.toggle('hidden', variant !== 'success');
-    errorEl?.classList.toggle('hidden', variant !== 'error');
+    setModalOverlayLoading(DETALHAMENTO_MODAL_OVERLAY, visible, message, variant);
 }
 
 function waitDetalhamentoStatus(ms) {
@@ -171,7 +157,7 @@ function waitDetalhamentoStatus(ms) {
 
 function populateDetalhamentoForm(record) {
     const badge = document.getElementById('detalhamento-modal-status-badge');
-    const projetoPath = document.getElementById('detalhamento-projeto-path');
+    const projectFilePath = document.getElementById('detalhamento-projeto-path');
     const serverFolderPath = document.getElementById('detalhamento-server-folder-path');
     const designerSelect = document.getElementById('detalhamento-designer-select');
     const designerReadonly = document.getElementById('detalhamento-designer-readonly');
@@ -183,7 +169,7 @@ function populateDetalhamentoForm(record) {
         badge.className = `text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${getDetalhamentoStatusBadgeClass(record?.status)}`;
     }
 
-    if (projetoPath) projetoPath.value = record?.projetoPath || '';
+    if (projectFilePath) projectFilePath.value = record?.projectFilePath || '';
     if (serverFolderPath) serverFolderPath.value = record?.serverFolderPath || '';
     if (designerSelect) designerSelect.value = record?.designerId ? String(record.designerId) : '';
     if (designerReadonly) {
@@ -267,14 +253,14 @@ async function refreshDetalhamentoRelatedViews(orderProjectId) {
     }
 }
 
-async function openDetalhamentoModal(orderProjectId, projectName = '') {
+async function openDetailingModal(orderProjectId, projectName = '') {
     if (!orderProjectId) return;
 
     activeDetalhamentoOrderProjectId = Number(orderProjectId);
     activeDetalhamentoProjectName = projectName || 'Projeto';
 
     try {
-        activeDetalhamentoRecord = await fetchDetalhamentoByOrderProjectId(activeDetalhamentoOrderProjectId);
+        activeDetalhamentoRecord = await fetchDetailingByOrderProjectId(activeDetalhamentoOrderProjectId);
         if (!activeDetalhamentoRecord) {
             alertAppDialog('Detalhamento não encontrado para este projeto.', { variant: 'warning', title: 'Aviso' });
             return;
@@ -295,9 +281,10 @@ async function openDetalhamentoModal(orderProjectId, projectName = '') {
     }
 }
 
-window.openDetalhamentoModal = openDetalhamentoModal;
+window.openDetailingModal = openDetailingModal;
+window.openDetalhamentoModal = openDetailingModal;
 
-function closeDetalhamentoModal() {
+function closeDetailingModal() {
     toggleModal('detalhamento-modal', false);
     activeDetalhamentoOrderProjectId = null;
     activeDetalhamentoRecord = null;
@@ -340,7 +327,7 @@ async function handleDetalhamentoAssociar() {
             await notifyDetalhamentoProjetistaAssociadoEmail({
                 orderProjectId: activeDetalhamentoOrderProjectId,
                 designerId,
-                projetoPath: data?.projetoPath || activeDetalhamentoRecord?.projetoPath || ''
+                projectFilePath: data?.projectFilePath || activeDetalhamentoRecord?.projectFilePath || ''
             });
         }
 
@@ -577,11 +564,11 @@ function renderProjectViewDetailingSection(record) {
     setText('project-view-detalhamento-started-at', formatDetalhamentoViewDate(record.startedAt));
     setText('project-view-detalhamento-completed-at', formatDetalhamentoViewDate(record.completedAt));
 
-    const projetoPathEl = document.getElementById('project-view-detalhamento-projeto-path');
-    const projetoPath = record.projetoPath || '—';
-    if (projetoPathEl) {
-        projetoPathEl.textContent = projetoPath;
-        projetoPathEl.classList.toggle('project-view-path--empty', projetoPath === '—');
+    const projectFilePathEl = document.getElementById('project-view-detalhamento-projeto-path');
+    const projectFilePath = record.projectFilePath || '—';
+    if (projectFilePathEl) {
+        projectFilePathEl.textContent = projectFilePath;
+        projectFilePathEl.classList.toggle('project-view-path--empty', projectFilePath === '—');
     }
 
     const serverPathEl = document.getElementById('project-view-detalhamento-server-path');
@@ -594,10 +581,19 @@ function renderProjectViewDetailingSection(record) {
 
 window.renderProjectViewDetailingSection = renderProjectViewDetailingSection;
 
-function bindDetalhamentoEvents() {
-    document.getElementById('btn-close-detalhamento-modal')?.addEventListener('click', closeDetalhamentoModal);
-    document.getElementById('btn-close-detalhamento-modal-footer')?.addEventListener('click', closeDetalhamentoModal);
+function bindDetailingEvents() {
+    document.getElementById('btn-close-detalhamento-modal')?.addEventListener('click', closeDetailingModal);
+    document.getElementById('btn-close-detalhamento-modal-footer')?.addEventListener('click', closeDetailingModal);
     document.getElementById('btn-detalhamento-associar')?.addEventListener('click', handleDetalhamentoAssociar);
     document.getElementById('btn-detalhamento-iniciar')?.addEventListener('click', handleDetalhamentoIniciar);
     document.getElementById('btn-detalhamento-encerrar')?.addEventListener('click', handleDetalhamentoEncerrar);
 }
+
+const bindDetalhamentoEvents = bindDetailingEvents;
+
+const fetchDetalhamentoByOrderProjectId = fetchDetailingByOrderProjectId;
+const createDetalhamentoForProject = createDetailingForProject;
+const openDetalhamentoModal = openDetailingModal;
+const closeDetalhamentoModal = closeDetailingModal;
+window.closeDetailingModal = closeDetailingModal;
+window.closeDetalhamentoModal = closeDetailingModal;

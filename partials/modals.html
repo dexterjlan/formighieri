@@ -261,20 +261,29 @@
         </div>
     </div>
 
-    <!-- MODAL: CONFIRMAR DATA DE ENTREGA DO PEDIDO (PRIMEIRA APROVAÇÃO COMERCIAL) -->
+    <!-- MODAL: CONFIRMAR DATA DE ENTREGA DO PEDIDO (APROVAÇÃO COMERCIAL) -->
     <div id="commercial-approval-order-delivery-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl relative">
-            <h3 class="font-bold text-base text-slate-900 mb-1">Confirmar data de entrega do pedido</h3>
-            <p id="commercial-approval-order-delivery-context" class="text-xs text-slate-500 mb-4">
-                Confirme a data de entrega do pedido antes de aprovar o primeiro projeto.
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl relative max-h-[90vh] flex flex-col">
+            <h3 class="font-bold text-base text-slate-900 mb-1 shrink-0">Confirmar data de entrega</h3>
+            <p id="commercial-approval-order-delivery-context" class="text-xs text-slate-500 mb-4 shrink-0">
+                Confirme a data de entrega antes de aprovar o projeto.
             </p>
-            <label class="block text-xs font-semibold text-slate-500 mb-1" for="commercial-approval-order-delivery-input">
-                Data de entrega do pedido <span class="text-red-500">*</span>
-            </label>
-            <input type="date" id="commercial-approval-order-delivery-input" required
-                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500">
-            <div class="flex gap-2 pt-4 mt-4 border-t border-slate-100">
+            <div class="overflow-y-auto space-y-4 pr-1 flex-1 min-h-0">
+                <div id="commercial-approval-order-delivery-wrap">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="commercial-approval-order-delivery-input">
+                        Data de entrega do pedido <span class="text-red-500">*</span>
+                    </label>
+                    <input type="date" id="commercial-approval-order-delivery-input" required
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500">
+                </div>
+                <div id="commercial-approval-phase-delivery-section" class="hidden">
+                    <div id="commercial-approval-phase-projects-label" class="text-xs font-semibold text-slate-500 mb-2">Projetos da fase</div>
+                    <div id="commercial-approval-phase-projects-wrap" class="space-y-3"></div>
+                </div>
+                <p id="commercial-approval-order-delivery-footnote" class="text-[10px] text-slate-400 hidden"></p>
+            </div>
+            <div class="flex gap-2 pt-4 mt-4 border-t border-slate-100 shrink-0">
                 <button type="button" id="btn-commercial-approval-order-delivery-cancel"
                     class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
                 <button type="button" id="btn-commercial-approval-order-delivery-submit"
@@ -601,7 +610,7 @@
             <h3 class="font-bold text-base text-slate-900 mb-1">Aprovar Conferência</h3>
             <p id="anteprojeto-approve-modal-context" class="text-xs text-slate-500 mb-4">Confirme as datas de entrega e o endereço da pasta da conferência antes de aprovar.</p>
             <div class="overflow-y-auto space-y-4 pr-1 flex-1 min-h-0">
-                <div>
+                <div id="anteprojeto-approve-order-delivery-wrap">
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="anteprojeto-approve-order-delivery">
                         Data de entrega do pedido <span class="text-red-500">*</span>
                     </label>
@@ -617,10 +626,10 @@
                         placeholder="Ex: \\\\servidor\\projetos\\1050-Cozinha">
                 </div>
                 <div>
-                    <div class="text-xs font-semibold text-slate-500 mb-2">Datas de entrega dos projetos</div>
+                    <div id="anteprojeto-approve-projects-label" class="text-xs font-semibold text-slate-500 mb-2">Datas de entrega dos projetos</div>
                     <div id="anteprojeto-approve-projects-wrap" class="space-y-3"></div>
                 </div>
-                <p class="text-[10px] text-slate-400">A data de entrega do projeto técnico deve ser anterior à data de entrega do pedido.</p>
+                <p id="anteprojeto-approve-delivery-footnote" class="text-[10px] text-slate-400">A data de entrega do projeto técnico deve ser anterior à data de entrega do pedido.</p>
             </div>
             <div class="flex gap-2 pt-4 mt-4 border-t border-slate-100 shrink-0">
                 <button type="button" id="btn-anteprojeto-approve-modal-cancel"
@@ -1217,7 +1226,7 @@
                 </button>
                 <button type="button" id="btn-project-view-revisions"
                     class="hidden flex-1 bg-sky-100 text-sky-800 border border-sky-200 py-2.5 rounded-lg text-xs font-semibold hover:bg-sky-200">
-                    Ver Revisões
+                    Revisões
                 </button>
                 <button type="button" id="btn-order-project-status-history"
                     class="flex-1 bg-white border border-indigo-200 text-indigo-800 py-2.5 rounded-lg text-xs font-semibold hover:bg-indigo-50">
@@ -1702,6 +1711,28 @@
                     class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium hover:bg-slate-200">Cancelar</button>
                 <button type="button" id="order-project-montagem-fim-submit"
                     class="flex-1 bg-amber-700 text-white py-2 rounded-lg text-xs font-medium hover:bg-amber-800">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: FINALIZAR ENTREGA TÉCNICA (lista de projetos do pedido / pendências) -->
+    <div id="order-project-entrega-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 class="font-bold text-base text-slate-900 mb-1">Finalizar entrega</h3>
+            <p id="order-project-entrega-context" class="text-xs text-slate-500 mb-4"></p>
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 mb-1" for="order-project-entrega-data">
+                    Data de entrega do pedido <span class="text-red-500">*</span>
+                </label>
+                <input type="date" id="order-project-entrega-data"
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-600">
+            </div>
+            <div class="flex gap-2 pt-4 mt-4 border-t border-slate-100">
+                <button type="button" id="order-project-entrega-cancel"
+                    class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium hover:bg-slate-200">Cancelar</button>
+                <button type="button" id="order-project-entrega-submit"
+                    class="flex-1 bg-emerald-700 text-white py-2 rounded-lg text-xs font-medium hover:bg-emerald-800">Confirmar</button>
             </div>
         </div>
     </div>

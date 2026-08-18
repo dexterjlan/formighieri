@@ -3,11 +3,11 @@ function getProjectStatusId(project) {
 }
 
 function isGestaoKanbanComplementarProject(project) {
-    return isComplementarOrderProject(project) || Boolean(project?.parentProjectId);
+    return isComplementaryOrderProject(project) || Boolean(project?.parentProjectId);
 }
 
 function isGestaoKanbanHiddenProject(project) {
-    return isGestaoKanbanComplementarProject(project) || isSubstituidoOrderProject(project);
+    return isGestaoKanbanComplementarProject(project) || isReplacedOrderProject(project);
 }
 
 function projectBelongsToGestaoKanbanPhase(project, phase, phases = []) {
@@ -64,23 +64,15 @@ function buildGestaoKanbanCardsForStatus(statusId, orders) {
                     project,
                     children: (complementarByParentId[Number(project.id)] || [])
                         .slice()
-                        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'))
+                        .sort(compareGestaoKanbanProjectsByDaysInStatus)
                 }))
-                .sort((a, b) => String(a.project.name || '').localeCompare(String(b.project.name || ''), 'pt-BR'));
+                .sort(compareGestaoKanbanProjectsByDaysInStatus);
 
             cards.push({ order, phase, projectTree });
         });
     });
 
-    cards.sort((a, b) => {
-        const codeCompare = String(a.order.orderCode || '').localeCompare(
-            String(b.order.orderCode || ''),
-            'pt-BR',
-            { numeric: true }
-        );
-        if (codeCompare !== 0) return codeCompare;
-        return (a.phase?.sortOrder || 0) - (b.phase?.sortOrder || 0);
-    });
+    cards.sort(compareGestaoKanbanCardsByDaysInStatus);
 
     return cards;
 }
@@ -89,17 +81,23 @@ function renderGestaoKanbanProjectRow(project, options = {}) {
     const { nested = false, isComplementar = false, orderCode = '' } = options;
 
     let displayName = project.name || 'Projeto';
-    if (isComplementar || nested || project.isComplementar) {
+    if (isComplementar || nested || project.isComplementary) {
         const orderLabel = project.order?.orderCode || orderCode || '';
         const orderPart = orderLabel ? `${orderLabel} - ` : '';
         displayName = `Proj. Compl. ${orderPart}${project.name || 'Projeto'}`;
     }
 
-    const showHistoryBtn = !isComplementar && !nested && !project.isComplementar;
+    const daysInStatusLabel = formatGestaoKanbanDaysInCurrentStatus(project);
+    const showHistoryBtn = !isComplementar && !nested && !project.isComplementary;
 
     return `
         <div class="flex items-start justify-between gap-2 ${nested ? 'ml-4 pl-2 border-l border-indigo-100' : ''}">
-            <span class="text-[11px] leading-snug min-w-0 ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(displayName)}</span>
+            <div class="flex items-baseline gap-1.5 min-w-0 flex-wrap">
+                <span class="text-[11px] leading-snug ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(displayName)}</span>
+                ${daysInStatusLabel
+                    ? `<span class="text-[10px] text-slate-400 whitespace-nowrap" title="Dias no status atual">${escapeHtml(daysInStatusLabel)}</span>`
+                    : ''}
+            </div>
             ${showHistoryBtn ? `
             <button type="button"
                 class="gestao-kanban-history-btn shrink-0 text-[10px] bg-white border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-medium hover:bg-indigo-50"
@@ -693,7 +691,149 @@ function renderGestaoKanbanColumn(status, orders) {
 
 let gestaoKanbanFullscreen = false;
 let gestaoKanbanStatusesCache = [];
+let gestaoKanbanStatusSinceByProjectId = {};
 let gestaoKanbanClientFilterTimer = null;
+
+function getGestaoKanbanDaysInCurrentStatus(changedAt) {
+    if (!changedAt) return null;
+
+    const start = new Date(changedAt);
+    if (Number.isNaN(start.getTime())) return null;
+
+    const now = new Date();
+    const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.max(0, Math.floor((today.getTime() - startDay.getTime()) / 86400000));
+}
+
+function formatGestaoKanbanDaysInCurrentStatus(project) {
+    const days = getGestaoKanbanProjectDaysInCurrentStatus(project);
+    if (days === null) return '';
+    if (days === 0) return 'hoje';
+    return days === 1 ? '1 dia' : `${days} dias`;
+}
+
+function getGestaoKanbanProjectDaysInCurrentStatus(project) {
+    const projectId = Number(project?.id);
+    const changedAt = gestaoKanbanStatusSinceByProjectId[projectId]
+        || project?.updatedAt
+        || null;
+    return getGestaoKanbanDaysInCurrentStatus(changedAt);
+}
+
+function compareGestaoKanbanProjectsByDaysInStatus(a, b) {
+    const projectA = a?.project || a;
+    const projectB = b?.project || b;
+    const daysA = getGestaoKanbanProjectDaysInCurrentStatus(projectA);
+    const daysB = getGestaoKanbanProjectDaysInCurrentStatus(projectB);
+    const normalizedDaysA = daysA === null ? -1 : daysA;
+    const normalizedDaysB = daysB === null ? -1 : daysB;
+
+    if (normalizedDaysA !== normalizedDaysB) {
+        return normalizedDaysB - normalizedDaysA;
+    }
+
+    return String(projectA?.name || '').localeCompare(String(projectB?.name || ''), 'pt-BR');
+}
+
+function getGestaoKanbanCardMaxDaysInStatus(projectTree) {
+    let maxDays = -1;
+
+    (projectTree || []).forEach(({ project, children }) => {
+        const parentDays = getGestaoKanbanProjectDaysInCurrentStatus(project);
+        if (parentDays !== null) maxDays = Math.max(maxDays, parentDays);
+
+        (children || []).forEach(child => {
+            const childDays = getGestaoKanbanProjectDaysInCurrentStatus(child);
+            if (childDays !== null) maxDays = Math.max(childDays, maxDays);
+        });
+    });
+
+    return maxDays;
+}
+
+function compareGestaoKanbanCardsByDaysInStatus(a, b) {
+    const daysA = getGestaoKanbanCardMaxDaysInStatus(a.projectTree);
+    const daysB = getGestaoKanbanCardMaxDaysInStatus(b.projectTree);
+
+    if (daysA !== daysB) return daysB - daysA;
+
+    const codeCompare = String(a.order.orderCode || '').localeCompare(
+        String(b.order.orderCode || ''),
+        'pt-BR',
+        { numeric: true }
+    );
+    if (codeCompare !== 0) return codeCompare;
+
+    return (a.phase?.sortOrder || 0) - (b.phase?.sortOrder || 0);
+}
+
+function collectGestaoKanbanVisibleProjects(orders = []) {
+    const projects = [];
+    const seen = new Set();
+
+    (orders || []).forEach(order => {
+        (order.projects || []).forEach(project => {
+            if (isReplacedOrderProject(project)) return;
+
+            const projectId = Number(project?.id);
+            if (!projectId || seen.has(projectId)) return;
+
+            seen.add(projectId);
+            projects.push(project);
+        });
+    });
+
+    return projects;
+}
+
+async function fetchGestaoKanbanCurrentStatusChangedAtByProjects(projects = []) {
+    const statusIdByProjectId = {};
+    const projectIds = [];
+
+    projects.forEach(project => {
+        const projectId = Number(project?.id);
+        const statusId = getProjectStatusId(project);
+        if (!projectId || !statusId) return;
+        statusIdByProjectId[projectId] = statusId;
+        projectIds.push(projectId);
+    });
+
+    if (!projectIds.length) return {};
+
+    let result = await supabaseClient
+        .from('OrderProjectStatusHistory')
+        .select('orderProjectId, newStatusId, changedAt')
+        .in('orderProjectId', projectIds)
+        .order('changedAt', { ascending: false });
+
+    if (result.error?.message?.includes('OrderProjectStatusHistory')) {
+        return {};
+    }
+
+    if (result.error) {
+        console.warn('fetchGestaoKanbanCurrentStatusChangedAtByProjects:', result.error);
+        return {};
+    }
+
+    const byProjectId = {};
+    (result.data || []).forEach(entry => {
+        const projectId = Number(entry.orderProjectId);
+        if (!projectId || byProjectId[projectId]) return;
+
+        const expectedStatusId = statusIdByProjectId[projectId];
+        if (Number(entry.newStatusId) !== Number(expectedStatusId)) return;
+
+        byProjectId[projectId] = entry.changedAt;
+    });
+
+    return byProjectId;
+}
+
+async function loadGestaoKanbanStatusSinceMap(orders = []) {
+    const projects = collectGestaoKanbanVisibleProjects(orders);
+    gestaoKanbanStatusSinceByProjectId = await fetchGestaoKanbanCurrentStatusChangedAtByProjects(projects);
+}
 
 function getGestaoKanbanClientFilter() {
     return document.getElementById('gestao-kanban-filter-client')?.value.trim() || '';
@@ -764,9 +904,9 @@ async function loadGestaoKanban() {
     let orders = ordersResult.data || [];
     const needsRelationFields = orders.some(order =>
         (order.projects || []).some(project =>
-            project.isComplementar === undefined && project.parentProjectId === undefined
-            || project.isSubstituido === undefined && project.substituidoPorProjectId === undefined
-            || project.isSubstituicao === undefined && project.substituiProjectId === undefined
+            project.isComplementary === undefined && project.parentProjectId === undefined
+            || project.isReplaced === undefined && project.replacedByProjectId === undefined
+            || project.isReplacement === undefined && project.replacesProjectId === undefined
         )
     );
 
@@ -788,7 +928,7 @@ async function loadGestaoKanban() {
 
     gestaoOrdersCache = orders;
 
-    const visibleStatuses = statuses.filter(status => !isSubstituidoStatusName(status.name));
+    const visibleStatuses = statuses.filter(status => !isReplacedStatusName(status.name));
 
     if (!visibleStatuses.length) {
         board.innerHTML = `
@@ -801,6 +941,7 @@ async function loadGestaoKanban() {
 
     gestaoKanbanStatusesCache = visibleStatuses;
 
+    await loadGestaoKanbanStatusSinceMap(orders);
     renderGestaoKanbanBoard();
 }
 
@@ -926,7 +1067,7 @@ function getGestaoKanbanExportFilename() {
 
 async function resolveGestaoKanbanExportData() {
     let orders = gestaoOrdersCache || [];
-    let statuses = (gestaoKanbanStatusesCache || []).filter(status => !isSubstituidoStatusName(status.name));
+    let statuses = (gestaoKanbanStatusesCache || []).filter(status => !isReplacedStatusName(status.name));
 
     if (!orders.length || !statuses.length) {
         const [loadedStatuses, ordersResult] = await Promise.all([
@@ -939,7 +1080,7 @@ async function resolveGestaoKanbanExportData() {
         }
 
         orders = ordersResult.data || [];
-        statuses = (loadedStatuses || []).filter(status => !isSubstituidoStatusName(status.name));
+        statuses = (loadedStatuses || []).filter(status => !isReplacedStatusName(status.name));
 
         if (orders.length && typeof fetchGestaoOrderPhasesByOrderIds === 'function') {
             const phasesByOrderId = await fetchGestaoOrderPhasesByOrderIds(orders.map(order => order.id));

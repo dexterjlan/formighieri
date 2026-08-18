@@ -37,11 +37,11 @@ function renderImportStatusWpsList(rows) {
         <tr data-row-id="${row.id}">
             <td class="p-3">
                 <input type="text" class="import-status-wps-field w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                    data-field="StatusWPS" value="${escapeHtml(row.StatusWPS || '')}" required>
+                    data-field="statusWps" value="${escapeHtml(row.statusWps || '')}" required>
             </td>
             <td class="p-3">
                 <input type="text" class="import-status-wps-field w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                    data-field="StatusFGP" value="${escapeHtml(row.StatusFGP || '')}" required>
+                    data-field="statusFgp" value="${escapeHtml(row.statusFgp || '')}" required>
             </td>
             <td class="p-3">
                 <div class="flex flex-wrap gap-1.5">
@@ -83,10 +83,10 @@ function renderImportConsultorWpsList(rows) {
         <tr data-row-id="${row.id}">
             <td class="p-3">
                 <input type="text" class="import-consultor-wps-field w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                    data-field="ConsultorWPS" value="${escapeHtml(row.ConsultorWPS || '')}" required>
+                    data-field="consultantWps" value="${escapeHtml(row.consultantWps || '')}" required>
             </td>
             <td class="p-3">
-                ${getImportConsultorFgpSelectHtml(row.ConsultorFGP || '')}
+                ${getImportConsultorFgpSelectHtml(row.consultantFgp || '')}
             </td>
             <td class="p-3">
                 <div class="flex flex-wrap gap-1.5">
@@ -133,7 +133,7 @@ function getImportConsultorFgpSelectHtml(selectedName = '') {
     const selectClass = 'import-consultor-wps-field w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600';
 
     if (!users.length) {
-        return `<select class="${selectClass}" data-field="ConsultorFGP" required disabled>
+        return `<select class="${selectClass}" data-field="consultantFgp" required disabled>
             <option value="">Cadastre consultores ativos</option>
         </select>`;
     }
@@ -154,7 +154,7 @@ function getImportConsultorFgpSelectHtml(selectedName = '') {
         return `<option value="${escapeHtml(user.name)}"${selected}>${escapeHtml(user.name)}</option>`;
     }).join('');
 
-    return `<select class="${selectClass}" data-field="ConsultorFGP" required>${optionsHtml}</select>`;
+    return `<select class="${selectClass}" data-field="consultantFgp" required>${optionsHtml}</select>`;
 }
 
 function populateImportConsultorFgpNewSelect(selectedName = '') {
@@ -212,11 +212,11 @@ function renderImportMarceneiroWpsList(rows) {
         <tr data-row-id="${row.id}">
             <td class="p-3">
                 <input type="text" class="import-marceneiro-wps-field w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                    data-field="MarceneiroWPS" value="${escapeHtml(row.MarceneiroWPS || '')}" required>
+                    data-field="cabinetMakerWps" value="${escapeHtml(row.cabinetMakerWps || '')}" required>
             </td>
             <td class="p-3">
                 <input type="text" class="import-marceneiro-wps-field w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                    data-field="MarceneiroFGP" value="${escapeHtml(row.MarceneiroFGP || '')}" required>
+                    data-field="cabinetMakerFgp" value="${escapeHtml(row.cabinetMakerFgp || '')}" required>
             </td>
             <td class="p-3">
                 <div class="flex flex-wrap gap-1.5">
@@ -252,9 +252,9 @@ async function loadImportPedidoSettings() {
     populateImportConsultorFgpNewSelect();
 
     const [statusResult, consultorResult, marceneiroResult] = await Promise.all([
-        supabaseClient.from('importStatusWPS').select('id, StatusWPS, StatusFGP').order('StatusWPS', { ascending: true }),
-        supabaseClient.from('importConsultorWPS').select('id, ConsultorWPS, ConsultorFGP').order('ConsultorWPS', { ascending: true }),
-        supabaseClient.from('importMarceneiroWPS').select('id, MarceneiroWPS, MarceneiroFGP').order('MarceneiroWPS', { ascending: true })
+        supabaseClient.from('importStatusWPS').select('id, statusWps, statusFgp').order('statusWps', { ascending: true }),
+        supabaseClient.from('importConsultorWPS').select('id, consultantWps, consultantFgp').order('consultantWps', { ascending: true }),
+        supabaseClient.from('importMarceneiroWPS').select('id, cabinetMakerWps, cabinetMakerFgp').order('cabinetMakerWps', { ascending: true })
     ]);
 
     if (statusResult.error) {
@@ -289,9 +289,9 @@ async function saveImportStatusWpsRow(row) {
     if (!row || !isAdmin()) return;
 
     const rowId = Number(row.dataset.rowId);
-    const values = readImportStatusWpsRowValues(row, 'import-status-wps-field');
+    const values = readImportWpsRowValues(row, 'import-status-wps-field');
 
-    if (!values.StatusWPS || !values.StatusFGP) {
+    if (!values.statusWps || !values.statusFgp) {
         alertAppDialog('Informe StatusWPS e StatusFGP.');
         return;
     }
@@ -313,8 +313,8 @@ async function deleteImportStatusWpsRow(row) {
     if (!row || !isAdmin()) return;
 
     const rowId = Number(row.dataset.rowId);
-    const values = readImportStatusWpsRowValues(row, 'import-status-wps-field');
-    if (!(await confirmAppDialog(`Excluir mapeamento "${values.StatusWPS}" → "${values.StatusFGP}"?`))) return;
+    const values = readImportWpsRowValues(row, 'import-status-wps-field');
+    if (!(await confirmAppDialog(`Excluir mapeamento "${values.statusWps}" → "${values.statusFgp}"?`))) return;
 
     const { error } = await supabaseClient
         .from('importStatusWPS')
@@ -343,7 +343,7 @@ async function addImportStatusWps(event) {
 
     const { error } = await supabaseClient
         .from('importStatusWPS')
-        .insert({ StatusWPS: statusWps, StatusFGP: statusFgp });
+        .insert({ statusWps, statusFgp });
 
     if (error) {
         alertAppDialog('Erro ao adicionar status WPS: ' + error.message);
@@ -360,7 +360,7 @@ async function saveImportConsultorWpsRow(row) {
     const rowId = Number(row.dataset.rowId);
     const values = readImportWpsRowValues(row, 'import-consultor-wps-field');
 
-    if (!values.ConsultorWPS || !values.ConsultorFGP) {
+    if (!values.consultantWps || !values.consultantFgp) {
         alertAppDialog('Informe ConsultorWPS e ConsultorFGP.');
         return;
     }
@@ -383,7 +383,7 @@ async function deleteImportConsultorWpsRow(row) {
 
     const rowId = Number(row.dataset.rowId);
     const values = readImportWpsRowValues(row, 'import-consultor-wps-field');
-    if (!(await confirmAppDialog(`Excluir mapeamento "${values.ConsultorWPS}" → "${values.ConsultorFGP}"?`))) return;
+    if (!(await confirmAppDialog(`Excluir mapeamento "${values.consultantWps}" → "${values.consultantFgp}"?`))) return;
 
     const { error } = await supabaseClient
         .from('importConsultorWPS')
@@ -412,7 +412,7 @@ async function addImportConsultorWps(event) {
 
     const { error } = await supabaseClient
         .from('importConsultorWPS')
-        .insert({ ConsultorWPS: consultorWps, ConsultorFGP: consultorFgp });
+        .insert({ consultantWps, consultantFgp });
 
     if (error) {
         alertAppDialog('Erro ao adicionar consultor WPS: ' + error.message);
@@ -429,7 +429,7 @@ async function saveImportMarceneiroWpsRow(row) {
     const rowId = Number(row.dataset.rowId);
     const values = readImportWpsRowValues(row, 'import-marceneiro-wps-field');
 
-    if (!values.MarceneiroWPS || !values.MarceneiroFGP) {
+    if (!values.cabinetMakerWps || !values.cabinetMakerFgp) {
         alertAppDialog('Informe MarceneiroWPS e MarceneiroFGP.');
         return;
     }
@@ -452,7 +452,7 @@ async function deleteImportMarceneiroWpsRow(row) {
 
     const rowId = Number(row.dataset.rowId);
     const values = readImportWpsRowValues(row, 'import-marceneiro-wps-field');
-    if (!(await confirmAppDialog(`Excluir mapeamento "${values.MarceneiroWPS}" → "${values.MarceneiroFGP}"?`))) return;
+    if (!(await confirmAppDialog(`Excluir mapeamento "${values.cabinetMakerWps}" → "${values.cabinetMakerFgp}"?`))) return;
 
     const { error } = await supabaseClient
         .from('importMarceneiroWPS')
@@ -481,7 +481,7 @@ async function addImportMarceneiroWps(event) {
 
     const { error } = await supabaseClient
         .from('importMarceneiroWPS')
-        .insert({ MarceneiroWPS: marceneiroWps, MarceneiroFGP: marceneiroFgp });
+        .insert({ cabinetMakerWps: marceneiroWps, cabinetMakerFgp: marceneiroFgp });
 
     if (error) {
         alertAppDialog('Erro ao adicionar marceneiro WPS: ' + error.message);

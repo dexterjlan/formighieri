@@ -302,8 +302,8 @@ function buildApprovalEmailBody(payload) {
         });
     }
 
-    if (payload.caminhoRedeAprovacao) {
-        lines.push(`Caminho da rede para aprovação: ${payload.caminhoRedeAprovacao}`);
+    if (payload.approvalNetworkPath) {
+        lines.push(`Caminho da rede para aprovação: ${payload.approvalNetworkPath}`);
     }
 
     return appendEmailNoReplyFooterText(lines.join('\n'));
@@ -347,10 +347,10 @@ function buildApprovalEmailHtml(payload) {
            </tr>`
         : '';
 
-    const caminhoRedeBlock = payload.caminhoRedeAprovacao
+    const networkPathBlock = payload.approvalNetworkPath
         ? `<div style="margin-top:16px;">
             <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.04em;">Caminho da rede para aprovação</p>
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-family:Consolas,Monaco,monospace;font-size:13px;color:#0f172a;word-break:break-all;">${escapeHtml(payload.caminhoRedeAprovacao)}</div>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-family:Consolas,Monaco,monospace;font-size:13px;color:#0f172a;word-break:break-all;">${escapeHtml(payload.approvalNetworkPath)}</div>
            </div>`
         : '';
 
@@ -390,17 +390,17 @@ function buildApprovalEmailHtml(payload) {
         </tr>
       </table>
       ${activitiesBlock}
-      ${caminhoRedeBlock}
+      ${networkPathBlock}
       ${buildEmailNoReplyFooterHtml()}
     </div>
   </div>
 </body>
 </html>`;
 }
-function buildCompraLiberacaoEmailSubject(tipoCompra, clientName, orderCode, subtypeName = '') {
+function buildCompraLiberacaoEmailSubject(purchaseType, clientName, orderCode, subtypeName = '') {
     const tipoLabel = typeof formatCompraTipoLabel === 'function'
-        ? formatCompraTipoLabel(tipoCompra, subtypeName)
-        : (tipoCompra || '—');
+        ? formatCompraTipoLabel(purchaseType, subtypeName)
+        : (purchaseType || '—');
     const client = clientName || '—';
     const order = orderCode || '—';
     return `Liberação de compra de ${tipoLabel} - ${client} (${order})`;
@@ -421,7 +421,7 @@ function buildCompraLiberacaoEmailBody(payload) {
         `Cliente: ${payload.clientName}`,
         `Consultor: ${payload.consultantName}`,
         `Projetista: ${payload.projetistaName}`,
-        `Tipo: ${payload.tipoCompra}`,
+        `Tipo: ${payload.purchaseType}`,
         `Ação por: ${payload.actedByName} (${payload.actedByRole})`
     );
 
@@ -473,7 +473,7 @@ function buildCompraLiberacaoEmailHtml(payload) {
         </tr>
         <tr>
           <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Tipo</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.tipoCompra)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.purchaseType)}</td>
         </tr>
         <tr>
           <td style="padding:8px 12px;color:#64748b;">Ação por</td>
@@ -501,7 +501,9 @@ const PROCESS_EMAIL_TITLE = {
     aguardando_detalhamento: 'Aguardando Detalhamento',
     detalhamento_projetista_associado: 'Detalhamento Atribuído',
     montagem_externa_finalizada: 'Montagem Externa Finalizada',
-    third_party_project_status: 'Projeto de Terceiros — Atualização de Status'
+    pedido_entregue: 'Pedido Entregue',
+    third_party_project_status: 'Projeto de Terceiros — Atualização de Status',
+    third_party_designer_assigned: 'Projeto de Terceiros Atribuído'
 };
 function buildProcessEmailSubject(eventType, orderCode, clientName) {
     const prefix = PROCESS_EMAIL_TITLE[eventType] || 'Atualização de Processo';

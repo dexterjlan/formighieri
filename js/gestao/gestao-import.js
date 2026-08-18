@@ -46,30 +46,30 @@ const GESTAO_IMPORT_HEADER_ALIASES = {
     medicao_data: 'measurementDate',
     data_de_medicao: 'measurementDate',
     dt_medicao: 'measurementDate',
-    data_planta_levantada: 'plantaLevantadaDate',
-    planta_levantada_data: 'plantaLevantadaDate',
-    data_inicio_montagem_interna: 'inicioMontagemInterna',
-    inicio_montagem_interna: 'inicioMontagemInterna',
-    data_fim_montagem_interna: 'fimMontagemInterna',
-    fim_montagem_interna: 'fimMontagemInterna',
+    data_planta_levantada: 'floorPlanRaisedDate',
+    planta_levantada_data: 'floorPlanRaisedDate',
+    data_inicio_montagem_interna: 'internalAssemblyStartDate',
+    inicio_montagem_interna: 'internalAssemblyStartDate',
+    data_fim_montagem_interna: 'internalAssemblyEndDate',
+    fim_montagem_interna: 'internalAssemblyEndDate',
     marceneiro: 'marceneiroName',
     marceneiro_wps: 'marceneiroName'
 };
 
 const GESTAO_IMPORT_PROJECT_DATE_COLUMNS = [
     { key: 'measurementDate', header: 'data_medicao', label: 'Data da medição do projeto' },
-    { key: 'plantaLevantadaDate', header: 'data_planta_levantada', label: 'Data da planta levantada' },
-    { key: 'inicioMontagemInterna', header: 'data_inicio_montagem_interna', label: 'Início da montagem interna' },
-    { key: 'fimMontagemInterna', header: 'data_fim_montagem_interna', label: 'Fim da montagem interna' },
+    { key: 'floorPlanRaisedDate', header: 'data_planta_levantada', label: 'Data da planta levantada' },
+    { key: 'internalAssemblyStartDate', header: 'data_inicio_montagem_interna', label: 'Início da montagem interna' },
+    { key: 'internalAssemblyEndDate', header: 'data_fim_montagem_interna', label: 'Fim da montagem interna' },
     { key: 'marceneiroName', header: 'marceneiro', label: 'Marceneiro (WPS)' }
 ];
 
 async function insertGestaoImportProjectRecord(orderId, project, timestamps) {
     const { createdAt, updatedAt } = timestamps;
     const montagemFields = {
-        inicioMontagemInterna: project.inicioMontagemInterna || undefined,
-        fimMontagemInterna: project.fimMontagemInterna || undefined,
-        marceneiroId: project.marceneiroId || undefined
+        internalAssemblyStartDate: project.internalAssemblyStartDate || undefined,
+        internalAssemblyEndDate: project.internalAssemblyEndDate || undefined,
+        cabinetMakerId: project.cabinetMakerId || undefined
     };
     const payloadVariants = [
         {
@@ -137,16 +137,16 @@ async function insertGestaoImportProjectRecord(orderId, project, timestamps) {
 }
 
 async function applyGestaoImportProjectMontagemFields(projectId, project, now) {
-    if (!project.inicioMontagemInterna && !project.fimMontagemInterna && !project.marceneiroId) return;
+    if (!project.internalAssemblyStartDate && !project.internalAssemblyEndDate && !project.cabinetMakerId) return;
 
     const montagemPayload = {
         updatedById: currentUser.id,
         updatedAt: now
     };
 
-    if (project.inicioMontagemInterna) montagemPayload.inicioMontagemInterna = project.inicioMontagemInterna;
-    if (project.fimMontagemInterna) montagemPayload.fimMontagemInterna = project.fimMontagemInterna;
-    if (project.marceneiroId) montagemPayload.marceneiroId = project.marceneiroId;
+    if (project.internalAssemblyStartDate) montagemPayload.internalAssemblyStartDate = project.internalAssemblyStartDate;
+    if (project.internalAssemblyEndDate) montagemPayload.internalAssemblyEndDate = project.internalAssemblyEndDate;
+    if (project.cabinetMakerId) montagemPayload.cabinetMakerId = project.cabinetMakerId;
 
     const { error } = await supabaseClient
         .from('OrderProject')
@@ -154,8 +154,8 @@ async function applyGestaoImportProjectMontagemFields(projectId, project, now) {
         .eq('id', projectId);
 
     if (error && !error.message?.includes('MontagemInterna')
-        && !error.message?.includes('inicioMontagemInterna')
-        && !error.message?.includes('marceneiroId')) {
+        && !error.message?.includes('internalAssemblyStartDate')
+        && !error.message?.includes('cabinetMakerId')) {
         throw error;
     }
 }
@@ -186,13 +186,13 @@ async function getGestaoImportProjectStatusIdByName(statusName) {
     return data?.id || null;
 }
 
-async function applyGestaoImportMedicaoProjectStatuses(entries, now) {
+async function applyGestaoImportMeasurementProjectStatuses(entries, now) {
     const plantaProjectIds = entries
-        .filter(entry => entry.plantaLevantadaDate)
+        .filter(entry => entry.floorPlanRaisedDate)
         .map(entry => Number(entry.projectId))
         .filter(Boolean);
     const medicaoProjectIds = entries
-        .filter(entry => entry.measurementDate && !entry.plantaLevantadaDate)
+        .filter(entry => entry.measurementDate && !entry.floorPlanRaisedDate)
         .map(entry => Number(entry.projectId))
         .filter(Boolean);
 
@@ -225,23 +225,23 @@ async function applyGestaoImportMedicaoProjectStatuses(entries, now) {
     }
 }
 
-async function insertGestaoImportMedicaoProject(medicaoId, entry) {
-    const measurementDate = entry.measurementDate || entry.plantaLevantadaDate;
+async function insertGestaoImportMeasurementProject(measurementId, entry) {
+    const measurementDate = entry.measurementDate || entry.floorPlanRaisedDate;
     if (!measurementDate) return false;
 
     const payload = {
-        medicaoId,
+        measurementId,
         orderProjectId: entry.projectId,
         measurementDate,
-        plantaLevantada: Boolean(entry.plantaLevantadaDate),
-        plantaLevantadaDate: entry.plantaLevantadaDate || null
+        isFloorPlanRaised: Boolean(entry.floorPlanRaisedDate),
+        floorPlanRaisedDate: entry.floorPlanRaisedDate || null
     };
 
-    let insertResult = await supabaseClient.from('MedicaoProject').insert(payload);
+    let insertResult = await supabaseClient.from('MeasurementProject').insert(payload);
 
-    if (insertResult.error?.message?.includes('plantaLevantada')) {
-        insertResult = await supabaseClient.from('MedicaoProject').insert({
-            medicaoId,
+    if (insertResult.error?.message?.includes('isFloorPlanRaised')) {
+        insertResult = await supabaseClient.from('MeasurementProject').insert({
+            measurementId,
             orderProjectId: entry.projectId,
             measurementDate
         });
@@ -251,19 +251,19 @@ async function insertGestaoImportMedicaoProject(medicaoId, entry) {
     return true;
 }
 
-async function createGestaoImportMedicaoForOrder(orderId, medicaoProjects, now) {
-    const entries = medicaoProjects.filter(entry =>
-        entry.projectId && (entry.measurementDate || entry.plantaLevantadaDate)
+async function createGestaoImportMedicaoForOrder(orderId, measurementProjects, now) {
+    const entries = measurementProjects.filter(entry =>
+        entry.projectId && (entry.measurementDate || entry.floorPlanRaisedDate)
     );
     if (!entries.length) return 0;
 
     const projectIds = entries.map(entry => Number(entry.projectId)).filter(Boolean);
     const { data: existingLinks, error: linksError } = await supabaseClient
-        .from('MedicaoProject')
+        .from('MeasurementProject')
         .select('orderProjectId')
         .in('orderProjectId', projectIds);
 
-    if (linksError && !linksError.message?.includes('MedicaoProject')) {
+    if (linksError && !linksError.message?.includes('MeasurementProject')) {
         throw linksError;
     }
 
@@ -274,7 +274,7 @@ async function createGestaoImportMedicaoForOrder(orderId, medicaoProjects, now) 
     if (!pendingEntries.length) return 0;
 
     const { data: medicao, error } = await supabaseClient
-        .from('Medicao')
+        .from('Measurement')
         .insert({
             orderId,
             observation: 'Importado via planilha',
@@ -290,13 +290,13 @@ async function createGestaoImportMedicaoForOrder(orderId, medicaoProjects, now) 
     let insertedCount = 0;
 
     for (const entry of pendingEntries) {
-        const inserted = await insertGestaoImportMedicaoProject(medicao.id, entry);
+        const inserted = await insertGestaoImportMeasurementProject(medicao.id, entry);
         if (inserted) insertedCount += 1;
     }
 
     if (!insertedCount) return 0;
 
-    await applyGestaoImportMedicaoProjectStatuses(pendingEntries, now);
+    await applyGestaoImportMeasurementProjectStatuses(pendingEntries, now);
     return insertedCount;
 }
 
@@ -477,18 +477,18 @@ async function downloadGestaoImportTemplate() {
 
         const { data: statusWpsList } = await supabaseClient
             .from('importStatusWPS')
-            .select('StatusWPS, StatusFGP')
-            .order('StatusWPS', { ascending: true });
+            .select('statusWps, statusFgp')
+            .order('statusWps', { ascending: true });
 
         const { data: consultorWpsList } = await supabaseClient
             .from('importConsultorWPS')
-            .select('ConsultorWPS, ConsultorFGP')
-            .order('ConsultorWPS', { ascending: true });
+            .select('consultantWps, consultantFgp')
+            .order('consultantWps', { ascending: true });
 
         const { data: marceneiroWpsList } = await supabaseClient
             .from('importMarceneiroWPS')
-            .select('MarceneiroWPS, MarceneiroFGP')
-            .order('MarceneiroWPS', { ascending: true });
+            .select('cabinetMakerWps, cabinetMakerFgp')
+            .order('cabinetMakerWps', { ascending: true });
 
         const importSheet = XLSX.utils.aoa_to_sheet(
             buildGestaoImportTemplateRows(consultants?.[0]?.name || '')
@@ -518,21 +518,21 @@ async function downloadGestaoImportTemplate() {
                 : [['(nenhum cadastrado)']]),
             [],
             ['Status WPS → FGP (status_projeto na planilha)', '', ''],
-            ['StatusWPS', 'StatusFGP'],
+            ['statusWps', 'statusFgp'],
             ...((statusWpsList || []).length
-                ? statusWpsList.map(item => [item.StatusWPS, item.StatusFGP])
+                ? statusWpsList.map(item => [item.statusWps, item.statusFgp])
                 : [['(execute create-import-wps-mappings.sql)']]),
             [],
             ['Consultor WPS → FGP (consultor na planilha)', '', ''],
-            ['ConsultorWPS', 'ConsultorFGP'],
+            ['consultantWps', 'consultantFgp'],
             ...((consultorWpsList || []).length
-                ? consultorWpsList.map(item => [item.ConsultorWPS, item.ConsultorFGP])
+                ? consultorWpsList.map(item => [item.consultantWps, item.consultantFgp])
                 : [['(execute create-import-wps-mappings.sql)']]),
             [],
             ['Marceneiro WPS → FGP (marceneiro na planilha)', '', ''],
-            ['MarceneiroWPS', 'MarceneiroFGP'],
+            ['cabinetMakerWps', 'cabinetMakerFgp'],
             ...((marceneiroWpsList || []).length
-                ? marceneiroWpsList.map(item => [item.MarceneiroWPS, item.MarceneiroFGP])
+                ? marceneiroWpsList.map(item => [item.cabinetMakerWps, item.cabinetMakerFgp])
                 : [['(execute create-import-wps-mappings.sql)']]),
             [],
             ['Projetistas (ativos)', '', ''],
@@ -581,9 +581,9 @@ function mapGestaoImportRow(rawRow, rowNumber) {
     mapped.clientDeliveryDate = parseGestaoImportDate(mapped.clientDeliveryDate);
     mapped.deliveryDate = parseGestaoImportDate(mapped.deliveryDate);
     mapped.measurementDate = parseGestaoImportDate(mapped.measurementDate);
-    mapped.plantaLevantadaDate = parseGestaoImportDate(mapped.plantaLevantadaDate);
-    mapped.inicioMontagemInterna = parseGestaoImportDate(mapped.inicioMontagemInterna);
-    mapped.fimMontagemInterna = parseGestaoImportDate(mapped.fimMontagemInterna);
+    mapped.floorPlanRaisedDate = parseGestaoImportDate(mapped.floorPlanRaisedDate);
+    mapped.internalAssemblyStartDate = parseGestaoImportDate(mapped.internalAssemblyStartDate);
+    mapped.internalAssemblyEndDate = parseGestaoImportDate(mapped.internalAssemblyEndDate);
     mapped.marceneiroName = String(mapped.marceneiroName || '').trim();
     mapped.saleValue = parseGestaoImportSaleValue(mapped.saleValue);
 
@@ -600,7 +600,7 @@ function mapGestaoImportRow(rawRow, rowNumber) {
         mapped.errors.push('Valor de venda inválido.');
     }
 
-    ['measurementDate', 'plantaLevantadaDate', 'inicioMontagemInterna', 'fimMontagemInterna'].forEach(field => {
+    ['measurementDate', 'floorPlanRaisedDate', 'internalAssemblyStartDate', 'internalAssemblyEndDate'].forEach(field => {
         if (mapped[field] === null && rawRow && Object.keys(rawRow).some(key => {
             const alias = GESTAO_IMPORT_HEADER_ALIASES[normalizeGestaoImportHeader(key)];
             return alias === field && rawRow[key] !== null && rawRow[key] !== undefined && rawRow[key] !== '';
@@ -704,12 +704,12 @@ async function loadGestaoImportWpsMappings() {
 
     const statusResult = await supabaseClient
         .from('importStatusWPS')
-        .select('StatusWPS, StatusFGP');
+        .select('statusWps, statusFgp');
 
     if (!statusResult.error) {
         (statusResult.data || []).forEach(row => {
-            const key = String(row.StatusWPS || '').trim().toLowerCase();
-            if (key) statusWpsToFgp[key] = String(row.StatusFGP || '').trim();
+            const key = String(row.statusWps || '').trim().toLowerCase();
+            if (key) statusWpsToFgp[key] = String(row.statusFgp || '').trim();
         });
     } else if (!statusResult.error.message?.includes('importStatusWPS')) {
         console.error('loadGestaoImportWpsMappings status:', statusResult.error);
@@ -717,13 +717,13 @@ async function loadGestaoImportWpsMappings() {
 
     const consultorResult = await supabaseClient
         .from('importConsultorWPS')
-        .select('ConsultorWPS, ConsultorFGP');
+        .select('consultantWps, consultantFgp');
 
     if (!consultorResult.error) {
         consultorWpsRows = consultorResult.data || [];
         consultorWpsRows.forEach(row => {
-            const key = String(row.ConsultorWPS || '').trim().toLowerCase();
-            if (key) consultorWpsToFgp[key] = String(row.ConsultorFGP || '').trim();
+            const key = String(row.consultantWps || '').trim().toLowerCase();
+            if (key) consultorWpsToFgp[key] = String(row.consultantFgp || '').trim();
         });
     } else if (!consultorResult.error.message?.includes('importConsultorWPS')) {
         console.error('loadGestaoImportWpsMappings consultor:', consultorResult.error);
@@ -731,12 +731,12 @@ async function loadGestaoImportWpsMappings() {
 
     const marceneiroResult = await supabaseClient
         .from('importMarceneiroWPS')
-        .select('MarceneiroWPS, MarceneiroFGP');
+        .select('cabinetMakerWps, cabinetMakerFgp');
 
     if (!marceneiroResult.error) {
         (marceneiroResult.data || []).forEach(row => {
-            const key = String(row.MarceneiroWPS || '').trim().toLowerCase();
-            if (key) marceneiroWpsToFgp[key] = String(row.MarceneiroFGP || '').trim();
+            const key = String(row.cabinetMakerWps || '').trim().toLowerCase();
+            if (key) marceneiroWpsToFgp[key] = String(row.cabinetMakerFgp || '').trim();
         });
     } else if (!marceneiroResult.error.message?.includes('importMarceneiroWPS')) {
         console.error('loadGestaoImportWpsMappings marceneiro:', marceneiroResult.error);
@@ -770,8 +770,8 @@ function buildGestaoImportConsultantResolver(consultants, consultorWpsToFgp, con
     });
 
     (consultorWpsRows || []).forEach(row => {
-        const wpsKey = String(row.ConsultorWPS || '').trim().toLowerCase();
-        const fgpKey = String(row.ConsultorFGP || '').trim().toLowerCase();
+        const wpsKey = String(row.consultantWps || '').trim().toLowerCase();
+        const fgpKey = String(row.consultantFgp || '').trim().toLowerCase();
         const canonical = consultantCanonicalNameByKey[fgpKey]
             || consultantCanonicalNameByKey[wpsKey];
         if (!canonical) return;
@@ -831,8 +831,8 @@ async function loadGestaoImportLookups() {
         .order('name', { ascending: true });
 
     const { data: clientes } = await supabaseClient
-        .from('Cliente')
-        .select('id, nome, ativo');
+        .from('Client')
+        .select('id, name, isActive');
 
     const wpsMappings = await loadGestaoImportWpsMappings();
     const consultantResolver = buildGestaoImportConsultantResolver(
@@ -860,8 +860,8 @@ async function loadGestaoImportLookups() {
         ),
         clientByName: Object.fromEntries(
             (clientes || [])
-                .filter(cliente => cliente.ativo !== false)
-                .map(cliente => [cliente.nome.trim().toLowerCase(), cliente.id])
+                .filter(cliente => cliente.isActive !== false)
+                .map(cliente => [cliente.name.trim().toLowerCase(), cliente.id])
         ),
         ...consultantResolver,
         statusWpsToFgp: wpsMappings.statusWpsToFgp,
@@ -955,15 +955,15 @@ function resolveGestaoImportProject(row, lookups) {
         }
     }
 
-    let marceneiroId = null;
+    let cabinetMakerId = null;
     if (row.marceneiroName) {
         const marceneiroFgp = mapGestaoImportMarceneiroWpsToFgp(row.marceneiroName, lookups);
         if (!marceneiroFgp) {
             return { error: `Marceneiro WPS "${row.marceneiroName}" não mapeado em importMarceneiroWPS.` };
         }
 
-        marceneiroId = lookups.marceneiroByName[marceneiroFgp.trim().toLowerCase()] || null;
-        if (!marceneiroId) {
+        cabinetMakerId = lookups.marceneiroByName[marceneiroFgp.trim().toLowerCase()] || null;
+        if (!cabinetMakerId) {
             return {
                 error: `Marceneiro FGP "${marceneiroFgp}" (WPS: "${row.marceneiroName}") não cadastrado ou inativo.`
             };
@@ -980,10 +980,10 @@ function resolveGestaoImportProject(row, lookups) {
             statusId,
             designerId,
             measurementDate: row.measurementDate,
-            plantaLevantadaDate: row.plantaLevantadaDate,
-            inicioMontagemInterna: row.inicioMontagemInterna,
-            fimMontagemInterna: row.fimMontagemInterna,
-            marceneiroId
+            floorPlanRaisedDate: row.floorPlanRaisedDate,
+            internalAssemblyStartDate: row.internalAssemblyStartDate,
+            internalAssemblyEndDate: row.internalAssemblyEndDate,
+            cabinetMakerId
         }
     };
 }
@@ -1104,16 +1104,16 @@ async function createGestaoImportOrder(order, lookups, now) {
     let medicaoCount = 0;
 
     try {
-        const medicaoProjects = importedProjects
-            .filter(({ project }) => project.measurementDate || project.plantaLevantadaDate)
+        const measurementProjects = importedProjects
+            .filter(({ project }) => project.measurementDate || project.floorPlanRaisedDate)
             .map(({ projectId, project }) => ({
                 projectId,
                 measurementDate: project.measurementDate,
-                plantaLevantadaDate: project.plantaLevantadaDate
+                floorPlanRaisedDate: project.floorPlanRaisedDate
             }));
 
-        if (medicaoProjects.length) {
-            medicaoCount = await createGestaoImportMedicaoForOrder(orderId, medicaoProjects, now);
+        if (measurementProjects.length) {
+            medicaoCount = await createGestaoImportMedicaoForOrder(orderId, measurementProjects, now);
         }
     } catch (medicaoError) {
         if (createdNewOrder) {
