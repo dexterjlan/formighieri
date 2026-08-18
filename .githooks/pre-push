@@ -15,7 +15,7 @@ if git diff --quiet -- VERSION; then
   exit 0
 fi
 
-git add VERSION index.html
+git add VERSION index.html js/bootstrap.js
 version="$(tr -d '[:space:]' < VERSION)"
 git commit -m "chore: bump version to ${version}"
 
