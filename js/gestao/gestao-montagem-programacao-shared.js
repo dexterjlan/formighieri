@@ -120,7 +120,7 @@ function getMontagemProgMarceneiroIds(prog) {
 }
 
 function getMontagemProgMarceneiroName(cabinetMakerId) {
-    const fromCache = (marceneirosCache || []).find(item => Number(item.id) === Number(cabinetMakerId));
+    const fromCache = (cabinetMakersCache || []).find(item => Number(item.id) === Number(cabinetMakerId));
     if (fromCache?.name) return fromCache.name;
 
     for (const prog of montagemProgCache) {
@@ -132,7 +132,7 @@ function getMontagemProgMarceneiroName(cabinetMakerId) {
 }
 
 function getMontagemProgSelectableMarceneiros() {
-    return (marceneirosCache || []).filter(marceneiro => marceneiro.isActive !== false);
+    return (cabinetMakersCache || []).filter(cabinetMaker => cabinetMaker.isActive !== false);
 }
 
 function getMontagemProgCrewMembers(prog) {

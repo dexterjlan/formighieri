@@ -854,9 +854,9 @@ async function loadGestaoImportLookups() {
             gestaoProjetistasCache.map(item => [item.name.trim().toLowerCase(), item.id])
         ),
         marceneiroByName: Object.fromEntries(
-            marceneirosCache
-                .filter(marceneiro => marceneiro.isActive !== false)
-                .map(marceneiro => [marceneiro.name.trim().toLowerCase(), marceneiro.id])
+            cabinetMakersCache
+                .filter(cabinetMaker => cabinetMaker.isActive !== false)
+                .map(cabinetMaker => [cabinetMaker.name.trim().toLowerCase(), cabinetMaker.id])
         ),
         clientByName: Object.fromEntries(
             (clientes || [])
