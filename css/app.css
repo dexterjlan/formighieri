@@ -3909,8 +3909,44 @@ body.montagem-prog-resizing {
     border-color: rgb(252 211 77);
 }
 
+.gestao-gantt-view-toggle {
+    display: inline-flex;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: rgb(255 255 255);
+}
+
+.gestao-gantt-view-toggle__btn {
+    border: 0;
+    background: transparent;
+    color: rgb(71 85 105);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.4375rem 0.75rem;
+    cursor: pointer;
+}
+
+.gestao-gantt-view-toggle__btn:hover {
+    background: rgb(248 250 252);
+}
+
+.gestao-gantt-view-toggle__btn--active {
+    background: rgb(238 242 255);
+    color: rgb(67 56 202);
+}
+
+.gestao-gantt-view-toggle__btn + .gestao-gantt-view-toggle__btn {
+    border-left: 1px solid rgb(226 232 240);
+}
+
 .gestao-gantt-month-grid {
     padding: 0.75rem;
+}
+
+.gestao-gantt-weeks--single {
+    min-height: 12rem;
 }
 
 .gestao-gantt-month-range-label {

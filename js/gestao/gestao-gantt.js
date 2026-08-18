@@ -15,6 +15,8 @@ const GESTAO_GANTT_DESIGNER_PALETTE = [
 ];
 
 let gestaoGanttMonthAnchor = startOfGestaoGanttMonth(new Date());
+let gestaoGanttWeekAnchor = startOfWeekSunday(new Date());
+let gestaoGanttViewMode = 'month';
 let gestaoGanttProjectsCache = [];
 let gestaoGanttProjectClientFilter = '';
 let gestaoGanttProjectDesignerFilter = '';
@@ -83,6 +85,103 @@ function gestaoGanttDaysBetween(startDate, endDate) {
 }
 
 const formatGestaoGanttMonthYearLabel = formatAppMonthYearLabel;
+const formatGestaoGanttWeekRangeLabel = formatAppWeekRangeLabel;
+
+function startOfGestaoGanttWeek(date) {
+    return startOfWeekSunday(date);
+}
+
+function buildGestaoGanttSingleWeek(weekAnchor = gestaoGanttWeekAnchor) {
+    const weekStart = startOfGestaoGanttWeek(weekAnchor);
+    const days = [];
+
+    for (let index = 0; index < 7; index += 1) {
+        const date = gestaoGanttAddDays(weekStart, index);
+        days.push({
+            dateKey: gestaoGanttToDateKey(date),
+            inMonth: true
+        });
+    }
+
+    return { weekStart, days };
+}
+
+function updateGestaoGanttPeriodNavUi() {
+    const label = document.getElementById('gestao-gantt-period-label');
+    const prevButton = document.getElementById('btn-gestao-gantt-prev-period');
+    const nextButton = document.getElementById('btn-gestao-gantt-next-period');
+    const todayButton = document.getElementById('btn-gestao-gantt-today-period');
+    const weekButton = document.getElementById('btn-gestao-gantt-view-week');
+    const monthButton = document.getElementById('btn-gestao-gantt-view-month');
+    const isWeekView = gestaoGanttViewMode === 'week';
+
+    weekButton?.classList.toggle('gestao-gantt-view-toggle__btn--active', isWeekView);
+    weekButton?.setAttribute('aria-pressed', isWeekView ? 'true' : 'false');
+    monthButton?.classList.toggle('gestao-gantt-view-toggle__btn--active', !isWeekView);
+    monthButton?.setAttribute('aria-pressed', !isWeekView ? 'true' : 'false');
+
+    if (isWeekView) {
+        if (label) {
+            label.textContent = formatGestaoGanttWeekRangeLabel(startOfGestaoGanttWeek(gestaoGanttWeekAnchor));
+        }
+        prevButton?.setAttribute('aria-label', 'Semana anterior');
+        nextButton?.setAttribute('aria-label', 'Próxima semana');
+        if (todayButton) todayButton.textContent = 'Semana atual';
+        return;
+    }
+
+    if (label) label.textContent = formatGestaoGanttMonthYearLabel(gestaoGanttMonthAnchor);
+    prevButton?.setAttribute('aria-label', 'Mês anterior');
+    nextButton?.setAttribute('aria-label', 'Próximo mês');
+    if (todayButton) todayButton.textContent = 'Hoje';
+}
+
+function setGestaoGanttViewMode(mode) {
+    const normalizedMode = mode === 'week' ? 'week' : 'month';
+    if (normalizedMode === gestaoGanttViewMode) return;
+
+    if (normalizedMode === 'week') {
+        const today = new Date();
+        const monthAnchor = startOfGestaoGanttMonth(gestaoGanttMonthAnchor);
+        const isCurrentMonth = monthAnchor.getMonth() === today.getMonth()
+            && monthAnchor.getFullYear() === today.getFullYear();
+        gestaoGanttWeekAnchor = startOfGestaoGanttWeek(isCurrentMonth ? today : gestaoGanttMonthAnchor);
+    } else {
+        gestaoGanttMonthAnchor = startOfGestaoGanttMonth(gestaoGanttWeekAnchor);
+    }
+
+    gestaoGanttViewMode = normalizedMode;
+    renderGestaoGanttCalendarGrid();
+}
+
+function navigateGestaoGanttPeriod(direction) {
+    if (gestaoGanttViewMode === 'week') {
+        gestaoGanttWeekAnchor = gestaoGanttAddDays(startOfGestaoGanttWeek(gestaoGanttWeekAnchor), direction * 7);
+        gestaoGanttMonthAnchor = startOfGestaoGanttMonth(gestaoGanttWeekAnchor);
+    } else {
+        gestaoGanttMonthAnchor = new Date(
+            gestaoGanttMonthAnchor.getFullYear(),
+            gestaoGanttMonthAnchor.getMonth() + direction,
+            1
+        );
+    }
+
+    renderGestaoGanttCalendarGrid();
+}
+
+function resetGestaoGanttPeriodToToday() {
+    const today = new Date();
+
+    if (gestaoGanttViewMode === 'week') {
+        gestaoGanttWeekAnchor = startOfGestaoGanttWeek(today);
+        gestaoGanttMonthAnchor = startOfGestaoGanttMonth(today);
+    } else {
+        gestaoGanttMonthAnchor = startOfGestaoGanttMonth(today);
+        gestaoGanttWeekAnchor = startOfGestaoGanttWeek(today);
+    }
+
+    renderGestaoGanttCalendarGrid();
+}
 
 function formatGestaoGanttMonthDayRangeLabel(monthAnchor = gestaoGanttMonthAnchor) {
     const monthEnd = endOfGestaoGanttMonth(monthAnchor);
@@ -679,15 +778,28 @@ function renderGestaoGanttWeekBlock(week, entries, todayKey) {
     `;
 }
 
-function renderGestaoGanttMonthGrid() {
-    const grid = document.getElementById('gestao-gantt-month-grid');
+function renderGestaoGanttWeekGrid() {
+    const grid = document.getElementById('gestao-gantt-calendar-grid');
     if (!grid) return;
 
     const todayKey = gestaoGanttToDateKey(new Date());
-    const monthLabel = formatGestaoGanttMonthYearLabel(gestaoGanttMonthAnchor);
-    const monthLabelEl = document.getElementById('gestao-gantt-month-label');
-    if (monthLabelEl) monthLabelEl.textContent = monthLabel;
+    const entries = getGestaoGanttCalendarEntries();
+    const week = buildGestaoGanttSingleWeek();
+    const weekHtml = renderGestaoGanttWeekBlock(week, entries, todayKey);
+    const rangeLabel = formatGestaoGanttWeekRangeLabel(startOfGestaoGanttWeek(gestaoGanttWeekAnchor));
 
+    grid.innerHTML = `
+        <div class="gestao-gantt-month-range-label">${escapeHtml(rangeLabel)}</div>
+        ${renderGestaoGanttWeekdayHeadersRow()}
+        <div class="gestao-gantt-weeks gestao-gantt-weeks--single">${weekHtml}</div>
+    `;
+}
+
+function renderGestaoGanttMonthGrid() {
+    const grid = document.getElementById('gestao-gantt-calendar-grid');
+    if (!grid) return;
+
+    const todayKey = gestaoGanttToDateKey(new Date());
     const entries = getGestaoGanttCalendarEntries();
     const weeks = buildGestaoGanttMonthWeeks();
     const weeksHtml = weeks.map(week => renderGestaoGanttWeekBlock(week, entries, todayKey)).join('');
@@ -698,6 +810,15 @@ function renderGestaoGanttMonthGrid() {
         ${renderGestaoGanttWeekdayHeadersRow()}
         <div class="gestao-gantt-weeks">${weeksHtml}</div>
     `;
+}
+
+function renderGestaoGanttCalendarGrid() {
+    if (gestaoGanttViewMode === 'week') {
+        renderGestaoGanttWeekGrid();
+    } else {
+        renderGestaoGanttMonthGrid();
+    }
+    updateGestaoGanttPeriodNavUi();
 }
 
 function renderGestaoGanttLegend() {
@@ -720,7 +841,7 @@ function renderGestaoGanttViews() {
     if (!isProgramacaoProjetosReadOnly()) {
         renderGestaoGanttProjectList();
     }
-    renderGestaoGanttMonthGrid();
+    renderGestaoGanttCalendarGrid();
 }
 
 function getGestaoGanttCardValues(card) {
@@ -954,7 +1075,7 @@ async function loadGestaoGantt() {
                 </div>
                 <div id="gestao-gantt-legend" class="gestao-gantt-legend"></div>
                 <div class="gestao-gantt-calendar-scroll">
-                    <div id="gestao-gantt-month-grid" class="gestao-gantt-month-grid">
+                    <div id="gestao-gantt-calendar-grid" class="gestao-gantt-month-grid">
                         <p class="text-xs text-slate-400 text-center py-8">Carregando calendário...</p>
                     </div>
                 </div>
@@ -972,7 +1093,7 @@ async function loadGestaoGantt() {
 
     if (ordersResult.error) {
         const list = document.getElementById('gestao-gantt-project-list');
-        const grid = document.getElementById('gestao-gantt-month-grid');
+        const grid = document.getElementById('gestao-gantt-calendar-grid');
         const message = `Erro ao carregar programação: ${escapeHtml(ordersResult.error.message)}`;
         if (list) list.innerHTML = `<p class="text-xs text-red-500 text-center py-8 px-3">${message}</p>`;
         if (grid) grid.innerHTML = `<p class="text-xs text-red-500 text-center py-8">${message}</p>`;
@@ -999,19 +1120,24 @@ function bindGestaoGanttEvents() {
     if (gestaoGanttEventsBound) return;
     gestaoGanttEventsBound = true;
 
-    document.getElementById('btn-gestao-gantt-prev-month')?.addEventListener('click', () => {
-        gestaoGanttMonthAnchor = new Date(gestaoGanttMonthAnchor.getFullYear(), gestaoGanttMonthAnchor.getMonth() - 1, 1);
-        renderGestaoGanttMonthGrid();
+    document.getElementById('btn-gestao-gantt-view-week')?.addEventListener('click', () => {
+        setGestaoGanttViewMode('week');
     });
 
-    document.getElementById('btn-gestao-gantt-next-month')?.addEventListener('click', () => {
-        gestaoGanttMonthAnchor = new Date(gestaoGanttMonthAnchor.getFullYear(), gestaoGanttMonthAnchor.getMonth() + 1, 1);
-        renderGestaoGanttMonthGrid();
+    document.getElementById('btn-gestao-gantt-view-month')?.addEventListener('click', () => {
+        setGestaoGanttViewMode('month');
     });
 
-    document.getElementById('btn-gestao-gantt-today-month')?.addEventListener('click', () => {
-        gestaoGanttMonthAnchor = startOfGestaoGanttMonth(new Date());
-        renderGestaoGanttMonthGrid();
+    document.getElementById('btn-gestao-gantt-prev-period')?.addEventListener('click', () => {
+        navigateGestaoGanttPeriod(-1);
+    });
+
+    document.getElementById('btn-gestao-gantt-next-period')?.addEventListener('click', () => {
+        navigateGestaoGanttPeriod(1);
+    });
+
+    document.getElementById('btn-gestao-gantt-today-period')?.addEventListener('click', () => {
+        resetGestaoGanttPeriodToToday();
     });
 
     document.getElementById('btn-gestao-gantt-refresh')?.addEventListener('click', () => {
@@ -1048,7 +1174,7 @@ function bindGestaoGanttEvents() {
         const calendarClientFilter = event.target.closest('#gestao-gantt-calendar-client-filter');
         if (calendarClientFilter) {
             gestaoGanttCalendarClientFilter = calendarClientFilter.value || '';
-            renderGestaoGanttMonthGrid();
+            renderGestaoGanttCalendarGrid();
             return;
         }
 
@@ -1079,7 +1205,7 @@ function bindGestaoGanttEvents() {
         const calendarDesignerFilter = event.target.closest('#gestao-gantt-calendar-designer-filter');
         if (calendarDesignerFilter) {
             gestaoGanttCalendarDesignerFilter = calendarDesignerFilter.value || '';
-            renderGestaoGanttMonthGrid();
+            renderGestaoGanttCalendarGrid();
             return;
         }
 
