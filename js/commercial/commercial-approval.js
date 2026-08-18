@@ -217,10 +217,10 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
 
     const { data: projects, error: fetchError } = await supabaseClient
         .from('OrderProject')
-        .select('id, conclusaoProjetoTecnico')
+        .select('id, technicalProjectCompletedDate')
         .in('id', uniqueIds);
 
-    if (fetchError?.message?.includes('conclusaoProjetoTecnico')) {
+    if (fetchError?.message?.includes('technicalProjectCompletedDate')) {
         await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Em Revisão Comercial');
         return;
     }
@@ -228,21 +228,21 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
     if (fetchError) throw fetchError;
 
     const idsNeedingConclusao = (projects || [])
-        .filter(project => !project.conclusaoProjetoTecnico)
+        .filter(project => !project.technicalProjectCompletedDate)
         .map(project => project.id);
 
     if (idsNeedingConclusao.length) {
         const { error: conclusaoError } = await supabaseClient
             .from('OrderProject')
             .update({
-                conclusaoProjetoTecnico: today,
+                technicalProjectCompletedDate: today,
                 updatedById: currentUser.id,
                 updatedAt: now
             })
             .in('id', idsNeedingConclusao)
-            .is('conclusaoProjetoTecnico', null);
+            .is('technicalProjectCompletedDate', null);
 
-        if (conclusaoError?.message?.includes('conclusaoProjetoTecnico')) {
+        if (conclusaoError?.message?.includes('technicalProjectCompletedDate')) {
             await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Em Revisão Comercial');
             return;
         }
@@ -406,7 +406,7 @@ async function applyNomearStatusToProjects(orderProjectIds) {
         .from('OrderProject')
         .update({
             statusId,
-            nomeado: false,
+            isNamed: false,
             updatedById: currentUser.id,
             updatedAt: now
         })
@@ -541,12 +541,6 @@ function getExistingApprovalsByProjectId(approvals, projects) {
     approvals.forEach(approval => {
         if (approval.orderProjectId) {
             byProjectId[approval.orderProjectId] = approval;
-            return;
-        }
-
-        const match = projects.find(p => p.name === approval.projectName);
-        if (match) {
-            byProjectId[match.id] = approval;
         }
     });
 
@@ -593,8 +587,8 @@ async function loadApprovalProjectCheckboxes() {
             <span class="flex-1 min-w-0 text-xs leading-tight">
                 <span class="font-semibold text-slate-800">${escapeHtml(project.name)}</span>
                 ${renderComplementarProjectNoticeHtml(project)}
-                ${renderSubstituidoProjectNoticeHtml(project)}
-                ${renderSubstituicaoProjectNoticeHtml(project)}
+                ${renderReplacedProjectNoticeHtml(project)}
+                ${renderReplacementProjectNoticeHtml(project)}
                 ${showDesignerName ? `<span class="text-slate-400"> · ${escapeHtml(designerName)}</span>` : ''}
                 ${hasApproval ? `<span class="text-[10px] text-emerald-700 font-medium"> · ${statusLabel}</span>` : ''}
                 ${showDesignerName && !hasApproval && !project.designerId && canActOnOrderProject(project) ? '<span class="text-[10px] text-amber-700 font-medium"> · Cadastre o responsável no projeto</span>' : ''}
@@ -674,25 +668,11 @@ async function confirmApprovalDespiteOpenRequests(openRequests, projects) {
 async function getOpenCommercialApprovalsForProject(orderId, orderProjectId) {
     if (!orderId || !orderProjectId) return [];
 
-    let { data, error } = await supabaseClient
+    const { data, error } = await supabaseClient
         .from('CommercialApproval')
-        .select('id, projectName, status, approved, orderProjectId, designerId')
+        .select('id, status, approved, orderProjectId, designerId, orderProject:OrderProject(id, name, projectCode)')
         .eq('orderId', orderId)
         .eq('orderProjectId', orderProjectId);
-
-    if (error?.message?.includes('orderProjectId')) {
-        const projects = typeof fetchOrderProjectsForOrder === 'function'
-            ? await fetchOrderProjectsForOrder(orderId)
-            : [];
-        const project = projects.find(p => p.id === orderProjectId);
-        if (!project) return [];
-
-        ({ data, error } = await supabaseClient
-            .from('CommercialApproval')
-            .select('id, projectName, status, approved, designerId')
-            .eq('orderId', orderId)
-            .eq('projectName', project.name));
-    }
 
     if (error) {
         console.error('getOpenCommercialApprovalsForProject:', error);
@@ -722,7 +702,7 @@ async function validateConsultorRequestAgainstOpenApproval(orderProjectId, exist
 
     const projects = await fetchOrderProjectsForOrder(activeOrderId);
     const project = projects.find(p => p.id === orderProjectId);
-    const name = project?.name || openApprovals[0].projectName || 'Projeto';
+    const name = project?.name || getCommercialApprovalProjectName(openApprovals[0]) || 'Projeto';
     const status = getApprovalStatusLabel(normalizeCommercialApproval(openApprovals[0]).status);
 
     alertAppDialog(
@@ -733,7 +713,7 @@ async function validateConsultorRequestAgainstOpenApproval(orderProjectId, exist
 }
 
 async function insertCommercialApprovals(payloads) {
-    const selectColumns = 'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status';
+    const selectColumns = 'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)';
     let { data, error } = await supabaseClient
         .from('CommercialApproval')
         .insert(payloads)
@@ -752,6 +732,255 @@ async function insertCommercialApprovals(payloads) {
 
 let aprovacaoCaminhoModalResolver = null;
 let pendingCommercialApprovalOrderDeliveryApprovalId = null;
+let commercialApprovalOrderDeliveryContext = null;
+
+function commercialApprovalOrderHasPhases(phases = commercialApprovalOrderDeliveryContext?.phases) {
+    return (phases || []).length >= 2;
+}
+
+function resolveCommercialApprovalProjectPhase(project, phases) {
+    if (typeof getGestaoProjectDeliveryPhase === 'function') {
+        return getGestaoProjectDeliveryPhase(project, phases);
+    }
+
+    const phaseId = Number(project?.deliveryPhaseId);
+    if (phaseId) {
+        const phase = (phases || []).find(item => Number(item.id) === phaseId);
+        if (phase) return phase;
+    }
+
+    return phases?.[0] || null;
+}
+
+async function fetchOrderProjectsForCommercialApprovalPhase(orderId, phase, phases) {
+    const normalizedOrderId = Number(orderId);
+    const phaseId = Number(phase?.id);
+    if (!normalizedOrderId || !phaseId) return [];
+
+    const selectVariants = [
+        'id, name, deliveryDate, deliveryPhaseId, isComplementary, isReplaced',
+        'id, name, deliveryDate, deliveryPhaseId',
+        'id, name, deliveryDate'
+    ];
+
+    for (const columns of selectVariants) {
+        const { data, error } = await supabaseClient
+            .from('OrderProject')
+            .select(columns)
+            .eq('orderId', normalizedOrderId);
+
+        if (error) continue;
+
+        return (data || [])
+            .filter(project => {
+                if (project.isComplementary || project.isReplaced) return false;
+                const resolved = resolveCommercialApprovalProjectPhase(project, phases);
+                return Number(resolved?.id) === phaseId;
+            })
+            .sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt-BR'));
+    }
+
+    return [];
+}
+
+async function fetchCommercialApprovalDeliveryModalContext(approval) {
+    const orderId = Number(approval?.orderId);
+    const orderContext = await fetchCommercialApprovalOrderDeliveryContext(orderId);
+
+    let phases = [];
+    if (orderId && typeof fetchGestaoOrderPhases === 'function') {
+        phases = await fetchGestaoOrderPhases(orderId);
+    }
+
+    const hasPhases = commercialApprovalOrderHasPhases(phases);
+    const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
+
+    let project = null;
+    if (orderProjectId) {
+        const cachedProject = typeof orderProjectsCache !== 'undefined'
+            ? orderProjectsCache.find(item => Number(item.id) === Number(orderProjectId))
+            : null;
+
+        if (cachedProject) {
+            project = cachedProject;
+        } else {
+            const { data } = await supabaseClient
+                .from('OrderProject')
+                .select('id, name, deliveryDate, deliveryPhaseId')
+                .eq('id', orderProjectId)
+                .maybeSingle();
+            project = data;
+        }
+    }
+
+    const activePhase = hasPhases && project
+        ? resolveCommercialApprovalProjectPhase(project, phases)
+        : null;
+    const phaseProjects = hasPhases && activePhase
+        ? await fetchOrderProjectsForCommercialApprovalPhase(orderId, activePhase, phases)
+        : [];
+
+    return {
+        ...orderContext,
+        orderId,
+        orderProjectId,
+        phases,
+        hasPhases,
+        activePhase,
+        phaseProjects,
+        project
+    };
+}
+
+function renderCommercialApprovalPhaseProjects(phase, projects = []) {
+    const wrap = document.getElementById('commercial-approval-phase-projects-wrap');
+    if (!wrap) return;
+
+    if (!phase || !projects.length) {
+        wrap.innerHTML = '<p class="text-xs text-slate-400">Nenhum projeto encontrado nesta fase.</p>';
+        return;
+    }
+
+    wrap.innerHTML = `
+        <div class="border border-slate-200 rounded-lg overflow-hidden bg-white" data-phase-id="${phase.id}">
+            ${projects.map((project, index) => `
+                <div class="flex items-center justify-between gap-3 px-3 py-2.5 ${index < projects.length - 1 ? 'border-b border-slate-100' : ''}" data-project-id="${project.id}">
+                    <div class="text-xs font-semibold text-slate-800 min-w-0 truncate">${escapeHtml(project.name || 'Projeto')}</div>
+                    <div class="flex items-center gap-2 shrink-0 text-right">
+                        <span class="text-[11px] font-medium text-slate-500 whitespace-nowrap">${escapeHtml(phase.name || 'Fase')}</span>
+                        ${index === 0 ? `
+                            <input type="date"
+                                id="commercial-approval-phase-delivery-${phase.id}"
+                                class="commercial-approval-phase-delivery w-[9.5rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-emerald-500"
+                                data-phase-id="${phase.id}"
+                                required
+                                value="${escapeHtml(toGestaoInputDate(phase.deliveryDate))}">
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function syncCommercialApprovalOrderDeliveryUi(hasPhases = commercialApprovalOrderHasPhases()) {
+    const orderDeliveryWrap = document.getElementById('commercial-approval-order-delivery-wrap');
+    const orderDeliveryInput = document.getElementById('commercial-approval-order-delivery-input');
+    const phaseSection = document.getElementById('commercial-approval-phase-delivery-section');
+    const phaseLabel = document.getElementById('commercial-approval-phase-projects-label');
+    const footnote = document.getElementById('commercial-approval-order-delivery-footnote');
+
+    orderDeliveryWrap?.classList.toggle('hidden', hasPhases);
+    phaseSection?.classList.toggle('hidden', !hasPhases);
+    if (orderDeliveryInput) {
+        orderDeliveryInput.required = !hasPhases;
+    }
+
+    if (phaseLabel) {
+        phaseLabel.textContent = hasPhases
+            ? 'Projetos da fase de entrega'
+            : 'Projetos da fase';
+    }
+
+    if (footnote) {
+        footnote.classList.toggle('hidden', !hasPhases);
+        if (hasPhases) {
+            footnote.textContent = 'Confirme ou altere a data de entrega da fase. A data de entrega do pedido será atualizada conforme a fase mais tardia.';
+        }
+    }
+}
+
+function collectCommercialApprovalOrderDeliverySelections() {
+    const hasPhases = commercialApprovalOrderHasPhases();
+    const context = commercialApprovalOrderDeliveryContext || {};
+
+    if (hasPhases) {
+        const phaseInput = document.querySelector('.commercial-approval-phase-delivery');
+        const phaseDeliveryDate = phaseInput?.value || '';
+        const phaseId = Number(phaseInput?.dataset?.phaseId || context.activePhase?.id);
+        const orderDeliveryDate = phaseDeliveryDate;
+
+        return {
+            hasPhases: true,
+            orderDeliveryDate,
+            phaseDeliveries: phaseId ? [{ phaseId, deliveryDate: phaseDeliveryDate }] : []
+        };
+    }
+
+    const orderDeliveryDate = document.getElementById('commercial-approval-order-delivery-input')?.value || '';
+    return {
+        hasPhases: false,
+        orderDeliveryDate,
+        phaseDeliveries: []
+    };
+}
+
+function validateCommercialApprovalOrderDeliverySelections(selections) {
+    if (selections.hasPhases) {
+        if (!selections.phaseDeliveries.length || !selections.phaseDeliveries[0]?.deliveryDate) {
+            alertAppDialog('Informe a data de entrega da fase.', { variant: 'warning', title: 'Aviso' });
+            return false;
+        }
+        return true;
+    }
+
+    if (!selections.orderDeliveryDate) {
+        alertAppDialog('Informe a data de entrega do pedido.', { variant: 'warning', title: 'Aviso' });
+        return false;
+    }
+
+    return true;
+}
+
+async function persistCommercialApprovalPhaseDeliveryDates(orderId, phaseDeliveries = []) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId || !phaseDeliveries.length) return;
+
+    const now = new Date().toISOString();
+
+    await Promise.all(phaseDeliveries.map(async phase => {
+        const { error } = await supabaseClient
+            .from('OrderDeliveryPhase')
+            .update({
+                deliveryDate: phase.deliveryDate,
+                updatedAt: now
+            })
+            .eq('id', phase.phaseId)
+            .eq('orderId', normalizedOrderId);
+
+        if (error) throw error;
+    }));
+}
+
+async function saveCommercialApprovalOrderDeliveryDates(orderId, selections) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return;
+
+    if (selections.hasPhases) {
+        await persistCommercialApprovalPhaseDeliveryDates(normalizedOrderId, selections.phaseDeliveries);
+
+        let orderDeliveryDate = selections.orderDeliveryDate;
+        if (typeof fetchGestaoOrderPhases === 'function') {
+            const refreshedPhases = await fetchGestaoOrderPhases(normalizedOrderId);
+            const maxDeliveryDate = pickLatestIsoDate(...refreshedPhases.map(phase => phase.deliveryDate));
+            if (maxDeliveryDate) {
+                orderDeliveryDate = maxDeliveryDate;
+            }
+            if (typeof orderPhasesByOrderId !== 'undefined') {
+                orderPhasesByOrderId[normalizedOrderId] = refreshedPhases;
+            }
+        }
+
+        if (orderDeliveryDate) {
+            await persistSalesOrderClientDeliveryDate(normalizedOrderId, orderDeliveryDate);
+        }
+        return;
+    }
+
+    if (selections.orderDeliveryDate) {
+        await persistSalesOrderClientDeliveryDate(normalizedOrderId, selections.orderDeliveryDate);
+    }
+}
 
 function openAprovacaoCaminhoModal(options = {}) {
     const { projectName = '—', currentPath = '' } = options;
@@ -778,14 +1007,14 @@ async function saveProjectCaminhoRedeAprovacao(projectId, path) {
     let { error } = await supabaseClient
         .from('OrderProject')
         .update({
-            caminhoRedeAprovacao: path,
+            approvalNetworkPath: path,
             updatedById: currentUser?.id || null,
             updatedAt: now
         })
         .eq('id', projectId);
 
-    if (error?.message?.includes('caminhoRedeAprovacao')) {
-        throw new Error('Campo caminhoRedeAprovacao não encontrado. Execute supabase/create-order-project-aprovacao-path.sql no Supabase.');
+    if (error?.message?.includes('approvalNetworkPath')) {
+        throw new Error('Campo approvalNetworkPath não encontrado. Execute supabase/create-order-project-aprovacao-path.sql no Supabase.');
     }
 
     if (error) throw error;
@@ -795,7 +1024,7 @@ async function promptProjectCaminhoRedeAprovacao(project) {
     while (true) {
         const path = await openAprovacaoCaminhoModal({
             projectName: project?.name || '—',
-            currentPath: project?.caminhoRedeAprovacao || ''
+            currentPath: project?.approvalNetworkPath || ''
         });
 
         if (path === null) return null;
@@ -820,7 +1049,7 @@ async function ensureProjectsCaminhoRedeAprovacao(projects) {
         if (path === null) return null;
 
         await saveProjectCaminhoRedeAprovacao(project.id, path);
-        saved.push({ ...project, caminhoRedeAprovacao: path });
+        saved.push({ ...project, approvalNetworkPath: path });
     }
 
     return saved;
@@ -832,19 +1061,19 @@ async function submitCommercialApprovalFromPendencias(projectId) {
 
     let result = await supabaseClient
         .from('OrderProject')
-        .select('id, orderId, name, designerId, statusId, caminhoRedeAprovacao, isComplementar, projectStatus:OrderProjectStatus(id, name)')
+        .select('id, orderId, name, designerId, statusId, approvalNetworkPath, isComplementary, projectStatus:OrderProjectStatus(id, name)')
         .eq('id', normalizedId)
         .maybeSingle();
 
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
         result = await supabaseClient
             .from('OrderProject')
-            .select('id, orderId, name, designerId, statusId, caminhoRedeAprovacao')
+            .select('id, orderId, name, designerId, statusId, approvalNetworkPath')
             .eq('id', normalizedId)
             .maybeSingle();
     }
 
-    if (result.error?.message?.includes('caminhoRedeAprovacao')) {
+    if (result.error?.message?.includes('approvalNetworkPath')) {
         result = await supabaseClient
             .from('OrderProject')
             .select('id, orderId, name, designerId, statusId, projectStatus:OrderProjectStatus(id, name)')
@@ -860,12 +1089,12 @@ async function submitCommercialApprovalFromPendencias(projectId) {
     const project = await enrichCommercialApprovalProjectsWithStatus([result.data]);
     const enrichedProject = project[0];
 
-    if (isComplementarOrderProject(enrichedProject)) {
+    if (isComplementaryOrderProject(enrichedProject)) {
         alertAppDialog('Projetos complementares acompanham o status do projeto pai e não podem ser enviados para aprovação.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (isSubstituidoOrderProject(enrichedProject)) {
+    if (isReplacedOrderProject(enrichedProject)) {
         alertAppDialog('Projetos substituídos não podem ser enviados para aprovação.', { variant: 'warning', title: 'Aviso' });
         return;
     }
@@ -912,7 +1141,7 @@ async function submitCommercialApprovalFromPendencias(projectId) {
     const caminhoSaved = await ensureProjectsCaminhoRedeAprovacao([{
         id: enrichedProject.id,
         name: enrichedProject.name,
-        caminhoRedeAprovacao: enrichedProject.caminhoRedeAprovacao
+        approvalNetworkPath: enrichedProject.approvalNetworkPath
     }]);
     if (!caminhoSaved) return;
 
@@ -930,7 +1159,6 @@ async function submitCommercialApprovalFromPendencias(projectId) {
         const payload = {
             orderId: enrichedProject.orderId,
             orderProjectId: normalizedId,
-            projectName: enrichedProject.name,
             designerId: enrichedProject.designerId,
             approved: false,
             approvedAt: null,
@@ -1012,7 +1240,7 @@ async function editCommercialApproval(id) {
     editingCommercialApprovalId = id;
     document.getElementById('commercial-approval-modal-title').textContent = 'Aprovação Comercial';
     document.getElementById('commercial-approval-form-submit').textContent = 'Salvar Alterações';
-    document.getElementById('approval-edit-project-name').textContent = approval.projectName || '-';
+    document.getElementById('approval-edit-project-name').textContent = getCommercialApprovalProjectName(approval) || '-';
     setupCommercialApprovalFormFields(approval, true);
     await setApprovalDesignerReadonlyLabel(approval);
     toggleModal('commercial-approval-modal', true);
@@ -1068,7 +1296,7 @@ async function fetchCommercialApprovalOrderDeliveryContext(orderId) {
     } else if (orderId) {
         const { data } = await supabaseClient
             .from('salesOrders')
-            .select('orderCode, clientDeliveryDate, cliente:Cliente(nome)')
+            .select('orderCode, clientDeliveryDate, client:Client(name)')
             .eq('id', orderId)
             .maybeSingle();
 
@@ -1084,8 +1312,12 @@ async function fetchCommercialApprovalOrderDeliveryContext(orderId) {
 
 function closeCommercialApprovalOrderDeliveryModal() {
     pendingCommercialApprovalOrderDeliveryApprovalId = null;
+    commercialApprovalOrderDeliveryContext = null;
     const input = document.getElementById('commercial-approval-order-delivery-input');
+    const phaseWrap = document.getElementById('commercial-approval-phase-projects-wrap');
     if (input) input.value = '';
+    if (phaseWrap) phaseWrap.innerHTML = '';
+    syncCommercialApprovalOrderDeliveryUi(false);
     toggleModal('commercial-approval-order-delivery-modal', false);
 }
 
@@ -1093,22 +1325,36 @@ async function showCommercialApprovalOrderDeliveryModal(approval) {
     if (!approval?.id || !approval?.orderId) return;
 
     pendingCommercialApprovalOrderDeliveryApprovalId = Number(approval.id);
-    const context = await fetchCommercialApprovalOrderDeliveryContext(approval.orderId);
+    commercialApprovalOrderDeliveryContext = await fetchCommercialApprovalDeliveryModalContext(approval);
+
     const contextEl = document.getElementById('commercial-approval-order-delivery-context');
     const input = document.getElementById('commercial-approval-order-delivery-input');
+    const projectName = getCommercialApprovalProjectName(approval) || 'Projeto';
 
     if (contextEl) {
-        contextEl.textContent = `Pedido ${context.orderCode} — ${context.clientName}. Este é o primeiro projeto aprovado do pedido. Confirme a data de entrega no cliente.`;
+        contextEl.textContent = commercialApprovalOrderDeliveryContext.hasPhases
+            ? `Pedido ${commercialApprovalOrderDeliveryContext.orderCode} — ${commercialApprovalOrderDeliveryContext.clientName}. Confirme a data de entrega da fase do projeto "${projectName}" antes de aprovar.`
+            : `Pedido ${commercialApprovalOrderDeliveryContext.orderCode} — ${commercialApprovalOrderDeliveryContext.clientName}. Confirme a data de entrega do pedido antes de aprovar "${projectName}".`;
     }
 
     if (input) {
         input.value = typeof toGestaoInputDate === 'function'
-            ? toGestaoInputDate(context.clientDeliveryDate)
-            : String(context.clientDeliveryDate || '').slice(0, 10);
+            ? toGestaoInputDate(commercialApprovalOrderDeliveryContext.clientDeliveryDate)
+            : String(commercialApprovalOrderDeliveryContext.clientDeliveryDate || '').slice(0, 10);
+    }
+
+    syncCommercialApprovalOrderDeliveryUi(commercialApprovalOrderDeliveryContext.hasPhases);
+    if (commercialApprovalOrderDeliveryContext.hasPhases) {
+        renderCommercialApprovalPhaseProjects(
+            commercialApprovalOrderDeliveryContext.activePhase,
+            commercialApprovalOrderDeliveryContext.phaseProjects
+        );
     }
 
     toggleModal('commercial-approval-order-delivery-modal', true);
-    input?.focus();
+    (commercialApprovalOrderDeliveryContext.hasPhases
+        ? document.querySelector('.commercial-approval-phase-delivery')
+        : input)?.focus();
 }
 
 async function saveCommercialApprovalOrderDeliveryDate(orderId, clientDeliveryDate) {
@@ -1127,14 +1373,11 @@ async function submitCommercialApprovalOrderDeliveryModal() {
         return;
     }
 
-    const clientDeliveryDate = document.getElementById('commercial-approval-order-delivery-input')?.value || '';
-    if (!clientDeliveryDate) {
-        alertAppDialog('Informe a data de entrega do pedido.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
+    const selections = collectCommercialApprovalOrderDeliverySelections();
+    if (!validateCommercialApprovalOrderDeliverySelections(selections)) return;
 
     try {
-        await saveCommercialApprovalOrderDeliveryDate(approval.orderId, clientDeliveryDate);
+        await saveCommercialApprovalOrderDeliveryDates(approval.orderId, selections);
         closeCommercialApprovalOrderDeliveryModal();
         await executeCommercialApproval(approvalId);
     } catch (error) {
@@ -1201,7 +1444,7 @@ async function approveCommercialApproval(id) {
     }
 
     const isAguardandoAprovacao = await isProjectInAguardandoAprovacaoStatus(approval);
-    if (isAguardandoAprovacao && await isFirstCommercialApprovalForOrder(approval)) {
+    if (isAguardandoAprovacao) {
         await showCommercialApprovalOrderDeliveryModal(approval);
         return;
     }
@@ -1209,7 +1452,7 @@ async function approveCommercialApproval(id) {
     const confirmed = await confirmAppDialog(
         'A solicitação será marcada como aprovada.',
         {
-            title: `Aprovar "${approval.projectName}"?`,
+            title: `Aprovar "${getCommercialApprovalProjectName(approval)}"?`,
             confirmLabel: 'Aprovar',
             variant: 'success'
         }
@@ -1345,12 +1588,12 @@ function sortCommercialApprovals(approvals) {
 
 async function queryCommercialApprovals(orderId) {
     const columnSets = [
-        'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status, createdAt',
-        'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status',
-        'id, orderId, projectName, designerId, approved, approvedAt, status, createdAt',
-        'id, orderId, projectName, designerId, approved, approvedAt, status',
-        'id, orderId, projectName, designerId, approved, approvedAt',
-        'id, orderId, projectName, designerId, approved',
+        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, createdAt, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, approvedAt, status, createdAt, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, orderProject:OrderProject(id, name, projectCode)',
         '*'
     ];
 
@@ -1433,7 +1676,7 @@ function renderCommercialApprovalCard(approval, context) {
                         aria-label="Expandir">▶</button>
                     <div class="min-w-0 flex-1">
                         <p class="text-[10px] uppercase font-semibold text-slate-500 tracking-wide">Projeto</p>
-                        <p class="text-sm font-bold text-slate-900 truncate" title="${approval.projectName || ''}">${approval.projectName || '—'}</p>
+                        <p class="text-sm font-bold text-slate-900 truncate" title="${getCommercialApprovalProjectName(approval) || ''}">${getCommercialApprovalProjectName(approval) || '—'}</p>
                         ${environmentName ? `<p class="text-xs text-slate-500 mt-0.5">${environmentName}</p>` : ''}
                         <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                             <span class="text-slate-600"><span class="text-slate-400">👤 Projetista:</span> <span class="font-medium text-slate-800">${projetistaName}</span></span>
@@ -1755,13 +1998,12 @@ function bindCommercialApprovalEvents() {
                 return {
                     orderId: activeOrderId,
                     orderProjectId: projectId,
-                    projectName: project?.name || '',
                     designerId: project?.designerId,
                     approved: false,
                     approvedAt: null,
                     status: 'Aguardando Aprovação'
                 };
-            }).filter(payload => payload.projectName && payload.designerId);
+            }).filter(payload => payload.orderProjectId && payload.designerId);
 
             if (!payloads.length) {
                 alertAppDialog('Não foi possível montar as solicitações com o responsável dos projetos.');

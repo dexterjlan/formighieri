@@ -6,7 +6,7 @@ function canEditPendenciasAguardandoMedicaoStatus() {
     return isGestorComercial();
 }
 
-async function fetchPendenciasAguardandoMedicaoProjects() {
+async function fetchPendenciasAguardandoMeasurementProjects() {
     const statusIds = await getPendenciasStatusIdsByNames(PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES);
 
     if (!statusIds.length) {
@@ -27,7 +27,7 @@ async function fetchPendenciasAguardandoMedicaoProjects() {
     };
 }
 
-let pendenciasAguardandoMedicaoProjectsCache = [];
+let pendenciasAguardandoMeasurementProjectsCache = [];
 let pendenciasAguardandoMedicaoEditGroup = null;
 let pendenciasAguardandoMedicaoRefreshContext = null;
 
@@ -81,7 +81,7 @@ async function refreshAfterPendenciasAguardandoMedicaoChange() {
     }
 }
 
-function groupPendenciasAguardandoMedicaoProjects(projects) {
+function groupPendenciasAguardandoMeasurementProjects(projects) {
     const groups = new Map();
 
     projects.forEach(project => {
@@ -111,14 +111,14 @@ function groupPendenciasAguardandoMedicaoProjects(projects) {
 }
 
 function getPendenciasAguardandoMedicaoGroupProjects(orderId, statusName) {
-    const projects = pendenciasAguardandoMedicaoProjectsCache.filter(project => (
+    const projects = pendenciasAguardandoMeasurementProjectsCache.filter(project => (
         Number(project.orderId) === Number(orderId)
         && getPendenciasProjectStatusName(project) === statusName
     ));
 
     return [...projects].sort((a, b) => (
-        getPendenciasAguardandoMedicaoProjectLabel(a).localeCompare(
-            getPendenciasAguardandoMedicaoProjectLabel(b),
+        getPendenciasAguardandoMeasurementProjectLabel(a).localeCompare(
+            getPendenciasAguardandoMeasurementProjectLabel(b),
             'pt-BR',
             { sensitivity: 'base' }
         )
@@ -147,15 +147,15 @@ function closePendenciasAguardandoMedicaoModal() {
     toggleModal('pendencias-aguardando-medicao-modal', false);
 }
 
-function getPendenciasAguardandoMedicaoProjectLabel(project) {
+function getPendenciasAguardandoMeasurementProjectLabel(project) {
     return typeof getPendenciasProjectDetailLabel === 'function'
         ? getPendenciasProjectDetailLabel(project)
         : (project?.name || 'Projeto');
 }
 
 function renderPendenciasAguardandoMedicaoModalProjectRow(project) {
-    const label = getPendenciasAguardandoMedicaoProjectLabel(project);
-    const observation = project.observacaoAguardandoObra || '';
+    const label = getPendenciasAguardandoMeasurementProjectLabel(project);
+    const observation = project.awaitingConstructionNote || '';
 
     return `
         <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/40 flex items-start gap-3"
@@ -240,7 +240,7 @@ function openOrderProjectAlterarStatusModal(orderId, projectId) {
         return;
     }
 
-    pendenciasAguardandoMedicaoProjectsCache = enrichOrderProjectsForAguardandoMedicaoModal(orderId, groupProjects);
+    pendenciasAguardandoMeasurementProjectsCache = enrichOrderProjectsForAguardandoMedicaoModal(orderId, groupProjects);
     pendenciasAguardandoMedicaoRefreshContext = {
         source: 'order',
         orderId: Number(orderId)
@@ -290,7 +290,7 @@ function collectPendenciasAguardandoMedicaoModalSelections() {
         if (!checkbox?.checked) return;
 
         const projectId = Number(row.dataset.projectId);
-        const project = pendenciasAguardandoMedicaoProjectsCache.find(item => Number(item.id) === projectId);
+        const project = pendenciasAguardandoMeasurementProjectsCache.find(item => Number(item.id) === projectId);
         if (!project) return;
 
         selections.push({
@@ -311,7 +311,7 @@ async function updateOrderProjectStatusWithObservation(projectId, statusId, obse
     };
 
     if (observation !== null) {
-        payload.observacaoAguardandoObra = observation || null;
+        payload.awaitingConstructionNote = observation || null;
     }
 
     let { error } = await supabaseClient
@@ -319,7 +319,7 @@ async function updateOrderProjectStatusWithObservation(projectId, statusId, obse
         .update(payload)
         .eq('id', projectId);
 
-    if (error?.message?.includes('observacaoAguardandoObra')) {
+    if (error?.message?.includes('awaitingConstructionNote')) {
         ({ error } = await supabaseClient
             .from('OrderProject')
             .update({
@@ -415,7 +415,7 @@ async function applyPendenciasAguardandoMedicaoToSelections(selections) {
 
             updatedProjects.push({
                 id: item.project.id,
-                name: getPendenciasAguardandoMedicaoProjectLabel(item.project)
+                name: getPendenciasAguardandoMeasurementProjectLabel(item.project)
             });
         }
 
@@ -481,17 +481,17 @@ function renderPendenciasAguardandoMedicaoList(projects) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    pendenciasAguardandoMedicaoProjectsCache = projects;
+    pendenciasAguardandoMeasurementProjectsCache = projects;
     const canEdit = canEditPendenciasAguardandoMedicaoStatus();
     const subtitle = canEdit
         ? 'Projetos agrupados por pedido e status. Use Editar para alterar status e observações.'
         : 'Visualização dos projetos vendidos ou aguardando obra.';
 
-    const groups = groupPendenciasAguardandoMedicaoProjects(projects);
+    const groups = groupPendenciasAguardandoMeasurementProjects(projects);
     const rows = groups.map(group => {
         const statusClass = getPendenciasProjectStatusBadgeClass(group.statusName);
         const projectNames = group.projects
-            .map(project => getPendenciasAguardandoMedicaoProjectLabel(project))
+            .map(project => getPendenciasAguardandoMeasurementProjectLabel(project))
             .join(' | ');
 
         return `
@@ -966,14 +966,14 @@ async function fetchPendenciasImplantacoesAbertas() {
     }
 
     const { data: implantacoes, error } = await supabaseClient
-        .from('Implantacao')
+        .from('Implementation')
         .select('id, status, orderProjectId, updatedAt')
         .neq('status', statusEncerrado)
         .order('updatedAt', { ascending: false });
 
-    if (error?.message?.includes('Implantacao')) {
+    if (error?.message?.includes('Implementation')) {
         return {
-            error: new Error('Tabela Implantacao não encontrada. Execute supabase/create-implantacao.sql no Supabase.'),
+            error: new Error('Tabela Implementation não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.'),
             projects: []
         };
     }
@@ -1019,7 +1019,7 @@ async function fetchPendenciasImplantacoesAbertas() {
 
         return {
             ...base,
-            implantacaoId: implantacao.id,
+            implementationId: implantacao.id,
             implantacaoStatus: implantacao.status
         };
     });
@@ -1150,14 +1150,14 @@ async function queryPendenciasFabricaProjects(statusId) {
             .select(selectColumns)
             .eq('statusId', statusId);
         if (withInactiveFilter) {
-            query = query.eq('isComplementar', false).eq('isSubstituido', false);
+            query = query.eq('isComplementary', false).eq('isReplaced', false);
         }
         return query;
     };
 
     let result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT);
 
-    if (result.error?.message?.includes('isComplementar') || result.error?.message?.includes('isSubstituido')) {
+    if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
         result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT, false);
     }
 
@@ -1230,8 +1230,8 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
         const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = getPendenciasFabricaProjectLabel(project);
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const inicioValue = project.inicioMontagemInterna
-            ? String(project.inicioMontagemInterna).split('T')[0]
+        const inicioValue = project.internalAssemblyStartDate
+            ? String(project.internalAssemblyStartDate).split('T')[0]
             : '';
         const actionCell = canAct
             ? `<button type="button"
@@ -1251,7 +1251,7 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
                     <div class="flex items-center gap-1.5 min-w-[210px]">
                         <select class="pendencias-fabrica-marceneiro flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-orange-600"
                             data-project-id="${project.id}" ${canAct ? '' : 'disabled'}>
-                            ${getPendenciasFabricaMarceneiroOptionsHtml(project.marceneiroId)}
+                            ${getPendenciasFabricaMarceneiroOptionsHtml(project.cabinetMakerId)}
                         </select>
                         ${canAct ? `<button type="button"
                             class="pendencias-trocar-marceneiro-btn text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-300 px-2 py-1.5 rounded-lg font-medium border border-slate-200 transition shrink-0"
@@ -1332,9 +1332,9 @@ function renderPendenciasEmMontagemList(projects) {
         const orderCode = project.order?.orderCode || '—';
         const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = getPendenciasFabricaProjectLabel(project);
-        const inicioDisplay = formatPendenciasFabricaDisplayDate(project.inicioMontagemInterna);
-        const fimValue = project.fimMontagemInterna
-            ? String(project.fimMontagemInterna).split('T')[0]
+        const inicioDisplay = formatPendenciasFabricaDisplayDate(project.internalAssemblyStartDate);
+        const fimValue = project.internalAssemblyEndDate
+            ? String(project.internalAssemblyEndDate).split('T')[0]
             : '';
         const actionCell = canAct
             ? `<button type="button"
@@ -1353,7 +1353,7 @@ function renderPendenciasEmMontagemList(projects) {
                     <div class="flex items-center gap-1.5 min-w-[210px]">
                         <select class="pendencias-fabrica-marceneiro flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
                             data-project-id="${project.id}" ${canAct ? '' : 'disabled'}>
-                            ${getPendenciasFabricaMarceneiroOptionsHtml(project.marceneiroId)}
+                            ${getPendenciasFabricaMarceneiroOptionsHtml(project.cabinetMakerId)}
                         </select>
                         ${canAct ? `<button type="button"
                             class="pendencias-trocar-marceneiro-btn text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-300 px-2 py-1.5 rounded-lg font-medium border border-slate-200 transition shrink-0"
@@ -1440,7 +1440,7 @@ async function changePendenciasProjectMarceneiro(projectId) {
         const { error } = await supabaseClient
             .from('OrderProject')
             .update({
-                marceneiroId: newMarceneiroId,
+                cabinetMakerId: newMarceneiroId,
                 updatedAt: new Date().toISOString(),
                 updatedById: currentUser?.id || null
             })
@@ -1451,7 +1451,7 @@ async function changePendenciasProjectMarceneiro(projectId) {
         if (typeof gestaoOrdersCache !== 'undefined') {
             const cachedProject = gestaoOrdersCache.flatMap(o => o.projects || []).find(p => Number(p.id) === Number(projectId));
             if (cachedProject) {
-                cachedProject.marceneiroId = newMarceneiroId;
+                cachedProject.cabinetMakerId = newMarceneiroId;
             }
         }
 
@@ -1481,19 +1481,19 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
     const row = document.querySelector(`tr[data-pendencias-fabrica-project-id="${projectId}"]`);
     if (!row) return;
 
-    const marceneiroId = row.querySelector('.pendencias-fabrica-marceneiro')?.value;
-    const inicioMontagemInterna = row.querySelector('.pendencias-fabrica-inicio')?.value;
+    const cabinetMakerId = row.querySelector('.pendencias-fabrica-marceneiro')?.value;
+    const internalAssemblyStartDate = row.querySelector('.pendencias-fabrica-inicio')?.value;
     const projectLabel = row.querySelector('td:nth-child(3)')?.textContent?.trim() || 'Projeto';
 
-    if (!marceneiroId) {
+    if (!cabinetMakerId) {
         alertAppDialog(`"${projectLabel}": selecione o marceneiro responsável.`);
         return;
     }
-    if (!inicioMontagemInterna) {
+    if (!internalAssemblyStartDate) {
         alertAppDialog(`"${projectLabel}": informe a data de início da montagem interna.`);
         return;
     }
-    if (isInputDateInFuture(inicioMontagemInterna)) {
+    if (isInputDateInFuture(internalAssemblyStartDate)) {
         alertAppDialog(`"${projectLabel}": a data de início não pode ser no futuro.`, { variant: 'warning', title: 'Aviso' });
         return;
     }
@@ -1513,8 +1513,8 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
         if (typeof persistFabricaInicioProject === 'function') {
             await persistFabricaInicioProject({
                 projectId,
-                marceneiroId: Number(marceneiroId),
-                inicioMontagemInterna,
+                cabinetMakerId: Number(cabinetMakerId),
+                internalAssemblyStartDate,
                 label: projectLabel
             }, montagemInternaStatusId);
         } else {
@@ -1522,8 +1522,8 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
             const { error } = await supabaseClient
                 .from('OrderProject')
                 .update({
-                    marceneiroId: Number(marceneiroId),
-                    inicioMontagemInterna,
+                    cabinetMakerId: Number(cabinetMakerId),
+                    internalAssemblyStartDate,
                     statusId: montagemInternaStatusId,
                     updatedById: currentUser.id,
                     updatedAt: now
@@ -1535,7 +1535,7 @@ async function savePendenciasFabricaInicioMontagem(projectId) {
 
         await reloadActivePendenciasGestorFabricaList();
     } catch (error) {
-        const sqlHint = error.message?.includes('marceneiroId') || error.message?.includes('MontagemInterna')
+        const sqlHint = error.message?.includes('cabinetMakerId') || error.message?.includes('MontagemInterna')
             ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
         alertAppDialog('Erro ao salvar: ' + error.message + sqlHint);
@@ -1551,14 +1551,14 @@ async function savePendenciasFabricaFimMontagem(projectId) {
     const row = document.querySelector(`tr[data-pendencias-fabrica-project-id="${projectId}"]`);
     if (!row) return;
 
-    const fimMontagemInterna = row.querySelector('.pendencias-fabrica-fim')?.value;
+    const internalAssemblyEndDate = row.querySelector('.pendencias-fabrica-fim')?.value;
     const projectLabel = row.querySelector('td:nth-child(3)')?.textContent?.trim() || 'Projeto';
 
-    if (!fimMontagemInterna) {
+    if (!internalAssemblyEndDate) {
         alertAppDialog(`"${projectLabel}": informe a data de fim da montagem interna.`);
         return;
     }
-    if (isInputDateInFuture(fimMontagemInterna)) {
+    if (isInputDateInFuture(internalAssemblyEndDate)) {
         alertAppDialog(`"${projectLabel}": a data de fim não pode ser no futuro.`, { variant: 'warning', title: 'Aviso' });
         return;
     }
@@ -1578,7 +1578,7 @@ async function savePendenciasFabricaFimMontagem(projectId) {
         if (typeof persistFabricaFimProject === 'function') {
             await persistFabricaFimProject({
                 projectId,
-                fimMontagemInterna,
+                internalAssemblyEndDate,
                 label: projectLabel
             }, expedicaoStatusId);
         } else {
@@ -1586,7 +1586,7 @@ async function savePendenciasFabricaFimMontagem(projectId) {
             const { error } = await supabaseClient
                 .from('OrderProject')
                 .update({
-                    fimMontagemInterna,
+                    internalAssemblyEndDate,
                     statusId: expedicaoStatusId,
                     updatedById: currentUser.id,
                     updatedAt: now
@@ -1598,7 +1598,7 @@ async function savePendenciasFabricaFimMontagem(projectId) {
 
         await reloadActivePendenciasGestorFabricaList();
     } catch (error) {
-        const sqlHint = error.message?.includes('fimMontagemInterna')
+        const sqlHint = error.message?.includes('internalAssemblyEndDate')
             ? '\n\nExecute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
         alertAppDialog('Erro ao salvar: ' + error.message + sqlHint);

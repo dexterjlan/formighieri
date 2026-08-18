@@ -35,12 +35,12 @@ async function fetchPendenciasEnviadosCompras() {
             .map(project => [project.id, project])
     );
 
-    const purchaseItemIds = [...new Set(compras.map(item => item.implantacaoPurchaseItemId).filter(Boolean))];
+    const purchaseItemIds = [...new Set(compras.map(item => item.implementationPurchaseItemId).filter(Boolean))];
     let purchaseItemsById = {};
 
     if (purchaseItemIds.length) {
         const purchaseResult = await supabaseClient
-            .from('ImplantacaoPurchaseItem')
+            .from('ImplementationPurchaseItem')
             .select('id, purchaseType, thirdPartySubtype:ThirdPartySubtype(id, name)')
             .in('id', purchaseItemIds);
 
@@ -52,7 +52,7 @@ async function fetchPendenciasEnviadosCompras() {
     const items = compras
         .map(compra => {
             const project = projectsById[compra.orderProjectId];
-            const purchaseItem = purchaseItemsById[compra.implantacaoPurchaseItemId] || null;
+            const purchaseItem = purchaseItemsById[compra.implementationPurchaseItemId] || null;
             const subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
             return {
                 ...compra,
@@ -99,8 +99,8 @@ function renderPendenciasEnviadosComprasList(items) {
         const clientName = item.clientName || getOrderClientName(item.project?.order) || '—';
         const projectName = item.projectName || item.project?.name || '—';
         const tipoLabel = typeof formatCompraTipoLabel === 'function'
-            ? formatCompraTipoLabel(item.tipoCompra, item.subtypeName)
-            : (item.tipoCompra || '—');
+            ? formatCompraTipoLabel(item.purchaseType, item.subtypeName)
+            : (item.purchaseType || '—');
         const statusClass = typeof getCompraStatusBadgeClass === 'function'
             ? getCompraStatusBadgeClass(item.status)
             : 'bg-amber-100 text-amber-800';

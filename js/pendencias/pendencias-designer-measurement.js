@@ -7,7 +7,7 @@ async function openRequestFromPendencias(requestId) {
     if (!request) {
         const selectWithProject = `
             *,
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
             orderProject:OrderProject(id, name, projectCode, environmentType:EnvironmentType(name))
         `;
         let result = await supabaseClient
@@ -19,7 +19,7 @@ async function openRequestFromPendencias(requestId) {
         if (result.error?.message?.includes('orderProject')) {
             result = await supabaseClient
                 .from('OrderRequest')
-                .select('*, order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
+                .select(`*, order:salesOrders(${getSalesOrderMinimalEmbedSelect()})`)
                 .eq('id', id)
                 .maybeSingle();
         }
@@ -197,28 +197,28 @@ function renderPendenciasProjetistaOrdersList(config) {
 
 function isPendenciasMedicaoTableMissingError(error) {
     const message = String(error?.message || '');
-    return /relation.*"Medicao".*does not exist/i.test(message)
-        || /relation.*Medicao.*does not exist/i.test(message);
+    return /relation.*"Measurement".*does not exist/i.test(message)
+        || /relation.*Measurement.*does not exist/i.test(message);
 }
 
 async function fetchPendenciasAguardandoPlantaMedicoes() {
     const selectVariants = [
         `
             id, orderId, observation, createdAt, createdById,
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
-            medicaoProjects:MedicaoProject(
-                id, orderProjectId, measurementDate, plantaLevantada, plantaLevantadaDate,
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
+            measurementProjects:MeasurementProject(
+                id, orderProjectId, measurementDate, isFloorPlanRaised, floorPlanRaisedDate,
                 orderProject:OrderProject(id, name, projectCode)
             )
         `,
         `
             id, orderId, observation, createdAt, createdById,
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
-            medicaoProjects:MedicaoProject(id, orderProjectId, measurementDate, plantaLevantada, plantaLevantadaDate)
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
+            measurementProjects:MeasurementProject(id, orderProjectId, measurementDate, isFloorPlanRaised, floorPlanRaisedDate)
         `,
         `
             id, orderId, observation, createdAt, createdById,
-            medicaoProjects:MedicaoProject(id, orderProjectId, measurementDate, plantaLevantada, plantaLevantadaDate)
+            measurementProjects:MeasurementProject(id, orderProjectId, measurementDate, isFloorPlanRaised, floorPlanRaisedDate)
         `,
         'id, orderId, observation, createdAt, createdById'
     ];
@@ -227,7 +227,7 @@ async function fetchPendenciasAguardandoPlantaMedicoes() {
 
     for (const selectColumns of selectVariants) {
         result = await supabaseClient
-            .from('Medicao')
+            .from('Measurement')
             .select(selectColumns)
             .order('createdAt', { ascending: false });
 
@@ -248,7 +248,7 @@ async function fetchPendenciasAguardandoPlantaMedicoes() {
     const orderIds = [...new Set(medicoes.map(medicao => Number(medicao.orderId)).filter(Boolean))];
     const projectIds = [...new Set(
         medicoes.flatMap(medicao =>
-            (medicao.medicaoProjects || [])
+            (medicao.measurementProjects || [])
                 .map(project => Number(project.orderProjectId))
                 .filter(Boolean)
         )
@@ -266,7 +266,7 @@ async function fetchPendenciasAguardandoPlantaMedicoes() {
 
     let projectById = {};
     if (projectIds.length && medicoes.some(medicao =>
-        (medicao.medicaoProjects || []).some(project => project.orderProjectId && !project.orderProject)
+        (medicao.measurementProjects || []).some(project => project.orderProjectId && !project.orderProject)
     )) {
         const { data: projects } = await supabaseClient
             .from('OrderProject')
@@ -276,24 +276,24 @@ async function fetchPendenciasAguardandoPlantaMedicoes() {
         projectById = Object.fromEntries((projects || []).map(project => [Number(project.id), project]));
     }
 
-    if (medicoes.some(medicao => !medicao.medicaoProjects)) {
-        const medicaoIds = medicoes.map(medicao => medicao.id).filter(Boolean);
-        if (medicaoIds.length) {
-            const { data: medicaoProjects } = await supabaseClient
-                .from('MedicaoProject')
-                .select('id, medicaoId, orderProjectId, measurementDate, plantaLevantada, plantaLevantadaDate')
-                .in('medicaoId', medicaoIds);
+    if (medicoes.some(medicao => !medicao.measurementProjects)) {
+        const measurementIds = medicoes.map(medicao => medicao.id).filter(Boolean);
+        if (measurementIds.length) {
+            const { data: measurementProjects } = await supabaseClient
+                .from('MeasurementProject')
+                .select('id, measurementId, orderProjectId, measurementDate, isFloorPlanRaised, floorPlanRaisedDate')
+                .in('measurementId', measurementIds);
 
             const projectsByMedicaoId = {};
-            (medicaoProjects || []).forEach(project => {
-                const medicaoId = Number(project.medicaoId);
-                if (!projectsByMedicaoId[medicaoId]) projectsByMedicaoId[medicaoId] = [];
-                projectsByMedicaoId[medicaoId].push(project);
+            (measurementProjects || []).forEach(project => {
+                const measurementId = Number(project.measurementId);
+                if (!projectsByMedicaoId[measurementId]) projectsByMedicaoId[measurementId] = [];
+                projectsByMedicaoId[measurementId].push(project);
             });
 
             medicoes = medicoes.map(medicao => ({
                 ...medicao,
-                medicaoProjects: medicao.medicaoProjects || projectsByMedicaoId[Number(medicao.id)] || []
+                measurementProjects: medicao.measurementProjects || projectsByMedicaoId[Number(medicao.id)] || []
             }));
         }
     }
@@ -301,26 +301,26 @@ async function fetchPendenciasAguardandoPlantaMedicoes() {
     medicoes = medicoes.map(medicao => ({
         ...medicao,
         order: medicao.order || orderById[Number(medicao.orderId)] || null,
-        medicaoProjects: (medicao.medicaoProjects || []).map(project => ({
+        measurementProjects: (medicao.measurementProjects || []).map(project => ({
             ...project,
             orderProject: project.orderProject || projectById[Number(project.orderProjectId)] || null
         }))
     }));
 
     const openMedicoes = medicoes.filter(medicao => {
-        const projects = medicao.medicaoProjects || [];
-        return projects.length > 0 && projects.some(project => !project.plantaLevantada);
+        const projects = medicao.measurementProjects || [];
+        return projects.length > 0 && projects.some(project => !project.isFloorPlanRaised);
     });
 
     return { error: null, medicoes: openMedicoes };
 }
 
-function getPendenciasMedicaoProjectLabel(medicaoProject) {
+function getPendenciasMeasurementProjectLabel(medicaoProject) {
     return medicaoProject?.orderProject?.name || 'Projeto';
 }
 
 function getPendenciasMedicaoPrimaryDate(medicao) {
-    const dates = (medicao?.medicaoProjects || [])
+    const dates = (medicao?.measurementProjects || [])
         .map(project => project.measurementDate)
         .filter(Boolean)
         .sort();
@@ -337,8 +337,8 @@ function renderPendenciasAguardandoPlantaList(medicoes) {
         const orderCode = medicao.order?.orderCode || '—';
         const clientName = getOrderClientName(medicao.order) || '—';
         const measurementDate = formatPendenciasDeliveryDate(getPendenciasMedicaoPrimaryDate(medicao));
-        const projectSummary = (medicao.medicaoProjects || [])
-            .map(project => getPendenciasMedicaoProjectLabel(project))
+        const projectSummary = (medicao.measurementProjects || [])
+            .map(project => getPendenciasMeasurementProjectLabel(project))
             .join(PENDENCIAS_DETAIL_SEPARATOR);
         const actionCell = canAct
             ? `<button type="button"
@@ -404,27 +404,27 @@ function renderPendenciasAguardandoPlantaList(medicoes) {
     });
 }
 
-async function openPendenciasEditarMedicao(medicaoId, orderId) {
+async function openPendenciasEditarMedicao(measurementId, orderId) {
     if (!canSeePendenciasProjetistaMedicaoConferenciaMenus()) {
         alertAppDialog('Sem permissão para editar medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     activeOrderId = Number(orderId);
-    if (!activeOrderId || !medicaoId) return;
+    if (!activeOrderId || !measurementId) return;
 
     if (typeof loadMedicoes === 'function') {
         await loadMedicoes(activeOrderId);
     }
 
-    const medicao = medicoesCache.find(item => Number(item.id) === Number(medicaoId));
+    const medicao = medicoesCache.find(item => Number(item.id) === Number(measurementId));
     if (medicao && typeof canEditMedicao === 'function' && !canEditMedicao(medicao)) {
         alertAppDialog('Sem permissão para editar esta medição.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     if (typeof openMedicaoModal === 'function') {
-        await openMedicaoModal(medicaoId);
+        await openMedicaoModal(measurementId);
     }
 }
 

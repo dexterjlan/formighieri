@@ -57,7 +57,7 @@ async function fetchOrderExportOrder(orderId) {
 
     if (!primary.error && primary.data) return primary.data;
 
-    if (primary.error?.message?.includes('Cliente') || primary.error?.message?.includes('consultor')) {
+    if (primary.error?.message?.includes('Client') || primary.error?.message?.includes('consultor')) {
         const fallback = await supabaseClient
             .from('salesOrders')
             .select('*, creator:appUsers!salesOrders_createdById_fkey(name)')
@@ -72,26 +72,26 @@ async function fetchOrderExportOrder(orderId) {
 async function fetchOrderExportProjects(orderId) {
     const selectVariants = [
         `id, orderId, projectCode, name, deliveryDate, deliveryPhaseId,
-        technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico,
-        statusId, designerId, caminhoRedeAprovacao, marceneiroId,
-        inicioMontagemInterna, fimMontagemInterna, productionMonth,
-        isComplementar, parentProjectId, isSubstituido, substituidoPorProjectId, isSubstituicao, substituiProjectId,
+        technicalProjectForecastStartDate, technicalProjectForecastEndDate, technicalProjectCompletedDate,
+        statusId, designerId, approvalNetworkPath, cabinetMakerId,
+        internalAssemblyStartDate, internalAssemblyEndDate, productionMonth,
+        isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId,
         environmentType:EnvironmentType(name),
         projectStatus:OrderProjectStatus(id, name),
         designer:appUsers!OrderProject_designerId_fkey(id, name),
-        marceneiro:Marceneiro(id, name),
+        cabinetMaker:CabinetMaker(id, name),
         parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)),
-        substituidoPor:substituidoPorProjectId(projectCode, order:salesOrders(orderCode)),
-        substitui:substituiProjectId(projectCode, order:salesOrders(orderCode))`,
+        replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)),
+        replaces:replacesProjectId(projectCode, order:salesOrders(orderCode))`,
         `id, orderId, projectCode, name, deliveryDate, deliveryPhaseId,
-        technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, conclusaoProjetoTecnico,
-        statusId, designerId, caminhoRedeAprovacao, marceneiroId,
-        inicioMontagemInterna, fimMontagemInterna, productionMonth,
+        technicalProjectForecastStartDate, technicalProjectForecastEndDate, technicalProjectCompletedDate,
+        statusId, designerId, approvalNetworkPath, cabinetMakerId,
+        internalAssemblyStartDate, internalAssemblyEndDate, productionMonth,
         environmentType:EnvironmentType(name),
         projectStatus:OrderProjectStatus(id, name),
         designer:appUsers!OrderProject_designerId_fkey(id, name)`,
         `id, orderId, projectCode, name, deliveryDate, statusId, designerId,
-        marceneiroId, inicioMontagemInterna, fimMontagemInterna,
+        cabinetMakerId, internalAssemblyStartDate, internalAssemblyEndDate,
         environmentType:EnvironmentType(name),
         projectStatus:OrderProjectStatus(id, name)`
     ];
@@ -117,7 +117,7 @@ async function fetchOrderExportProjects(orderId) {
             return projects;
         }
 
-        if (error?.message?.includes('marceneiro') || error?.message?.includes('Marceneiro')
+        if (error?.message?.includes('cabinetMaker') || error?.message?.includes('CabinetMaker')
             || error?.message?.includes('parentProject') || error?.message?.includes('technicalProject')) {
             continue;
         }
@@ -132,10 +132,10 @@ async function fetchOrderExportProjects(orderId) {
 
 async function fetchOrderExportMedicoes(orderId) {
     let result = await supabaseClient
-        .from('Medicao')
+        .from('Measurement')
         .select(`
             *,
-            medicaoProjects:MedicaoProject(
+            measurementProjects:MeasurementProject(
                 *,
                 orderProject:OrderProject(id, name, environmentType:EnvironmentType(name))
             )
@@ -143,9 +143,9 @@ async function fetchOrderExportMedicoes(orderId) {
         .eq('orderId', orderId)
         .order('createdAt', { ascending: false });
 
-    if (result.error?.message?.includes('MedicaoProject')) {
+    if (result.error?.message?.includes('MeasurementProject')) {
         result = await supabaseClient
-            .from('Medicao')
+            .from('Measurement')
             .select('*')
             .eq('orderId', orderId)
             .order('createdAt', { ascending: false });
@@ -162,17 +162,17 @@ async function fetchOrderExportMedicoes(orderId) {
 
 async function fetchOrderExportConferences(orderId) {
     let result = await supabaseClient
-        .from('AnteprojetoConference')
+        .from('PreliminaryDesignConference')
         .select(`
             *,
-            conferenceProjects:AnteprojetoConferenceProject(
+            conferenceProjects:PreliminaryDesignConferenceProject(
                 *,
                 orderProject:OrderProject(id, name, statusId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)),
-                modules:AnteprojetoModule(
+                modules:PreliminaryDesignModule(
                     *,
-                    observations:AnteprojetoModuleObservation(
+                    observations:PreliminaryDesignModuleObservation(
                         *,
-                        observation:AnteprojetoObservation(id, text)
+                        observation:PreliminaryDesignObservation(id, text)
                     )
                 )
             )
@@ -180,14 +180,14 @@ async function fetchOrderExportConferences(orderId) {
         .eq('orderId', orderId)
         .order('createdAt', { ascending: false });
 
-    if (result.error?.message?.includes('AnteprojetoConferenceProject')) {
+    if (result.error?.message?.includes('PreliminaryDesignConferenceProject')) {
         result = await supabaseClient
-            .from('AnteprojetoConference')
+            .from('PreliminaryDesignConference')
             .select(`
                 *,
-                conferenceProjects:AnteprojetoConferenceProject(
+                conferenceProjects:PreliminaryDesignConferenceProject(
                     *,
-                    modules:AnteprojetoModule(*)
+                    modules:PreliminaryDesignModule(*)
                 )
             `)
             .eq('orderId', orderId)
@@ -300,9 +300,9 @@ async function fetchOrderExportBundle(orderId) {
 
         if (implantacao?.id) {
             let purchaseItems = [];
-            if (typeof fetchImplantacaoPurchaseItems === 'function') {
+            if (typeof fetchImplementationPurchaseItems === 'function') {
                 try {
-                    purchaseItems = await fetchImplantacaoPurchaseItems(implantacao.id);
+                    purchaseItems = await fetchImplementationPurchaseItems(implantacao.id);
                 } catch (error) {
                     console.warn('fetchOrderExportBundle purchaseItems:', error);
                 }
@@ -410,10 +410,10 @@ function renderOrderExportProjectsSection(bundle) {
             orderExportField('Entrega do projeto', formatOrderExportDate(project.deliveryDate)),
             orderExportField('Fase de entrega', phaseDisplay ? `${phaseDisplay.name} (${phaseDisplay.dateLabel})` : null),
             orderExportField('Previsão início PT', formatOrderExportDate(project.technicalProjectForecastStartDate)),
-            orderExportField('Previsão conclusão PT', formatOrderExportDate(project.previsaoConclusaoProjetoTecnico)),
-            orderExportField('Conclusão PT', formatOrderExportDate(project.conclusaoProjetoTecnico)),
+            orderExportField('Previsão conclusão PT', formatOrderExportDate(project.technicalProjectForecastEndDate)),
+            orderExportField('Conclusão PT', formatOrderExportDate(project.technicalProjectCompletedDate)),
             orderExportField('Mês de produção', project.productionMonth),
-            orderExportField('Caminho rede aprovação', project.caminhoRedeAprovacao)
+            orderExportField('Caminho rede aprovação', project.approvalNetworkPath)
         ].join('');
 
         return `
@@ -434,9 +434,9 @@ function renderOrderExportMedicoesSection(bundle) {
     }
 
     const blocks = medicoes.map(medicao => {
-        const projects = typeof getMedicaoProjects === 'function'
-            ? getMedicaoProjects(medicao)
-            : (medicao.medicaoProjects || []);
+        const projects = typeof getMeasurementProjects === 'function'
+            ? getMeasurementProjects(medicao)
+            : (medicao.measurementProjects || []);
         const primaryDate = typeof getMedicaoPrimaryDate === 'function'
             ? getMedicaoPrimaryDate(medicao)
             : (projects[0]?.measurementDate || medicao.createdAt);
@@ -446,8 +446,8 @@ function renderOrderExportMedicoesSection(bundle) {
                 <tr>
                     <td>${escapeHtml(item.orderProject?.name || 'Projeto')}</td>
                     <td>${escapeHtml(formatOrderExportDate(item.measurementDate))}</td>
-                    <td>${item.plantaLevantada ? 'Sim' : 'Não'}</td>
-                    <td>${escapeHtml(formatOrderExportDate(item.plantaLevantadaDate))}</td>
+                    <td>${item.isFloorPlanRaised ? 'Sim' : 'Não'}</td>
+                    <td>${escapeHtml(formatOrderExportDate(item.floorPlanRaisedDate))}</td>
                 </tr>
             `).join('')
             : `<tr><td colspan="4">${orderExportEmpty('Nenhum projeto vinculado.')}</td></tr>`;
@@ -495,7 +495,7 @@ function renderOrderExportConferencesSection(bundle) {
                 <tr>
                     <td>${escapeHtml(obs.moduleName || obs.module?.name || '—')}</td>
                     <td>${escapeHtml(obs.observationText || obs.observation?.text || '—')}</td>
-                    <td>${obs.consultorChecked ? 'Sim' : 'Não'}</td>
+                    <td>${obs.consultantChecked ? 'Sim' : 'Não'}</td>
                 </tr>
             `).join('')
             : `<tr><td colspan="3">${orderExportEmpty('Nenhum módulo registrado.')}</td></tr>`;
@@ -511,8 +511,8 @@ function renderOrderExportConferencesSection(bundle) {
                 ${conference.conferenceObservation
                     ? `<p class="order-export-note"><strong>Observação:</strong> ${escapeHtml(conference.conferenceObservation)}</p>`
                     : ''}
-                ${conference.gestorObservation
-                    ? `<p class="order-export-note"><strong>Observação do gestor:</strong> ${escapeHtml(conference.gestorObservation)}</p>`
+                ${conference.managerObservation
+                    ? `<p class="order-export-note"><strong>Observação do gestor:</strong> ${escapeHtml(conference.managerObservation)}</p>`
                     : ''}
                 <table class="order-export-table">
                     <thead>
@@ -724,8 +724,8 @@ function renderOrderExportImplantacaoSection(bundle) {
                 ${orderExportSubheading(getOrderExportProjectLabel(project))}
                 <div class="order-export-fields order-export-fields--grid">
                     ${orderExportField('Status', implantacao.status)}
-                    ${orderExportField('Caminho do projeto', implantacao.projetoPath)}
-                    ${orderExportField('Projeto conferido', implantacao.projetoChecked ? 'Sim' : 'Não')}
+                    ${orderExportField('Caminho do projeto', implantacao.projectFilePath)}
+                    ${orderExportField('Projeto conferido', implantacao.isProjectChecked ? 'Sim' : 'Não')}
                     ${orderExportField('Código OP WPS', implantacao.wpsOpCode)}
                     ${orderExportField('Atualizado em', formatOrderExportDateTime(implantacao.updatedAt))}
                 </div>
@@ -778,7 +778,7 @@ function renderOrderExportDetalhamentoSection(bundle) {
                     ${orderExportField('Projetista', record.designer?.name)}
                     ${orderExportField('Início', formatOrderExportDate(record.startedAt))}
                     ${orderExportField('Fim', formatOrderExportDate(record.completedAt))}
-                    ${orderExportField('Caminho projeto', record.projetoPath)}
+                    ${orderExportField('Caminho projeto', record.projectFilePath)}
                     ${orderExportField('Pasta servidor', record.serverFolderPath)}
                 </div>
                 ${stepRows ? `
@@ -799,10 +799,10 @@ function renderOrderExportDetalhamentoSection(bundle) {
 function renderOrderExportMontagemSection(bundle) {
     const { projects } = bundle;
     const projectsWithMontagem = projects.filter(project =>
-        project.marceneiroId
-        || project.inicioMontagemInterna
-        || project.fimMontagemInterna
-        || project.marceneiro?.name
+        project.cabinetMakerId
+        || project.internalAssemblyStartDate
+        || project.internalAssemblyEndDate
+        || project.cabinetMaker?.name
     );
 
     if (!projectsWithMontagem.length) {
@@ -812,15 +812,15 @@ function renderOrderExportMontagemSection(bundle) {
     const blocks = projectsWithMontagem.map(project => {
         const marceneiroName = typeof getMarceneiroNameFromProject === 'function'
             ? getMarceneiroNameFromProject(project)
-            : (project.marceneiro?.name || '—');
+            : (project.cabinetMaker?.name || '—');
 
         return `
             <div class="order-export-card">
                 ${orderExportSubheading(getOrderExportProjectLabel(project))}
                 <div class="order-export-fields order-export-fields--grid">
                     ${orderExportField('Marceneiro', marceneiroName)}
-                    ${orderExportField('Início montagem', formatOrderExportDate(project.inicioMontagemInterna))}
-                    ${orderExportField('Fim montagem', formatOrderExportDate(project.fimMontagemInterna))}
+                    ${orderExportField('Início montagem', formatOrderExportDate(project.internalAssemblyStartDate))}
+                    ${orderExportField('Fim montagem', formatOrderExportDate(project.internalAssemblyEndDate))}
                 </div>
             </div>
         `;

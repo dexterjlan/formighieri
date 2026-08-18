@@ -33,10 +33,10 @@ async function fetchCommercialApprovalsByProjectIds(projectIds) {
     if (!projectIds.length) return {};
 
     const columnSets = [
-        'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status',
-        'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt',
-        'id, orderId, projectName, designerId, approved, approvedAt, status',
-        'id, orderId, projectName, designerId, approved, approvedAt'
+        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, orderProjectId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)'
     ];
 
     let lastError = null;
@@ -518,12 +518,12 @@ async function fetchPendenciasRequisicaoRequests() {
 
     const selectWithProject = `
         *,
-        order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
+        order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
         orderProject:OrderProject(id, name, projectCode, environmentType:EnvironmentType(name))
     `;
     const selectFallback = `
         *,
-        order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+        order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
     `;
 
     let result = await supabaseClient

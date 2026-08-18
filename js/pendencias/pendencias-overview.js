@@ -21,12 +21,14 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     },
     'gestor-comercial': {
         'aguardando-medicao': 'Projetos vendidos ou aguardando obra.',
-        'aprovar-conferencia': 'Conferências confirmadas aguardando aprovação comercial.'
+        'aprovar-conferencia': 'Conferências confirmadas aguardando aprovação comercial.',
+        'aguardando-entrega-tecnica': 'Projetos aguardando confirmação de entrega pelo gestor comercial.'
     },
     'gestor-projetos': {
         'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.',
         'terceiros-sem-projetistas': 'Projetos de terceiros sem projetista responsável.',
         'aguardando-detalhamento': 'Projetos em produção aguardando associação de projetista de detalhamento.',
+        expedicao: 'Projetos em expedição aguardando início da montagem externa.',
         'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
     },
     'gestor-fabrica': {
@@ -120,13 +122,17 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 return error ? null : orders.length;
             }
             case 'gestor-comercial:aguardando-medicao': {
-                const { error, projects } = await fetchPendenciasAguardandoMedicaoProjects();
+                const { error, projects } = await fetchPendenciasAguardandoMeasurementProjects();
                 return error ? null : projects.length;
             }
             case 'gestor-comercial:aprovar-conferencia': {
                 const { error, projects, conferenceByProjectId } = await fetchPendenciasAprovarConferenciaProjects();
                 if (error) return null;
                 return groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId).length;
+            }
+            case 'gestor-comercial:aguardando-entrega-tecnica': {
+                const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA);
+                return error ? null : projects.length;
             }
             case 'gestor-projetos:projetos-sem-projetistas': {
                 const { error, projects } = await fetchPendenciasAguardandoPtSemProjetista();
@@ -140,6 +146,10 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             case 'gestor-projetos:aguardando-detalhamento': {
                 const { error, records } = await fetchPendenciasDetalhamentosSemProjetista();
                 return error ? null : records.length;
+            }
+            case 'gestor-projetos:expedicao': {
+                const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EXPEDICAO);
+                return error ? null : projects.length;
             }
             case 'gestor-projetos:montagem-externa': {
                 const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);

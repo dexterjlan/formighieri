@@ -1,18 +1,11 @@
 const REQUEST_QUERY_DEFAULT_STATUSES = ['Aguardando Consultor', 'Aguardando Projetista'];
 
 function getRequestQueryStatusFilters() {
-    const select = document.getElementById('filter-status');
-    if (!select) return [...REQUEST_QUERY_DEFAULT_STATUSES];
-    return Array.from(select.selectedOptions).map(option => option.value);
+    return getMultiSelectFilterValues('filter-status', REQUEST_QUERY_DEFAULT_STATUSES);
 }
 
 function resetRequestQueryStatusFilter() {
-    const select = document.getElementById('filter-status');
-    if (!select) return;
-
-    Array.from(select.options).forEach(option => {
-        option.selected = REQUEST_QUERY_DEFAULT_STATUSES.includes(option.value);
-    });
+    resetMultiSelectFilter('filter-status', REQUEST_QUERY_DEFAULT_STATUSES);
 }
 
 function matchesRequestQueryStatusFilter(request, selectedStatuses) {
@@ -21,30 +14,9 @@ function matchesRequestQueryStatusFilter(request, selectedStatuses) {
 }
 
 async function loadQueryFilterOptions() {
-    const { data: consultores } = await supabaseClient
-        .from('appUsers')
-        .select('name')
-        .eq('role', 'Consultor')
-        .eq('isActive', true)
-        .order('name', { ascending: true });
-
-    const { data: projetistas } = await supabaseClient
-        .from('appUsers')
-        .select('id, name')
-        .eq('role', 'Projetista')
-        .eq('isActive', true)
-        .order('name', { ascending: true });
-
-    const consultorSelect = document.getElementById("filter-consultor");
-    consultorSelect.innerHTML = '<option value="">Todos</option>';
-    consultores?.forEach(c => {
-        consultorSelect.innerHTML += `<option value="${c.name}">${c.name}</option>`;
-    });
-
-    const projetistaSelect = document.getElementById("filter-projetista");
-    projetistaSelect.innerHTML = '<option value="">Todos</option>';
-    projetistas?.forEach(p => {
-        projetistaSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    await loadConsultantAndDesignerFilterOptions({
+        consultantSelectId: 'filter-consultor',
+        designerSelectId: 'filter-projetista'
     });
 }
 

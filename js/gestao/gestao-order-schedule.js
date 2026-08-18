@@ -64,8 +64,8 @@ function mapCronogramaPedidoStatusKind(statusName) {
 }
 
 function isCronogramaPedidoEligibleProject(project) {
-    if (typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project)) return false;
-    if (typeof isSubstituidoOrderProject === 'function' && isSubstituidoOrderProject(project)) return false;
+    if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) return false;
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) return false;
     return true;
 }
 
@@ -95,7 +95,7 @@ function buildCronogramaPedidoPrevisaoSegment(project, history) {
     if (historyEnteredProjetoTecnico(history)) return null;
 
     const start = parseCronogramaPedidoDateOnly(project.technicalProjectForecastStartDate);
-    const end = parseCronogramaPedidoDateOnly(project.previsaoConclusaoProjetoTecnico);
+    const end = parseCronogramaPedidoDateOnly(project.technicalProjectForecastEndDate);
     if (!start || !end) return null;
 
     return {
@@ -377,7 +377,7 @@ function renderCronogramaPedidoProjectRow(project, history, axisStart, axisEnd) 
     ];
 
     const hasForecast = Boolean(
-        project.technicalProjectForecastStartDate && project.previsaoConclusaoProjetoTecnico
+        project.technicalProjectForecastStartDate && project.technicalProjectForecastEndDate
     );
     const previsaoHint = !historyEnteredProjetoTecnico(history) && !hasForecast
         ? '<span class="gestao-cronograma-pedido__sem-previsao">Sem previsão</span>'
@@ -475,7 +475,7 @@ async function fetchCronogramaPedidoOrderByCode(orderCode) {
         throw new Error('Informe o código do pedido.');
     }
 
-    const orderRelations = 'cliente:Cliente(id, nome, ativo), consultor:appUsers!consultantUserId(id, name)';
+    const orderRelations = 'client:Client(id, name, isActive), consultor:appUsers!consultantUserId(id, name)';
     const { data, error } = await supabaseClient
         .from('salesOrders')
         .select(`*, ${orderRelations}`)
@@ -593,7 +593,7 @@ function openGestaoCronogramaPedidoOrderPicker() {
     });
 }
 
-async function loadGestaoCronogramaPedido() {
+async function loadGestaoOrderSchedule() {
     const input = document.getElementById('gestao-cronograma-pedido-order-code');
     const orderCode = input?.value.trim() || gestaoCronogramaPedidoSelectedOrder?.orderCode || '';
 
@@ -620,9 +620,9 @@ function showGestaoCronogramaPedidoPanel() {
     renderGestaoCronogramaPedido(gestaoCronogramaPedidoSelectedOrder);
 }
 
-function bindGestaoCronogramaPedidoEvents() {
+function bindGestaoOrderScheduleEvents() {
     document.getElementById('btn-gestao-cronograma-pedido-load')?.addEventListener('click', () => {
-        loadGestaoCronogramaPedido();
+        loadGestaoOrderSchedule();
     });
 
     document.getElementById('btn-gestao-cronograma-pedido-pick-order')?.addEventListener('click', () => {
@@ -632,11 +632,16 @@ function bindGestaoCronogramaPedidoEvents() {
     document.getElementById('gestao-cronograma-pedido-order-code')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
-            loadGestaoCronogramaPedido();
+            loadGestaoOrderSchedule();
         }
     });
 }
 
 window.showGestaoCronogramaPedidoPanel = showGestaoCronogramaPedidoPanel;
-window.loadGestaoCronogramaPedido = loadGestaoCronogramaPedido;
-window.bindGestaoCronogramaPedidoEvents = bindGestaoCronogramaPedidoEvents;
+window.loadGestaoOrderSchedule = loadGestaoOrderSchedule;
+window.bindGestaoOrderScheduleEvents = bindGestaoOrderScheduleEvents;
+window.loadGestaoCronogramaPedido = loadGestaoOrderSchedule;
+window.bindGestaoCronogramaPedidoEvents = bindGestaoOrderScheduleEvents;
+
+const loadGestaoCronogramaPedido = loadGestaoOrderSchedule;
+const bindGestaoCronogramaPedidoEvents = bindGestaoOrderScheduleEvents;

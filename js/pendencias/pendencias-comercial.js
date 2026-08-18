@@ -9,7 +9,7 @@ async function loadPendenciasAguardandoMedicao() {
         return;
     }
 
-    const { error, projects } = await fetchPendenciasAguardandoMedicaoProjects();
+    const { error, projects } = await fetchPendenciasAguardandoMeasurementProjects();
 
     if (error) {
         renderPendenciasPlaceholder('Aguardando Medição', `Erro ao carregar: ${error.message}`);
@@ -27,16 +27,16 @@ async function fetchPendenciasConferenceByProjectIds(projectIds, conferenceStatu
     if (!projectIds.length) return {};
 
     let result = await supabaseClient
-        .from('AnteprojetoConferenceProject')
+        .from('PreliminaryDesignConferenceProject')
         .select(`
             orderProjectId,
-            conference:AnteprojetoConference(id, orderId, status, createdAt)
+            conference:PreliminaryDesignConference(id, orderId, status, createdAt)
         `)
         .in('orderProjectId', projectIds);
 
-    if (result.error?.message?.includes('AnteprojetoConference')) {
+    if (result.error?.message?.includes('PreliminaryDesignConference')) {
         result = await supabaseClient
-            .from('AnteprojetoConferenceProject')
+            .from('PreliminaryDesignConferenceProject')
             .select('orderProjectId, conferenceId')
             .in('orderProjectId', projectIds);
     }
@@ -55,7 +55,7 @@ async function fetchPendenciasConferenceByProjectIds(projectIds, conferenceStatu
     let conferenceById = {};
     if (conferenceIds.length) {
         const { data: conferences, error } = await supabaseClient
-            .from('AnteprojetoConference')
+            .from('PreliminaryDesignConference')
             .select('id, orderId, status, createdAt')
             .in('id', conferenceIds);
 
@@ -619,8 +619,8 @@ async function ensureCommercialApprovalInPendenciasContext(approvalId) {
 
     if (!approval) {
         const columnSets = [
-            'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt, status',
-            'id, orderId, orderProjectId, projectName, designerId, approved, approvedAt'
+            'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
+            'id, orderId, orderProjectId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)'
         ];
 
         for (const columns of columnSets) {
@@ -719,12 +719,12 @@ async function fetchPendenciasConsultorRequisicaoRequests() {
 
     const selectWithProject = `
         *,
-        order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
+        order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
         orderProject:OrderProject(id, name, projectCode, environmentType:EnvironmentType(name))
     `;
     const selectFallback = `
         *,
-        order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+        order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
     `;
 
     let result = await supabaseClient
@@ -868,7 +868,7 @@ async function openConsultorRequestFromPendencias(requestId) {
     if (!request) {
         const selectWithProject = `
             *,
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)),
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
             orderProject:OrderProject(id, name, projectCode, environmentType:EnvironmentType(name))
         `;
         let result = await supabaseClient
@@ -880,7 +880,7 @@ async function openConsultorRequestFromPendencias(requestId) {
         if (result.error?.message?.includes('orderProject')) {
             result = await supabaseClient
                 .from('OrderRequest')
-                .select('*, order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
+                .select(`*, order:salesOrders(${getSalesOrderMinimalEmbedSelect()})`)
                 .eq('id', id)
                 .maybeSingle();
         }

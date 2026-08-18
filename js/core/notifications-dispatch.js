@@ -38,10 +38,10 @@ async function notifyApprovalEmail(eventType, approval, options = {}) {
     try {
         const context = await fetchApprovalNotificationContext(approval);
         const eventTitle = APPROVAL_EMAIL_TITLE[eventType] || 'Aprovação Atualizada';
-        let caminhoRedeAprovacao = '';
+        let approvalNetworkPath = '';
 
         if (eventType === 'approval_requested' && approval.orderProjectId) {
-            caminhoRedeAprovacao = await fetchProjectCaminhoRedeAprovacao(approval.orderProjectId);
+            approvalNetworkPath = await fetchProjectApprovalNetworkPath(approval.orderProjectId);
         }
 
         const payload = {
@@ -56,7 +56,7 @@ async function notifyApprovalEmail(eventType, approval, options = {}) {
             actedByName: currentUser?.name || '-',
             actedByRole: currentUser?.role || '-',
             activities: options.activities || null,
-            caminhoRedeAprovacao
+            approvalNetworkPath
         };
 
         const subject = buildApprovalEmailSubject(
@@ -139,133 +139,6 @@ async function notifyOrderRequestEmail(eventType, requestData) {
     }
 }
 
-async function fetchActiveComprasRecipientEmails() {
-    if (NOTIFICATION_TEST_MODE) {
-        return [NOTIFICATION_TEST_EMAIL];
-    }
-
-    const { data, error } = await supabaseClient
-        .from('appUsers')
-        .select('email')
-        .eq('role', 'Compras')
-        .eq('isActive', true);
-
-    if (error) throw error;
-
-    const emails = (data || [])
-        .map(user => user.email?.trim())
-        .filter(Boolean);
-
-    return emails.length ? emails : [NOTIFICATION_TEST_EMAIL];
-}
-
-function buildCompraLiberacaoEmailSubject(tipoCompra, clientName, orderCode, subtypeName = '') {
-    const tipoLabel = typeof formatCompraTipoLabel === 'function'
-        ? formatCompraTipoLabel(tipoCompra, subtypeName)
-        : (tipoCompra || '—');
-    const client = clientName || '—';
-    const order = orderCode || '—';
-    return `Liberação de compra de ${tipoLabel} - ${client} (${order})`;
-}
-
-function buildCompraLiberacaoEmailBody(payload) {
-    const lines = [
-        payload.eventTitle,
-        '',
-        `Pedido: ${payload.orderCode}`,
-    ];
-
-    if (hasOrderProject(payload.projectName)) {
-        lines.push(`Projeto: ${payload.projectName}`);
-    }
-
-    lines.push(
-        `Cliente: ${payload.clientName}`,
-        `Consultor: ${payload.consultantName}`,
-        `Projetista: ${payload.projetistaName}`,
-        `Tipo: ${payload.tipoCompra}`,
-        `Ação por: ${payload.actedByName} (${payload.actedByRole})`
-    );
-
-    if (payload.filePath) {
-        lines.push(`Caminho do arquivo na rede: ${payload.filePath}`);
-    }
-
-    return appendEmailNoReplyFooterText(lines.join('\n'));
-}
-
-function buildCompraLiberacaoEmailHtml(payload) {
-    const projectRow = hasOrderProject(payload.projectName)
-        ? `<tr>
-            <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Projeto</td>
-            <td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.projectName)}</td>
-           </tr>`
-        : '';
-
-    const caminhoArquivoBlock = payload.filePath
-        ? `<div style="margin-top:16px;">
-            <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.04em;">Caminho do arquivo na rede</p>
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-family:Consolas,Monaco,monospace;font-size:13px;color:#0f172a;word-break:break-all;">${escapeHtml(payload.filePath)}</div>
-           </div>`
-        : '';
-
-    return `<!DOCTYPE html>
-<html lang="pt-BR">
-<body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
-    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
-    ${buildEmailBrandHeaderHtml(payload.eventTitle, '#f59e0b')}
-    <div style="padding:24px;">
-      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
-        <tr>
-          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;width:120px;">Pedido</td>
-          <td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.orderCode)}</td>
-        </tr>
-        ${projectRow}
-        <tr>
-          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Cliente</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.clientName)}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Consultor</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.consultantName)}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Projetista</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.projetistaName)}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Tipo</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.tipoCompra)}</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px;color:#64748b;">Ação por</td>
-          <td style="padding:8px 12px;">${escapeHtml(payload.actedByName)} <span style="color:#64748b;">(${escapeHtml(payload.actedByRole)})</span></td>
-        </tr>
-      </table>
-      ${caminhoArquivoBlock}
-      ${buildEmailNoReplyFooterHtml()}
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-async function fetchCompraLiberacaoNotificationContext(orderProjectId) {
-    let projectMeta = await supabaseClient
-        .from('OrderProject')
-        .select('orderId, designerId')
-        .eq('id', orderProjectId)
-        .maybeSingle();
-
-    if (projectMeta.error) throw projectMeta.error;
-
-    return fetchOrderRequestNotificationContext(
-        projectMeta.data?.orderId,
-        orderProjectId,
-        projectMeta.data?.designerId
-    );
-}
-
 async function notifyCompraLiberacaoEmails(options = {}) {
     const { items = [], formValues = {}, orderProjectId } = options;
     if (!NOTIFICATIONS_ENABLED || !items.length || !orderProjectId) return;
@@ -285,8 +158,8 @@ async function notifyCompraLiberacaoEmails(options = {}) {
         for (const item of items) {
             const subtypeName = item.thirdPartySubtype?.name || item.subtypeName || '';
             const tipoLabel = typeof formatCompraTipoLabel === 'function'
-                ? formatCompraTipoLabel(item.purchaseType || item.tipoCompra, subtypeName)
-                : (item.purchaseType || item.tipoCompra || '—');
+                ? formatCompraTipoLabel(item.purchaseType || item.purchaseType, subtypeName)
+                : (item.purchaseType || item.purchaseType || '—');
             const filePath = item.folderPath || item.path || '';
             const payload = {
                 eventTitle: 'Liberação de Compra',
@@ -295,14 +168,14 @@ async function notifyCompraLiberacaoEmails(options = {}) {
                 clientName: context.clientName || '—',
                 consultantName: context.consultantName || '—',
                 projetistaName: context.projetistaName || '—',
-                tipoCompra: tipoLabel,
+                purchaseType: tipoLabel,
                 actedByName: currentUser?.name || '—',
                 actedByRole: currentUser?.role || '—',
                 filePath
             };
 
             const subject = buildCompraLiberacaoEmailSubject(
-                item.purchaseType || item.tipoCompra,
+                item.purchaseType || item.purchaseType,
                 payload.clientName,
                 payload.orderCode,
                 subtypeName
@@ -543,7 +416,7 @@ async function notifyPlantaLevantadaEmail(options = {}) {
 
     try {
         const plantaDates = Object.fromEntries(
-            projects.map(project => [Number(project.orderProjectId), project.plantaLevantadaDate])
+            projects.map(project => [Number(project.orderProjectId), project.floorPlanRaisedDate])
         );
 
         await notifyOrderProjectStatusChangeEmail({
@@ -623,13 +496,13 @@ async function notifyConferenciaConfirmadaEmail(options = {}) {
 window.notifyConferenciaConfirmadaEmail = notifyConferenciaConfirmadaEmail;
 
 async function notifyConferenciaAprovadaEmail(options = {}) {
-    const { orderId, orderProjectIds = [], caminhoRede = null } = options;
+    const { orderId, orderProjectIds = [], networkPath = null } = options;
     if (!orderId || !orderProjectIds.length) return;
 
     try {
         const extraFields = [];
-        if (caminhoRede) {
-            extraFields.push({ label: 'Pasta / Caminho da rede da conferência', value: caminhoRede });
+        if (networkPath) {
+            extraFields.push({ label: 'Pasta / Caminho da rede da conferência', value: networkPath });
         }
 
         await notifyOrderProjectStatusChangeEmail({
@@ -704,7 +577,7 @@ async function notifyProjetoTecnicoIniciadoEmail(options = {}) {
         orderId,
         orderProjectId,
         designerId = null,
-        previsaoConclusaoProjetoTecnico = null,
+        technicalProjectForecastEndDate = null,
         technicalProjectForecastStartDate = null
     } = options;
 
@@ -722,10 +595,10 @@ async function notifyProjetoTecnicoIniciadoEmail(options = {}) {
             });
         }
 
-        if (previsaoConclusaoProjetoTecnico) {
+        if (technicalProjectForecastEndDate) {
             extraFields.push({
                 label: 'Previsão de conclusão',
-                value: formatNotificationDate(previsaoConclusaoProjetoTecnico)
+                value: formatNotificationDate(technicalProjectForecastEndDate)
             });
         }
 
@@ -753,7 +626,7 @@ async function notifyImplantacaoEnviarProducaoEmail(options = {}) {
         orderProjectId,
         designerId = null,
         wpsOpCode = '',
-        projetoPath = ''
+        projectFilePath = ''
     } = options;
 
     if (!orderId || !orderProjectId) return;
@@ -763,8 +636,8 @@ async function notifyImplantacaoEnviarProducaoEmail(options = {}) {
             { label: 'Novo status', value: 'Em Produção' }
         ];
 
-        if (projetoPath) {
-            extraFields.push({ label: 'Caminho do projeto', value: projetoPath });
+        if (projectFilePath) {
+            extraFields.push({ label: 'Caminho do projeto', value: projectFilePath });
         }
         if (wpsOpCode) {
             extraFields.push({ label: 'Código da OP no WPS', value: wpsOpCode });
@@ -789,7 +662,7 @@ async function notifyImplantacaoEnviarProducaoEmail(options = {}) {
 window.notifyImplantacaoEnviarProducaoEmail = notifyImplantacaoEnviarProducaoEmail;
 
 async function notifyAguardandoDetalhamentoEmail(options = {}) {
-    const { orderProjectId, projetoPath = '' } = options;
+    const { orderProjectId, projectFilePath = '' } = options;
     if (!orderProjectId) return;
 
     if (!NOTIFICATIONS_ENABLED) return;
@@ -819,8 +692,8 @@ async function notifyAguardandoDetalhamentoEmail(options = {}) {
             }
         ];
 
-        if (projetoPath) {
-            extraFields.push({ label: 'Caminho do projeto (implantação)', value: projetoPath });
+        if (projectFilePath) {
+            extraFields.push({ label: 'Caminho do projeto (implantação)', value: projectFilePath });
         }
 
         await sendProcessNotificationEmail('aguardando_detalhamento', {
@@ -842,7 +715,7 @@ async function notifyAguardandoDetalhamentoEmail(options = {}) {
 window.notifyAguardandoDetalhamentoEmail = notifyAguardandoDetalhamentoEmail;
 
 async function notifyDetalhamentoProjetistaAssociadoEmail(options = {}) {
-    const { orderProjectId, designerId, projetoPath = '' } = options;
+    const { orderProjectId, designerId, projectFilePath = '' } = options;
     if (!orderProjectId || !designerId) return;
 
     if (!NOTIFICATIONS_ENABLED) return;
@@ -872,8 +745,8 @@ async function notifyDetalhamentoProjetistaAssociadoEmail(options = {}) {
             }
         ];
 
-        if (projetoPath) {
-            extraFields.push({ label: 'Pasta (implantação)', value: projetoPath });
+        if (projectFilePath) {
+            extraFields.push({ label: 'Pasta (implantação)', value: projectFilePath });
         }
 
         await sendProcessNotificationEmail('detalhamento_projetista_associado', {
@@ -918,6 +791,35 @@ async function notifyMontagemExternaFinalizadaEmail(options = {}) {
 }
 
 window.notifyMontagemExternaFinalizadaEmail = notifyMontagemExternaFinalizadaEmail;
+
+async function notifyOrderDeliveredEmail(options = {}) {
+    const { orderId, orderProjectId, actualDeliveryDate } = options;
+    if (!orderId || !orderProjectId) return;
+
+    try {
+        const recipientEmails = await fetchActiveGestoresRecipientEmails();
+        const dateLabel = typeof formatDisplayDate === 'function'
+            ? formatDisplayDate(actualDeliveryDate)
+            : (actualDeliveryDate || '—');
+
+        await sendProcessNotificationEmail('pedido_entregue', {
+            orderId,
+            orderProjectIds: [orderProjectId],
+            recipientEmails,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto entregue',
+            accentColor: '#059669',
+            extraFields: [
+                { label: 'Data de entrega', value: dateLabel },
+                { label: 'Novo status', value: 'Entregue' }
+            ]
+        });
+    } catch (err) {
+        console.warn('notifyOrderDeliveredEmail:', err);
+    }
+}
+
+window.notifyOrderDeliveredEmail = notifyOrderDeliveredEmail;
 
 async function notifyLiberacaoMedicaoEmail(options = {}) {
     const { orderId, projects = [] } = options;
@@ -1000,3 +902,58 @@ async function notifyThirdPartyProjectStatusEmail(options = {}) {
 }
 
 window.notifyThirdPartyProjectStatusEmail = notifyThirdPartyProjectStatusEmail;
+
+async function notifyThirdPartyDesignerAssignedEmail(options = {}) {
+    const {
+        orderId,
+        orderProjectId,
+        designerId,
+        subtypeName = '',
+        characteristicName = ''
+    } = options;
+
+    if (!orderId || !orderProjectId || !designerId) return;
+
+    if (!NOTIFICATIONS_ENABLED) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyThirdPartyDesignerAssignedEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const recipientEmail = await fetchDesignerEmailById(designerId);
+        if (!recipientEmail) return;
+
+        const extraFields = [
+            {
+                label: 'Mensagem',
+                value: 'Você foi associado a este projeto de terceiros. Acesse Pendências > Projetista > Projetos de Terceiros para iniciar.'
+            }
+        ];
+
+        if (characteristicName) {
+            extraFields.unshift({ label: 'Característica', value: characteristicName });
+        }
+
+        if (subtypeName) {
+            extraFields.unshift({ label: 'Subtipo', value: subtypeName });
+        }
+
+        await sendProcessNotificationEmail('third_party_designer_assigned', {
+            orderId,
+            orderProjectIds: [orderProjectId],
+            designerId,
+            recipientEmails: [recipientEmail],
+            includeProjetista: true,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto de terceiros atribuído',
+            accentColor: '#7c3aed',
+            extraFields
+        });
+    } catch (err) {
+        console.warn('notifyThirdPartyDesignerAssignedEmail:', err);
+    }
+}
+
+window.notifyThirdPartyDesignerAssignedEmail = notifyThirdPartyDesignerAssignedEmail;

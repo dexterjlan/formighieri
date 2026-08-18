@@ -19,21 +19,6 @@ function getThirdPartyProjectStatusLabel(status) {
     return THIRD_PARTY_PROJECT_STATUS_LABELS[status] || status;
 }
 
-function getThirdPartyProjectStatusBadgeClass(status) {
-    switch (status) {
-        case THIRD_PARTY_PROJECT_STATUS_OPEN:
-            return 'bg-slate-100 text-slate-700';
-        case THIRD_PARTY_PROJECT_STATUS_SENT:
-            return 'bg-sky-100 text-sky-800';
-        case THIRD_PARTY_PROJECT_STATUS_IN_REVIEW:
-            return 'bg-amber-100 text-amber-800';
-        case THIRD_PARTY_PROJECT_STATUS_APPROVED:
-            return 'bg-emerald-100 text-emerald-800';
-        default:
-            return 'bg-slate-100 text-slate-600';
-    }
-}
-
 function isThirdPartyProjectTableMissingError(error) {
     const message = String(error?.message || '').toLowerCase();
     return (message.includes('does not exist') || message.includes('schema cache'))
@@ -45,7 +30,7 @@ function getThirdPartyProjectMinimalSelect(options = {}) {
     const relationEmbed = includeOrder
         ? `,
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))`
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})`
         : '';
 
     return `
@@ -71,7 +56,7 @@ function getThirdPartyProjectSelectVariants(options = {}) {
     const relationEmbed = includeOrder
         ? `,
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))`
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})`
         : '';
 
     const baseFields = `
@@ -536,7 +521,7 @@ async function fetchThirdPartyProjectsWithoutDesigner() {
             projectCharacteristic:ProjectCharacteristic(id, name),
             thirdPartySubtype:ThirdPartySubtype(id, name),
             orderProject:OrderProject(id, name, projectCode, deliveryDate),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
         `)
         .is('designerId', null)
         .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED)
@@ -574,7 +559,7 @@ async function fetchThirdPartyProjectsForProjetista(designerId, options = {}) {
             thirdPartySubtype:ThirdPartySubtype(id, name),
             ${THIRD_PARTY_PROJECT_DESIGNER_EMBED},
             orderProject:OrderProject(id, name, projectCode, deliveryDate),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
         `)
         .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED)
         .order('updatedAt', { ascending: false });
@@ -613,16 +598,33 @@ async function assignThirdPartyProjectDesigner(thirdPartyProjectId, designerId) 
             id,
             orderId,
             orderProjectId,
+            projectCharacteristicId,
             designerId,
             status,
             thirdPartySubtype:ThirdPartySubtype(id, name),
+            projectCharacteristic:ProjectCharacteristic(id, name),
             ${THIRD_PARTY_PROJECT_DESIGNER_EMBED},
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
         `)
         .single();
 
     if (error) throw error;
+
+    if (typeof notifyThirdPartyDesignerAssignedEmail === 'function') {
+        try {
+            await notifyThirdPartyDesignerAssignedEmail({
+                orderId: data.orderId,
+                orderProjectId: data.orderProjectId,
+                designerId: normalizedDesignerId,
+                subtypeName: data.thirdPartySubtype?.name || '',
+                characteristicName: data.projectCharacteristic?.name || ''
+            });
+        } catch (emailError) {
+            console.warn('notifyThirdPartyDesignerAssignedEmail:', emailError);
+        }
+    }
+
     return data;
 }
 
@@ -712,7 +714,7 @@ async function sendThirdPartyProject(thirdPartyProjectId) {
             designerId,
             thirdPartySubtype:ThirdPartySubtype(id, name),
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
         `)
         .single();
 

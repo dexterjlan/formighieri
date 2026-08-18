@@ -2,20 +2,20 @@ const GESTAO_RELATORIO_PEDIDOS_PENDENTES_END = 'Montagem Interna';
 const GESTAO_RELATORIO_EXPEDICAO_STATUS = 'Expedição';
 
 const GESTAO_RELATORIO_PROJECT_SELECT = `
-    id, orderId, projectCode, name, saleValue, deliveryDate, fimMontagemInterna, productionMonth, statusId,
-    deliveryPhaseId, isComplementar, parentProjectId,
-    isSubstituicao, substituiProjectId,
-    substitui:substituiProjectId(projectCode, saleValue, order:salesOrders(orderCode)),
+    id, orderId, projectCode, name, saleValue, deliveryDate, internalAssemblyEndDate, productionMonth, statusId,
+    deliveryPhaseId, isComplementary, parentProjectId,
+    isReplacement, replacesProjectId,
+    replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode)),
     parentProject:parentProjectId(id, deliveryPhaseId),
-    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
+    order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
 
 const GESTAO_RELATORIO_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, saleValue, deliveryDate, statusId,
-    deliveryPhaseId, isComplementar, parentProjectId,
-    isSubstituicao, substituiProjectId,
-    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
+    deliveryPhaseId, isComplementary, parentProjectId,
+    isReplacement, replacesProjectId,
+    order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
@@ -51,16 +51,16 @@ async function fetchGestaoRelatorioProjects() {
 
     if (result.error?.message?.includes('projectStatus')
         || result.error?.message?.includes('sortOrder')
-        || result.error?.message?.includes('fimMontagemInterna')
+        || result.error?.message?.includes('internalAssemblyEndDate')
         || result.error?.message?.includes('productionMonth')
         || result.error?.message?.includes('clientDeliveryDate')
         || result.error?.message?.includes('deliveryPhaseId')
-        || result.error?.message?.includes('isComplementar')
+        || result.error?.message?.includes('isComplementary')
         || result.error?.message?.includes('parentProjectId')
         || result.error?.message?.includes('parentProject')
         || result.error?.message?.includes('substitui')
-        || result.error?.message?.includes('isSubstituicao')
-        || result.error?.message?.includes('substituiProjectId')) {
+        || result.error?.message?.includes('isReplacement')
+        || result.error?.message?.includes('replacesProjectId')) {
         result = await supabaseClient
             .from('OrderProject')
             .select(GESTAO_RELATORIO_PROJECT_SELECT_FALLBACK)
@@ -94,7 +94,7 @@ async function fetchGestaoRelatorioMeasurementDates(projectIds) {
     if (!normalizedIds.length) return {};
 
     const { data, error } = await supabaseClient
-        .from('MedicaoProject')
+        .from('MeasurementProject')
         .select('orderProjectId, measurementDate')
         .in('orderProjectId', normalizedIds);
 
@@ -128,21 +128,21 @@ function enrichGestaoRelatorioProjectsWithMeasurementDates(projects, measurement
 async function enrichGestaoRelatorioProjectsWithSubstituicaoValues(projects) {
     const list = projects || [];
     const needsEnrich = list.filter(project => {
-        if (!Number(project.substituiProjectId)) return false;
-        if (project.substituiProject?.saleValue != null && project.substituiProject.saleValue !== '') return false;
-        if (project.substituiOriginalSaleValue != null && project.substituiOriginalSaleValue !== '') return false;
+        if (!Number(project.replacesProjectId)) return false;
+        if (project.replacesProject?.saleValue != null && project.replacesProject.saleValue !== '') return false;
+        if (project.replacesOriginalSaleValue != null && project.replacesOriginalSaleValue !== '') return false;
         return true;
     });
 
     if (!needsEnrich.length) {
         return list.map(project => (
-            project.substituiProjectId && !isSubstituicaoOrderProject(project)
-                ? { ...project, isSubstituicao: true }
+            project.replacesProjectId && !isReplacementOrderProject(project)
+                ? { ...project, isReplacement: true }
                 : project
         ));
     }
 
-    const originalIds = [...new Set(needsEnrich.map(project => Number(project.substituiProjectId)).filter(Boolean))];
+    const originalIds = [...new Set(needsEnrich.map(project => Number(project.replacesProjectId)).filter(Boolean))];
     const selectVariants = [
         'id, projectCode, saleValue, order:salesOrders(orderCode)',
         'id, projectCode, saleValue',
@@ -165,32 +165,32 @@ async function enrichGestaoRelatorioProjectsWithSubstituicaoValues(projects) {
     const originalById = Object.fromEntries(originals.map(item => [Number(item.id), item]));
 
     return list.map(project => {
-        const originalId = Number(project.substituiProjectId);
+        const originalId = Number(project.replacesProjectId);
         if (!originalId) return project;
 
         const original = originalById[originalId];
         const hasOriginalValue = original?.saleValue != null && original.saleValue !== '';
-        const alreadyHasValue = project.substituiProject?.saleValue != null && project.substituiProject.saleValue !== ''
-            || project.substituiOriginalSaleValue != null && project.substituiOriginalSaleValue !== '';
+        const alreadyHasValue = project.replacesProject?.saleValue != null && project.replacesProject.saleValue !== ''
+            || project.replacesOriginalSaleValue != null && project.replacesOriginalSaleValue !== '';
 
         if (!hasOriginalValue && !alreadyHasValue) {
-            return { ...project, isSubstituicao: true };
+            return { ...project, isReplacement: true };
         }
 
         if (alreadyHasValue) {
-            return { ...project, isSubstituicao: true };
+            return { ...project, isReplacement: true };
         }
 
         return {
             ...project,
-            isSubstituicao: true,
-            substituiOriginalSaleValue: original.saleValue,
-            substituiProject: {
-                ...(project.substituiProject || {}),
+            isReplacement: true,
+            replacesOriginalSaleValue: original.saleValue,
+            replacesProject: {
+                ...(project.replacesProject || {}),
                 id: originalId,
-                projectCode: original.projectCode || project.substituiProject?.projectCode || null,
+                projectCode: original.projectCode || project.replacesProject?.projectCode || null,
                 saleValue: original.saleValue,
-                order: original.order || project.substituiProject?.order || null
+                order: original.order || project.replacesProject?.order || null
             }
         };
     });
@@ -315,7 +315,7 @@ function getGestaoRelatorioOrderPhases(orderId, phasesByOrderId = {}) {
 }
 
 function getGestaoRelatorioPedidosPendentesSourceProject(project, projectsById = {}) {
-    if (typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project)) {
+    if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
         const parentId = Number(project.parentProjectId || project.parentProject?.id);
         if (parentId && projectsById[parentId]) {
             return projectsById[parentId];
@@ -340,11 +340,33 @@ function getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, context 
 
     return sourceProject.order?.clientDeliveryDate
         || project.order?.clientDeliveryDate
+        || sourceProject.deliveryDate
+        || project.deliveryDate
         || null;
 }
 
-function isGestaoRelatorioPedidosPendentesComplementarProject(project) {
-    return typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project);
+function compareGestaoRelatorioProjectsByDeliveryDate(a, b, context = {}) {
+    const dateA = getGestaoRelatorioPedidosPendentesProjectDeliveryDate(a, context) || '';
+    const dateB = getGestaoRelatorioPedidosPendentesProjectDeliveryDate(b, context) || '';
+    const dateCompare = String(dateA).localeCompare(String(dateB));
+    if (dateCompare !== 0) return dateCompare;
+
+    const codeCompare = String(a.order?.orderCode || '').localeCompare(
+        String(b.order?.orderCode || ''),
+        'pt-BR',
+        { numeric: true }
+    );
+    if (codeCompare !== 0) return codeCompare;
+
+    return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+}
+
+function sortGestaoRelatorioProjectsByDeliveryDate(projects, context = {}) {
+    return [...(projects || [])].sort((a, b) => compareGestaoRelatorioProjectsByDeliveryDate(a, b, context));
+}
+
+function isGestaoRelatorioPedidosPendentesComplementaryProject(project) {
+    return typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project);
 }
 
 function getGestaoRelatorioPedidosPendentesOrderGroupKeys(project, context = {}, options = {}) {
@@ -398,7 +420,12 @@ function getGestaoRelatorioPedidosPendentesOrderGroup(
     return monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey];
 }
 
-function buildGestaoRelatorioPedidosPendentesProjectTree(parentProjects, complementarProjects, projectsById = {}) {
+function buildGestaoRelatorioPedidosPendentesProjectTree(parentProjects, complementarProjects, projectsById = {}, options = {}) {
+    const context = options.context || { projectsById };
+    const sortParents = options.sortByDeliveryDate
+        ? (a, b) => compareGestaoRelatorioProjectsByDeliveryDate(a, b, context)
+        : (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+
     const complementarByParentId = {};
     const parentIdsInList = new Set(parentProjects.map(project => Number(project.id)));
 
@@ -410,7 +437,12 @@ function buildGestaoRelatorioPedidosPendentesProjectTree(parentProjects, complem
     });
 
     Object.values(complementarByParentId).forEach(children => {
-        children.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+        children.sort((a, b) => {
+            if (options.sortByDeliveryDate) {
+                return compareGestaoRelatorioProjectsByDeliveryDate(a, b, context);
+            }
+            return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+        });
     });
 
     const extraParentIds = Object.keys(complementarByParentId)
@@ -418,7 +450,7 @@ function buildGestaoRelatorioPedidosPendentesProjectTree(parentProjects, complem
         .filter(parentId => parentId && !parentIdsInList.has(parentId) && projectsById[parentId]);
 
     const allParents = [...parentProjects, ...extraParentIds.map(parentId => projectsById[parentId])]
-        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+        .sort(sortParents);
 
     return allParents.map(project => ({
         project,
@@ -437,7 +469,7 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
     const complementarProjects = [];
 
     (projects || []).forEach(project => {
-        if (isGestaoRelatorioPedidosPendentesComplementarProject(project)) {
+        if (isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
             complementarProjects.push(project);
             return;
         }
@@ -474,7 +506,11 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
                             const projectTree = buildGestaoRelatorioPedidosPendentesProjectTree(
                                 orderGroup.projects,
                                 orderGroup.complementarProjects,
-                                context.projectsById || {}
+                                context.projectsById || {},
+                                {
+                                    sortByDeliveryDate: options.sortByDeliveryDate,
+                                    context
+                                }
                             );
                             const valueProjects = [
                                 ...orderGroup.projects,
@@ -488,11 +524,17 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
                                 totalSaleValue: sumGestaoRelatorioSaleValues(valueProjects)
                             };
                         })
-                        .sort((a, b) => String(a.order?.orderCode || '').localeCompare(
-                            String(b.order?.orderCode || ''),
-                            'pt-BR',
-                            { numeric: true }
-                        ));
+                        .sort((a, b) => {
+                            if (options.sortByDeliveryDate) {
+                                const dateCompare = String(a.clientDeliveryDate || '').localeCompare(String(b.clientDeliveryDate || ''));
+                                if (dateCompare !== 0) return dateCompare;
+                            }
+                            return String(a.order?.orderCode || '').localeCompare(
+                                String(b.order?.orderCode || ''),
+                                'pt-BR',
+                                { numeric: true }
+                            );
+                        });
 
                     return {
                         clientName: clientGroup.clientName,
@@ -693,7 +735,7 @@ function sumGestaoRelatorioSaleValues(projects) {
 }
 
 function getGestaoRelatorioFechamentoProducaoProjectMonthKey(project) {
-    return getGestaoRelatorioMonthKey(project?.productionMonth || project?.fimMontagemInterna);
+    return getGestaoRelatorioMonthKey(project?.productionMonth || project?.internalAssemblyEndDate);
 }
 
 function getGestaoRelatorioFechamentoProducaoTotals(projects) {
@@ -753,8 +795,8 @@ async function loadGestaoRelatorioFechamentoProducaoMonthGroups(options = {}) {
 
 function sortGestaoRelatorioFechamentoProducaoProjects(projects) {
     return [...projects].sort((a, b) => {
-        const fimA = a.fimMontagemInterna || '';
-        const fimB = b.fimMontagemInterna || '';
+        const fimA = a.internalAssemblyEndDate || '';
+        const fimB = b.internalAssemblyEndDate || '';
         return String(fimB).localeCompare(String(fimA))
             || String(a.order?.orderCode || '').localeCompare(String(b.order?.orderCode || ''), 'pt-BR', { numeric: true })
             || String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
@@ -764,8 +806,12 @@ function sortGestaoRelatorioFechamentoProducaoProjects(projects) {
 function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, options = {}) {
     const getMonthKey = typeof options.getMonthKey === 'function'
         ? options.getMonthKey
-        : (project) => getGestaoRelatorioMonthKey(project.fimMontagemInterna);
+        : (project) => getGestaoRelatorioMonthKey(project.internalAssemblyEndDate);
     const sortDescending = options.sortDescending !== false;
+    const context = {
+        phasesByOrderId: options.phasesByOrderId || {},
+        projectsById: options.projectsById || buildGestaoRelatorioProjectsById(projects)
+    };
     const monthGroups = {};
 
     projects.forEach(project => {
@@ -796,7 +842,9 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, option
                 .sort((a, b) => a.clientName.localeCompare(b.clientName, 'pt-BR'))
                 .map(clientGroup => ({
                     ...clientGroup,
-                    projects: sortGestaoRelatorioFechamentoProducaoProjects(clientGroup.projects),
+                    projects: options.sortByDeliveryDate
+                        ? sortGestaoRelatorioProjectsByDeliveryDate(clientGroup.projects, context)
+                        : sortGestaoRelatorioFechamentoProducaoProjects(clientGroup.projects),
                     totalSaleValue: sumGestaoRelatorioSaleValues(clientGroup.projects)
                 }));
 
@@ -814,8 +862,8 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, option
 function renderGestaoRelatorioFechamentoProducaoProjectRow(project) {
     const orderCode = project.order?.orderCode || '—';
     const fimMontagem = typeof formatGestaoDate === 'function'
-        ? formatGestaoDate(project.fimMontagemInterna)
-        : (project.fimMontagemInterna || '—');
+        ? formatGestaoDate(project.internalAssemblyEndDate)
+        : (project.internalAssemblyEndDate || '—');
     const saleValue = typeof formatSaleValue === 'function'
         ? formatSaleValue(getProjectEffectiveSaleValue(project))
         : (getProjectEffectiveSaleValue(project) ?? '—');
@@ -1022,7 +1070,7 @@ window.groupGestaoRelatorioPedidosPendentesByMonthAndClient = groupGestaoRelator
 window.renderGestaoRelatorioPedidosPendentesGroups = renderGestaoRelatorioPedidosPendentesGroups;
 window.buildGestaoRelatorioPedidosPendentesProjectTree = buildGestaoRelatorioPedidosPendentesProjectTree;
 window.getGestaoRelatorioPedidosPendentesProjectDeliveryDate = getGestaoRelatorioPedidosPendentesProjectDeliveryDate;
-window.isGestaoRelatorioPedidosPendentesComplementarProject = isGestaoRelatorioPedidosPendentesComplementarProject;
+window.isGestaoRelatorioPedidosPendentesComplementaryProject = isGestaoRelatorioPedidosPendentesComplementaryProject;
 window.getGestaoRelatorioProjectLabel = getGestaoRelatorioProjectLabel;
 window.getGestaoRelatorioStatusName = getGestaoRelatorioStatusName;
 window.getGestaoRelatorioFechamentoProducaoTotals = getGestaoRelatorioFechamentoProducaoTotals;

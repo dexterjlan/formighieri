@@ -119,7 +119,7 @@ async function applyMissingRoleFromMetadata(profile, user) {
         .from('appUsers')
         .update({ role: metadataRole })
         .eq('id', normalized.id)
-        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isFactoryManager, isDetailing')
         .single();
 
     if (error) {
@@ -133,14 +133,14 @@ async function applyMissingRoleFromMetadata(profile, user) {
 async function queryAppUserByAuthId(authUserId) {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isFactoryManager, isDetailing')
         .eq('authId', authUserId)
         .maybeSingle();
 
-    if (result.error?.message?.includes('ppcp') || result.error?.message?.includes('gestorFabrica') || result.error?.message?.includes('detalhamento')) {
+    if (result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isDetailing')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager')
             .eq('authId', authUserId)
             .maybeSingle();
     }
@@ -157,7 +157,7 @@ async function refreshCurrentUserProfile() {
 
     let query = supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos, ppcp, gestorFabrica, detalhamento');
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isFactoryManager, isDetailing');
 
     if (authId) {
         query = query.eq('authId', authId);
@@ -167,10 +167,10 @@ async function refreshCurrentUserProfile() {
 
     let { data, error } = await query.maybeSingle();
 
-    if (error?.message?.includes('ppcp') || error?.message?.includes('gestorFabrica') || error?.message?.includes('detalhamento')) {
+    if (error?.message?.includes('isPpcp') || error?.message?.includes('isFactoryManager') || error?.message?.includes('isDetailing')) {
         let fallbackQuery = supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, conferente, gestorComercial, gestorProjetos');
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager');
         fallbackQuery = authId
             ? fallbackQuery.eq('authId', authId)
             : fallbackQuery.eq('id', userId);

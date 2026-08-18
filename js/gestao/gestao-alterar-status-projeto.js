@@ -94,7 +94,7 @@ async function fetchGestaoAlterarStatusProjects(filters = {}) {
     }
 
     const orderSelect = clientName
-        ? `id, orderCode, clientId, consultantUserId, cliente:Cliente!inner(nome), consultor:appUsers!consultantUserId(name)`
+        ? `id, orderCode, clientId, consultantUserId, client:Client!inner(name), consultor:appUsers!consultantUserId(name)`
         : getSalesOrderMinimalEmbedSelect();
 
     let orderQuery = supabaseClient
@@ -107,7 +107,7 @@ async function fetchGestaoAlterarStatusProjects(filters = {}) {
         orderQuery = orderQuery.ilike('orderCode', `%${orderCode}%`);
     }
     if (clientName) {
-        orderQuery = orderQuery.ilike('cliente.nome', `%${clientName}%`);
+        orderQuery = orderQuery.ilike('client.name', `%${clientName}%`);
     }
 
     const { data: orders, error: ordersError } = await orderQuery;

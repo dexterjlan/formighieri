@@ -2,16 +2,16 @@ const PROGRAMACAO_PRODUCAO_END_STATUS = 'Montagem Interna';
 
 const PROGRAMACAO_PRODUCAO_PROJECT_SELECT = `
     id, orderId, projectCode, name, saleValue, statusId, deliveryPhaseId, productionMonth,
-    isComplementar, parentProjectId,
+    isComplementary, parentProjectId,
     parentProject:parentProjectId(id, deliveryPhaseId),
-    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
+    order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     projectStatus:OrderProjectStatus(id, name, sortOrder)
 `;
 
 const PROGRAMACAO_PRODUCAO_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, saleValue, statusId, deliveryPhaseId,
-    isComplementar, parentProjectId,
-    order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name), clientDeliveryDate),
+    isComplementary, parentProjectId,
+    order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     projectStatus:OrderProjectStatus(id, name)
 `;
 
@@ -47,8 +47,8 @@ function getProgramacaoProducaoContext() {
 }
 
 function isProgramacaoProducaoComplementarProject(project) {
-    return typeof isGestaoRelatorioPedidosPendentesComplementarProject === 'function'
-        && isGestaoRelatorioPedidosPendentesComplementarProject(project);
+    return typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
+        && isGestaoRelatorioPedidosPendentesComplementaryProject(project);
 }
 
 function getProgramacaoProducaoParentProjectId(project) {
@@ -89,7 +89,7 @@ async function fetchProgramacaoProducaoProjects() {
 
     if (result.error?.message?.includes('productionMonth')
         || result.error?.message?.includes('deliveryPhaseId')
-        || result.error?.message?.includes('isComplementar')
+        || result.error?.message?.includes('isComplementary')
         || result.error?.message?.includes('parentProject')
         || result.error?.message?.includes('clientDeliveryDate')
         || result.error?.message?.includes('projectStatus')
@@ -135,9 +135,9 @@ function getProgramacaoProducaoFilteredProjects() {
 
 function getProgramacaoProducaoOrderDeliveryDates(projects, context) {
     const parentProjects = (projects || []).filter(project =>
-        typeof isGestaoRelatorioPedidosPendentesComplementarProject === 'function'
-            ? !isGestaoRelatorioPedidosPendentesComplementarProject(project)
-            : !project.isComplementar
+        typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
+            ? !isGestaoRelatorioPedidosPendentesComplementaryProject(project)
+            : !project.isComplementary
     );
     const resolveDelivery = typeof getGestaoRelatorioPedidosPendentesProjectDeliveryDate === 'function'
         ? getGestaoRelatorioPedidosPendentesProjectDeliveryDate
@@ -209,7 +209,8 @@ function buildProgramacaoProducaoOrderSlice(orderGroup, context, options = {}) {
         ? buildGestaoRelatorioPedidosPendentesProjectTree(
             parentProjects,
             complementarProjects,
-            context.projectsById
+            context.projectsById,
+            { sortByDeliveryDate: true, context }
         )
         : parentProjects.map(project => ({ project, children: [], parentPending: true }));
 
@@ -254,8 +255,8 @@ function buildProgramacaoProducaoOrders() {
             };
         }
 
-        if (typeof isGestaoRelatorioPedidosPendentesComplementarProject === 'function'
-            && isGestaoRelatorioPedidosPendentesComplementarProject(project)) {
+        if (typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
+            && isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
             ordersById[orderId].complementarProjects.push(project);
             return;
         }
@@ -559,7 +560,8 @@ function renderProgramacaoProducaoSummary(projects) {
         getOrderDisplayDeliveryDate: (project, groupContext) =>
             typeof getGestaoRelatorioPedidosPendentesProjectDeliveryDate === 'function'
                 ? getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, groupContext)
-                : null
+                : null,
+        sortByDeliveryDate: true
     });
     const mergedGroups = mergeProgramacaoProducaoSummaryMonthGroups(
         pendingGroups,
@@ -696,7 +698,12 @@ async function loadProgramacaoProducao() {
                 getMonthKey: typeof getGestaoRelatorioFechamentoProducaoProjectMonthKey === 'function'
                     ? getGestaoRelatorioFechamentoProducaoProjectMonthKey
                     : undefined,
-                sortDescending: false
+                sortDescending: false,
+                sortByDeliveryDate: true,
+                phasesByOrderId,
+                projectsById: typeof buildGestaoRelatorioProjectsById === 'function'
+                    ? buildGestaoRelatorioProjectsById(projects || [])
+                    : {}
             });
         } catch (fechamentoError) {
             console.error('programacao-producao fechamento month groups:', fechamentoError);

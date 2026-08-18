@@ -48,18 +48,18 @@ async function fetchOrderRequestNotificationContext(orderId, orderProjectId, des
         projetistaName
     };
 }
-async function fetchProjectCaminhoRedeAprovacao(orderProjectId) {
+async function fetchProjectApprovalNetworkPath(orderProjectId) {
     if (!orderProjectId) return '';
 
     const { data, error } = await supabaseClient
         .from('OrderProject')
-        .select('caminhoRedeAprovacao')
+        .select('approvalNetworkPath')
         .eq('id', orderProjectId)
         .maybeSingle();
 
-    if (error?.message?.includes('caminhoRedeAprovacao')) return '';
+    if (error?.message?.includes('approvalNetworkPath')) return '';
     if (error) throw error;
-    return data?.caminhoRedeAprovacao || '';
+    return data?.approvalNetworkPath || '';
 }
 
 async function resolveApprovalNotificationToEmail(eventType, approval) {
@@ -88,7 +88,7 @@ async function fetchApprovalNotificationContext(approval) {
 
     return {
         ...context,
-        projectName: approval.projectName || context.projectName
+        projectName: getCommercialApprovalProjectName(approval) || context.projectName
     };
 }
 async function fetchActiveComprasRecipientEmails() {
@@ -174,13 +174,13 @@ async function fetchActiveGestorComercialRecipientEmails() {
 
     const { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, role, gestorComercial')
+        .select('email, role, isCommercialManager')
         .eq('isActive', true);
 
     if (error) throw error;
 
     const emails = (data || [])
-        .filter(user => (user.role === 'Admin' || user.role === 'Consultor') && user.gestorComercial)
+        .filter(user => (user.role === 'Admin' || user.role === 'Consultor') && user.isCommercialManager)
         .map(user => user.email);
 
     const unique = uniqueEmails(emails);
@@ -194,16 +194,16 @@ async function fetchActiveGestoresRecipientEmails() {
 
     const { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, role, gestorComercial, gestorProjetos, gestorFabrica')
+        .select('email, role, isCommercialManager, isProjectsManager, isFactoryManager')
         .eq('isActive', true);
 
     if (error) throw error;
 
     const emails = (data || [])
         .filter(user => (
-            ((user.role === 'Admin' || user.role === 'Consultor') && user.gestorComercial)
-            || ((user.role === 'Admin' || user.role === 'Projetista') && user.gestorProjetos)
-            || (user.role === 'Marceneiro' && user.gestorFabrica)
+            ((user.role === 'Admin' || user.role === 'Consultor') && user.isCommercialManager)
+            || ((user.role === 'Admin' || user.role === 'Projetista') && user.isProjectsManager)
+            || (user.role === 'Marceneiro' && user.isFactoryManager)
         ))
         .map(user => user.email);
 
@@ -221,9 +221,9 @@ async function fetchActivePpcpProjetistasRecipientEmails() {
         .select('email')
         .eq('role', 'Projetista')
         .eq('isActive', true)
-        .eq('ppcp', true);
+        .eq('isPpcp', true);
 
-    if (error?.message?.includes('ppcp')) {
+    if (error?.message?.includes('isPpcp')) {
         return [];
     }
 
@@ -243,9 +243,9 @@ async function fetchActiveDetalhamentoProjetistasRecipientEmails() {
         .select('email')
         .eq('role', 'Projetista')
         .eq('isActive', true)
-        .eq('detalhamento', true);
+        .eq('isDetailing', true);
 
-    if (error?.message?.includes('detalhamento')) {
+    if (error?.message?.includes('isDetailing')) {
         return [];
     }
 
@@ -262,17 +262,17 @@ async function fetchActiveGestorFabricaRecipientEmails() {
 
     const { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, role, gestorFabrica')
+        .select('email, role, isFactoryManager')
         .eq('isActive', true);
 
-    if (error?.message?.includes('gestorFabrica')) {
+    if (error?.message?.includes('isFactoryManager')) {
         return [];
     }
 
     if (error) throw error;
 
     const emails = (data || [])
-        .filter(user => user.role === 'Marceneiro' && user.gestorFabrica)
+        .filter(user => user.role === 'Marceneiro' && user.isFactoryManager)
         .map(user => user.email);
 
     const unique = uniqueEmails(emails);
@@ -282,17 +282,17 @@ async function fetchActiveGestorFabricaRecipientEmails() {
 async function fetchActiveGestorProjetosUser() {
     let { data, error } = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, gestorProjetos')
+        .select('id, name, email, role, isProjectsManager')
         .eq('isActive', true);
 
-    if (error?.message?.includes('gestorProjetos')) {
+    if (error?.message?.includes('isProjectsManager')) {
         return null;
     }
 
     if (error) throw error;
 
     const users = (data || [])
-        .filter(user => (user.role === 'Admin' || user.role === 'Projetista') && user.gestorProjetos);
+        .filter(user => (user.role === 'Admin' || user.role === 'Projetista') && user.isProjectsManager);
 
     return users[0] || null;
 }
@@ -304,17 +304,17 @@ async function fetchActiveGestorProjetosRecipientEmails() {
 
     let { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, role, gestorProjetos')
+        .select('email, role, isProjectsManager')
         .eq('isActive', true);
 
-    if (error?.message?.includes('gestorProjetos')) {
+    if (error?.message?.includes('isProjectsManager')) {
         return [];
     }
 
     if (error) throw error;
 
     const emails = (data || [])
-        .filter(user => (user.role === 'Admin' || user.role === 'Projetista') && user.gestorProjetos)
+        .filter(user => (user.role === 'Admin' || user.role === 'Projetista') && user.isProjectsManager)
         .map(user => user.email);
 
     return uniqueEmails(emails);
@@ -325,17 +325,7 @@ async function fetchMontagemExternaFinalizadaRecipientEmails(orderId) {
         return [NOTIFICATION_TEST_EMAIL];
     }
 
-    const [gestorComercialEmails, consultorEmail, gestorProjetosEmails] = await Promise.all([
-        fetchActiveGestorComercialRecipientEmails(),
-        fetchConsultorEmailForOrder(orderId),
-        fetchActiveGestorProjetosRecipientEmails()
-    ]);
-
-    return uniqueEmails([
-        ...gestorComercialEmails,
-        consultorEmail,
-        ...gestorProjetosEmails
-    ].filter(Boolean));
+    return fetchActiveGestorComercialRecipientEmails();
 }
 
 async function fetchIniciarProjetoTecnicoRecipientEmails(orderId, designerId) {
@@ -437,7 +427,7 @@ async function fetchActiveConferenteRecipientEmails() {
         .select('email')
         .eq('role', 'Projetista')
         .eq('isActive', true)
-        .eq('conferente', true);
+        .eq('isConferenceReviewer', true);
 
     if (error) throw error;
 

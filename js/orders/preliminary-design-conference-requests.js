@@ -87,7 +87,7 @@ async function insertConferenceOrderRequestActivities(requestId, observations) {
         const description = buildConferenceRequestActivityDescription(
             observation.moduleName,
             getObservationConferenteText(observation),
-            observation.consultorResponse
+            observation.consultantResponse
         );
 
         const { error } = await supabaseClient
@@ -149,7 +149,7 @@ async function createConferenceOrderRequestsFromApproval(conference, approvedByU
                     description: buildConferenceRequestActivityDescription(
                         observation.moduleName,
                         getObservationConferenteText(observation),
-                        observation.consultorResponse
+                        observation.consultantResponse
                     ),
                     completed: false,
                     sortOrder: index

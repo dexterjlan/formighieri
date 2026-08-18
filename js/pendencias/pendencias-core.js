@@ -17,22 +17,15 @@ const PENDENCIAS_STATUS_EM_PRODUCAO = 'Em Produção';
 const PENDENCIAS_STATUS_MONTAGEM_INTERNA = 'Montagem Interna';
 const PENDENCIAS_STATUS_MONTAGEM_EXTERNA = 'Montagem Externa';
 const PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA = 'Aguardando Entrega Técnica';
+const PENDENCIAS_STATUS_ENTREGUE = 'Entregue';
 const PENDENCIAS_STATUS_EXPEDICAO = 'Expedição';
 
-const PENDENCIAS_ORDER_EMBED = 'id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name)';
-
 const PENDENCIAS_FABRICA_PROJECT_SELECT = `
-    id, orderId, projectCode, name, statusId, deliveryDate,
-    marceneiroId, inicioMontagemInterna, fimMontagemInterna,
-    order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
-    projectStatus:OrderProjectStatus(id, name),
-    marceneiro:Marceneiro(id, name)
+    ${getPendenciasFabricaProjectSelect()}
 `;
 
 const PENDENCIAS_FABRICA_PROJECT_SELECT_FALLBACK = `
-    id, orderId, projectCode, name, statusId, deliveryDate,
-    marceneiroId, inicioMontagemInterna, fimMontagemInterna,
-    order:salesOrders(${PENDENCIAS_ORDER_EMBED})
+    ${getPendenciasFabricaProjectSelect({ includeStatus: false, includeCabinetMaker: false })}
 `;
 const PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES = [
     PENDENCIAS_STATUS_VENDIDO,
@@ -48,15 +41,11 @@ const PENDENCIAS_MINE_EXTRA_STATUSES = [
 ];
 
 const PENDENCIAS_PROJECT_SELECT = `
-    id, orderId, projectCode, name, designerId, statusId, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico, observacaoAguardandoObra,
-    order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
-    designer:appUsers!OrderProject_designerId_fkey(id, name),
-    projectStatus:OrderProjectStatus(id, name)
+    ${getPendenciasProjectSelect()}
 `;
 
 const PENDENCIAS_PROJECT_SELECT_FALLBACK = `
-    id, orderId, projectCode, name, designerId, statusId, deliveryDate, technicalProjectForecastStartDate, previsaoConclusaoProjetoTecnico,
-    order:salesOrders(${PENDENCIAS_ORDER_EMBED})
+    ${getPendenciasProjectSelect({ includeStatus: false, includeDesigner: false, includeAwaitingConstructionNote: false })}
 `;
 
 const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
@@ -293,7 +282,8 @@ function getPendenciasSidebarSections() {
             visible: canSeePendenciasGestorComercialMenu(),
             items: [
                 { id: 'aguardando-medicao', label: 'Aguardando Medição' },
-                { id: 'aprovar-conferencia', label: 'Aprovar Conferência' }
+                { id: 'aprovar-conferencia', label: 'Aprovar Conferência' },
+                { id: 'aguardando-entrega-tecnica', label: 'Aguardando Entrega Técnica' }
             ]
         },
         {
@@ -304,6 +294,7 @@ function getPendenciasSidebarSections() {
                 { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
                 { id: 'terceiros-sem-projetistas', label: 'Terceiros Sem Projetistas' },
                 { id: 'aguardando-detalhamento', label: 'Aguardando Detalhamento' },
+                { id: 'expedicao', label: 'Expedição' },
                 { id: 'montagem-externa', label: 'Montagem Externa' }
             ]
         },
@@ -464,6 +455,64 @@ async function getPendenciasStatusIdsByNames(names) {
     return ids;
 }
 
+function canActPendenciasGestorProjetosMontagemExterna() {
+    return isAdmin() || isGestorProjetos();
+}
+
+async function fetchPhasesByOrderIdForPendenciasProjects(projects = []) {
+    const orderIds = [...new Set((projects || []).map(project => Number(project.orderId)).filter(Boolean))];
+    if (!orderIds.length || typeof fetchGestaoOrderPhasesByOrderIds !== 'function') {
+        return {};
+    }
+
+    return fetchGestaoOrderPhasesByOrderIds(orderIds);
+}
+
+function getPendenciasProjectEffectiveDeliveryDate(project, phasesByOrderId = {}) {
+    const phases = phasesByOrderId[Number(project?.orderId)] || [];
+    if (phases.length >= 2) {
+        const phaseId = Number(project?.deliveryPhaseId);
+        const phase = phaseId
+            ? phases.find(item => Number(item.id) === phaseId)
+            : phases[0];
+        return phase?.deliveryDate || project?.deliveryDate || null;
+    }
+
+    return project?.deliveryDate || null;
+}
+
+function formatPendenciasProjectDeliveryDate(project, phasesByOrderId = {}) {
+    const phases = phasesByOrderId[Number(project?.orderId)] || [];
+    if (phases.length >= 2) {
+        const phaseId = Number(project?.deliveryPhaseId);
+        const phase = phaseId
+            ? phases.find(item => Number(item.id) === phaseId)
+            : phases[0];
+        if (!phase) return '—';
+
+        const dateLabel = typeof formatPendenciasDeliveryDate === 'function'
+            ? formatPendenciasDeliveryDate(phase.deliveryDate)
+            : (phase.deliveryDate || '—');
+        const phaseName = phase.name || 'Fase';
+        return `${phaseName}: ${dateLabel}`;
+    }
+
+    return typeof formatPendenciasDeliveryDate === 'function'
+        ? formatPendenciasDeliveryDate(project?.deliveryDate)
+        : (project?.deliveryDate || '—');
+}
+
+function sortPendenciasByEffectiveDeliveryDate(projects, phasesByOrderId = {}) {
+    return [...projects].sort((a, b) => {
+        const aDate = getPendenciasProjectEffectiveDeliveryDate(a, phasesByOrderId);
+        const bDate = getPendenciasProjectEffectiveDeliveryDate(b, phasesByOrderId);
+        const aTime = aDate ? new Date(aDate).getTime() : Number.MAX_SAFE_INTEGER;
+        const bTime = bDate ? new Date(bDate).getTime() : Number.MAX_SAFE_INTEGER;
+        if (aTime !== bTime) return aTime - bTime;
+        return (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' });
+    });
+}
+
 async function queryPendenciasProjects(filters = {}) {
     const { statusId, statusIds, designerId, unassignedOnly = false } = filters;
 
@@ -474,31 +523,31 @@ async function queryPendenciasProjects(filters = {}) {
         if (designerId) query = query.eq('designerId', designerId);
         if (unassignedOnly) query = query.is('designerId', null);
         if (withInactiveFilter) {
-            query = query.eq('isComplementar', false).eq('isSubstituido', false);
+            query = query.eq('isComplementary', false).eq('isReplaced', false);
         }
         return query;
     };
 
     let result = await buildQuery(PENDENCIAS_PROJECT_SELECT);
 
-    if (result.error?.message && isOrderProjectPrevisaoColumnError(result.error.message)) {
+    if (result.error?.message && isOrderProjectTechnicalForecastColumnError(result.error.message)) {
         result = await buildQuery(`
-            id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
-            order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
+            id, orderId, projectCode, name, designerId, statusId, deliveryDate, awaitingConstructionNote,
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
             designer:appUsers!OrderProject_designerId_fkey(id, name),
             projectStatus:OrderProjectStatus(id, name)
         `, true);
-        if (result.error?.message?.includes('isComplementar') || result.error?.message?.includes('isSubstituido')) {
+        if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
             result = await buildQuery(`
-                id, orderId, projectCode, name, designerId, statusId, deliveryDate, observacaoAguardandoObra,
-                order:salesOrders(${PENDENCIAS_ORDER_EMBED}),
+                id, orderId, projectCode, name, designerId, statusId, deliveryDate, awaitingConstructionNote,
+                order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
                 designer:appUsers!OrderProject_designerId_fkey(id, name),
                 projectStatus:OrderProjectStatus(id, name)
             `, false);
         }
     }
 
-    if (result.error?.message?.includes('isComplementar') || result.error?.message?.includes('isSubstituido')) {
+    if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
         result = await buildQuery(PENDENCIAS_PROJECT_SELECT, false);
     }
 
@@ -506,11 +555,10 @@ async function queryPendenciasProjects(filters = {}) {
         result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK, false);
     }
 
-    if (result.error?.message?.includes('observacaoAguardandoObra')
-        || isOrderProjectPrevisaoColumnError(result.error?.message)) {
+    if (result.error?.message?.includes('awaitingConstructionNote')
+        || isOrderProjectTechnicalForecastColumnError(result.error?.message)) {
         result = await buildQuery(`
-            id, orderId, projectCode, name, designerId, statusId, deliveryDate,
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            ${getPendenciasProjectSelect({ includeStatus: false, includeDesigner: false, includeAwaitingConstructionNote: false })}
         `, false);
     }
 
@@ -554,28 +602,6 @@ async function enrichPendenciasProjectsWithConsultantUserId(projects) {
 
 function getPendenciasProjectStatusName(project) {
     return project?.projectStatus?.name || '';
-}
-
-function getPendenciasProjectStatusBadgeClass(statusName) {
-    if (statusName === 'Aguardando Aprovação') return 'bg-amber-100 text-amber-800';
-    if (statusName === 'Em Revisão Comercial') return 'bg-sky-100 text-sky-800';
-    if (statusName === 'Em Revisão Técnica' || statusName === 'Em Revisão' || statusName === 'Em revisão') return 'bg-sky-100 text-sky-800';
-    if (statusName === PENDENCIAS_STATUS_PROJETO_TECNICO) return 'bg-violet-100 text-violet-800';
-    if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) return 'bg-indigo-100 text-indigo-800';
-    if (statusName === PENDENCIAS_STATUS_VENDIDO) return 'bg-emerald-100 text-emerald-800';
-    if (statusName === PENDENCIAS_STATUS_AGUARDANDO_OBRA) return 'bg-orange-100 text-orange-800';
-    if (statusName === PENDENCIAS_STATUS_AGUARDANDO_MEDICAO) return 'bg-cyan-100 text-cyan-800';
-    if (statusName === PENDENCIAS_STATUS_PLANTA_LEVANTADA) return 'bg-lime-100 text-lime-800';
-    if (statusName === PENDENCIAS_STATUS_CONFERENCIA_REALIZADA) return 'bg-teal-100 text-teal-800';
-    if (statusName === PENDENCIAS_STATUS_CONFERENCIA_ENVIADA) return 'bg-sky-100 text-sky-800';
-    if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PPCP) return 'bg-fuchsia-100 text-fuchsia-800';
-    if (statusName === PENDENCIAS_STATUS_IMPLANTACAO) return 'bg-teal-100 text-teal-800';
-    if (statusName === 'Detalhamento' || statusName === 'Aguardando Detalhamento') return 'bg-indigo-100 text-indigo-800';
-    if (statusName === PENDENCIAS_STATUS_EM_PRODUCAO) return 'bg-orange-100 text-orange-800';
-    if (statusName === PENDENCIAS_STATUS_MONTAGEM_INTERNA) return 'bg-amber-100 text-amber-800';
-    if (statusName === PENDENCIAS_STATUS_MONTAGEM_EXTERNA) return 'bg-purple-100 text-purple-800';
-    if (statusName === PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA) return 'bg-sky-100 text-sky-800';
-    return 'bg-slate-100 text-slate-700';
 }
 
 function loadPendenciasContent() {
@@ -687,6 +713,11 @@ function loadPendenciasContent() {
         return;
     }
 
+    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'expedicao') {
+        loadPendenciasExpedicao();
+        return;
+    }
+
     if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'montagem-externa') {
         loadPendenciasMontagemExterna();
         return;
@@ -699,6 +730,11 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'gestor-comercial' && pendenciasActiveItem === 'aprovar-conferencia') {
         loadPendenciasAprovarConferencia();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-comercial' && pendenciasActiveItem === 'aguardando-entrega-tecnica') {
+        loadPendenciasAguardandoEntregaTecnica();
         return;
     }
 

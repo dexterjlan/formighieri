@@ -72,7 +72,7 @@ async function fetchImplantacoesMapForProjectIds(projectIds) {
     if (!projectIds.length) return {};
 
     const { data, error } = await supabaseClient
-        .from('Implantacao')
+        .from('Implementation')
         .select('id, status, orderProjectId')
         .in('orderProjectId', projectIds);
 
@@ -140,8 +140,8 @@ function renderPpcpProjectCard(project, implantacao) {
             <div class="flex flex-wrap items-center gap-2">
                 <p class="text-sm font-semibold text-slate-900">${escapeHtml(project.name)}</p>
                 ${renderComplementarProjectNoticeHtml(project)}
-                ${renderSubstituidoProjectNoticeHtml(project)}
-                ${renderSubstituicaoProjectNoticeHtml(project)}
+                ${renderReplacedProjectNoticeHtml(project)}
+                ${renderReplacementProjectNoticeHtml(project)}
                 ${statusBadgeHtml}
             </div>
         </div>
@@ -180,11 +180,11 @@ async function loadPpcpProjects(orderId) {
 
     let result = await supabaseClient
         .from('OrderProject')
-        .select('id, name, statusId, isComplementar, parentProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), projectStatus:OrderProjectStatus(id, name)')
+        .select('id, name, statusId, isComplementary, parentProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), projectStatus:OrderProjectStatus(id, name)')
         .eq('orderId', orderId)
         .order('name', { ascending: true });
 
-    if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementar')) {
+    if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementary')) {
         result = await supabaseClient
             .from('OrderProject')
             .select('id, name, statusId, projectStatus:OrderProjectStatus(id, name)')

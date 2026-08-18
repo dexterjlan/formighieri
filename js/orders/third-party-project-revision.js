@@ -279,7 +279,7 @@ async function fetchThirdPartyProjectById(thirdPartyProjectId) {
             thirdPartySubtype:ThirdPartySubtype(id, name),
             ${THIRD_PARTY_PROJECT_DESIGNER_EMBED},
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
         `)
         .eq('id', projectId)
         .maybeSingle();
@@ -350,7 +350,7 @@ async function fetchThirdPartyProjectsSentForConsultor(options = {}) {
             thirdPartySubtype:ThirdPartySubtype(id, name),
             ${THIRD_PARTY_PROJECT_DESIGNER_EMBED},
             orderProject:OrderProject(id, name, projectCode, deliveryDate),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
         `)
         .eq('status', THIRD_PARTY_PROJECT_STATUS_SENT)
         .order('sentAt', { ascending: true });
@@ -506,36 +506,17 @@ function closeThirdPartyRevisionsHistoryModal() {
     toggleModal('third-party-revisions-history-modal', false);
 }
 
-function setThirdPartyRevisionModalLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('third-party-revision-loading');
-    const messageEl = document.getElementById('third-party-revision-loading-msg');
-    const spinner = document.getElementById('third-party-revision-loading-spinner');
-    const successIcon = document.getElementById('third-party-revision-loading-success');
-    const errorIcon = document.getElementById('third-party-revision-loading-error');
-    const buttons = [
-        document.getElementById('btn-save-third-party-revision'),
-        document.getElementById('btn-resend-third-party-project'),
-        document.getElementById('btn-add-third-party-revision-activity'),
-        document.getElementById('btn-close-third-party-revision')
-    ];
-    const show = Boolean(active);
+const THIRD_PARTY_REVISION_MODAL_OVERLAY = createModalOverlayConfig('third-party-revision', {
+    disableElementIds: [
+        'btn-save-third-party-revision',
+        'btn-resend-third-party-project',
+        'btn-add-third-party-revision-activity',
+        'btn-close-third-party-revision'
+    ]
+});
 
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
-    buttons.forEach(btn => {
-        if (!btn) return;
-        btn.disabled = show;
-        btn.classList.toggle('opacity-60', show);
-        btn.classList.toggle('cursor-not-allowed', show);
-    });
+function setThirdPartyRevisionModalLoading(active, message = 'Processando...', status = 'loading') {
+    setModalOverlayLoading(THIRD_PARTY_REVISION_MODAL_OVERLAY, active, message, status);
 }
 
 async function persistThirdPartyRevision() {
@@ -661,7 +642,7 @@ async function updateThirdPartyProjectStatus(thirdPartyProjectId, newStatus, pre
             designerId,
             thirdPartySubtype:ThirdPartySubtype(id, name),
             orderProject:OrderProject(id, name, projectCode),
-            order:salesOrders(id, orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
         `)
         .single();
 

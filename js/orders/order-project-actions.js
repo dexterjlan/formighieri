@@ -1,5 +1,3 @@
-let orderProjectAssociarPending = null;
-
 function enrichApprovalForOrderProject(approval, orderId, project = null) {
     if (!approval) return null;
     const order = typeof ordersCache !== 'undefined'
@@ -26,6 +24,15 @@ function isAssignedProjetistaForApproval(approval) {
         && Number(approval.designerId) === Number(currentUser.id);
 }
 
+function canShowOrderProjectVerRevisoesByStatus(statusName) {
+    const normalized = String(statusName || '').trim();
+    return normalized === 'Em Revisão Comercial'
+        || normalized === 'Em Revisão Técnica'
+        || normalized === 'Em Revisão'
+        || normalized === 'Em revisão'
+        || normalized === 'Aguardando Aprovação';
+}
+
 function canShowOrderProjectVerRevisoesAction(approval) {
     if (!approval) return false;
     if (typeof canViewCommercialRevision !== 'function' || !canViewCommercialRevision(approval)) {
@@ -34,7 +41,7 @@ function canShowOrderProjectVerRevisoesAction(approval) {
     return isOrderConsultorViewerForApproval(approval) || isAssignedProjetistaForApproval(approval);
 }
 
-async function fetchOrderProjectVerRevisoesActionContext(project, orderId) {
+async function fetchOrderProjectCommercialRevisionsContext(project, orderId) {
     if (!project?.id) return null;
 
     let approval = null;
@@ -53,15 +60,26 @@ async function fetchOrderProjectVerRevisoesActionContext(project, orderId) {
         revisions = revisionsByApproval[approvalCtx.id] || [];
     }
 
-    if (!revisions.length || !canShowOrderProjectVerRevisoesAction(approvalCtx)) {
-        return null;
-    }
+    if (!revisions.length) return null;
 
     return {
         approvalId: approvalCtx.id,
         approval: approvalCtx,
         revisions
     };
+}
+
+async function fetchOrderProjectVerRevisoesActionContext(project, orderId) {
+    const context = await fetchOrderProjectCommercialRevisionsContext(project, orderId);
+    if (!context || !canShowOrderProjectVerRevisoesAction(context.approval)) {
+        return null;
+    }
+
+    return context;
+}
+
+async function fetchOrderProjectRevisionsHistoryContext(project, orderId) {
+    return fetchOrderProjectCommercialRevisionsContext(project, orderId);
 }
 
 function getOrderProjectActions(project, context = {}) {
@@ -110,7 +128,7 @@ function getOrderProjectActions(project, context = {}) {
             label: 'Editar Medição',
             enabled: true,
             projectId: project.id,
-            medicaoId: medicao.id
+            measurementId: medicao.id
         });
     }
 
@@ -190,7 +208,8 @@ function getOrderProjectActions(project, context = {}) {
             && canViewCommercialRevision(approvalCtx);
         const hasRevisions = revisions.length > 0;
 
-        if (canViewRevision && hasRevisions && canShowOrderProjectVerRevisoesAction(approvalCtx)) {
+        if (canViewRevision && hasRevisions && canShowOrderProjectVerRevisoesAction(approvalCtx)
+            && canShowOrderProjectVerRevisoesByStatus(statusName)) {
             actions.push({
                 id: 'view-revisions',
                 label: 'Ver Revisões',
@@ -211,27 +230,16 @@ function getOrderProjectActions(project, context = {}) {
         });
     }
 
-    if (statusName === 'Aguardando Projeto Técnico') {
-        if (!project.designerId) {
-            const enabled = currentUser?.role === 'Projetista' || isAdmin();
-            actions.push({
-                id: 'associar',
-                label: 'Associar a mim',
-                enabled,
-                projectId: project.id,
-                deliveryDate: project.deliveryDate || ''
-            });
-        } else {
-            const enabled = isAdmin()
-                || (currentUser?.role === 'Projetista'
-                    && Number(project.designerId) === Number(currentUser.id));
-            actions.push({
-                id: 'iniciar-pt',
-                label: 'Iniciar Projeto',
-                enabled,
-                projectId: project.id
-            });
-        }
+    if (statusName === 'Aguardando Projeto Técnico' && project.designerId) {
+        const enabled = isAdmin()
+            || (currentUser?.role === 'Projetista'
+                && Number(project.designerId) === Number(currentUser.id));
+        actions.push({
+            id: 'iniciar-pt',
+            label: 'Iniciar Projeto',
+            enabled,
+            projectId: project.id
+        });
     }
 
     if (statusName === 'Nomear') {
@@ -295,69 +303,63 @@ function getOrderProjectActions(project, context = {}) {
         });
     }
 
+    if (typeof canShowOrderProjectIniciarMontagemExtAction === 'function'
+        && canShowOrderProjectIniciarMontagemExtAction(project)) {
+        actions.push({
+            id: 'iniciar-montagem-ext',
+            label: 'Iniciar Montagem Externa',
+            enabled: true,
+            projectId: project.id,
+            projectName: project.name || ''
+        });
+    }
+
+    if (typeof canShowOrderProjectFinalizarMontagemExtAction === 'function'
+        && canShowOrderProjectFinalizarMontagemExtAction(project)) {
+        actions.push({
+            id: 'finalizar-montagem-ext',
+            label: 'Finalizar',
+            enabled: true,
+            projectId: project.id,
+            projectName: project.name || ''
+        });
+    }
+
+    if (typeof canShowOrderProjectFinalizarEntregaTecnicaAction === 'function'
+        && canShowOrderProjectFinalizarEntregaTecnicaAction(project)) {
+        actions.push({
+            id: 'finalizar-entrega-tecnica',
+            label: 'Finalizar',
+            enabled: true,
+            projectId: project.id,
+            projectName: project.name || ''
+        });
+    }
+
     return actions;
 }
 
 function renderOrderProjectActionButtons(actions) {
-    if (!actions.length) {
+    const enabledActions = (actions || []).filter(action => action.enabled);
+    if (!enabledActions.length) {
         return '<span class="text-xs text-slate-300">—</span>';
     }
 
-    return `<div class="flex flex-wrap justify-end gap-1">${actions.map(action => {
-        const disabled = !action.enabled;
+    return `<div class="flex flex-wrap justify-end gap-1">${enabledActions.map(action => {
         const attrs = [`data-action="${escapeHtml(action.id)}"`];
         if (action.approvalId) attrs.push(`data-approval-id="${action.approvalId}"`);
         if (action.projectId) attrs.push(`data-project-id="${action.projectId}"`);
-        if (action.medicaoId) attrs.push(`data-medicao-id="${action.medicaoId}"`);
+        if (action.measurementId) attrs.push(`data-medicao-id="${action.measurementId}"`);
         if (action.conferenceId) attrs.push(`data-conference-id="${action.conferenceId}"`);
         if (action.projectName) attrs.push(`data-project-name="${escapeHtml(action.projectName)}"`);
         if (action.deliveryDate) attrs.push(`data-delivery-date="${escapeHtml(String(action.deliveryDate).slice(0, 10))}"`);
 
         return `<button type="button"
-            class="order-project-action-btn text-[10px] px-2 py-0.5 rounded-md font-medium whitespace-nowrap ${disabled
-                ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                : 'bg-violet-700 text-white hover:bg-violet-800'}"
-            ${attrs.join(' ')}
-            ${disabled ? 'disabled' : ''}>
+            class="order-project-action-btn text-[10px] px-2 py-0.5 rounded-md font-medium whitespace-nowrap bg-violet-700 text-white hover:bg-violet-800"
+            ${attrs.join(' ')}>
             ${escapeHtml(action.label)}
         </button>`;
     }).join('')}</div>`;
-}
-
-function closeOrderProjectAssociarModal() {
-    orderProjectAssociarPending = null;
-    toggleModal('order-project-associar-modal', false);
-    const inicioInput = document.getElementById('order-project-associar-previsao-inicio');
-    const fimInput = document.getElementById('order-project-associar-previsao');
-    if (inicioInput) inicioInput.value = '';
-    if (fimInput) fimInput.value = '';
-}
-
-function openOrderProjectAssociarModal(projectId, deliveryDate = '') {
-    orderProjectAssociarPending = {
-        projectId: Number(projectId),
-        deliveryDate: deliveryDate || ''
-    };
-
-    const inicioInput = document.getElementById('order-project-associar-previsao-inicio');
-    const fimInput = document.getElementById('order-project-associar-previsao');
-    const maxDate = String(deliveryDate || '').slice(0, 10);
-
-    if (inicioInput) {
-        inicioInput.value = '';
-        inicioInput.removeAttribute('max');
-    }
-
-    if (fimInput) {
-        fimInput.value = '';
-        if (maxDate) {
-            fimInput.max = maxDate;
-        } else {
-            fimInput.removeAttribute('max');
-        }
-    }
-
-    toggleModal('order-project-associar-modal', true);
 }
 
 async function refreshOrderProjectListAfterAction(orderId = activeOrderId) {
@@ -410,9 +412,6 @@ async function handleOrderProjectAction(button) {
                 await refreshOrderProjectListAfterAction();
             }
             break;
-        case 'associar':
-            openOrderProjectAssociarModal(projectId, button.dataset.deliveryDate || '');
-            break;
         case 'iniciar-pt':
             if (typeof iniciarProjetoTecnico === 'function' && projectId) {
                 await iniciarProjetoTecnico(projectId);
@@ -446,6 +445,27 @@ async function handleOrderProjectAction(button) {
                 await openOrderProjectMontagemFimModal(projectId, projectName);
             }
             break;
+        case 'iniciar-montagem-ext':
+            if (typeof iniciarMontagemExternaForProject === 'function' && projectId) {
+                await iniciarMontagemExternaForProject(projectId, {
+                    onSuccess: () => refreshOrderProjectListAfterAction()
+                });
+            }
+            break;
+        case 'finalizar-montagem-ext':
+            if (typeof finalizeMontagemExternaForProject === 'function' && projectId) {
+                await finalizeMontagemExternaForProject(projectId, {
+                    onSuccess: () => refreshOrderProjectListAfterAction()
+                });
+            }
+            break;
+        case 'finalizar-entrega-tecnica':
+            if (typeof openOrderProjectEntregaModal === 'function' && projectId) {
+                await openOrderProjectEntregaModal(projectId, projectName, {
+                    onSuccess: () => refreshOrderProjectListAfterAction()
+                });
+            }
+            break;
         case 'alterar-status':
             if (typeof openOrderProjectAlterarStatusModal === 'function' && projectId) {
                 openOrderProjectAlterarStatusModal(activeOrderId, projectId);
@@ -458,8 +478,8 @@ async function handleOrderProjectAction(button) {
             break;
         case 'editar-medicao':
             if (typeof openOrderProjectEditarMedicao === 'function') {
-                const medicaoId = Number(button.dataset.medicaoId);
-                await openOrderProjectEditarMedicao(medicaoId, activeOrderId);
+                const measurementId = Number(button.dataset.medicaoId);
+                await openOrderProjectEditarMedicao(measurementId, activeOrderId);
             }
             break;
         case 'conferencia':
@@ -479,27 +499,3 @@ async function handleOrderProjectAction(button) {
             break;
     }
 }
-
-function bindOrderProjectAssociarModalEvents() {
-    document.getElementById('order-project-associar-modal-cancel')
-        ?.addEventListener('click', closeOrderProjectAssociarModal);
-
-    document.getElementById('order-project-associar-modal-submit')
-        ?.addEventListener('click', async () => {
-            if (!orderProjectAssociarPending?.projectId) return;
-
-            const inicioDate = document.getElementById('order-project-associar-previsao-inicio')?.value || '';
-            const previsaoDate = document.getElementById('order-project-associar-previsao')?.value || '';
-            const { projectId, deliveryDate } = orderProjectAssociarPending;
-
-            if (typeof associarProjetoTecnicoAMim === 'function') {
-                const ok = await associarProjetoTecnicoAMim(projectId, inicioDate, previsaoDate, deliveryDate);
-                if (ok) {
-                    closeOrderProjectAssociarModal();
-                    await refreshOrderProjectListAfterAction();
-                }
-            }
-        });
-}
-
-bindOrderProjectAssociarModalEvents();

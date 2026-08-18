@@ -27,12 +27,12 @@ async function fetchAnteprojetoConferenceHistory(conferenceId) {
     if (!normalizedId) return [];
 
     const { data, error } = await supabaseClient
-        .from('AnteprojetoConferenceHistory')
+        .from('PreliminaryDesignConferenceHistory')
         .select('id, conferenceId, action, observation, createdAt, createdById, createdBy:appUsers(id, name)')
         .eq('conferenceId', normalizedId)
         .order('createdAt', { ascending: false });
 
-    if (error?.message?.includes('AnteprojetoConferenceHistory')) {
+    if (error?.message?.includes('PreliminaryDesignConferenceHistory')) {
         return [];
     }
 
@@ -44,7 +44,7 @@ async function fetchAnteprojetoConferenceHistory(conferenceId) {
     return data || [];
 }
 
-async function openAnteprojetoHistoryModal(conferenceId) {
+async function openPreliminaryDesignHistoryModal(conferenceId) {
     const list = document.getElementById('anteprojeto-history-modal-list');
     if (!list) return;
 
@@ -60,7 +60,7 @@ async function openAnteprojetoHistoryModal(conferenceId) {
     list.innerHTML = history.map(renderAnteprojetoConferenceHistoryEntry).join('');
 }
 
-function closeAnteprojetoReturnModal() {
+function closePreliminaryDesignReturnModal() {
     setAnteprojetoReturnModalLoading(false);
     pendingAnteprojetoReturnConferenceId = null;
     const observationEl = document.getElementById('anteprojeto-return-modal-observation');
@@ -68,13 +68,13 @@ function closeAnteprojetoReturnModal() {
     toggleModal('anteprojeto-return-modal', false);
 }
 
-async function showAnteprojetoReturnObservationForm(conferenceId) {
+async function showPreliminaryDesignReturnObservationForm(conferenceId) {
     const normalizedId = Number(conferenceId);
     if (!normalizedId) return;
 
     let conference = anteprojetoConferencesCache.find(item => Number(item.id) === normalizedId);
-    if (!conference && typeof fetchAnteprojetoConferenceById === 'function') {
-        conference = await fetchAnteprojetoConferenceById(normalizedId);
+    if (!conference && typeof fetchPreliminaryDesignConferenceById === 'function') {
+        conference = await fetchPreliminaryDesignConferenceById(normalizedId);
         if (conference) {
             const cacheIndex = anteprojetoConferencesCache.findIndex(item => Number(item.id) === normalizedId);
             if (cacheIndex >= 0) {
@@ -90,7 +90,7 @@ async function showAnteprojetoReturnObservationForm(conferenceId) {
         return;
     }
 
-    if (!canReturnAnteprojetoConferenceToConsultor(conference)) {
+    if (!canReturnPreliminaryDesignConferenceToConsultor(conference)) {
         alertAppDialog('Somente o gestor comercial ou admin pode devolver conferências confirmadas ao consultor.', { variant: 'warning', title: 'Aviso' });
         return;
     }
@@ -112,7 +112,7 @@ async function showAnteprojetoReturnObservationForm(conferenceId) {
         } else if (conference.orderId) {
             const { data } = await supabaseClient
                 .from('salesOrders')
-                .select('orderCode, cliente:Cliente(nome)')
+                .select('orderCode, client:Client(name)')
                 .eq('id', conference.orderId)
                 .maybeSingle();
             if (data) {
@@ -126,14 +126,14 @@ async function showAnteprojetoReturnObservationForm(conferenceId) {
 
     const observationEl = document.getElementById('anteprojeto-return-modal-observation');
     if (observationEl) {
-        observationEl.value = conference.gestorObservation || '';
+        observationEl.value = conference.managerObservation || '';
     }
 
     toggleModal('anteprojeto-return-modal', true);
     observationEl?.focus();
 }
 
-async function returnAnteprojetoConferenceToConsultor(conferenceId, observation) {
+async function returnPreliminaryDesignConferenceToConsultor(conferenceId, observation) {
     const normalizedId = Number(conferenceId);
     const trimmedObservation = String(observation || '').trim();
     if (!normalizedId) return;
@@ -144,7 +144,7 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
 
     let conference = anteprojetoConferencesCache.find(item => Number(item.id) === normalizedId);
     if (!conference) {
-        conference = await fetchAnteprojetoConferenceById(normalizedId);
+        conference = await fetchPreliminaryDesignConferenceById(normalizedId);
         if (conference) {
             anteprojetoConferencesCache = [...anteprojetoConferencesCache, conference];
         }
@@ -155,7 +155,7 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
         return;
     }
 
-    if (!canReturnAnteprojetoConferenceToConsultor(conference)) {
+    if (!canReturnPreliminaryDesignConferenceToConsultor(conference)) {
         alertAppDialog('Somente o gestor comercial ou admin pode devolver conferências confirmadas ao consultor.', { variant: 'warning', title: 'Aviso' });
         return;
     }
@@ -166,7 +166,7 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
         setAnteprojetoConferenceActionLoading(true, 'Registrando observações da devolução...');
 
         const { error: historyError } = await supabaseClient
-            .from('AnteprojetoConferenceHistory')
+            .from('PreliminaryDesignConferenceHistory')
             .insert({
                 conferenceId: normalizedId,
                 action: 'voltar_consultor',
@@ -175,7 +175,7 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
             });
 
         if (historyError) {
-            if (historyError.message?.includes('AnteprojetoConferenceHistory')) {
+            if (historyError.message?.includes('PreliminaryDesignConferenceHistory')) {
                 throw new Error('Tabela de histórico não encontrada. Execute supabase/create-anteprojeto-conference-observation-history.sql no Supabase.');
             }
             throw historyError;
@@ -183,10 +183,10 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
 
         const now = new Date().toISOString();
         let { error: conferenceError } = await supabaseClient
-            .from('AnteprojetoConference')
+            .from('PreliminaryDesignConference')
             .update({
                 status: 'Em andamento',
-                gestorObservation: trimmedObservation,
+                managerObservation: trimmedObservation,
                 confirmedAt: null,
                 confirmedById: null,
                 updatedAt: now,
@@ -194,9 +194,9 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
             })
             .eq('id', normalizedId);
 
-        if (conferenceError?.message?.includes('gestorObservation')) {
+        if (conferenceError?.message?.includes('managerObservation')) {
             ({ error: conferenceError } = await supabaseClient
-                .from('AnteprojetoConference')
+                .from('PreliminaryDesignConference')
                 .update({
                     status: 'Em andamento',
                     confirmedAt: null,
@@ -209,7 +209,7 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
 
         if (conferenceError) throw conferenceError;
 
-        conference.gestorObservation = trimmedObservation;
+        conference.managerObservation = trimmedObservation;
 
         setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
         await applyConferenciaEnviadaStatusToProjects(getConferenceOrderProjectIds(conference));
@@ -229,9 +229,9 @@ async function returnAnteprojetoConferenceToConsultor(conferenceId, observation)
         setAnteprojetoConferenceActionLoading(true, 'Conferência devolvida ao consultor!', 'success');
         await new Promise(resolve => setTimeout(resolve, 900));
 
-        closeAnteprojetoReturnModal();
+        closePreliminaryDesignReturnModal();
         if (isAnteprojetoModalVisible()) {
-            closeAnteprojetoModal();
+            closePreliminaryDesignModal();
         }
 
         setAnteprojetoConferenceActionLoading(false);
@@ -254,6 +254,6 @@ async function submitAnteprojetoReturnModal() {
     }
 
     setAnteprojetoReturnModalLoading(true, 'Iniciando devolução ao consultor...');
-    await returnAnteprojetoConferenceToConsultor(conferenceId, trimmedObservation);
+    await returnPreliminaryDesignConferenceToConsultor(conferenceId, trimmedObservation);
 }
 

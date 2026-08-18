@@ -11,67 +11,11 @@ let editingCalendarEventId = null;
 let calendarFilterResponsibleId = '';
 let calendarFilterEventTypeId = '';
 
-function startOfMonth(date) {
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function startOfWeek(date) {
-    const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    const weekday = normalized.getDay();
-    normalized.setDate(normalized.getDate() - weekday);
-    return normalized;
-}
-
-function toDateKey(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
-function parseDateKey(dateKey) {
-    const [year, month, day] = String(dateKey || '').split('-').map(Number);
-    if (!year || !month || !day) return null;
-    return new Date(year, month - 1, day);
-}
-
-function addDays(date, days) {
-    const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-    next.setDate(next.getDate() + days);
-    return next;
-}
-
-function formatCalendarMonthLabel(date) {
-    const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-    return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function formatCalendarWeekLabel(weekStart) {
-    const weekEnd = addDays(weekStart, 6);
-    const startLabel = weekStart.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-    const endLabel = weekEnd.toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric'
-    });
-    return `${startLabel} – ${endLabel}`;
-}
-
-function formatCalendarDayLabel(dateKey) {
-    const date = parseDateKey(dateKey);
-    if (!date) return 'Selecione um dia';
-    const label = date.toLocaleDateString('pt-BR', {
-        weekday: 'long',
-        day: '2-digit',
-        month: 'long',
-        year: 'numeric'
-    });
-    return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function formatCalendarShortDate(date) {
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-}
+const startOfWeek = startOfWeekSunday;
+const formatCalendarMonthLabel = formatAppMonthYearLabel;
+const formatCalendarWeekLabel = formatAppWeekRangeLabel;
+const formatCalendarDayLabel = formatAppLongDayLabel;
+const formatCalendarShortDate = formatAppShortDate;
 
 function formatCalendarTimeValue(timeValue) {
     if (!timeValue) return '—';
@@ -124,13 +68,14 @@ function getCalendarEventTooltipClass(event) {
 }
 
 function getCalendarEventClientLabel(event) {
-    if (event?.order) return getOrderClientName(event.order);
-    if (event?.clientName) return event.clientName;
-    return '';
+    if (!event) return '';
+    return getOrderClientName(event.order)
+        || event.client?.name
+        || '';
 }
 
 function getCalendarEventOrderLabel(event) {
-    return event?.orderCode || event?.order?.orderCode || '';
+    return event?.order?.orderCode || '';
 }
 
 function getCalendarEventResponsibleLabel(event) {
@@ -320,10 +265,11 @@ async function loadCalendarEventsForVisibleRange(viewMode = calendarViewMode, an
     let result = await supabaseClient
         .from('CalendarEvent')
         .select(`
-            id, eventDate, eventTime, eventTypeId, description, orderCode, orderId, clientName, responsibleId,
+            id, eventDate, eventTime, eventTypeId, description, orderId, clientId, responsibleId,
             googleCalendarEventId,
             eventType:CalendarEventType(id, name, clientRequired, orderRequired),
-            order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+            client:Client(id, name),
+            order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))
         `)
         .gte('eventDate', startDate)
         .lte('eventDate', endDate)
@@ -334,9 +280,10 @@ async function loadCalendarEventsForVisibleRange(viewMode = calendarViewMode, an
         result = await supabaseClient
             .from('CalendarEvent')
             .select(`
-                id, eventDate, eventTime, eventTypeId, description, orderCode, orderId, clientName, responsibleId,
+                id, eventDate, eventTime, eventTypeId, description, orderId, clientId, responsibleId,
                 eventType:CalendarEventType(id, name, clientRequired, orderRequired),
-                order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))
+                client:Client(id, name),
+                order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))
             `)
             .gte('eventDate', startDate)
             .lte('eventDate', endDate)
@@ -667,11 +614,11 @@ async function openCalendarEventModal(event = null, presetDate = calendarSelecte
     document.getElementById('cal-event-date').value = event?.eventDate || presetDate || toDateKey(new Date());
     document.getElementById('cal-event-time').value = formatCalendarTimeValue(event?.eventTime || '09:00');
     document.getElementById('cal-event-description').value = event?.description || '';
-    document.getElementById('cal-event-order-code').value = event?.orderCode || event?.order?.orderCode || '';
+    document.getElementById('cal-event-order-code').value = event?.order?.orderCode || '';
 
     const clientName = getCalendarEventClientLabel(event);
     document.getElementById('cal-event-client-name').value = clientName;
-    document.getElementById('cal-event-client-id').value = '';
+    document.getElementById('cal-event-client-id').value = event?.clientId || event?.client?.id || '';
 
     syncCalendarClientNameField();
     toggleModal('calendar-event-modal', true);
@@ -686,7 +633,9 @@ async function saveCalendarEvent(event) {
     const responsibleId = Number(document.getElementById('cal-event-responsible').value);
     const description = document.getElementById('cal-event-description').value.trim();
     const orderCode = document.getElementById('cal-event-order-code').value.trim();
-    let clientName = document.getElementById('cal-event-client-name').value.trim();
+    const clientName = document.getElementById('cal-event-client-name').value.trim();
+    const clientIdInput = document.getElementById('cal-event-client-id');
+    let clientId = Number(clientIdInput?.value) || null;
     const selectedType = getCalendarEventTypeById(eventTypeId);
 
     if (!eventDate || !eventTime || !eventTypeId || !responsibleId) {
@@ -700,20 +649,26 @@ async function saveCalendarEvent(event) {
     }
 
     let orderId = null;
+    let order = null;
     if (orderCode) {
-        const order = await lookupCalendarOrderByCode(orderCode);
+        order = await lookupCalendarOrderByCode(orderCode);
         if (!order) {
             alertAppDialog('Pedido não encontrado para o código informado.');
             return;
         }
         orderId = order.id;
-        clientName = getOrderClientName(order) || clientName;
+        clientId = null;
+        if (clientIdInput) clientIdInput.value = '';
     } else if (selectedType.orderRequired) {
         alertAppDialog('Informe o código do pedido para este tipo de evento.');
         return;
     }
 
-    if (selectedType.clientRequired && !clientName) {
+    const resolvedClientName = order
+        ? getOrderClientName(order)
+        : clientName;
+
+    if (selectedType.clientRequired && !resolvedClientName && !clientId) {
         alertAppDialog('Informe o cliente para este tipo de evento.');
         return;
     }
@@ -725,9 +680,8 @@ async function saveCalendarEvent(event) {
         eventTypeId,
         responsibleId,
         description: description || '',
-        orderCode: orderCode || null,
         orderId,
-        clientName: orderCode ? null : (clientName || null),
+        clientId: orderId ? null : (clientId || null),
         updatedAt: now,
         updatedById: currentUser?.id || null
     };
@@ -1170,7 +1124,7 @@ function bindCalendarEvents() {
             openClientePickerModal(cliente => {
                 const input = document.getElementById('cal-event-client-name');
                 const idInput = document.getElementById('cal-event-client-id');
-                if (input) input.value = cliente.nome;
+                if (input) input.value = cliente.name;
                 if (idInput) idInput.value = cliente.id;
             });
         }
@@ -1184,8 +1138,12 @@ function bindCalendarEvents() {
         if (orderCode) {
             const order = await lookupCalendarOrderByCode(orderCode);
             const clientInput = document.getElementById('cal-event-client-name');
+            const clientIdInput = document.getElementById('cal-event-client-id');
             if (order && clientInput) {
                 clientInput.value = getOrderClientName(order) || '';
+            }
+            if (clientIdInput) {
+                clientIdInput.value = '';
             }
         }
     });
@@ -1194,8 +1152,12 @@ function bindCalendarEvents() {
         if (orderCode) {
             const order = await lookupCalendarOrderByCode(orderCode);
             const clientInput = document.getElementById('cal-event-client-name');
+            const clientIdInput = document.getElementById('cal-event-client-id');
             if (order && clientInput) {
                 clientInput.value = getOrderClientName(order) || '';
+            }
+            if (clientIdInput) {
+                clientIdInput.value = '';
             }
         }
         syncCalendarClientNameField();

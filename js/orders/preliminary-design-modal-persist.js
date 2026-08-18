@@ -8,17 +8,17 @@ async function attachModuleObservationsToConferences(conferences) {
     if (!moduleIds.length) return conferences;
 
     let result = await supabaseClient
-        .from('AnteprojetoModuleObservation')
+        .from('PreliminaryDesignModuleObservation')
         .select(`
             *,
-            observation:AnteprojetoObservation(id, text)
+            observation:PreliminaryDesignObservation(id, text)
         `)
         .in('moduleId', moduleIds)
         .order('sortOrder', { ascending: true });
 
     if (result.error) {
         result = await supabaseClient
-            .from('AnteprojetoModuleObservation')
+            .from('PreliminaryDesignModuleObservation')
             .select('*')
             .in('moduleId', moduleIds)
             .order('sortOrder', { ascending: true });
@@ -33,7 +33,7 @@ async function attachModuleObservationsToConferences(conferences) {
     let observationById = {};
     if (observationIds.length) {
         const { data: catalog } = await supabaseClient
-            .from('AnteprojetoObservation')
+            .from('PreliminaryDesignObservation')
             .select('id, text')
             .in('id', observationIds);
         catalog?.forEach(item => { observationById[item.id] = item; });
@@ -64,17 +64,17 @@ async function attachModuleObservationsToConferences(conferences) {
 
 async function upsertModuleObservationRow(payload) {
     const attempt = async (data) => supabaseClient
-        .from('AnteprojetoModuleObservation')
+        .from('PreliminaryDesignModuleObservation')
         .insert(data)
         .select('id')
         .single();
 
     let { data, error } = await attempt(payload);
-    if (error?.message?.includes('consultorDisposition')) {
-        const { consultorDisposition: _d, consultorChecked: _c, consultorResponse: _r, ...fallback } = payload;
+    if (error?.message?.includes('consultantDisposition')) {
+        const { consultantDisposition: _d, consultantChecked: _c, consultantResponse: _r, ...fallback } = payload;
         ({ data, error } = await attempt(fallback));
-    } else if (error?.message?.includes('consultorChecked') || error?.message?.includes('consultorResponse')) {
-        const { consultorChecked: _c, consultorResponse: _r, ...fallback } = payload;
+    } else if (error?.message?.includes('consultantChecked') || error?.message?.includes('consultantResponse')) {
+        const { consultantChecked: _c, consultantResponse: _r, ...fallback } = payload;
         ({ data, error } = await attempt(fallback));
     }
     if (error) throw error;
@@ -83,16 +83,16 @@ async function upsertModuleObservationRow(payload) {
 
 async function updateModuleObservationRow(id, payload) {
     const attempt = async (data) => supabaseClient
-        .from('AnteprojetoModuleObservation')
+        .from('PreliminaryDesignModuleObservation')
         .update(data)
         .eq('id', id);
 
     let { error } = await attempt(payload);
-    if (error?.message?.includes('consultorDisposition')) {
-        const { consultorDisposition: _d, consultorChecked: _c, consultorResponse: _r, ...fallback } = payload;
+    if (error?.message?.includes('consultantDisposition')) {
+        const { consultantDisposition: _d, consultantChecked: _c, consultantResponse: _r, ...fallback } = payload;
         ({ error } = await attempt(fallback));
-    } else if (error?.message?.includes('consultorChecked') || error?.message?.includes('consultorResponse')) {
-        const { consultorChecked: _c, consultorResponse: _r, ...fallback } = payload;
+    } else if (error?.message?.includes('consultantChecked') || error?.message?.includes('consultantResponse')) {
+        const { consultantChecked: _c, consultantResponse: _r, ...fallback } = payload;
         ({ error } = await attempt(fallback));
     }
     if (error) throw error;
@@ -101,9 +101,9 @@ async function updateModuleObservationRow(id, payload) {
 function buildModuleObservationConsultorPayload(obs) {
     const disposition = normalizeConsultorDisposition(obs);
     return {
-        consultorDisposition: disposition,
-        consultorChecked: disposition === ANTEPROJETO_DISPOSITION_OK,
-        consultorResponse: obs.consultorResponse || null
+        consultantDisposition: disposition,
+        consultantChecked: disposition === ANTEPROJETO_DISPOSITION_OK,
+        consultantResponse: obs.consultantResponse || null
     };
 }
 
@@ -122,7 +122,7 @@ async function persistModuleObservations(moduleId, observations, options = {}) {
     if (!canEditStructure) return;
 
     const { data: current } = await supabaseClient
-        .from('AnteprojetoModuleObservation')
+        .from('PreliminaryDesignModuleObservation')
         .select('id')
         .eq('moduleId', moduleId);
 
@@ -133,7 +133,7 @@ async function persistModuleObservations(moduleId, observations, options = {}) {
 
     if (deleteIds.length) {
         await supabaseClient
-            .from('AnteprojetoModuleObservation')
+            .from('PreliminaryDesignModuleObservation')
             .delete()
             .in('id', deleteIds);
     }
@@ -174,7 +174,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
 
     if (canExtendStructure && canEditStructure) {
         const { data: currentProjects } = await supabaseClient
-            .from('AnteprojetoConferenceProject')
+            .from('PreliminaryDesignConferenceProject')
             .select('id, orderProjectId')
             .eq('conferenceId', conferenceId);
 
@@ -185,7 +185,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
 
         if (deleteProjectIds.length) {
             await supabaseClient
-                .from('AnteprojetoConferenceProject')
+                .from('PreliminaryDesignConferenceProject')
                 .delete()
                 .in('id', deleteProjectIds);
         }
@@ -197,7 +197,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
 
             if (existing) {
                 const { error } = await supabaseClient
-                    .from('AnteprojetoConferenceProject')
+                    .from('PreliminaryDesignConferenceProject')
                     .update({ sortOrder: project.sortOrder })
                     .eq('id', existing.id);
                 if (error) throw error;
@@ -206,7 +206,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
             }
 
             const { data: inserted, error } = await supabaseClient
-                .from('AnteprojetoConferenceProject')
+                .from('PreliminaryDesignConferenceProject')
                 .insert({
                     conferenceId,
                     orderProjectId: project.orderProjectId,
@@ -219,7 +219,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
         }
     } else {
         const { data: currentProjects } = await supabaseClient
-            .from('AnteprojetoConferenceProject')
+            .from('PreliminaryDesignConferenceProject')
             .select('id, orderProjectId')
             .eq('conferenceId', conferenceId);
         (currentProjects || []).forEach(project => {
@@ -233,7 +233,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
         let moduleRows = [];
         if (conferenceProjectIds.length) {
             const { data: currentModules } = await supabaseClient
-                .from('AnteprojetoModule')
+                .from('PreliminaryDesignModule')
                 .select('id')
                 .in('conferenceProjectId', conferenceProjectIds);
             moduleRows = currentModules || [];
@@ -244,7 +244,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
             .filter(id => !existingModuleIds.includes(id));
 
         if (deleteModuleIds.length) {
-            await supabaseClient.from('AnteprojetoModule').delete().in('id', deleteModuleIds);
+            await supabaseClient.from('PreliminaryDesignModule').delete().in('id', deleteModuleIds);
         }
     }
 
@@ -263,7 +263,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
             }
 
             const { error } = await supabaseClient
-                .from('AnteprojetoModule')
+                .from('PreliminaryDesignModule')
                 .update(updatePayload)
                 .eq('id', module.id);
             if (error) throw error;
@@ -285,7 +285,7 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
         if (!canExtendStructure || !canEditStructure) continue;
 
         const { data: insertedModule, error } = await supabaseClient
-            .from('AnteprojetoModule')
+            .from('PreliminaryDesignModule')
             .insert({
                 conferenceProjectId,
                 name: module.name,
@@ -377,7 +377,7 @@ async function saveAnteprojetoConference() {
         if (conference) {
             if (canEditStructure) {
                 const { error } = await supabaseClient
-                    .from('AnteprojetoConference')
+                    .from('PreliminaryDesignConference')
                     .update({
                         designerId,
                         sketchUpPath,
@@ -390,7 +390,7 @@ async function saveAnteprojetoConference() {
             }
         } else {
             const { data: created, error } = await supabaseClient
-                .from('AnteprojetoConference')
+                .from('PreliminaryDesignConference')
                 .insert({
                     orderId: activeOrderId,
                     designerId,
@@ -435,7 +435,7 @@ async function saveAnteprojetoConference() {
         setAnteprojetoModalLoading(true, 'Atualizando telas...');
         await loadAnteprojetoObservations();
         refreshAnteprojetoObservationDatalist();
-        await loadAnteprojetoConferences(activeOrderId);
+        await loadPreliminaryDesignConferences(activeOrderId);
         if (typeof loadOrderProjects === 'function' && activeOrderId) {
             await loadOrderProjects(activeOrderId);
         }
@@ -447,7 +447,7 @@ async function saveAnteprojetoConference() {
             'success'
         );
         await new Promise(resolve => setTimeout(resolve, 900));
-        closeAnteprojetoModal();
+        closePreliminaryDesignModal();
     } catch (error) {
         setAnteprojetoModalLoading(true, `Erro ao salvar conferência: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));

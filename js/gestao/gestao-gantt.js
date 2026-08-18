@@ -82,10 +82,7 @@ function gestaoGanttDaysBetween(startDate, endDate) {
     return Math.round(ms / (1000 * 60 * 60 * 24));
 }
 
-function formatGestaoGanttMonthYearLabel(date) {
-    const label = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-    return label.charAt(0).toUpperCase() + label.slice(1);
-}
+const formatGestaoGanttMonthYearLabel = formatAppMonthYearLabel;
 
 function formatGestaoGanttMonthDayRangeLabel(monthAnchor = gestaoGanttMonthAnchor) {
     const monthEnd = endOfGestaoGanttMonth(monthAnchor);
@@ -144,7 +141,7 @@ function matchesGestaoGanttClientFilter(entry, clientQuery) {
     const query = String(clientQuery || '').trim().toLowerCase();
     if (!query) return true;
 
-    const clientName = (entry.order.cliente?.nome || '').toLowerCase();
+    const clientName = (entry.order.client?.name || '').toLowerCase();
     return clientName.includes(query);
 }
 
@@ -229,8 +226,8 @@ function getGestaoGanttProjectStatusSortOrder(project, statusById = {}) {
 }
 
 function isGestaoGanttVisibleProject(project) {
-    if (typeof isComplementarOrderProject === 'function' && isComplementarOrderProject(project)) return false;
-    if (typeof isSubstituidoOrderProject === 'function' && isSubstituidoOrderProject(project)) return false;
+    if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) return false;
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) return false;
     return true;
 }
 
@@ -286,7 +283,7 @@ function validateGestaoGanttPrevisao(inicioDate, previsaoDate, deliveryDate) {
         alertAppDialog('Informe a previsão de conclusão do projeto técnico.');
         return false;
     }
-    if (!isPrevisaoProjetoTecnicoRangeValid(inicioDate, previsaoDate, deliveryDate)) {
+    if (!isTechnicalProjectForecastRangeValid(inicioDate, previsaoDate, deliveryDate)) {
         alertAppDialog(
             'O início deve ser anterior ou igual à previsão de conclusão.',
             { variant: 'warning', title: 'Aviso' }
@@ -297,7 +294,7 @@ function validateGestaoGanttPrevisao(inicioDate, previsaoDate, deliveryDate) {
 }
 
 function getGestaoGanttProjectForecastRange(project) {
-    const endKey = String(project?.previsaoConclusaoProjetoTecnico || '').split('T')[0];
+    const endKey = String(project?.technicalProjectForecastEndDate || '').split('T')[0];
     const startKey = String(project?.technicalProjectForecastStartDate || '').split('T')[0];
 
     if (!endKey && !startKey) return null;
@@ -473,12 +470,12 @@ function renderGestaoGanttDesignerOptions(selectedId) {
 function renderGestaoGanttProjectCard(entry) {
     const { project, order } = entry;
     const statusName = project.projectStatus?.name || 'Status';
-    const clientName = order.cliente?.nome || 'Cliente';
+    const clientName = order.client?.name || 'Cliente';
     const orderCode = order.orderCode || '—';
     const projectCode = project.projectCode || '—';
     const deliveryDate = getGestaoGanttPrevisaoInputMaxDate(project.deliveryDate);
     const inicioValue = getGestaoGanttPrevisaoInputValue(project.technicalProjectForecastStartDate);
-    const fimValue = getGestaoGanttPrevisaoInputValue(project.previsaoConclusaoProjetoTecnico);
+    const fimValue = getGestaoGanttPrevisaoInputValue(project.technicalProjectForecastEndDate);
     const designerName = getGestaoGanttDesignerName(project);
     const readOnly = isProgramacaoProjetosReadOnly();
 
@@ -507,7 +504,7 @@ function renderGestaoGanttProjectCard(entry) {
                 </div>
                 <div class="gestao-gantt-project-card__field">
                     <span class="gestao-gantt-project-card__label">Fim previsto</span>
-                    <span class="gestao-gantt-project-card__value">${escapeHtml(formatGestaoDate(project.previsaoConclusaoProjetoTecnico))}</span>
+                    <span class="gestao-gantt-project-card__value">${escapeHtml(formatGestaoDate(project.technicalProjectForecastEndDate))}</span>
                 </div>
             </div>
         </article>
@@ -599,7 +596,7 @@ function renderGestaoGanttDesignerLane(laneItems, weekDays, todayKey, designerId
 
     const barsHtml = laneItems.map(item => {
         const { project, order, placement } = item;
-        const clientName = order.cliente?.nome || 'Cliente';
+        const clientName = order.client?.name || 'Cliente';
         const projectName = project.name || 'Projeto';
         const orderCode = order.orderCode || '—';
         const designerName = getGestaoGanttDesignerNameById(designerId);
@@ -737,7 +734,7 @@ function getGestaoGanttCardValues(card) {
 function getGestaoGanttCardSavedValues(project) {
     return {
         inicioDate: getGestaoGanttPrevisaoInputValue(project?.technicalProjectForecastStartDate),
-        previsaoDate: getGestaoGanttPrevisaoInputValue(project?.previsaoConclusaoProjetoTecnico),
+        previsaoDate: getGestaoGanttPrevisaoInputValue(project?.technicalProjectForecastEndDate),
         designerId: Number(project?.designerId) || null
     };
 }
@@ -817,7 +814,7 @@ async function saveGestaoGanttProjectCard(card) {
     }
 
     if (datesChanged) {
-        Object.assign(payload, buildOrderProjectPrevisaoPayload(values.inicioDate, values.previsaoDate));
+        Object.assign(payload, buildOrderProjectTechnicalForecastPayload(values.inicioDate, values.previsaoDate));
     }
 
     const saveButton = card.querySelector('.gestao-gantt-project-card__save');
@@ -834,7 +831,7 @@ async function saveGestaoGanttProjectCard(card) {
             .update(payload)
             .eq('id', projectId);
 
-        if (isOrderProjectPrevisaoColumnError(error?.message)) {
+        if (isOrderProjectTechnicalForecastColumnError(error?.message)) {
             const fallbackPayload = { updatedById: currentUser.id, updatedAt: now };
             if (designerChanged) fallbackPayload.designerId = values.designerId;
 

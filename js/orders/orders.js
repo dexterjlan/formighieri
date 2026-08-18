@@ -207,16 +207,16 @@ function initApp() {
 
 async function loadClientesDatalist() {
     const { data, error } = await supabaseClient
-        .from('Cliente')
-        .select('id, nome')
-        .eq('ativo', true)
-        .order('nome', { ascending: true });
+        .from('Client')
+        .select('id, name')
+        .eq('isActive', true)
+        .order('name', { ascending: true });
 
     if (error || !data) return;
 
     const listEl = document.getElementById('ord-client-list');
     if (listEl) {
-        listEl.innerHTML = data.map(c => `<option value="${escapeHtml(c.nome)}"></option>`).join('');
+        listEl.innerHTML = data.map(c => `<option value="${escapeHtml(c.name)}"></option>`).join('');
     }
 }
 
@@ -225,22 +225,22 @@ async function resolveOrCreateClienteId(clientName) {
     if (!trimmed) return null;
 
     let { data: existing, error: searchErr } = await supabaseClient
-        .from('Cliente')
-        .select('id, nome')
-        .ilike('nome', trimmed)
+        .from('Client')
+        .select('id, name')
+        .ilike('name', trimmed)
         .maybeSingle();
 
-    if (searchErr && searchErr.message?.includes('Cliente')) return null;
+    if (searchErr && searchErr.message?.includes('Client')) return null;
 
     if (existing?.id) return existing.id;
 
     let { data: created, error: insertErr } = await supabaseClient
-        .from('Cliente')
-        .insert([{ nome: trimmed, ativo: true }])
+        .from('Client')
+        .insert([{ name: trimmed, isActive: true }])
         .select('id')
         .single();
 
-    if (insertErr && insertErr.message?.includes('Cliente')) return null;
+    if (insertErr && insertErr.message?.includes('Client')) return null;
 
     return created?.id || null;
 }
@@ -251,7 +251,7 @@ async function loadOrders() {
         .select(`*, ${SALES_ORDER_RELATIONS_SELECT}`)
         .order('createdAt', { ascending: false });
 
-    if (result.error?.message?.includes('Cliente') || result.error?.message?.includes('consultor')
+    if (result.error?.message?.includes('Client') || result.error?.message?.includes('consultor')
         || result.error?.message?.includes('salesOrders')) {
         result = await supabaseClient
             .from('salesOrders')
@@ -630,7 +630,7 @@ async function selectOrder(id) {
 
     if (!primary.error && primary.data) {
         order = primary.data;
-    } else if (primary.error?.message?.includes('Cliente') || primary.error?.message?.includes('consultor')) {
+    } else if (primary.error?.message?.includes('Client') || primary.error?.message?.includes('consultor')) {
         const fallback = await supabaseClient
             .from('salesOrders')
             .select('*, creator:appUsers!salesOrders_createdById_fkey(name)')
@@ -639,7 +639,7 @@ async function selectOrder(id) {
         if (!fallback.error && fallback.data) {
             order = fallback.data;
             const cached = ordersCache.find(item => Number(item.id) === Number(id));
-            if (cached?.cliente) order.cliente = cached.cliente;
+            if (cached?.client) order.client = cached.client;
             if (cached?.consultor) order.consultor = cached.consultor;
         } else {
             fetchError = fallback.error || primary.error;

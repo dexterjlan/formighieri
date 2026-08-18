@@ -1,4 +1,4 @@
-function bindAnteprojetoTreeToggles(root) {
+function bindPreliminaryDesignTreeToggles(root) {
     root.querySelectorAll('.anteprojeto-tree-node').forEach(node => {
         const row = node.querySelector(':scope > .anteprojeto-tree-row');
         const children = node.querySelector(':scope > .anteprojeto-tree-children');
@@ -30,7 +30,7 @@ function renderAnteprojetoObservationLeaf(obs) {
         <div class="anteprojeto-tree-leaf grid grid-cols-[1fr_7rem_1fr] gap-2 items-start px-2 py-1.5 text-xs border-b border-slate-100 last:border-0">
             <span class="text-slate-700 whitespace-pre-wrap text-left">${escapeHtml(obs.text)}</span>
             <span class="text-center text-slate-600 font-medium">${escapeHtml(getConsultorDispositionLabel(disposition))}</span>
-            <span class="text-slate-500 whitespace-pre-wrap text-left">${escapeHtml(obs.consultorResponse || '—')}</span>
+            <span class="text-slate-500 whitespace-pre-wrap text-left">${escapeHtml(obs.consultantResponse || '—')}</span>
         </div>
     `;
 }
@@ -53,7 +53,7 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
             : 'bg-sky-100 text-sky-800';
     const sketchUpPath = getConferenceSketchUpPath(conference);
     const conferenceObservation = conference.conferenceObservation || '';
-    const gestorObservation = conference.gestorObservation || '';
+    const managerObservation = conference.managerObservation || '';
     const projectCount = (conference.conferenceProjects || []).length;
     const moduleCount = getConferenceModules(conference).length;
 
@@ -86,10 +86,10 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
             <div class="text-[10px] font-semibold text-slate-500 uppercase mb-1">Observação da conferência</div>
             <div class="text-xs text-slate-700 whitespace-pre-wrap">${escapeHtml(conferenceObservation || '—')}</div>
         </div>
-        ${gestorObservation ? `
+        ${managerObservation ? `
         <div class="text-left border border-amber-200 rounded-lg px-3 py-2 bg-amber-50/70">
             <div class="text-[10px] font-semibold text-amber-800 uppercase mb-1">Última Observação do Gestor</div>
-            <div class="text-xs text-slate-700 whitespace-pre-wrap">${escapeHtml(gestorObservation)}</div>
+            <div class="text-xs text-slate-700 whitespace-pre-wrap">${escapeHtml(managerObservation)}</div>
         </div>
         ` : ''}
         <div class="text-xs text-slate-600 text-left">
@@ -195,7 +195,7 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
 
     card.appendChild(header);
     card.appendChild(body);
-    bindAnteprojetoTreeToggles(body);
+    bindPreliminaryDesignTreeToggles(body);
 
     return card;
 }
@@ -221,7 +221,7 @@ async function enrichAnteprojetoConferences(conferences, orderId) {
     let observationById = {};
     if (observationIds.length) {
         const { data: observations } = await supabaseClient
-            .from('AnteprojetoObservation')
+            .from('PreliminaryDesignObservation')
             .select('id, text')
             .in('id', observationIds);
         observations?.forEach(observation => {
@@ -258,22 +258,22 @@ async function enrichAnteprojetoConferences(conferences, orderId) {
     }));
 }
 
-async function loadAnteprojetoConferences(orderId) {
+async function loadPreliminaryDesignConferences(orderId) {
     const list = document.getElementById('anteprojeto-list');
     if (!list) return;
 
     let result = await supabaseClient
-        .from('AnteprojetoConference')
+        .from('PreliminaryDesignConference')
         .select(`
             *,
-            conferenceProjects:AnteprojetoConferenceProject(
+            conferenceProjects:PreliminaryDesignConferenceProject(
                 *,
                 orderProject:OrderProject(id, name, statusId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)),
-                modules:AnteprojetoModule(
+                modules:PreliminaryDesignModule(
                     *,
-                    observations:AnteprojetoModuleObservation(
+                    observations:PreliminaryDesignModuleObservation(
                         *,
-                        observation:AnteprojetoObservation(id, text)
+                        observation:PreliminaryDesignObservation(id, text)
                     )
                 )
             )
@@ -281,14 +281,14 @@ async function loadAnteprojetoConferences(orderId) {
         .eq('orderId', orderId)
         .order('createdAt', { ascending: false });
 
-    if (result.error?.message?.includes('AnteprojetoConferenceProject')) {
+    if (result.error?.message?.includes('PreliminaryDesignConferenceProject')) {
         result = await supabaseClient
-            .from('AnteprojetoConference')
+            .from('PreliminaryDesignConference')
             .select(`
                 *,
-                conferenceProjects:AnteprojetoConferenceProject(
+                conferenceProjects:PreliminaryDesignConferenceProject(
                     *,
-                    modules:AnteprojetoModule(*)
+                    modules:PreliminaryDesignModule(*)
                 )
             `)
             .eq('orderId', orderId)
@@ -302,7 +302,7 @@ async function loadAnteprojetoConferences(orderId) {
     }
 
     if (result.error) {
-        console.error('loadAnteprojetoConferences:', result.error);
+        console.error('loadPreliminaryDesignConferences:', result.error);
         list.innerHTML = `<p class="text-xs text-red-500 text-center py-4">Erro ao carregar conferências: ${escapeHtml(result.error.message)}</p>`;
         return;
     }
@@ -346,3 +346,5 @@ function updateAnteprojetoActionButtons() {
         newBtn.classList.toggle('hidden', !onTab || !canCreateAnteprojetoConference());
     }
 }
+
+const bindAnteprojetoTreeToggles = bindPreliminaryDesignTreeToggles;

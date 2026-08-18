@@ -51,13 +51,14 @@ function initAppEvents() {
     if (typeof bindThirdPartyProjectRevisionEvents === 'function') {
         bindThirdPartyProjectRevisionEvents();
     }
-    bindAnteprojetoEvents();
-    bindMedicaoEvents();
+    bindPreliminaryDesignEvents();
+    bindMeasurementEvents();
     bindOrderProjectMontagemEvents();
+    bindOrderProjectEntregaEvents();
     bindNomearEvents();
-    bindImplantacaoEvents();
-    bindDetalhamentoEvents();
-    bindCompraEvents();
+    bindImplementationEvents();
+    bindDetailingEvents();
+    bindPurchaseEvents();
     bindPpcpEvents();
     bindConversationEvents();
     bindRequestActivityEvents();

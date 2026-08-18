@@ -1,15 +1,6 @@
 const COMPRA_STATUS_ABERTO = 'Aberto';
 const COMPRA_STATUS_FECHADO = 'Fechado';
 
-const COMPRA_STATUS_BADGE_CLASSES = {
-    'Aberto': 'bg-amber-100 text-amber-800',
-    'Orçado': 'bg-sky-100 text-sky-800',
-    'Aguardando Entrega': 'bg-violet-100 text-violet-800',
-    'Ag. Lib. de Medição - Obra': 'bg-orange-100 text-orange-800',
-    'Ag. Lib. de Medição - Fábrica': 'bg-cyan-100 text-cyan-800',
-    'Fechado': 'bg-slate-200 text-slate-700'
-};
-
 const COMPRA_TIPO_MATERIAL = 'Material';
 const COMPRA_TIPO_FERRAGEM = 'Ferragem';
 const COMPRA_TIPO_TINTA = 'Tinta';
@@ -19,13 +10,13 @@ let activeCompraRecord = null;
 let compraStatusesCache = [];
 let compraStatusesActiveOnlyCache = true;
 
-async function loadCompraStatuses(activeOnly = true, forceReload = false) {
+async function loadPurchaseStatuses(activeOnly = true, forceReload = false) {
     if (!forceReload && compraStatusesCache.length && activeOnly === compraStatusesActiveOnlyCache) {
         return compraStatusesCache;
     }
 
     let query = supabaseClient
-        .from('CompraStatus')
+        .from('PurchaseStatus')
         .select('id, name, sortOrder, isActive, isClosed')
         .order('sortOrder', { ascending: true })
         .order('name', { ascending: true });
@@ -37,7 +28,7 @@ async function loadCompraStatuses(activeOnly = true, forceReload = false) {
     const { data, error } = await query;
 
     if (error) {
-        console.error('loadCompraStatuses:', error);
+        console.error('loadPurchaseStatuses:', error);
         compraStatusesCache = getFallbackCompraStatuses();
         return compraStatusesCache;
     }
@@ -102,17 +93,18 @@ function populateCompraStatusSelect(selectedStatus = '') {
 }
 
 async function ensureCompraStatusesLoaded(activeOnly = true) {
-    return loadCompraStatuses(activeOnly);
+    return loadPurchaseStatuses(activeOnly);
 }
 
-window.loadCompraStatuses = loadCompraStatuses;
+window.loadPurchaseStatuses = loadPurchaseStatuses;
+window.loadCompraStatuses = loadPurchaseStatuses;
 
-function formatCompraTipoLabel(tipoCompra, subtypeName = '') {
-    if (tipoCompra === 'Lista de Material') return COMPRA_TIPO_MATERIAL;
-    if (tipoCompra === COMPRA_TIPO_TERCEIRO && subtypeName) {
+function formatCompraTipoLabel(purchaseType, subtypeName = '') {
+    if (purchaseType === 'Lista de Material') return COMPRA_TIPO_MATERIAL;
+    if (purchaseType === COMPRA_TIPO_TERCEIRO && subtypeName) {
         return `Terceiro — ${subtypeName}`;
     }
-    return tipoCompra || '—';
+    return purchaseType || '—';
 }
 
 function getCompraPurchaseItemLabel(purchaseItem) {
@@ -145,7 +137,7 @@ function fromCompraDateInputValue(value) {
 async function fetchOrderProjectCodesForCompra(orderProjectId) {
     let result = await supabaseClient
         .from('OrderProject')
-        .select('id, projectCode, name, order:salesOrders(orderCode, clientId, consultantUserId, cliente:Cliente(nome), consultor:appUsers!consultantUserId(name))')
+        .select('id, projectCode, name, order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))')
         .eq('id', orderProjectId)
         .maybeSingle();
 
@@ -186,13 +178,13 @@ async function fetchOrderProjectCodesForCompra(orderProjectId) {
     };
 }
 
-async function fetchImplantacaoPurchaseItemForCompra(implantacaoPurchaseItemId) {
-    if (!implantacaoPurchaseItemId) return null;
+async function fetchImplementationPurchaseItemForCompra(implementationPurchaseItemId) {
+    if (!implementationPurchaseItemId) return null;
 
     const { data, error } = await supabaseClient
-        .from('ImplantacaoPurchaseItem')
+        .from('ImplementationPurchaseItem')
         .select('id, purchaseType, folderPath, thirdPartySubtype:ThirdPartySubtype(id, name)')
-        .eq('id', implantacaoPurchaseItemId)
+        .eq('id', implementationPurchaseItemId)
         .maybeSingle();
 
     if (error) throw error;
@@ -209,6 +201,7 @@ async function enrichCompraRecord(record) {
             const context = await fetchOrderProjectCodesForCompra(record.orderProjectId);
             enriched = {
                 ...enriched,
+                orderCode: context.orderCode,
                 clientName: context.clientName,
                 projectName: context.projectName
             };
@@ -217,9 +210,9 @@ async function enrichCompraRecord(record) {
         }
     }
 
-    if (record.implantacaoPurchaseItemId) {
+    if (record.implementationPurchaseItemId) {
         try {
-            const purchaseItem = await fetchImplantacaoPurchaseItemForCompra(record.implantacaoPurchaseItemId);
+            const purchaseItem = await fetchImplementationPurchaseItemForCompra(record.implementationPurchaseItemId);
             enriched.listaPath = purchaseItem?.folderPath || '';
             enriched.subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
         } catch (error) {
@@ -232,7 +225,7 @@ async function enrichCompraRecord(record) {
 
 async function createComprasRecordsFromImplantacaoSend(options = {}) {
     const {
-        implantacaoId,
+        implementationId,
         orderProjectId,
         purchaseItems = []
     } = options;
@@ -240,15 +233,13 @@ async function createComprasRecordsFromImplantacaoSend(options = {}) {
     const items = getImplantacaoCompraSendItems(purchaseItems);
     if (!items.length) return [];
 
-    const codes = await fetchOrderProjectCodesForCompra(orderProjectId);
+    await fetchOrderProjectCodesForCompra(orderProjectId);
     const now = new Date().toISOString();
     const rows = items.map(item => ({
-        orderCode: codes.orderCode,
-        projectCode: codes.projectCode,
-        implantacaoId,
-        implantacaoPurchaseItemId: item.id,
+        implementationId,
+        implementationPurchaseItemId: item.id,
         orderProjectId,
-        tipoCompra: item.purchaseType,
+        purchaseType: item.purchaseType,
         status: getDefaultCompraStatusName(),
         createdById: currentUser?.id || null,
         updatedById: currentUser?.id || null,
@@ -256,13 +247,13 @@ async function createComprasRecordsFromImplantacaoSend(options = {}) {
     }));
 
     const { data, error } = await supabaseClient
-        .from('Compras')
+        .from('Purchase')
         .insert(rows)
         .select('*');
 
     if (error) {
-        if (error.message?.includes('Compras') || error.message?.includes('does not exist')) {
-            throw new Error('Tabela Compras não encontrada. Execute supabase/create-compras.sql no Supabase.');
+        if (error.message?.includes('Purchase') || error.message?.includes('does not exist')) {
+            throw new Error('Tabela Purchase não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.');
         }
         throw error;
     }
@@ -279,23 +270,24 @@ function formatCompraDisplayDate(dateStr) {
 }
 
 async function fetchComprasByOrderId(orderId) {
-    const { data: order, error: orderError } = await supabaseClient
-        .from('salesOrders')
-        .select('orderCode')
-        .eq('id', orderId)
-        .maybeSingle();
+    const { data: projects, error: projectsError } = await supabaseClient
+        .from('OrderProject')
+        .select('id')
+        .eq('orderId', orderId);
 
-    if (orderError) throw orderError;
-    if (!order?.orderCode) return [];
+    if (projectsError) throw projectsError;
+
+    const projectIds = (projects || []).map(project => project.id).filter(Boolean);
+    if (!projectIds.length) return [];
 
     const { data, error } = await supabaseClient
-        .from('Compras')
+        .from('Purchase')
         .select('*')
-        .eq('orderCode', order.orderCode)
+        .in('orderProjectId', projectIds)
         .order('createdAt', { ascending: false });
 
-    if (error?.message?.includes('Compras') || error?.message?.includes('does not exist')) {
-        throw new Error('Tabela Compras não encontrada. Execute supabase/create-compras.sql no Supabase.');
+    if (error?.message?.includes('Purchase') || error?.message?.includes('does not exist')) {
+        throw new Error('Tabela Purchase não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.');
     }
 
     if (error) throw error;
@@ -307,7 +299,7 @@ async function fetchOrderComprasItems(orderId) {
     if (!compras.length) return [];
 
     const projectIds = [...new Set(compras.map(item => item.orderProjectId).filter(Boolean))];
-    const purchaseItemIds = [...new Set(compras.map(item => item.implantacaoPurchaseItemId).filter(Boolean))];
+    const purchaseItemIds = [...new Set(compras.map(item => item.implementationPurchaseItemId).filter(Boolean))];
     let projectsById = {};
     let purchaseItemsById = {};
 
@@ -323,7 +315,7 @@ async function fetchOrderComprasItems(orderId) {
 
     if (purchaseItemIds.length) {
         const { data, error } = await supabaseClient
-            .from('ImplantacaoPurchaseItem')
+            .from('ImplementationPurchaseItem')
             .select('id, purchaseType, thirdPartySubtype:ThirdPartySubtype(id, name)')
             .in('id', purchaseItemIds);
 
@@ -333,13 +325,13 @@ async function fetchOrderComprasItems(orderId) {
     }
 
     return compras.map(compra => {
-        const purchaseItem = purchaseItemsById[compra.implantacaoPurchaseItemId] || null;
+        const purchaseItem = purchaseItemsById[compra.implementationPurchaseItemId] || null;
         const subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
         return {
             ...compra,
             projectName: projectsById[compra.orderProjectId]?.name || '',
             subtypeName,
-            tipoLabel: formatCompraTipoLabel(compra.tipoCompra, subtypeName)
+            tipoLabel: formatCompraTipoLabel(compra.purchaseType, subtypeName)
         };
     });
 }
@@ -355,9 +347,9 @@ function renderOrderComprasList(items) {
 
     const rows = items.map(item => {
         const projectName = item.projectName || '—';
-        const tipoLabel = item.tipoLabel || formatCompraTipoLabel(item.tipoCompra, item.subtypeName);
+        const tipoLabel = item.tipoLabel || formatCompraTipoLabel(item.purchaseType, item.subtypeName);
         const statusClass = getCompraStatusBadgeClass(item.status);
-        const previsaoLabel = formatCompraDisplayDate(item.previsaoEntrega);
+        const previsaoLabel = formatCompraDisplayDate(item.expectedDeliveryAt);
         const actionCell = item.id
             ? `<button type="button"
                 class="order-compras-open-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-amber-100 text-amber-800 hover:bg-amber-200"
@@ -401,7 +393,7 @@ function renderOrderComprasList(items) {
     `;
 }
 
-async function loadOrderCompras(orderId) {
+async function loadOrderPurchases(orderId) {
     const list = document.getElementById('order-compras-list');
     if (!orderId || !list) return;
 
@@ -419,9 +411,9 @@ async function loadOrderCompras(orderId) {
 }
 
 async function refreshActiveOrderComprasTab() {
-    if (!activeOrderId || typeof loadOrderCompras !== 'function') return;
+    if (!activeOrderId || typeof loadOrderPurchases !== 'function') return;
     if (document.getElementById('order-tab-panel-compras')?.classList.contains('hidden')) return;
-    await loadOrderCompras(activeOrderId);
+    await loadOrderPurchases(activeOrderId);
 }
 
 async function fetchComprasAbertas() {
@@ -429,7 +421,7 @@ async function fetchComprasAbertas() {
     const closedStatusNames = getCompraClosedStatusNames();
 
     let query = supabaseClient
-        .from('Compras')
+        .from('Purchase')
         .select('*')
         .order('createdAt', { ascending: false });
 
@@ -439,9 +431,9 @@ async function fetchComprasAbertas() {
 
     const { data, error } = await query;
 
-    if (error?.message?.includes('Compras') || error?.message?.includes('does not exist')) {
+    if (error?.message?.includes('Purchase') || error?.message?.includes('does not exist')) {
         return {
-            error: new Error('Tabela Compras não encontrada. Execute supabase/create-compras.sql no Supabase.'),
+            error: new Error('Tabela Purchase não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.'),
             compras: []
         };
     }
@@ -455,7 +447,7 @@ async function fetchComprasAbertas() {
 
 async function fetchCompraById(compraId) {
     const { data, error } = await supabaseClient
-        .from('Compras')
+        .from('Purchase')
         .select('*')
         .eq('id', compraId)
         .maybeSingle();
@@ -467,9 +459,9 @@ async function fetchCompraById(compraId) {
 function readCompraFormValues() {
     return {
         status: document.getElementById('compra-modal-status')?.value || getDefaultCompraStatusName(),
-        previsaoEntrega: fromCompraDateInputValue(document.getElementById('compra-modal-previsao-entrega')?.value),
-        observacao: document.getElementById('compra-modal-observacao')?.value?.trim() || '',
-        orcamentoPath: document.getElementById('compra-modal-orcamento-path')?.value?.trim() || ''
+        expectedDeliveryAt: fromCompraDateInputValue(document.getElementById('compra-modal-previsao-entrega')?.value),
+        note: document.getElementById('compra-modal-observacao')?.value?.trim() || '',
+        quoteFilePath: document.getElementById('compra-modal-orcamento-path')?.value?.trim() || ''
     };
 }
 
@@ -487,7 +479,7 @@ function setCompraFormDisabled(disabled) {
 }
 
 const COMPRA_MODAL_OVERLAY = createModalOverlayConfig('compra-modal', {
-    closeButtonSelector: '#compra-modal button[onclick="closeCompraModal()"]'
+    closeButtonSelector: '#compra-modal button[onclick="closePurchaseModal()"]'
 });
 
 function setCompraModalLoading(active, message = 'Processando...', status = 'loading') {
@@ -496,16 +488,16 @@ function setCompraModalLoading(active, message = 'Processando...', status = 'loa
 }
 
 function populateCompraForm(record) {
-    const tipoLabel = formatCompraTipoLabel(record?.tipoCompra, record?.subtypeName);
+    const tipoLabel = formatCompraTipoLabel(record?.purchaseType, record?.subtypeName);
     document.getElementById('compra-modal-order-code').textContent = record?.orderCode || '—';
     document.getElementById('compra-modal-client-name').textContent = ` ${record?.clientName || '—'}`;
     document.getElementById('compra-modal-project-name').textContent = ` ${record?.projectName || '—'}`;
     document.getElementById('compra-modal-tipo').textContent = ` ${tipoLabel}`;
     document.getElementById('compra-modal-lista-path').textContent = ` ${record?.listaPath || '—'}`;
     populateCompraStatusSelect(record?.status || getDefaultCompraStatusName());
-    document.getElementById('compra-modal-previsao-entrega').value = toCompraDateInputValue(record?.previsaoEntrega);
-    document.getElementById('compra-modal-observacao').value = record?.observacao || '';
-    document.getElementById('compra-modal-orcamento-path').value = record?.orcamentoPath || '';
+    document.getElementById('compra-modal-previsao-entrega').value = toCompraDateInputValue(record?.expectedDeliveryAt);
+    document.getElementById('compra-modal-observacao').value = record?.note || '';
+    document.getElementById('compra-modal-orcamento-path').value = record?.quoteFilePath || '';
 
     const badge = document.getElementById('compra-modal-status-badge');
     const status = record?.status || getDefaultCompraStatusName();
@@ -515,7 +507,7 @@ function populateCompraForm(record) {
     }
 }
 
-async function openCompraModal(compraId) {
+async function openPurchaseModal(compraId) {
     if (!compraId) return;
 
     try {
@@ -532,21 +524,23 @@ async function openCompraModal(compraId) {
         setCompraFormDisabled(!canActCompraModal());
         toggleModal('compra-modal', true);
     } catch (error) {
-        if (error.message?.includes('Compras') || error.message?.includes('does not exist')) {
-            alertAppDialog('Tabela Compras não encontrada. Execute supabase/create-compras.sql no Supabase.');
+        if (error.message?.includes('Purchase') || error.message?.includes('does not exist')) {
+            alertAppDialog('Tabela Purchase não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.');
         } else {
             alertAppDialog('Erro ao abrir compra: ' + error.message);
         }
     }
 }
 
-function closeCompraModal() {
+function closePurchaseModal() {
     setCompraModalLoading(false);
     toggleModal('compra-modal', false);
     activeCompraRecord = null;
 }
-window.closeCompraModal = closeCompraModal;
-window.openCompraModal = openCompraModal;
+window.closePurchaseModal = closePurchaseModal;
+window.openPurchaseModal = openPurchaseModal;
+window.closeCompraModal = closePurchaseModal;
+window.openCompraModal = openPurchaseModal;
 
 async function handleCompraSalvar() {
     if (!activeCompraRecord?.id || !canActCompraModal()) return;
@@ -557,12 +551,12 @@ async function handleCompraSalvar() {
         const formValues = readCompraFormValues();
         const now = new Date().toISOString();
         const { data, error } = await supabaseClient
-            .from('Compras')
+            .from('Purchase')
             .update({
                 status: formValues.status,
-                previsaoEntrega: formValues.previsaoEntrega,
-                observacao: formValues.observacao || null,
-                orcamentoPath: formValues.orcamentoPath || null,
+                expectedDeliveryAt: formValues.expectedDeliveryAt,
+                note: formValues.note || null,
+                quoteFilePath: formValues.quoteFilePath || null,
                 updatedById: currentUser?.id || null,
                 updatedAt: now
             })
@@ -594,7 +588,7 @@ async function handleCompraSalvar() {
         setCompraModalLoading(true, 'Compra salva com sucesso!', 'success');
         await new Promise(resolve => setTimeout(resolve, 900));
 
-        closeCompraModal();
+        closePurchaseModal();
     } catch (error) {
         setCompraModalLoading(true, `Erro ao salvar compra: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));
@@ -603,14 +597,7 @@ async function handleCompraSalvar() {
     }
 }
 
-function getCompraStatusBadgeClass(status) {
-    if (COMPRA_STATUS_BADGE_CLASSES[status]) {
-        return COMPRA_STATUS_BADGE_CLASSES[status];
-    }
-    return 'bg-slate-100 text-slate-700';
-}
-
-function bindCompraEvents() {
+function bindPurchaseEvents() {
     ensureCompraStatusesLoaded(true).then(() => {
         populateCompraStatusSelect();
     });
@@ -629,6 +616,13 @@ function bindCompraEvents() {
         if (!button) return;
         const compraId = Number(button.dataset.compraId);
         if (!compraId) return;
-        openCompraModal(compraId);
+        openPurchaseModal(compraId);
     });
 }
+
+const loadCompraStatuses = loadPurchaseStatuses;
+const loadOrderCompras = loadOrderPurchases;
+const openCompraModal = openPurchaseModal;
+const closeCompraModal = closePurchaseModal;
+
+const bindCompraEvents = bindPurchaseEvents;

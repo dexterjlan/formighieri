@@ -11,18 +11,11 @@ function getCommercialApprovalQueryStatus(approval) {
 }
 
 function getApprovalQueryStatusFilters() {
-    const select = document.getElementById('approval-filter-status');
-    if (!select) return [...APPROVAL_QUERY_DEFAULT_STATUSES];
-    return Array.from(select.selectedOptions).map(option => option.value);
+    return getMultiSelectFilterValues('approval-filter-status', APPROVAL_QUERY_DEFAULT_STATUSES);
 }
 
 function resetApprovalQueryStatusFilter() {
-    const select = document.getElementById('approval-filter-status');
-    if (!select) return;
-
-    Array.from(select.options).forEach(option => {
-        option.selected = APPROVAL_QUERY_DEFAULT_STATUSES.includes(option.value);
-    });
+    resetMultiSelectFilter('approval-filter-status', APPROVAL_QUERY_DEFAULT_STATUSES);
 }
 
 function matchesApprovalQueryStatusFilter(approval, selectedStatuses) {
@@ -33,40 +26,20 @@ function matchesApprovalQueryStatusFilter(approval, selectedStatuses) {
 }
 
 async function loadApprovalQueryFilterOptions() {
-    const { data: consultores } = await supabaseClient
-        .from('appUsers')
-        .select('name')
-        .eq('role', 'Consultor')
-        .eq('isActive', true)
-        .order('name', { ascending: true });
-
-    const { data: projetistas } = await supabaseClient
-        .from('appUsers')
-        .select('id, name')
-        .eq('role', 'Projetista')
-        .eq('isActive', true)
-        .order('name', { ascending: true });
-
-    const consultorSelect = document.getElementById('approval-filter-consultor');
-    consultorSelect.innerHTML = '<option value="">Todos</option>';
-    consultores?.forEach(c => {
-        consultorSelect.innerHTML += `<option value="${c.name}">${c.name}</option>`;
-    });
-
-    const projetistaSelect = document.getElementById('approval-filter-projetista');
-    projetistaSelect.innerHTML = '<option value="">Todos</option>';
-    projetistas?.forEach(p => {
-        projetistaSelect.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    await loadConsultantAndDesignerFilterOptions({
+        consultantSelectId: 'approval-filter-consultor',
+        designerSelectId: 'approval-filter-projetista'
     });
 }
 
 async function queryAllCommercialApprovals() {
     const columnSets = [
-        'id, orderId, projectName, designerId, approved, approvedAt, status, createdAt',
-        'id, orderId, projectName, designerId, approved, approvedAt, status',
-        'id, orderId, projectName, designerId, approved, approvedAt, createdAt',
-        'id, orderId, projectName, designerId, approved, approvedAt',
-        'id, orderId, projectName, designerId, approved',
+        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, createdAt, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, approvedAt, status, createdAt, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)',
+        'id, orderId, designerId, approved, orderProject:OrderProject(id, name, projectCode)',
         '*'
     ];
 
@@ -191,7 +164,7 @@ async function searchCommercialApprovalsQuery() {
             <td class="p-3 text-slate-800" style="${cellStyle}">${getOrderClientName(r.order) || '-'}</td>
             <td class="p-3 text-slate-500" style="${cellStyle}">${getOrderConsultantNameFromRecord(r.order) || '-'}</td>
             <td class="p-3 text-slate-700" style="${cellStyle}">👤 ${r.projetistaName}</td>
-            <td class="p-3 text-slate-800" style="${cellStyle}">${r.projectName || '-'}</td>
+            <td class="p-3 text-slate-800" style="${cellStyle}">${getCommercialApprovalProjectName(r) || '-'}</td>
             <td class="p-3" style="${cellStyle}">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${statusLabel}</span>
             </td>
