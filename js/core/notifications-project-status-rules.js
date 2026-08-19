@@ -9,7 +9,8 @@ const PROJECT_STATUS_RECIPIENT_ROLE = {
     GESTOR_PROJETOS: 'gestor_projetos',
     GESTOR_FABRICA: 'gestor_fabrica',
     PROJETISTA: 'projetista',
-    PPCP: 'ppcp'
+    PPCP: 'ppcp',
+    REVISOR: 'revisor'
 };
 
 /** status destino → papéis que recebem e-mail */
@@ -40,10 +41,27 @@ const ORDER_PROJECT_STATUS_EMAIL_RULES = {
         PROJECT_STATUS_RECIPIENT_ROLE.GESTOR_PROJETOS,
         PROJECT_STATUS_RECIPIENT_ROLE.CONSULTOR
     ],
+    'Em Revisão Comercial Cons.': [
+        PROJECT_STATUS_RECIPIENT_ROLE.CONSULTOR
+    ],
+    'Em Revisão Comercial Proj.': [
+        PROJECT_STATUS_RECIPIENT_ROLE.PROJETISTA
+    ],
     'Em Revisão Comercial': [
         PROJECT_STATUS_RECIPIENT_ROLE.CONSULTOR
     ],
     'Em Revisão Técnica': [
+        PROJECT_STATUS_RECIPIENT_ROLE.PROJETISTA
+    ],
+    'Em Revisão Técnica Revisor': [
+        PROJECT_STATUS_RECIPIENT_ROLE.REVISOR,
+        PROJECT_STATUS_RECIPIENT_ROLE.GESTOR_PROJETOS
+    ],
+    'Em Revisão Técnica Lider': [
+        PROJECT_STATUS_RECIPIENT_ROLE.REVISOR,
+        PROJECT_STATUS_RECIPIENT_ROLE.GESTOR_PROJETOS
+    ],
+    'Em Revisão Técnica Proj.': [
         PROJECT_STATUS_RECIPIENT_ROLE.PROJETISTA
     ],
     'Aguardando Aprovação': [
@@ -77,6 +95,10 @@ function getOrderProjectStatusEmailRoles(statusName) {
 }
 
 async function fetchEmailsForProjectStatusRoles(roles, context = {}) {
+    if (NOTIFICATION_TEST_MODE && NOTIFICATION_TEST_EMAIL) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
     const { orderId, designerId } = context;
     const uniqueRoles = [...new Set((roles || []).filter(Boolean))];
     const emailLists = await Promise.all(uniqueRoles.map(role => {
@@ -95,6 +117,8 @@ async function fetchEmailsForProjectStatusRoles(roles, context = {}) {
                 return fetchDesignerEmailById(designerId).then(email => email ? [email] : []);
             case PROJECT_STATUS_RECIPIENT_ROLE.PPCP:
                 return fetchActivePpcpProjetistasRecipientEmails();
+            case PROJECT_STATUS_RECIPIENT_ROLE.REVISOR:
+                return fetchActiveReviewerRecipientEmails();
             default:
                 return [];
         }

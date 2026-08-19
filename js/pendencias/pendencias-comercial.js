@@ -494,7 +494,7 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
     if (!content) return;
 
     const isEmRevisaoComercialView = (typeof pendenciasActiveItem !== 'undefined' && pendenciasActiveItem === 'em-revisao-comercial');
-    const titleText = isEmRevisaoComercialView ? 'Em Revisão Comercial' : 'Aguardando Aprovação';
+    const titleText = isEmRevisaoComercialView ? PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL : 'Aguardando Aprovação';
 
     const subtitle = overviewMode
         ? `Todos os projetos em ${titleText.toLowerCase()}.`
@@ -513,7 +513,7 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
             && typeof canApproveCommercialApproval === 'function'
             && canApproveCommercialApproval(approval);
         const showRequestRevision = approval
-            && (projectStatusName === 'Em Revisão Comercial' || isEmRevisaoComercialView)
+            && (isOrderProjectEmRevisaoComercialConsStatus(projectStatusName) || isEmRevisaoComercialView)
             && typeof canRequestNewRevision === 'function'
             && canRequestNewRevision(approval, projectStatusName);
         const actionButtons = [];
@@ -617,39 +617,11 @@ async function ensureCommercialApprovalInPendenciasContext(approvalId) {
 
     let approval = pendenciasAguardandoAprovacaoCache.find(item => Number(item.id) === id);
 
-    if (!approval) {
-        const columnSets = [
-            'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
-            'id, orderId, orderProjectId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)'
-        ];
-
-        for (const columns of columnSets) {
-            const { data, error } = await supabaseClient
-                .from('CommercialApproval')
-                .select(columns)
-                .eq('id', id)
-                .maybeSingle();
-
-            if (!error && data) {
-                approval = normalizeCommercialApproval(data);
-                break;
-            }
-        }
+    if (!approval && typeof ensureProjectWorkflowInCache === 'function') {
+        approval = await ensureProjectWorkflowInCache(id, true);
     }
 
     if (!approval) return null;
-
-    if (!approval.orderConsultantName && approval.orderId) {
-        const { data: orderInfo } = await supabaseClient
-            .from('salesOrders')
-            .select('consultantUserId, consultor:appUsers!consultantUserId(name)')
-            .eq('id', approval.orderId)
-            .maybeSingle();
-        approval = {
-            ...approval,
-            orderConsultantName: getOrderConsultantNameFromRecord(orderInfo) || approval.orderConsultantName
-        };
-    }
 
     activeOrderId = approval.orderId;
     const cacheIndex = commercialApprovalsCache.findIndex(item => Number(item.id) === id);

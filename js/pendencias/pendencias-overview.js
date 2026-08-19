@@ -1,7 +1,7 @@
 const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     consultor: {
         conferencia: 'Conferências enviadas aguardando retorno do consultor.',
-        'em-revisao-comercial': 'Projetos em revisão comercial aguardando aprovação.',
+        'em-revisao-comercial': 'Projetos em revisão comercial (consultor) aguardando aprovação.',
         'aguardando-aprovacao': 'Projetos aguardando aprovação comercial.',
         requisicoes: 'Requisições aguardando resposta do consultor.'
     },
@@ -9,7 +9,9 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'aguardando-projeto-tecnico': 'Projetos aguardando projeto técnico associados a você.',
         'projeto-tecnico': 'Projetos em projeto técnico associados a você.',
         'projetos-terceiros': 'Projetos de terceiros não aprovados sob sua responsabilidade.',
-        'em-revisao': 'Projetos em revisão sob sua responsabilidade.',
+        'em-revisao': 'Projetos em revisão comercial (projetista) sob sua responsabilidade.',
+        'em-revisao-tecnica-revisor': 'Projetos aguardando revisão técnica do revisor.',
+        'em-revisao-tecnica-proj': 'Projetos em revisão técnica do projetista sob sua responsabilidade.',
         requisicao: 'Requisições aguardando sua resposta.',
         nomear: 'Projetos aguardando nomeação pelo projetista responsável.',
         'aguardando-ppcp': 'Projetos aguardando implantação PPCP.',
@@ -87,6 +89,14 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             }
             case 'projetista:em-revisao': {
                 const { error, projects } = await fetchPendenciasEmRevisaoProjects();
+                return error ? null : projects.length;
+            }
+            case 'projetista:em-revisao-tecnica-revisor': {
+                const { error, projects } = await fetchPendenciasEmRevisaoTecnicaRevisorProjects();
+                return error ? null : projects.length;
+            }
+            case 'projetista:em-revisao-tecnica-proj': {
+                const { error, projects } = await fetchPendenciasEmRevisaoTecnicaProjProjects();
                 return error ? null : projects.length;
             }
             case 'projetista:requisicao': {

@@ -26,11 +26,56 @@ function isAssignedProjetistaForApproval(approval) {
 
 function canShowOrderProjectVerRevisoesByStatus(statusName) {
     const normalized = String(statusName || '').trim();
-    return normalized === 'Em Revisão Comercial'
-        || normalized === 'Em Revisão Técnica'
-        || normalized === 'Em Revisão'
-        || normalized === 'Em revisão'
-        || normalized === 'Aguardando Aprovação';
+    return isOrderProjectEmRevisaoComercialConsStatus(normalized)
+        || isOrderProjectEmRevisaoComercialProjStatus(normalized)
+        || normalized === 'Aguardando Aprovação'
+        || (typeof isOrderProjectEmRevisaoTecnicaRevisorStatus === 'function'
+            && isOrderProjectEmRevisaoTecnicaRevisorStatus(normalized))
+        || (typeof isOrderProjectEmRevisaoTecnicaProjStatus === 'function'
+            && isOrderProjectEmRevisaoTecnicaProjStatus(normalized));
+}
+
+function canShowOrderProjectRevisionsReadOnly(project, revisions = []) {
+    if (!currentUser?.id || !project?.id) return false;
+    return Array.isArray(revisions) && revisions.length > 0;
+}
+
+function buildOrderProjectRevisionsFallbackApproval(project, orderId = null) {
+    const orderProjectId = Number(project.id);
+    return {
+        id: orderProjectId,
+        orderProjectId,
+        orderId: project.orderId || orderId || null,
+        designerId: project.designerId || null,
+        projectStatus: project.projectStatus || null,
+        orderProject: {
+            id: orderProjectId,
+            name: project.name || '',
+            projectCode: project.projectCode || null
+        }
+    };
+}
+
+function canShowOrderProjectRevisoesAction(project, approval) {
+    const statusName = getOrderProjectStatusName(project);
+
+    if (typeof isOrderProjectEmRevisaoTecnicaRevisorStatus === 'function'
+        && isOrderProjectEmRevisaoTecnicaRevisorStatus(statusName)) {
+        return isAdmin()
+            || isGestorProjetos()
+            || (typeof canReviewerActOnProject === 'function' && canReviewerActOnProject(project));
+    }
+
+    if (typeof isOrderProjectEmRevisaoTecnicaProjStatus === 'function'
+        && isOrderProjectEmRevisaoTecnicaProjStatus(statusName)) {
+        return isAdmin()
+            || isGestorProjetos()
+            || (typeof canDesignerActOnTechnicalReviewerProject === 'function'
+                && canDesignerActOnTechnicalReviewerProject(project))
+            || (typeof canReviewerActOnProject === 'function' && canReviewerActOnProject(project));
+    }
+
+    return canShowOrderProjectVerRevisoesAction(approval);
 }
 
 function canShowOrderProjectVerRevisoesAction(approval) {
@@ -44,23 +89,29 @@ function canShowOrderProjectVerRevisoesAction(approval) {
 async function fetchOrderProjectCommercialRevisionsContext(project, orderId) {
     if (!project?.id) return null;
 
+    let revisions = [];
+    if (typeof fetchCommercialRevisionsByApprovalIds === 'function') {
+        const revisionsByProject = await fetchCommercialRevisionsByApprovalIds([project.id]);
+        revisions = revisionsByProject[project.id] || [];
+    }
+
+    if (!revisions.length) return null;
+
     let approval = null;
     if (typeof fetchCommercialApprovalsByProjectIds === 'function') {
         const approvalsByProject = await fetchCommercialApprovalsByProjectIds([project.id]);
         approval = approvalsByProject[project.id] || null;
     }
 
-    if (!approval) return null;
-
-    const approvalCtx = enrichApprovalForOrderProject(approval, orderId, project);
-
-    let revisions = [];
-    if (typeof fetchCommercialRevisionsByApprovalIds === 'function' && approvalCtx.id) {
-        const revisionsByApproval = await fetchCommercialRevisionsByApprovalIds([approvalCtx.id]);
-        revisions = revisionsByApproval[approvalCtx.id] || [];
+    if (!approval && typeof buildProjectWorkflowContext === 'function') {
+        approval = buildProjectWorkflowContext(project);
     }
 
-    if (!revisions.length) return null;
+    if (!approval) {
+        approval = buildOrderProjectRevisionsFallbackApproval(project, orderId);
+    }
+
+    const approvalCtx = enrichApprovalForOrderProject(approval, orderId, project);
 
     return {
         approvalId: approvalCtx.id,
@@ -71,7 +122,13 @@ async function fetchOrderProjectCommercialRevisionsContext(project, orderId) {
 
 async function fetchOrderProjectVerRevisoesActionContext(project, orderId) {
     const context = await fetchOrderProjectCommercialRevisionsContext(project, orderId);
-    if (!context || !canShowOrderProjectVerRevisoesAction(context.approval)) {
+    if (!context) return null;
+
+    if (canShowOrderProjectRevisionsReadOnly(project, context.revisions)) {
+        return context;
+    }
+
+    if (!canShowOrderProjectRevisoesAction(project, context.approval)) {
         return null;
     }
 
@@ -79,7 +136,11 @@ async function fetchOrderProjectVerRevisoesActionContext(project, orderId) {
 }
 
 async function fetchOrderProjectRevisionsHistoryContext(project, orderId) {
-    return fetchOrderProjectCommercialRevisionsContext(project, orderId);
+    const context = await fetchOrderProjectCommercialRevisionsContext(project, orderId);
+    if (!context || !canShowOrderProjectRevisionsReadOnly(project, context.revisions)) {
+        return null;
+    }
+    return context;
 }
 
 function getOrderProjectActions(project, context = {}) {
@@ -153,7 +214,7 @@ function getOrderProjectActions(project, context = {}) {
         });
     }
 
-    if (statusName === 'Em Revisão Comercial' && approvalCtx) {
+    if (isOrderProjectEmRevisaoComercialConsStatus(statusName) && approvalCtx) {
         const canApprove = typeof canApproveCommercialApproval === 'function'
             && canApproveCommercialApproval(approvalCtx);
         const canRevision = typeof canRequestNewRevision === 'function'
@@ -203,23 +264,20 @@ function getOrderProjectActions(project, context = {}) {
         }
     }
 
-    if (approvalCtx) {
-        const canViewRevision = typeof canViewCommercialRevision === 'function'
-            && canViewCommercialRevision(approvalCtx);
-        const hasRevisions = revisions.length > 0;
-
-        if (canViewRevision && hasRevisions && canShowOrderProjectVerRevisoesAction(approvalCtx)
-            && canShowOrderProjectVerRevisoesByStatus(statusName)) {
-            actions.push({
-                id: 'view-revisions',
-                label: 'Ver Revisões',
-                enabled: true,
-                approvalId: approvalCtx.id
-            });
-        }
+    if (revisions.length
+        && canShowOrderProjectRevisionsReadOnly(project, revisions)
+        && typeof isOrderProjectStatusInOrderRevisionsListRange === 'function'
+        && isOrderProjectStatusInOrderRevisionsListRange(project)) {
+        actions.push({
+            id: 'view-revisions',
+            label: 'Revisões',
+            enabled: true,
+            approvalId: approvalCtx?.id || project.id,
+            readOnly: true
+        });
     }
 
-    if (statusName === 'Projeto Técnico' || statusName === 'Em Revisão Técnica' || statusName === 'Em Revisão' || statusName === 'Em revisão') {
+    if (statusName === 'Projeto Técnico' || isOrderProjectEmRevisaoComercialProjStatus(statusName)) {
         const canSubmit = typeof canSubmitCommercialApprovalFromPendencias === 'function'
             && canSubmitCommercialApprovalFromPendencias(project, approval);
         actions.push({
@@ -238,6 +296,36 @@ function getOrderProjectActions(project, context = {}) {
             id: 'iniciar-pt',
             label: 'Iniciar Projeto',
             enabled,
+            projectId: project.id
+        });
+    }
+
+    if (typeof isOrderProjectEmRevisaoTecnicaRevisorStatus === 'function'
+        && isOrderProjectEmRevisaoTecnicaRevisorStatus(statusName)
+        && typeof canReviewerActOnProject === 'function'
+        && canReviewerActOnProject(project)) {
+        actions.push({
+            id: 'tr-approve-nomear',
+            label: 'Aprovar',
+            enabled: true,
+            projectId: project.id
+        });
+        actions.push({
+            id: 'tr-revision',
+            label: 'Revisão Técnica',
+            enabled: true,
+            projectId: project.id
+        });
+    }
+
+    if (typeof isOrderProjectEmRevisaoTecnicaProjStatus === 'function'
+        && isOrderProjectEmRevisaoTecnicaProjStatus(statusName)
+        && typeof canDesignerActOnTechnicalReviewerProject === 'function'
+        && canDesignerActOnTechnicalReviewerProject(project)) {
+        actions.push({
+            id: 'tr-revision',
+            label: 'Executar Revisão',
+            enabled: true,
             projectId: project.id
         });
     }
@@ -353,6 +441,7 @@ function renderOrderProjectActionButtons(actions) {
         if (action.conferenceId) attrs.push(`data-conference-id="${action.conferenceId}"`);
         if (action.projectName) attrs.push(`data-project-name="${escapeHtml(action.projectName)}"`);
         if (action.deliveryDate) attrs.push(`data-delivery-date="${escapeHtml(String(action.deliveryDate).slice(0, 10))}"`);
+        if (action.readOnly) attrs.push('data-read-only="1"');
 
         return `<button type="button"
             class="order-project-action-btn text-[10px] px-2 py-0.5 rounded-md font-medium whitespace-nowrap bg-violet-700 text-white hover:bg-violet-800"
@@ -401,11 +490,12 @@ async function handleOrderProjectAction(button) {
                 await openCommercialRevisionView(approvalId);
             }
             break;
-        case 'view-revisions':
-            if (typeof openCommercialRevisionsHistoryView === 'function' && approvalId) {
-                await openCommercialRevisionsHistoryView(approvalId);
-            }
+        case 'view-revisions': {
+            if (typeof openCommercialRevisionsHistoryView !== 'function' || !approvalId) break;
+            const readOnly = button.dataset.readOnly === '1';
+            await openCommercialRevisionsHistoryView(approvalId, null, { readOnly });
             break;
+        }
         case 'send-approval':
             if (typeof submitCommercialApprovalFromPendencias === 'function' && projectId) {
                 await submitCommercialApprovalFromPendencias(projectId);
@@ -415,6 +505,17 @@ async function handleOrderProjectAction(button) {
         case 'iniciar-pt':
             if (typeof iniciarProjetoTecnico === 'function' && projectId) {
                 await iniciarProjetoTecnico(projectId);
+            }
+            break;
+        case 'tr-approve-nomear':
+            if (typeof approveTechnicalReviewerProjectToNomear === 'function' && projectId) {
+                await approveTechnicalReviewerProjectToNomear(projectId);
+                await refreshOrderProjectListAfterAction();
+            }
+            break;
+        case 'tr-revision':
+            if (typeof openTechnicalReviewerRevisionModal === 'function' && projectId) {
+                await openTechnicalReviewerRevisionModal(projectId);
             }
             break;
         case 'nomear':

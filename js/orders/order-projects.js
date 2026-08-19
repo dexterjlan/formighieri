@@ -99,16 +99,9 @@ async function fetchOrderProjectActionContext(orderId, projectIds, projects = nu
     ]);
 
     let revisionsByProject = {};
-    const approvalIds = Object.values(approvalsByProject || {})
-        .map(approval => approval?.id)
-        .filter(Boolean);
 
-    if (approvalIds.length && typeof fetchCommercialRevisionsByApprovalIds === 'function') {
-        const revisionsByApproval = await fetchCommercialRevisionsByApprovalIds(approvalIds);
-        Object.entries(approvalsByProject || {}).forEach(([projectId, approval]) => {
-            if (!approval?.id) return;
-            revisionsByProject[projectId] = revisionsByApproval[approval.id] || [];
-        });
+    if (projectIds.length && typeof fetchCommercialRevisionsByApprovalIds === 'function') {
+        revisionsByProject = await fetchCommercialRevisionsByApprovalIds(projectIds);
     }
 
     let implantacaoMap = implantacaoByProjectId || {};
@@ -130,14 +123,14 @@ async function fetchOrderProjectActionContext(orderId, projectIds, projects = nu
 async function fetchOrderProjectsForOrder(orderId) {
     let result = await supabaseClient
         .from('OrderProject')
-        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), deliveryPhaseId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
+        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name, sortOrder), designer:appUsers!OrderProject_designerId_fkey(id, name), deliveryPhaseId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
         .eq('orderId', orderId)
         .order('createdAt', { ascending: true });
 
     if (result.error?.message?.includes('deliveryPhaseId')) {
         result = await supabaseClient
             .from('OrderProject')
-            .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
+            .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name, sortOrder), designer:appUsers!OrderProject_designerId_fkey(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
             .eq('orderId', orderId)
             .order('createdAt', { ascending: true });
     }
@@ -187,7 +180,7 @@ async function enrichOrderProjectsWithStatus(projects) {
 
     const { data: statuses, error } = await supabaseClient
         .from('OrderProjectStatus')
-        .select('id, name')
+        .select('id, name, sortOrder')
         .in('id', statusIds);
 
     if (error) {

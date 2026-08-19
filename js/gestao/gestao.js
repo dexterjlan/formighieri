@@ -64,7 +64,7 @@ function setGestaoNavActive(navKey) {
         dashboard: document.getElementById('gestao-nav-dashboard'),
         kanban: document.getElementById('gestao-nav-kanban'),
         'cronograma-pedido': document.getElementById('gestao-nav-cronograma-pedido'),
-        gantt: document.getElementById('gestao-nav-gantt'),
+        'project-scheduling': document.getElementById('gestao-nav-project-scheduling'),
         relatorios: document.getElementById('gestao-nav-relatorios'),
         performance: document.getElementById('gestao-nav-performance')
     };
@@ -106,8 +106,8 @@ function updateGestaoCadastrosNavVisibility() {
     if (typeof updateMontagemProgramacaoNavVisibility === 'function') {
         updateMontagemProgramacaoNavVisibility();
     }
-    if (typeof updateProgramacaoProjetosNavVisibility === 'function') {
-        updateProgramacaoProjetosNavVisibility();
+    if (typeof updateProjectSchedulingNavVisibility === 'function') {
+        updateProjectSchedulingNavVisibility();
     }
 }
 
@@ -121,25 +121,25 @@ function updateGestaoCalendarLayout(options = {}) {
     layout?.classList.toggle('gestao-view-layout--full', !showSidebar);
 }
 
-async function showProgramacaoProjetosView(options = {}) {
-    if (!canViewProgramacaoProjetos()) return;
+async function showProjectSchedulingView(options = {}) {
+    if (!canViewProjectScheduling()) return;
 
     if (typeof hideSubViews === 'function') hideSubViews();
     document.getElementById('gestao-view')?.classList.remove('hidden');
     updateGestaoCalendarLayout(options);
     if (typeof updateMainNavActive === 'function') {
-        updateMainNavActive(options.fromGestao ? 'gestao' : 'programacao-projetos');
+        updateMainNavActive(options.fromGestao ? 'gestao' : 'project-scheduling');
     }
     if (typeof updateAdminNav === 'function') updateAdminNav();
     if (options.fromGestao) {
         updateGestaoCadastrosNavVisibility();
     }
 
-    showGestaoGanttPanel();
+    showGestaoProjectSchedulingPanel();
     if (typeof saveAppNavState === 'function') {
         saveAppNavState({
-            view: options.fromGestao ? 'gestao' : 'programacao-projetos',
-            gestaoNav: 'gantt'
+            view: options.fromGestao ? 'gestao' : 'project-scheduling',
+            gestaoNav: 'project-scheduling'
         });
     }
 }
@@ -169,7 +169,7 @@ async function showProgramacaoMontagemView(options = {}) {
     }
 }
 
-window.showProgramacaoProjetosView = showProgramacaoProjetosView;
+window.showProjectSchedulingView = showProjectSchedulingView;
 window.showProgramacaoMontagemView = showProgramacaoMontagemView;
 
 function hideAllGestaoPanels() {
@@ -191,7 +191,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-dashboard-panel')?.classList.add('hidden');
     document.getElementById('gestao-kanban-panel')?.classList.add('hidden');
     document.getElementById('gestao-cronograma-pedido-panel')?.classList.add('hidden');
-    document.getElementById('gestao-gantt-panel')?.classList.add('hidden');
+    document.getElementById('gestao-project-scheduling-panel')?.classList.add('hidden');
     document.getElementById('gestao-relatorios-panel')?.classList.add('hidden');
     document.getElementById('gestao-performance-panel')?.classList.add('hidden');
     document.getElementById('gestao-import-panel')?.classList.add('hidden');
@@ -465,6 +465,7 @@ function bindGestaoProjectRelationToggles(project = {}) {
         'gestao-project-sale-value',
         'gestao-project-delivery',
         'gestao-project-phase',
+        'gestao-project-caminho-rede-conferencia',
         'gestao-project-caminho-rede-aprovacao'
     ];
 
@@ -590,6 +591,7 @@ function fillGestaoProjectForm(project = {}) {
     document.getElementById('gestao-project-name').value = project.name || '';
     document.getElementById('gestao-project-sale-value').value = formatSaleValueAsCurrencyInput(project.saleValue);
     document.getElementById('gestao-project-delivery').value = toGestaoInputDate(project.deliveryDate);
+    document.getElementById('gestao-project-caminho-rede-conferencia').value = project.conferenceNetworkPath || '';
     document.getElementById('gestao-project-caminho-rede-aprovacao').value = project.approvalNetworkPath || '';
     document.getElementById('gestao-project-complementar').checked = Boolean(project.isComplementary);
     
@@ -679,6 +681,7 @@ function collectGestaoProjectFormData() {
         technicalProjectForecastEndDate: existing?.technicalProjectForecastEndDate ?? null,
         technicalProjectForecastStartDate: existing?.technicalProjectForecastStartDate ?? null,
         approvalNetworkPath: document.getElementById('gestao-project-caminho-rede-aprovacao')?.value?.trim() || null,
+        conferenceNetworkPath: existing?.conferenceNetworkPath ?? null,
         isComplementary: Boolean(document.getElementById('gestao-project-complementar')?.checked),
         parentProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-parent-code')?.value || ''),
         isReplaced: Boolean(document.getElementById('gestao-project-substituido')?.checked),
@@ -1222,18 +1225,18 @@ function showGestaoCronogramaPedidoPanelFromGestao() {
     }
 }
 
-function showGestaoGanttPanel() {
+function showGestaoProjectSchedulingPanel() {
     hideAllGestaoPanels();
-    document.getElementById('gestao-gantt-panel')?.classList.remove('hidden');
-    setGestaoNavActive('gantt');
-    if (typeof applyProgramacaoProjetosReadOnlyUi === 'function') {
-        applyProgramacaoProjetosReadOnlyUi();
+    document.getElementById('gestao-project-scheduling-panel')?.classList.remove('hidden');
+    setGestaoNavActive('project-scheduling');
+    if (typeof applyProjectSchedulingReadOnlyUi === 'function') {
+        applyProjectSchedulingReadOnlyUi();
     }
-    if (typeof bindGestaoGanttEvents === 'function') {
-        bindGestaoGanttEvents();
+    if (typeof bindGestaoProjectSchedulingEvents === 'function') {
+        bindGestaoProjectSchedulingEvents();
     }
-    if (typeof loadGestaoGantt === 'function') {
-        loadGestaoGantt();
+    if (typeof loadGestaoProjectScheduling === 'function') {
+        loadGestaoProjectScheduling();
     }
 }
 
@@ -1462,9 +1465,9 @@ function bindGestaoEvents() {
         editingGestaoOrderId = null;
         showGestaoCronogramaPedidoPanelFromGestao();
     });
-    document.getElementById('gestao-nav-gantt')?.addEventListener('click', async () => {
+    document.getElementById('gestao-nav-project-scheduling')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
-        showProgramacaoProjetosView({ fromGestao: true });
+        showProjectSchedulingView({ fromGestao: true });
     });
     document.getElementById('gestao-nav-relatorios')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
@@ -1712,8 +1715,12 @@ async function openProjectRelationPickerModal(target = 'parent') {
 
     const BLOCKED_STATUSES_AFTER_AGUARDANDO_PT = new Set([
         'Projeto Técnico',
-        'Em Revisão Comercial',
-        'Em Revisão Técnica',
+        ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS,
+        ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ,
+        ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL,
+        ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA,
+        ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
+        ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
         'Aguardando Aprovação',
         'Em Revisão',
         'Em revisão',

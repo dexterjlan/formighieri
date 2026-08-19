@@ -276,7 +276,7 @@ async function persistSalesOrderActualDeliveryDate(orderId, actualDeliveryDate, 
             lastError = error;
             if (error.message?.includes('actualDeliveryDate')) {
                 throw new Error(
-                    'Coluna actualDeliveryDate não encontrada. Execute supabase/rename/phase-22-sales-order-actual-delivery-date.sql no Supabase.'
+                    'Coluna actualDeliveryDate não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.'
                 );
             }
             continue;

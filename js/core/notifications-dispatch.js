@@ -305,7 +305,14 @@ async function notifyOrderProjectStatusChangeEmail(options = {}) {
     try {
         const roles = getOrderProjectStatusEmailRoles(statusName);
         const recipientEmails = await fetchEmailsForProjectStatusRoles(roles, { orderId, designerId });
-        if (!recipientEmails.length) return;
+        if (!recipientEmails.length) {
+            console.warn('notifyOrderProjectStatusChangeEmail: sem destinatários', { statusName, roles, orderId });
+            return;
+        }
+
+        if (NOTIFICATION_TEST_MODE) {
+            console.info('notifyOrderProjectStatusChangeEmail: modo teste →', NOTIFICATION_TEST_EMAIL, statusName);
+        }
 
         const shouldIncludeProjetista = includeProjetista != null
             ? includeProjetista
@@ -384,6 +391,54 @@ async function notifyDesignerAssignedToProjectEmail(options = {}) {
 }
 
 window.notifyDesignerAssignedToProjectEmail = notifyDesignerAssignedToProjectEmail;
+
+async function notifyTechnicalReviewerRevisionStartedEmail(options = {}) {
+    const { orderId, orderProjectIds = [], designerId = null } = options;
+    if (!NOTIFICATIONS_ENABLED || !orderId || !orderProjectIds.length) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyTechnicalReviewerRevisionStartedEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const recipientEmails = NOTIFICATION_TEST_MODE && NOTIFICATION_TEST_EMAIL
+            ? [NOTIFICATION_TEST_EMAIL]
+            : (typeof fetchActiveReviewerRecipientEmails === 'function'
+                ? await fetchActiveReviewerRecipientEmails()
+                : []);
+
+        if (!recipientEmails.length) {
+            console.warn('notifyTechnicalReviewerRevisionStartedEmail: sem destinatários');
+            return;
+        }
+
+        const payload = await buildProcessNotificationPayload('technical_reviewer_revision_started', {
+            orderId,
+            orderProjectIds,
+            designerId,
+            includeProjetista: true,
+            accentColor: '#0d9488'
+        });
+
+        const subject = buildProjectStatusEmailSubject('Revisão Iniciada', payload.orderCode, payload.clientName);
+        const body = buildProcessEmailBody(payload);
+        const html = buildProcessEmailHtml(payload);
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: recipientEmails.join(', '),
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject,
+            message_body: body,
+            message_html: html
+        });
+    } catch (err) {
+        console.warn('notifyTechnicalReviewerRevisionStartedEmail:', err);
+    }
+}
+
+window.notifyTechnicalReviewerRevisionStartedEmail = notifyTechnicalReviewerRevisionStartedEmail;
 
 async function notifyMedicaoRealizadaEmail(options = {}) {
     const { orderId, projects = [] } = options;

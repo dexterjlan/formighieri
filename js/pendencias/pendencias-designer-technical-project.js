@@ -1,3 +1,40 @@
+async function savePendenciasTechnicalProjectForecast(projectId, inicioDate, previsaoDate, userId = undefined) {
+    const statusId = typeof getOrderProjectTechnicalStatusId === 'function'
+        ? await getOrderProjectTechnicalStatusId()
+        : null;
+
+    if (!statusId || typeof saveOrderProjectStatusForecast !== 'function') {
+        return { error: null };
+    }
+
+    const payload = {
+        orderProjectId: projectId,
+        statusId,
+        forecastStartDate: inicioDate,
+        forecastEndDate: previsaoDate,
+        updatedById: currentUser.id
+    };
+
+    if (userId !== undefined) {
+        payload.userId = userId || null;
+        payload.cabinetMakerId = null;
+    }
+
+    return saveOrderProjectStatusForecast(payload);
+}
+
+async function enrichPendenciasProjectsWithTechnicalForecast(projects) {
+    const statusId = typeof getOrderProjectTechnicalStatusId === 'function'
+        ? await getOrderProjectTechnicalStatusId()
+        : null;
+
+    if (!statusId || typeof enrichOrderProjectsWithStatusForecast !== 'function') {
+        return projects;
+    }
+
+    return enrichOrderProjectsWithStatusForecast(projects, statusId);
+}
+
 async function fetchPendenciasAguardandoProjetoTecnico() {
     const aguardandoStatusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_AGUARDANDO_PT);
     if (!aguardandoStatusId) {
@@ -410,8 +447,9 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
 }
 
 function normalizePendenciasWorkloadStatusName(statusName) {
-    if (statusName === 'Em revisão' || statusName === 'Em Revisão') return 'Em Revisão Técnica';
-    return statusName;
+    return typeof normalizeOrderProjectWorkloadStatusName === 'function'
+        ? normalizeOrderProjectWorkloadStatusName(statusName)
+        : statusName;
 }
 
 async function fetchPendenciasActiveProjetistas() {
@@ -828,7 +866,7 @@ function renderPendenciasProjetosSemProjetistas(
                 <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                     <div>
                         <h3 class="font-bold text-sm text-slate-900">Carga por projetista</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial, Em Revisão Técnica, Aguardando Aprovação, Aguardando PPCP, Implantação e Detalhamento.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial Cons., Em Revisão Comercial Proj., Aguardando Aprovação, Aguardando PPCP, Implantação e Detalhamento.</p>
                     </div>
                     <button type="button" id="btn-pendencias-refresh-sem-projetistas"
                         class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
@@ -923,6 +961,12 @@ async function loadPendenciasProjetosSemProjetistas() {
     }
 
     const projectIds = (projectsResult.projects || []).map(project => Number(project.id)).filter(Boolean);
+    const workloadProjects = (workloadResult.workload || []).flatMap(row => row.projects || []);
+    await enrichPendenciasProjectsWithTechnicalForecast([
+        ...(projectsResult.projects || []),
+        ...workloadProjects
+    ]);
+
     const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
         ? await fetchOrderProjectCharacteristicsMap(projectIds)
         : new Map();
@@ -971,64 +1015,57 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
     }
 
     const now = new Date().toISOString();
-    const payload = {
-        ...buildOrderProjectTechnicalForecastPayload(inicioDate, previsaoDate),
-        updatedById: currentUser.id,
-        updatedAt: now
-    };
-
-    if (shouldChangeDesigner) {
-        payload.designerId = newDesignerId;
-    }
-
     const loadingMessage = shouldChangeDesigner ? 'Atualizando projeto...' : 'Salvando previsão...';
 
     try {
         setPendenciasActionLoading(true, loadingMessage);
 
-        let { error } = await supabaseClient
-            .from('OrderProject')
-            .update(payload)
-            .eq('id', projectId);
+        if (shouldChangeDesigner) {
+            const { error } = await supabaseClient
+                .from('OrderProject')
+                .update({
+                    designerId: newDesignerId,
+                    updatedById: currentUser.id,
+                    updatedAt: now
+                })
+                .eq('id', projectId);
 
-        if (isOrderProjectTechnicalForecastColumnError(error?.message)) {
-            if (shouldChangeDesigner) {
-                ({ error } = await supabaseClient
-                    .from('OrderProject')
-                    .update({
-                        designerId: newDesignerId,
-                        updatedById: currentUser.id,
-                        updatedAt: now
-                    })
-                    .eq('id', projectId));
-                if (!error) {
-                    alertAppDialog('Projetista alterado, mas os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
-                }
-            } else {
-                alertAppDialog('Os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+            if (error) {
+                alertAppDialog('Erro ao atualizar projeto: ' + error.message);
                 return;
             }
-        }
 
-        if (error) {
-            alertAppDialog('Erro ao atualizar projeto: ' + error.message);
-            return;
-        }
+            if (typeof notifyDesignerAssignedToProjectEmail === 'function') {
+                const { data: projectMeta } = await supabaseClient
+                    .from('OrderProject')
+                    .select('orderId')
+                    .eq('id', projectId)
+                    .maybeSingle();
 
-        if (shouldChangeDesigner && typeof notifyDesignerAssignedToProjectEmail === 'function') {
-            const { data: projectMeta } = await supabaseClient
-                .from('OrderProject')
-                .select('orderId')
-                .eq('id', projectId)
-                .maybeSingle();
-
-            if (projectMeta?.orderId) {
-                await notifyDesignerAssignedToProjectEmail({
-                    orderId: projectMeta.orderId,
-                    orderProjectIds: [projectId],
-                    designerId: newDesignerId
-                });
+                if (projectMeta?.orderId) {
+                    await notifyDesignerAssignedToProjectEmail({
+                        orderId: projectMeta.orderId,
+                        orderProjectIds: [projectId],
+                        designerId: newDesignerId
+                    });
+                }
             }
+        }
+
+        const forecastUserId = shouldChangeDesigner ? newDesignerId : undefined;
+        const { error: forecastError } = await savePendenciasTechnicalProjectForecast(
+            projectId,
+            inicioDate,
+            previsaoDate,
+            forecastUserId
+        );
+        if (forecastError) {
+            if (isOrderProjectStatusForecastTableError(forecastError.message)) {
+                alertAppDialog('Execute supabase/feats/add-order-project-status-forecast.sql no Supabase para habilitar previsões por status.', { variant: 'warning', title: 'Aviso' });
+            } else {
+                alertAppDialog('Erro ao salvar previsão: ' + forecastError.message);
+            }
+            return;
         }
 
         await loadPendenciasProjetosSemProjetistas();
@@ -1061,38 +1098,37 @@ async function associarPendenciaProjetoAProjetista(projectId, designerId, inicio
     if (!(await confirmAppDialog(`Associar este projeto a ${projetista.name}?`))) return;
 
     const now = new Date().toISOString();
-    const payload = {
-        designerId,
-        ...buildOrderProjectTechnicalForecastPayload(inicioDate, previsaoDate),
-        updatedById: currentUser.id,
-        updatedAt: now
-    };
 
     try {
         setPendenciasActionLoading(true, 'Associando projetista...');
 
-        let { error } = await supabaseClient
+        const { error } = await supabaseClient
             .from('OrderProject')
-            .update(payload)
+            .update({
+                designerId,
+                updatedById: currentUser.id,
+                updatedAt: now
+            })
             .eq('id', projectId);
-
-        if (isOrderProjectTechnicalForecastColumnError(error?.message)) {
-            ({ error } = await supabaseClient
-                .from('OrderProject')
-                .update({
-                    designerId,
-                    updatedById: currentUser.id,
-                    updatedAt: now
-                })
-                .eq('id', projectId));
-            if (!error) {
-                alertAppDialog('Projetista associado, mas os campos de previsão ainda não existem no banco. Execute supabase/create-order-project-technical-forecast-start-date.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
-            }
-        }
 
         if (error) {
             alertAppDialog('Erro ao associar projetista: ' + error.message);
             return;
+        }
+
+        const { error: forecastError } = await savePendenciasTechnicalProjectForecast(
+            projectId,
+            inicioDate,
+            previsaoDate,
+            designerId
+        );
+        if (forecastError) {
+            if (isOrderProjectStatusForecastTableError(forecastError.message)) {
+                alertAppDialog('Projetista associado, mas a tabela de previsão ainda não existe. Execute supabase/feats/add-order-project-status-forecast.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
+            } else {
+                alertAppDialog('Erro ao salvar previsão: ' + forecastError.message);
+                return;
+            }
         }
 
         const { data: projectMeta } = await supabaseClient

@@ -536,11 +536,11 @@ async function saveAnteprojetoApprovalDeliveryDates(conference, selections) {
     // Atualizar no objeto da conferência em memória
     conference.networkPath = selections.conferencePath;
 
-    // Replicar o networkPath e deliveryDate nos projetos (OrderProject.approvalNetworkPath)
+    // Replicar o networkPath da conferência e deliveryDate nos projetos.
     await Promise.all(selections.projectDeliveries.map(async project => {
         let updatePayload = {
             deliveryDate: project.deliveryDate,
-            approvalNetworkPath: selections.conferencePath,
+            conferenceNetworkPath: selections.conferencePath,
             updatedAt: now,
             updatedById: currentUser.id
         };
@@ -549,6 +549,19 @@ async function saveAnteprojetoApprovalDeliveryDates(conference, selections) {
             .from('OrderProject')
             .update(updatePayload)
             .eq('id', project.projectId);
+
+        if (error?.message?.includes('conferenceNetworkPath')) {
+            updatePayload = {
+                deliveryDate: project.deliveryDate,
+                approvalNetworkPath: selections.conferencePath,
+                updatedAt: now,
+                updatedById: currentUser.id
+            };
+            ({ error } = await supabaseClient
+                .from('OrderProject')
+                .update(updatePayload)
+                .eq('id', project.projectId));
+        }
 
         if (error?.message?.includes('approvalNetworkPath')) {
             updatePayload = {

@@ -49,7 +49,7 @@ async function loadGestaoMontadoresList() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="4" class="p-6 text-center text-xs text-amber-700">
-                    Nenhum montador cadastrado. Execute <code>supabase/rename/phase-02-cabinetmaker-installer-purchasestatus.sql</code> no Supabase.
+                    Nenhum montador cadastrado. Consulte <code>PENDING-PROD-SQL.md</code> ou <code>supabase/schema/</code>.
                 </td>
             </tr>
         `;
@@ -474,7 +474,7 @@ async function loadGestaoClientesList() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="4" class="p-6 text-center text-xs text-amber-700">
-                    Tabela Client não encontrada. Execute <code>supabase/rename/phase-01-client.sql</code> no Supabase.
+                    Tabela Client não encontrada. Consulte <code>PENDING-PROD-SQL.md</code> ou <code>supabase/schema/</code>.
                 </td>
             </tr>
         `;

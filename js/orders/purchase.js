@@ -253,7 +253,7 @@ async function createComprasRecordsFromImplantacaoSend(options = {}) {
 
     if (error) {
         if (error.message?.includes('Purchase') || error.message?.includes('does not exist')) {
-            throw new Error('Tabela Purchase não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.');
+            throw new Error('Tabela Purchase não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.');
         }
         throw error;
     }
@@ -287,7 +287,7 @@ async function fetchComprasByOrderId(orderId) {
         .order('createdAt', { ascending: false });
 
     if (error?.message?.includes('Purchase') || error?.message?.includes('does not exist')) {
-        throw new Error('Tabela Purchase não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.');
+        throw new Error('Tabela Purchase não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.');
     }
 
     if (error) throw error;
@@ -433,7 +433,7 @@ async function fetchComprasAbertas() {
 
     if (error?.message?.includes('Purchase') || error?.message?.includes('does not exist')) {
         return {
-            error: new Error('Tabela Purchase não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.'),
+            error: new Error('Tabela Purchase não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.'),
             compras: []
         };
     }
@@ -525,7 +525,7 @@ async function openPurchaseModal(compraId) {
         toggleModal('compra-modal', true);
     } catch (error) {
         if (error.message?.includes('Purchase') || error.message?.includes('does not exist')) {
-            alertAppDialog('Tabela Purchase não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.');
+            alertAppDialog('Tabela Purchase não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.');
         } else {
             alertAppDialog('Erro ao abrir compra: ' + error.message);
         }

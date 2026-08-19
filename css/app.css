@@ -331,6 +331,12 @@ body {
     border-color: rgb(199 210 254);
 }
 
+.welcome-legend--revisor {
+    color: rgb(15 118 110);
+    background: rgb(240 253 250);
+    border-color: rgb(153 246 228);
+}
+
 .welcome-legend--projetista-ppcp {
     color: rgb(194 65 12);
     background: rgb(255 247 237);
@@ -479,6 +485,10 @@ body {
 .welcome-pipeline-segment--projetista { background: linear-gradient(90deg, rgb(238 242 255 / 0.75) 0%, rgb(255 255 255) 38%); }
 .welcome-pipeline-node--projetista { border-color: rgb(199 210 254); background: rgb(238 242 255); }
 
+.welcome-pipeline-segment--revisor .welcome-pipeline-segment-accent { background: rgb(13 148 136); }
+.welcome-pipeline-segment--revisor { background: linear-gradient(90deg, rgb(240 253 250 / 0.8) 0%, rgb(255 255 255) 38%); }
+.welcome-pipeline-node--revisor { border-color: rgb(153 246 228); background: rgb(240 253 250); }
+
 .welcome-pipeline-segment--projetista-ppcp .welcome-pipeline-segment-accent { background: rgb(249 115 22); }
 .welcome-pipeline-segment--projetista-ppcp { background: linear-gradient(90deg, rgb(255 247 237 / 0.8) 0%, rgb(255 255 255) 38%); }
 .welcome-pipeline-node--projetista-ppcp { border-color: rgb(254 215 170); background: rgb(255 247 237); }
@@ -526,6 +536,7 @@ body {
 .welcome-flow-timeline-marker--projetista-conferente { background: rgb(139 92 246); }
 .welcome-flow-timeline-marker--consultor { background: rgb(14 165 233); }
 .welcome-flow-timeline-marker--projetista { background: rgb(99 102 241); }
+.welcome-flow-timeline-marker--revisor { background: rgb(13 148 136); }
 .welcome-flow-timeline-marker--projetista-ppcp { background: rgb(249 115 22); }
 .welcome-flow-timeline-marker--gestor-fabrica { background: rgb(217 119 6); }
 
@@ -2337,7 +2348,7 @@ body.gestao-kanban-fullscreen-active {
     #gestao-dashboard-panel,
     #gestao-kanban-panel,
     #gestao-cronograma-pedido-panel,
-    #gestao-gantt-panel,
+    #gestao-project-scheduling-panel,
     #gestao-relatorios-panel,
     #gestao-performance-panel,
     #gestao-project-history-panel {
@@ -3576,23 +3587,96 @@ body.montagem-prog-resizing {
     color: rgb(100 116 139);
 }
 
-.gestao-gantt-layout {
+.gestao-project-scheduling-layout {
     display: flex;
     flex-direction: column;
     gap: 0;
-    min-height: 0;
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden;
 }
 
-@media (min-width: 1024px) {
-    .gestao-gantt-layout {
-        flex-direction: row;
-    }
+.gestao-project-scheduling-table-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    overflow: visible;
+    background: rgb(255 255 255);
+    border-top: 1px solid rgb(226 232 240);
 }
 
-.gestao-gantt-projects-panel {
+.gestao-project-scheduling-table-panel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgb(241 245 249);
+    background: rgb(248 250 252 / 0.8);
+    flex-shrink: 0;
+}
+
+.gestao-project-scheduling-table-panel__title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: rgb(15 23 42);
+}
+
+.gestao-project-scheduling-table-panel__count {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(79 70 229);
+    background: rgb(238 242 255);
+    border: 1px solid rgb(199 210 254);
+    border-radius: 9999px;
+    padding: 0.125rem 0.5rem;
+}
+
+.gestao-project-scheduling-hide-forecast-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 1.875rem;
+    padding: 0 0.25rem;
+    font-size: 0.75rem;
+    color: rgb(71 85 105);
+    white-space: nowrap;
+    user-select: none;
+}
+
+.gestao-project-scheduling-hide-forecast-filter {
+    flex: 0 0 auto;
+}
+
+.gestao-project-scheduling-table-panel__filters {
+    padding: 0;
+    border-bottom: 0;
+    background: transparent;
+    flex-shrink: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.gestao-project-scheduling-table-panel__header-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgb(241 245 249);
+    background: rgb(248 250 252 / 0.8);
+    flex-shrink: 0;
+}
+
+.gestao-project-scheduling-table-scroll {
+    overflow: visible;
+}
+
+.gestao-project-scheduling-table-row--dirty {
+    background: rgb(255 251 235 / 0.7);
+}
+
+.gestao-project-scheduling-projects-panel {
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -3604,7 +3688,7 @@ body.montagem-prog-resizing {
 }
 
 @media (min-width: 1024px) {
-    .gestao-gantt-projects-panel {
+    .gestao-project-scheduling-projects-panel {
         width: 20rem;
         flex: 0 0 20rem;
         max-height: 100%;
@@ -3614,7 +3698,7 @@ body.montagem-prog-resizing {
     }
 }
 
-.gestao-gantt-projects-panel__header {
+.gestao-project-scheduling-projects-panel__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -3625,13 +3709,13 @@ body.montagem-prog-resizing {
     flex-shrink: 0;
 }
 
-.gestao-gantt-projects-panel__title {
+.gestao-project-scheduling-projects-panel__title {
     font-size: 0.75rem;
     font-weight: 700;
     color: rgb(15 23 42);
 }
 
-.gestao-gantt-projects-panel__count {
+.gestao-project-scheduling-projects-panel__count {
     font-size: 0.6875rem;
     font-weight: 700;
     color: rgb(79 70 229);
@@ -3641,7 +3725,7 @@ body.montagem-prog-resizing {
     padding: 0.125rem 0.5rem;
 }
 
-.gestao-gantt-projects-panel__filters {
+.gestao-project-scheduling-projects-panel__filters {
     padding: 0.625rem 1rem;
     border-bottom: 1px solid rgb(241 245 249);
     background: rgb(255 255 255);
@@ -3651,36 +3735,46 @@ body.montagem-prog-resizing {
     gap: 0.5rem;
 }
 
-.gestao-gantt-projects-panel__filter,
-.gestao-gantt-panel__filter {
+.gestao-project-scheduling-projects-panel__filter,
+.gestao-project-scheduling-panel__filter {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
 }
 
-.gestao-gantt-projects-panel__filter-label,
-.gestao-gantt-panel__filter-label {
+.gestao-project-scheduling-projects-panel__filter-label,
+.gestao-project-scheduling-panel__filter-label {
     font-size: 0.625rem;
     font-weight: 600;
     color: rgb(100 116 139);
 }
 
-.gestao-gantt-calendar-panel__filters {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+.gestao-project-scheduling-calendar-panel__filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
     gap: 0.5rem;
     flex-shrink: 0;
     padding-bottom: 0.25rem;
     border-bottom: 1px solid rgb(241 245 249);
 }
 
-@media (max-width: 1023px) {
-    .gestao-gantt-calendar-panel__filters {
-        grid-template-columns: 1fr;
+.gestao-project-scheduling-calendar-panel__filters .gestao-project-scheduling-panel__filter {
+    flex: 1 1 8rem;
+    min-width: 8rem;
+}
+
+@media (max-width: 767px) {
+    .gestao-project-scheduling-calendar-panel__filters {
+        flex-wrap: wrap;
+    }
+
+    .gestao-project-scheduling-calendar-panel__filters .gestao-project-scheduling-panel__filter {
+        flex: 1 1 100%;
     }
 }
 
-.gestao-gantt-project-list {
+.gestao-project-scheduling-project-list {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -3690,7 +3784,7 @@ body.montagem-prog-resizing {
     gap: 0.625rem;
 }
 
-.gestao-gantt-project-card {
+.gestao-project-scheduling-project-card {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -3700,14 +3794,14 @@ body.montagem-prog-resizing {
     background: rgb(255 255 255);
 }
 
-.gestao-gantt-project-card__header {
+.gestao-project-scheduling-project-card__header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 0.5rem;
 }
 
-.gestao-gantt-project-card__open {
+.gestao-project-scheduling-project-card__open {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -3716,25 +3810,25 @@ body.montagem-prog-resizing {
     min-width: 0;
 }
 
-.gestao-gantt-project-card__open:hover .gestao-gantt-project-card__name {
+.gestao-project-scheduling-project-card__open:hover .gestao-project-scheduling-project-card__name {
     color: rgb(79 70 229);
 }
 
-.gestao-gantt-project-card__codes {
+.gestao-project-scheduling-project-card__codes {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.625rem;
     font-weight: 700;
     color: rgb(79 70 229);
 }
 
-.gestao-gantt-project-card__name {
+.gestao-project-scheduling-project-card__name {
     font-size: 0.75rem;
     font-weight: 700;
     color: rgb(15 23 42);
     line-height: 1.2;
 }
 
-.gestao-gantt-project-card__status {
+.gestao-project-scheduling-project-card__status {
     flex-shrink: 0;
     font-size: 0.5625rem;
     font-weight: 700;
@@ -3746,56 +3840,46 @@ body.montagem-prog-resizing {
     padding: 0.125rem 0.375rem;
 }
 
-.gestao-gantt-project-card__client {
+.gestao-project-scheduling-project-card__client {
     font-size: 0.6875rem;
     color: rgb(100 116 139);
 }
 
-.gestao-gantt-project-card__field {
+.gestao-project-scheduling-project-card__field {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
 }
 
-.gestao-gantt-project-card__label {
+.gestao-project-scheduling-project-card__label {
     font-size: 0.625rem;
     font-weight: 600;
     color: rgb(100 116 139);
 }
 
-.gestao-gantt-project-card__dates {
+.gestao-project-scheduling-project-card__dates {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
 }
 
-.gestao-gantt-project-card--dirty {
+.gestao-project-scheduling-project-card--dirty {
     border-color: rgb(199 210 254);
     box-shadow: 0 0 0 1px rgb(199 210 254);
 }
 
-.gestao-gantt-project-card__save:disabled {
+.gestao-project-scheduling-project-card__save:disabled {
     opacity: 0.7;
     cursor: not-allowed;
 }
 
-.gestao-gantt-project-card__value {
+.gestao-project-scheduling-project-card__value {
     font-size: 0.75rem;
     color: rgb(15 23 42);
 }
 
-.gestao-gantt-project-card__dates--readonly {
+.gestao-project-scheduling-project-card__dates--readonly {
     grid-template-columns: 1fr;
-}
-
-.gestao-gantt-layout--calendar-only {
-    flex-direction: column;
-}
-
-.gestao-gantt-layout--calendar-only .gestao-gantt-calendar-panel {
-    flex: 1 1 auto;
-    max-height: 100%;
-    width: 100%;
 }
 
 .gestao-view-layout--full > :not(#gestao-sidebar) {
@@ -3847,30 +3931,35 @@ body.montagem-prog-resizing {
     cursor: default;
 }
 
-.gestao-gantt-calendar-panel {
-    flex: 1 1 50%;
+.gestao-project-scheduling-layout--calendar-only .gestao-project-scheduling-table-panel {
+    display: none;
+}
+
+.gestao-project-scheduling-layout--calendar-only .gestao-project-scheduling-calendar-panel {
+    flex: 1 1 auto;
+    min-height: 32rem;
+}
+
+.gestao-project-scheduling-layout--calendar-only .gestao-project-scheduling-calendar-scroll {
+    min-height: 26rem;
+}
+
+.gestao-project-scheduling-calendar-panel {
+    flex: 0 0 auto;
     min-width: 0;
-    min-height: 0;
-    max-height: 50%;
+    min-height: 28rem;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     padding: 0.75rem;
-    overflow: hidden;
+    overflow: visible;
     background: rgb(248 250 252 / 0.35);
+    border-bottom: 1px solid rgb(226 232 240);
 }
 
-@media (min-width: 1024px) {
-    .gestao-gantt-calendar-panel {
-        flex: 1 1 auto;
-        max-height: 100%;
-        height: 100%;
-    }
-}
-
-.gestao-gantt-calendar-scroll {
-    flex: 1;
-    min-height: 0;
+.gestao-project-scheduling-calendar-scroll {
+    flex: 1 1 auto;
+    min-height: 22rem;
     overflow-y: auto;
     overflow-x: hidden;
     border: 1px solid rgb(226 232 240);
@@ -3878,7 +3967,7 @@ body.montagem-prog-resizing {
     background: rgb(255 255 255);
 }
 
-.gestao-gantt-legend {
+.gestao-project-scheduling-legend {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem 1rem;
@@ -3887,29 +3976,29 @@ body.montagem-prog-resizing {
     flex-shrink: 0;
 }
 
-.gestao-gantt-legend-item {
+.gestao-project-scheduling-legend-item {
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
 }
 
-.gestao-gantt-legend-swatch {
+.gestao-project-scheduling-legend-swatch {
     width: 0.875rem;
     height: 0.875rem;
     border-radius: 0.25rem;
     border: 1px solid rgb(226 232 240);
 }
 
-.gestao-gantt-legend-swatch--bar {
+.gestao-project-scheduling-legend-swatch--bar {
     background: linear-gradient(135deg, #4f46e5, #6366f1);
 }
 
-.gestao-gantt-legend-swatch--today {
+.gestao-project-scheduling-legend-swatch--today {
     background: rgb(254 243 199);
     border-color: rgb(252 211 77);
 }
 
-.gestao-gantt-view-toggle {
+.gestao-project-scheduling-view-toggle {
     display: inline-flex;
     border: 1px solid rgb(226 232 240);
     border-radius: 0.5rem;
@@ -3917,7 +4006,7 @@ body.montagem-prog-resizing {
     background: rgb(255 255 255);
 }
 
-.gestao-gantt-view-toggle__btn {
+.gestao-project-scheduling-view-toggle__btn {
     border: 0;
     background: transparent;
     color: rgb(71 85 105);
@@ -3928,28 +4017,28 @@ body.montagem-prog-resizing {
     cursor: pointer;
 }
 
-.gestao-gantt-view-toggle__btn:hover {
+.gestao-project-scheduling-view-toggle__btn:hover {
     background: rgb(248 250 252);
 }
 
-.gestao-gantt-view-toggle__btn--active {
+.gestao-project-scheduling-view-toggle__btn--active {
     background: rgb(238 242 255);
     color: rgb(67 56 202);
 }
 
-.gestao-gantt-view-toggle__btn + .gestao-gantt-view-toggle__btn {
+.gestao-project-scheduling-view-toggle__btn + .gestao-project-scheduling-view-toggle__btn {
     border-left: 1px solid rgb(226 232 240);
 }
 
-.gestao-gantt-month-grid {
+.gestao-project-scheduling-month-grid {
     padding: 0.75rem;
 }
 
-.gestao-gantt-weeks--single {
+.gestao-project-scheduling-weeks--single {
     min-height: 12rem;
 }
 
-.gestao-gantt-month-range-label {
+.gestao-project-scheduling-month-range-label {
     font-size: 0.8125rem;
     font-weight: 700;
     color: rgb(79 70 229);
@@ -3958,7 +4047,7 @@ body.montagem-prog-resizing {
     margin-bottom: 0.5rem;
 }
 
-.gestao-gantt-weekday-headers {
+.gestao-project-scheduling-weekday-headers {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 0.25rem;
@@ -3971,7 +4060,7 @@ body.montagem-prog-resizing {
     padding-bottom: 0.25rem;
 }
 
-.gestao-gantt-weekday-header {
+.gestao-project-scheduling-weekday-header {
     text-align: center;
     padding: 0.375rem 0.125rem;
     border-radius: 0.5rem;
@@ -3985,19 +4074,19 @@ body.montagem-prog-resizing {
     line-height: 1.2;
 }
 
-.gestao-gantt-weeks {
+.gestao-project-scheduling-weeks {
     display: flex;
     flex-direction: column;
     gap: 1rem;
 }
 
-.gestao-gantt-week-block {
+.gestao-project-scheduling-week-block {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
 }
 
-.gestao-gantt-week-block__title {
+.gestao-project-scheduling-week-block__title {
     font-size: 0.6875rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -4006,35 +4095,35 @@ body.montagem-prog-resizing {
     padding: 0 0.125rem;
 }
 
-.gestao-gantt-week-empty {
+.gestao-project-scheduling-week-empty {
     padding: 0.25rem 0;
 }
 
-.gestao-gantt-calendar-table {
+.gestao-project-scheduling-calendar-table {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
 }
 
-.gestao-gantt-day-headers,
-.gestao-gantt-lane {
+.gestao-project-scheduling-day-headers,
+.gestao-project-scheduling-lane {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     gap: 0.25rem;
     width: 100%;
 }
 
-.gestao-gantt-week-lanes {
+.gestao-project-scheduling-week-lanes {
     display: flex;
     flex-direction: column;
     gap: 0.375rem;
 }
 
-.gestao-gantt-day-headers {
+.gestao-project-scheduling-day-headers {
     margin-bottom: 0.25rem;
 }
 
-.gestao-gantt-day-header {
+.gestao-project-scheduling-day-header {
     text-align: center;
     padding: 0.375rem 0.125rem;
     border-radius: 0.5rem;
@@ -4042,62 +4131,62 @@ body.montagem-prog-resizing {
     border: 1px solid rgb(226 232 240);
 }
 
-.gestao-gantt-day-header--outside {
+.gestao-project-scheduling-day-header--outside {
     opacity: 0.45;
     background: rgb(248 250 252 / 0.5);
 }
 
-.gestao-gantt-day-header--weekend {
+.gestao-project-scheduling-day-header--weekend {
     background: rgb(241 245 249);
     color: rgb(100 116 139);
 }
 
-.gestao-gantt-day-header--today {
+.gestao-project-scheduling-day-header--today {
     background: rgb(254 243 199);
     border-color: rgb(252 211 77);
 }
 
-.gestao-gantt-day-header__date {
+.gestao-project-scheduling-day-header__date {
     display: block;
     font-size: 0.75rem;
     font-weight: 700;
     color: rgb(15 23 42);
 }
 
-.gestao-gantt-lane {
+.gestao-project-scheduling-lane {
     position: relative;
     min-height: 2.75rem;
     grid-template-rows: minmax(2.5rem, auto);
 }
 
-.gestao-gantt-day-slot,
-.gestao-gantt-bar {
+.gestao-project-scheduling-day-slot,
+.gestao-project-scheduling-bar {
     grid-row: 1;
 }
 
-.gestao-gantt-day-slot {
+.gestao-project-scheduling-day-slot {
     min-height: 2.75rem;
     border-radius: 0.5rem;
     border: 1px dashed rgb(226 232 240);
     background: rgb(248 250 252 / 0.7);
 }
 
-.gestao-gantt-day-slot--outside {
+.gestao-project-scheduling-day-slot--outside {
     opacity: 0.35;
     border-style: dotted;
     background: rgb(248 250 252 / 0.35);
 }
 
-.gestao-gantt-day-slot--weekend {
+.gestao-project-scheduling-day-slot--weekend {
     background: rgb(241 245 249 / 0.8);
 }
 
-.gestao-gantt-day-slot--today {
+.gestao-project-scheduling-day-slot--today {
     border-color: rgb(252 211 77);
     background: rgb(254 243 199 / 0.45);
 }
 
-.gestao-gantt-bar {
+.gestao-project-scheduling-bar {
     position: relative;
     z-index: 2;
     display: flex;
@@ -4108,18 +4197,18 @@ body.montagem-prog-resizing {
     margin: 0.125rem 0;
     padding: 0.2rem 0.3rem;
     border-radius: 0.5rem;
-    background: linear-gradient(135deg, var(--gestao-gantt-bar-from), var(--gestao-gantt-bar-to));
+    background: linear-gradient(135deg, var(--gestao-project-scheduling-bar-from), var(--gestao-project-scheduling-bar-to));
     color: rgb(255 255 255);
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.12);
     overflow: hidden;
     text-align: left;
 }
 
-.gestao-gantt-bar:hover {
+.gestao-project-scheduling-bar:hover {
     filter: brightness(1.05);
 }
 
-.gestao-gantt-bar__title {
+.gestao-project-scheduling-bar__title {
     font-size: 0.625rem;
     font-weight: 700;
     line-height: 1.2;
@@ -4128,7 +4217,7 @@ body.montagem-prog-resizing {
     text-overflow: ellipsis;
 }
 
-.gestao-gantt-bar__meta {
+.gestao-project-scheduling-bar__meta {
     font-size: 0.5625rem;
     line-height: 1.2;
     opacity: 0.92;
@@ -4137,17 +4226,14 @@ body.montagem-prog-resizing {
     text-overflow: ellipsis;
 }
 
-.gestao-gantt-empty-row {
+.gestao-project-scheduling-empty-row {
     padding: 1rem 0;
 }
 
-#gestao-gantt-panel {
-    height: calc(100vh - 180px);
-    max-height: calc(100vh - 180px);
+#gestao-project-scheduling-panel {
+    min-height: calc(100vh - 180px);
 }
 
-#gestao-gantt-content {
-    height: 100%;
+#gestao-project-scheduling-content {
     min-height: 0;
-    overflow: hidden;
 }

@@ -55,8 +55,8 @@ function cronogramaPedidoDateToPercent(date, axisStart, axisEnd) {
 
 function mapCronogramaPedidoStatusKind(statusName) {
     if (statusName === CRONOGRAMA_PEDIDO_STATUS_PROJETO_TECNICO) return 'andamento';
-    if (statusName === 'Em Revisão Comercial') return 'rev-comercial';
-    if (statusName === 'Em Revisão Técnica' || statusName === 'Em Revisão' || statusName === 'Em revisão') {
+    if (isOrderProjectEmRevisaoComercialConsStatus(statusName)) return 'rev-comercial';
+    if (isOrderProjectEmRevisaoComercialProjStatus(statusName)) {
         return 'rev-tecnica';
     }
     if (statusName === CRONOGRAMA_PEDIDO_STATUS_AGUARDANDO_APROVACAO) return 'entregue';

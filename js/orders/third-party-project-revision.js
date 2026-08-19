@@ -222,23 +222,9 @@ async function loadThirdPartyRevisionActivities(revisionId) {
     const tbody = document.getElementById('third-party-revision-activities-list');
     if (!tbody) return;
 
-    const { data: activities, error } = await supabaseClient
-        .from('ThirdPartyProjectRevisionActivity')
-        .select('*')
-        .eq('revisionId', revisionId)
-        .order('sortOrder', { ascending: true })
-        .order('id', { ascending: true });
+    const activities = await fetchRevisionActivities(revisionId);
 
     tbody.innerHTML = '';
-
-    if (error) {
-        if (error.message?.includes('ThirdPartyProjectRevisionActivity')) {
-            alertAppDialog('Execute supabase/create-third-party-project-revision.sql no Supabase.');
-            return;
-        }
-        alertAppDialog('Erro ao carregar atividades: ' + error.message);
-        return;
-    }
 
     if (!activities?.length) {
         document.getElementById('third-party-revision-empty-msg')?.classList.remove('hidden');
@@ -289,29 +275,20 @@ async function fetchThirdPartyProjectById(thirdPartyProjectId) {
 }
 
 async function fetchLatestThirdPartyProjectRevision(thirdPartyProjectId) {
-    const { data, error } = await supabaseClient
-        .from('ThirdPartyProjectRevision')
-        .select('id, thirdPartyProjectId, createdAt, createdById')
-        .eq('thirdPartyProjectId', Number(thirdPartyProjectId))
-        .order('createdAt', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-    if (error?.message?.includes('ThirdPartyProjectRevision')) return null;
-    if (error) throw error;
-    return data;
+    const revisions = await fetchRevisionsByThirdPartyProjectIds([thirdPartyProjectId]);
+    return revisions[0] || null;
 }
 
 async function fetchThirdPartyProjectRevisions(thirdPartyProjectId) {
     const { data, error } = await supabaseClient
-        .from('ThirdPartyProjectRevision')
+        .from('Revision')
         .select(`
             id,
             thirdPartyProjectId,
             createdAt,
             createdById,
-            createdBy:appUsers!ThirdPartyProjectRevision_createdById_fkey(id, name),
-            activities:ThirdPartyProjectRevisionActivity(
+            createdBy:appUsers!Revision_createdById_fkey(id, name),
+            activities:RevisionActivity(
                 id,
                 description,
                 completed,
@@ -321,9 +298,10 @@ async function fetchThirdPartyProjectRevisions(thirdPartyProjectId) {
             )
         `)
         .eq('thirdPartyProjectId', Number(thirdPartyProjectId))
+        .eq('revisionType', REVISION_TYPE_THIRD_PARTY)
         .order('createdAt', { ascending: false });
 
-    if (error?.message?.includes('ThirdPartyProjectRevision')) return [];
+    if (error?.message?.includes('Revision')) return [];
     if (error) throw error;
     return data || [];
 }
@@ -534,17 +512,11 @@ async function persistThirdPartyRevision() {
     const createdRevision = !revisionId;
 
     if (!revisionId) {
-        const { data: revision, error: revisionError } = await supabaseClient
-            .from('ThirdPartyProjectRevision')
-            .insert([{
-                thirdPartyProjectId: project.id,
-                createdAt: now,
-                createdById: currentUser?.id || null,
-                updatedAt: now,
-                updatedById: currentUser?.id || null
-            }])
-            .select('id')
-            .single();
+        const { data: revision, error: revisionError } = await createRevisionRecord({
+            thirdPartyProjectId: project.id,
+            revisionType: REVISION_TYPE_THIRD_PARTY,
+            status: REVISION_STATUS_OPEN
+        });
 
         if (revisionError) {
             alertAppDialog('Erro ao criar revisão: ' + revisionError.message);
@@ -568,21 +540,14 @@ async function persistThirdPartyRevision() {
         };
 
         if (activity.id) {
-            const { error } = await supabaseClient
-                .from('ThirdPartyProjectRevisionActivity')
-                .update(payload)
-                .eq('id', activity.id);
+            const { error } = await updateRevisionActivity(activity.id, payload);
             if (error) {
                 alertAppDialog('Erro ao salvar atividade: ' + error.message);
                 return { ok: false };
             }
             activityIdByRowId[activity.rowId] = activity.id;
         } else {
-            const { data: inserted, error } = await supabaseClient
-                .from('ThirdPartyProjectRevisionActivity')
-                .insert([{ ...payload, revisionId }])
-                .select('id')
-                .single();
+            const { data: inserted, error } = await insertRevisionActivity(revisionId, payload);
             if (error || !inserted?.id) {
                 alertAppDialog('Erro ao salvar atividade: ' + (error?.message || 'Erro desconhecido'));
                 return { ok: false };
@@ -604,10 +569,7 @@ async function persistThirdPartyRevision() {
         }
     }
 
-    await supabaseClient
-        .from('ThirdPartyProjectRevision')
-        .update({ updatedAt: now, updatedById: currentUser?.id || null })
-        .eq('id', revisionId);
+    await updateRevisionRecord(revisionId, {});
 
     return { ok: true, createdRevision, activities, revisionId };
 }

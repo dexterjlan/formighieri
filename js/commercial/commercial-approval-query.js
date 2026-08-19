@@ -33,29 +33,10 @@ async function loadApprovalQueryFilterOptions() {
 }
 
 async function queryAllCommercialApprovals() {
-    const columnSets = [
-        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, createdAt, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, approvedAt, status, createdAt, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, orderProject:OrderProject(id, name, projectCode)',
-        '*'
-    ];
-
-    let lastError = null;
-
-    for (const columns of columnSets) {
-        const result = await supabaseClient
-            .from('CommercialApproval')
-            .select(columns)
-            .order('id', { ascending: false });
-
-        if (!result.error) return result;
-        lastError = result.error;
+    if (typeof queryAllCommercialWorkflowProjects === 'function') {
+        return queryAllCommercialWorkflowProjects();
     }
-
-    return { data: null, error: lastError };
+    return { data: [], error: null };
 }
 
 async function searchCommercialApprovalsQuery() {
@@ -140,7 +121,7 @@ async function searchCommercialApprovalsQuery() {
         const isWaitingApproval = r.status === 'Aguardando Aprovação';
         const showApprove = isWaitingApproval && canApproveCommercialApproval(r);
         const showRequestRevision = isWaitingApproval
-            && (projectStatusName === 'Em Revisão Comercial' || !projectStatusName)
+            && (isOrderProjectEmRevisaoComercialConsStatus(projectStatusName) || !projectStatusName)
             && typeof canRequestNewRevision === 'function'
             && canRequestNewRevision(r, projectStatusName);
         const actionButtons = [];

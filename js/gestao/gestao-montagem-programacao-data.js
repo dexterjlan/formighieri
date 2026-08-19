@@ -321,9 +321,9 @@ async function createMontagemProgFromDrop(worker, dateKey, targetProgramacaoId =
     } catch (error) {
         console.error('createMontagemProgFromDrop:', error);
         const sqlHint = error.message?.includes('AssemblyScheduleCabinetMaker')
-            ? '\n\nExecute supabase/rename/phase-05-assembly-schedule.sql no Supabase.'
+            ? '\n\nConsulte PENDING-PROD-SQL.md ou supabase/schema/.'
             : (error.message?.includes('AssemblySchedule')
-                ? '\n\nExecute supabase/rename/phase-05-assembly-schedule.sql no Supabase.'
+                ? '\n\nConsulte PENDING-PROD-SQL.md ou supabase/schema/.'
                 : '');
         alertAppDialog('Erro ao criar montagem: ' + error.message + sqlHint);
     }

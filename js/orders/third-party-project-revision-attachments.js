@@ -140,11 +140,11 @@ async function loadThirdPartyRevisionAttachmentsForActivities(activities = []) {
     if (!activityIds.length) return;
 
     const { data, error } = await supabaseClient
-        .from('ThirdPartyProjectRevisionActivityAttachment')
+        .from('RevisionActivityAttachment')
         .select('id, revisionActivityId, storagePath, fileName, mimeType, fileSizeBytes, sortOrder, createdAt')
         .in('revisionActivityId', activityIds);
 
-    if (error?.message?.includes('ThirdPartyProjectRevisionActivityAttachment')) return;
+    if (error?.message?.includes('RevisionActivityAttachment')) return;
     if (error) throw error;
 
     (data || []).forEach(item => {
@@ -157,7 +157,7 @@ async function persistThirdPartyRevisionAttachments(revisionId, activityIdByRowI
     for (const [activityId, attachment] of thirdPartyRevisionAttachmentExisting.entries()) {
         if (!attachment || !deletedIds.has(attachment.id)) continue;
         await supabaseClient.storage.from(THIRD_PARTY_REVISION_ATTACHMENTS_BUCKET).remove([attachment.storagePath]);
-        await supabaseClient.from('ThirdPartyProjectRevisionActivityAttachment').delete().eq('id', attachment.id);
+        await supabaseClient.from('RevisionActivityAttachment').delete().eq('id', attachment.id);
         thirdPartyRevisionAttachmentExisting.delete(activityId);
     }
     thirdPartyRevisionAttachmentRemovedIds.clear();
@@ -172,7 +172,7 @@ async function persistThirdPartyRevisionAttachments(revisionId, activityIdByRowI
         if (uploadError) throw uploadError;
 
         const { error: insertError } = await supabaseClient
-            .from('ThirdPartyProjectRevisionActivityAttachment')
+            .from('RevisionActivityAttachment')
             .insert({
                 revisionActivityId: activityId,
                 storagePath,

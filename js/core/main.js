@@ -64,6 +64,10 @@ function initAppEvents() {
     bindRequestActivityEvents();
     bindCommercialApprovalEvents();
     bindCommercialRevisionEvents();
+    if (typeof bindTechnicalReviewerRevisionEvents === 'function') {
+        bindTechnicalReviewerRevisionEvents();
+    }
     bindPendenciasEvents();
+    bindPesquisasEvents();
     bindUsersAdminEvents();
 }

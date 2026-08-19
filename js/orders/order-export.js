@@ -73,7 +73,7 @@ async function fetchOrderExportProjects(orderId) {
     const selectVariants = [
         `id, orderId, projectCode, name, deliveryDate, deliveryPhaseId,
         technicalProjectForecastStartDate, technicalProjectForecastEndDate, technicalProjectCompletedDate,
-        statusId, designerId, approvalNetworkPath, cabinetMakerId,
+        statusId, designerId, approvalNetworkPath, conferenceNetworkPath, cabinetMakerId,
         internalAssemblyStartDate, internalAssemblyEndDate, productionMonth,
         isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId,
         environmentType:EnvironmentType(name),
@@ -85,7 +85,7 @@ async function fetchOrderExportProjects(orderId) {
         replaces:replacesProjectId(projectCode, order:salesOrders(orderCode))`,
         `id, orderId, projectCode, name, deliveryDate, deliveryPhaseId,
         technicalProjectForecastStartDate, technicalProjectForecastEndDate, technicalProjectCompletedDate,
-        statusId, designerId, approvalNetworkPath, cabinetMakerId,
+        statusId, designerId, approvalNetworkPath, conferenceNetworkPath, cabinetMakerId,
         internalAssemblyStartDate, internalAssemblyEndDate, productionMonth,
         environmentType:EnvironmentType(name),
         projectStatus:OrderProjectStatus(id, name),
@@ -413,6 +413,7 @@ function renderOrderExportProjectsSection(bundle) {
             orderExportField('Previsão conclusão PT', formatOrderExportDate(project.technicalProjectForecastEndDate)),
             orderExportField('Conclusão PT', formatOrderExportDate(project.technicalProjectCompletedDate)),
             orderExportField('Mês de produção', project.productionMonth),
+            orderExportField('Caminho rede conferência', project.conferenceNetworkPath),
             orderExportField('Caminho rede aprovação', project.approvalNetworkPath)
         ].join('');
 

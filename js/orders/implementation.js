@@ -849,7 +849,7 @@ async function openImplementationModal(orderProjectId, projectName = '', options
         if (error.message?.includes('ImplementationPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
             alertAppDialog('Execute supabase/create-third-party-subtype.sql e supabase/create-implantacao-purchase-item.sql no Supabase.');
         } else if (error.message?.includes('Implementation') || error.message?.includes('does not exist')) {
-            alertAppDialog('Tabela Implementation não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.');
+            alertAppDialog('Tabela Implementation não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.');
         } else {
             alertAppDialog('Erro ao abrir implantação: ' + error.message);
         }

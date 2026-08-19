@@ -48,9 +48,17 @@ if (!SUPABASE_URL || !SUPABASE_KEY || SUPABASE_URL.includes('SUBSTITUA')) {
 const { createClient } = window.supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+const FORMIGHIERI_DEV_SUPABASE_PROJECT_REF = 'phpcrboxtduethlqvkot';
+
+function isDevSupabaseEnvironment() {
+    return String(SUPABASE_URL || '').includes(FORMIGHIERI_DEV_SUPABASE_PROJECT_REF);
+}
+
 const NOTIFICATIONS_ENABLED = true;
-const NOTIFICATION_TEST_MODE = FORMIGHIERI_ENV_CONFIG.NOTIFICATION_TEST_MODE !== false;
-const NOTIFICATION_TEST_EMAIL = FORMIGHIERI_ENV_CONFIG.NOTIFICATION_TEST_EMAIL || '';
+const NOTIFICATION_TEST_MODE = isDevSupabaseEnvironment()
+    || FORMIGHIERI_ENV_CONFIG.NOTIFICATION_TEST_MODE !== false;
+const NOTIFICATION_TEST_EMAIL = FORMIGHIERI_ENV_CONFIG.NOTIFICATION_TEST_EMAIL
+    || (isDevSupabaseEnvironment() ? 'dexterjl@gmail.com' : '');
 const NOTIFICATION_FROM_EMAIL = 'formighieri.notificacoes@gmail.com';
 const NOTIFICATION_FROM_NAME = 'FGP - Formighieri';
 

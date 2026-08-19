@@ -12,7 +12,8 @@ function normalizeAppUserProfile(profile) {
         isProjectsManager: Boolean(profile.isProjectsManager),
         isPpcp: Boolean(profile.isPpcp),
         isFactoryManager: Boolean(profile.isFactoryManager),
-        isDetailing: Boolean(profile.isDetailing)
+        isDetailing: Boolean(profile.isDetailing),
+        isReviewer: Boolean(profile.isReviewer ?? profile.isProjectLeader)
     };
 }
 
@@ -32,6 +33,10 @@ function isGestorProjetos(user = currentUser) {
 
 function isPpcp(user = currentUser) {
     return user?.role === 'Projetista' && Boolean(user?.isPpcp);
+}
+
+function isReviewer(user = currentUser) {
+    return user?.role === 'Projetista' && Boolean(user?.isReviewer ?? user?.isProjectLeader);
 }
 
 function isDetalhamento(user = currentUser) {
@@ -105,11 +110,11 @@ function canAccessMontagemProgramacao(user = currentUser) {
     return isAdmin(user) || isGestorProjetos(user);
 }
 
-function canViewProgramacaoProjetos(user = currentUser) {
+function canViewProjectScheduling(user = currentUser) {
     return Boolean(user);
 }
 
-function canEditProgramacaoProjetos(user = currentUser) {
+function canEditProjectScheduling(user = currentUser) {
     return canAccessGestao(user);
 }
 

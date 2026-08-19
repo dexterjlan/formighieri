@@ -249,6 +249,7 @@ async function openConvModal() {
 function closeConvModal() {
     setConvFormLoading(false);
     editingConversationId = null;
+    document.getElementById("conv-form-submit")?.classList.remove('hidden');
     toggleModal('conv-modal', false);
 }
 
@@ -344,6 +345,7 @@ async function editConversation(id) {
     document.getElementById("conv-form-submit").textContent = respondOnly
         ? 'Salvar'
         : 'Salvar Alterações';
+    document.getElementById("conv-form-submit")?.classList.remove('hidden');
     setupConvProfileFields(true, conv);
     setupConvResponseFields(conv);
     await Promise.all([
@@ -358,6 +360,45 @@ async function editConversation(id) {
     updateConvAttachmentModalControls(conv);
     updateConvModalActivitiesHint();
     setupConvModalFieldLocks(conv);
+    if (typeof updateConvModalEncerrarButton === 'function') {
+        updateConvModalEncerrarButton();
+    }
+    toggleModal('conv-modal', true);
+}
+
+async function viewConversationDetails(id) {
+    const conv = conversationsCache.find(c => Number(c.id) === Number(id));
+    if (!conv) return;
+
+    editingConversationId = id;
+    document.getElementById("conv-modal-title").textContent = 'Detalhes da Requisição';
+    document.getElementById("conv-form-submit")?.classList.add('hidden');
+    setupConvProfileFields(true, conv);
+    setupConvResponseFields(conv);
+    await Promise.all([
+        loadProjetistas(),
+        loadConvOrderProjects(conv.orderProjectId),
+        loadRequestActivitiesForModal(id),
+        loadOrderRequestAttachmentsForModal(id)
+    ]);
+    document.getElementById("conv-designer").value = String(conv.designerId || '');
+    document.getElementById("conv-request").value = conv.designerRequest || '';
+    updateRequestActivityModalControls(conv);
+    updateConvAttachmentModalControls(conv);
+    updateConvModalActivitiesHint();
+
+    [
+        'conv-order-project',
+        'conv-designer',
+        'conv-request'
+    ].forEach(fieldId => setConvFieldDisabled(document.getElementById(fieldId), true));
+
+    document.querySelectorAll('#conv-modal textarea, #conv-modal input:not([type="hidden"]), #conv-modal select, #conv-modal button[data-request-activity], #conv-modal [data-add-request-attachment], #conv-modal [data-remove-request-attachment]').forEach(element => {
+        if (element.id === 'conv-form-submit') return;
+        setConvFieldDisabled(element, true);
+        element.disabled = true;
+    });
+
     if (typeof updateConvModalEncerrarButton === 'function') {
         updateConvModalEncerrarButton();
     }
@@ -454,6 +495,7 @@ function buildRequestResponseSection(conv, activities = []) {
 window.openConvModal = openConvModal;
 window.closeConvModal = closeConvModal;
 window.editConversation = editConversation;
+window.viewConversationDetails = viewConversationDetails;
 
 async function loadConversations(orderId) {
     await ensureSystemSettingsLoaded();

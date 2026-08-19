@@ -67,7 +67,11 @@ async function restoreGestaoView(state) {
         updateGestaoCadastrosNavVisibility();
     }
 
-    const gestaoNav = state.gestaoNav || 'pedido';
+    const legacyGestaoNav = {
+        gantt: 'project-scheduling',
+        'programacao-projetos': 'project-scheduling'
+    };
+    const gestaoNav = legacyGestaoNav[state.gestaoNav] || state.gestaoNav || 'pedido';
     const openGestaoPanel = {
         pedido: () => {
             if (typeof showGestaoPedidoListPanel === 'function') showGestaoPedidoListPanel();
@@ -106,9 +110,9 @@ async function restoreGestaoView(state) {
         'cronograma-pedido': () => {
             if (typeof showGestaoCronogramaPedidoPanel === 'function') showGestaoCronogramaPedidoPanel();
         },
-        gantt: () => {
-            if (typeof showProgramacaoProjetosView === 'function') showProgramacaoProjetosView({ fromGestao: true });
-            else if (typeof showGestaoGanttPanel === 'function') showGestaoGanttPanel();
+        'project-scheduling': () => {
+            if (typeof showProjectSchedulingView === 'function') showProjectSchedulingView({ fromGestao: true });
+            else if (typeof showGestaoProjectSchedulingPanel === 'function') showGestaoProjectSchedulingPanel();
         },
         relatorios: () => {
             if (typeof showGestaoRelatoriosPanel === 'function') showGestaoRelatoriosPanel();
@@ -128,6 +132,26 @@ async function restoreGestaoView(state) {
     (openGestaoPanel[gestaoNav] || openGestaoPanel.pedido)();
 }
 
+async function restorePesquisasView(state) {
+    if (!canAccessPesquisas()) {
+        showWelcome();
+        return;
+    }
+
+    hideSubViews();
+    document.getElementById('pesquisas-view')?.classList.remove('hidden');
+    updateMainNavActive('pesquisas');
+    updateAdminNav();
+
+    const savedSection = state.pesquisasSection || 'revisions';
+    pesquisasActiveSection = ['revisions', 'requests', 'purchases'].includes(savedSection)
+        ? savedSection
+        : 'revisions';
+
+    if (typeof renderPesquisasSidebar === 'function') renderPesquisasSidebar();
+    if (typeof loadPesquisasContent === 'function') await loadPesquisasContent();
+}
+
 async function restorePendenciasView(state) {
     if (!canAccessPendencias()) {
         showWelcome();
@@ -139,6 +163,7 @@ async function restorePendenciasView(state) {
     updateMainNavActive('pendencias');
     updateAdminNav();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
+    if (typeof updatePesquisasNav === 'function') updatePesquisasNav();
 
     const gestorSection = typeof getPrimaryGestorPendenciasSection === 'function'
         ? getPrimaryGestorPendenciasSection()
@@ -168,7 +193,12 @@ async function restoreAppNavState() {
     suppressAppNavPersist = true;
 
     try {
-        switch (state.view) {
+        const legacyViewMap = {
+            'programacao-projetos': 'project-scheduling'
+        };
+        const view = legacyViewMap[state.view] || state.view;
+
+        switch (view) {
             case 'home':
                 showWelcome();
                 return true;
@@ -191,12 +221,15 @@ async function restoreAppNavState() {
             case 'pendencias':
                 await restorePendenciasView(state);
                 return true;
+            case 'pesquisas':
+                await restorePesquisasView(state);
+                return true;
             case 'calendar':
                 if (typeof showCalendar === 'function') showCalendar();
                 return true;
-            case 'programacao-projetos':
-                if (typeof showProgramacaoProjetosView === 'function') {
-                    await showProgramacaoProjetosView();
+            case 'project-scheduling':
+                if (typeof showProjectSchedulingView === 'function') {
+                    await showProjectSchedulingView();
                     return true;
                 }
                 return false;
@@ -241,10 +274,11 @@ function updateAdminNav() {
     document.getElementById("btn-conversations-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-approvals-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-calendario").classList.toggle("hidden", !canAccessCalendar());
-    document.getElementById("btn-programacao-projetos")?.classList.toggle("hidden", !canViewProgramacaoProjetos());
+    document.getElementById("btn-project-scheduling")?.classList.toggle("hidden", !canViewProjectScheduling());
     document.getElementById("btn-programacao-montagem")?.classList.toggle("hidden", !canViewProgramacaoMontagem());
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
+    if (typeof updatePesquisasNav === 'function') updatePesquisasNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
     if (typeof updateCalendarGoogleSyncControls === 'function') updateCalendarGoogleSyncControls();
 }
@@ -259,10 +293,11 @@ function updateMainNavActive(activeView) {
         requests: document.getElementById('btn-conversations-query'),
         approvals: document.getElementById('btn-approvals-query'),
         calendar: document.getElementById('btn-calendario'),
-        'programacao-projetos': document.getElementById('btn-programacao-projetos'),
+        'project-scheduling': document.getElementById('btn-project-scheduling'),
         'programacao-montagem': document.getElementById('btn-programacao-montagem'),
         gestao: document.getElementById('btn-gestao'),
         pendencias: document.getElementById('btn-pendencias'),
+        pesquisas: document.getElementById('btn-pesquisas'),
         settings: document.getElementById('btn-system-settings')
     };
 
@@ -288,6 +323,7 @@ function hideSubViews() {
     document.getElementById("calendar-view").classList.add("hidden");
     document.getElementById("gestao-view").classList.add("hidden");
     document.getElementById("pendencias-view").classList.add("hidden");
+    document.getElementById("pesquisas-view")?.classList.add("hidden");
 }
 
 function showDashboard() {
@@ -337,8 +373,8 @@ function bindNavigationEvents() {
     document.getElementById("btn-back-dashboard").addEventListener("click", showDashboard);
     document.getElementById("btn-conversations-query").addEventListener("click", showConversationsQuery);
     document.getElementById("btn-approvals-query").addEventListener("click", showApprovalsQuery);
-    document.getElementById("btn-programacao-projetos")?.addEventListener("click", () => {
-        if (typeof showProgramacaoProjetosView === 'function') showProgramacaoProjetosView();
+    document.getElementById("btn-project-scheduling")?.addEventListener("click", () => {
+        if (typeof showProjectSchedulingView === 'function') showProjectSchedulingView();
     });
     document.getElementById("btn-programacao-montagem")?.addEventListener("click", () => {
         if (typeof showProgramacaoMontagemView === 'function') showProgramacaoMontagemView();

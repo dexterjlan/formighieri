@@ -35,7 +35,7 @@ function canApproveCommercialApproval(approval) {
     if (!isAdminOrOrderConsultorForApproval(approval)) return false;
 
     const projectStatusName = getCommercialApprovalProjectStatusName(approval);
-    if (projectStatusName === 'Em Revisão Comercial' || projectStatusName === 'Aguardando Aprovação') {
+    if (isOrderProjectEmRevisaoComercialConsStatus(projectStatusName) || projectStatusName === 'Aguardando Aprovação') {
         return true;
     }
 
@@ -150,25 +150,40 @@ async function setApprovalDesignerReadonlyLabel(approval) {
 }
 
 const COMMERCIAL_APPROVAL_PROJECT_STATUS = 'Projeto Técnico';
-const COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS = 'Em Revisão Comercial';
+const COMMERCIAL_APPROVAL_REQUESTED_PROJECT_STATUS = ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS;
 
 async function getEmRevisaoComercialProjectStatusId() {
+    const candidateNames = [
+        ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS,
+        ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL
+    ];
+
     const { data, error } = await supabaseClient
         .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', 'Em Revisão Comercial')
-        .eq('isActive', true)
-        .maybeSingle();
+        .select('id, name')
+        .in('name', candidateNames)
+        .eq('isActive', true);
 
-    if (!error && data?.id) return data.id;
+    if (!error && data?.length) {
+        for (const targetName of candidateNames) {
+            const found = data.find(item => item.name === targetName);
+            if (found) return found.id;
+        }
+    }
 
     const { data: fallback } = await supabaseClient
         .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', 'Em Revisão Comercial')
-        .maybeSingle();
+        .select('id, name')
+        .in('name', candidateNames);
 
-    return fallback?.id || null;
+    if (fallback?.length) {
+        for (const targetName of candidateNames) {
+            const found = fallback.find(item => item.name === targetName);
+            if (found) return found.id;
+        }
+    }
+
+    return null;
 }
 
 async function getAguardandoAprovacaoProjectStatusId() {
@@ -199,7 +214,7 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
         statusId = await getAguardandoAprovacaoProjectStatusId();
     }
     if (!statusId) {
-        throw new Error(`Status "Em Revisão Comercial" não encontrado.`);
+        throw new Error(`Status "${ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS}" não encontrado.`);
     }
 
     const now = new Date().toISOString();
@@ -221,7 +236,7 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (fetchError?.message?.includes('technicalProjectCompletedDate')) {
-        await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Em Revisão Comercial');
+        await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS);
         return;
     }
 
@@ -243,14 +258,14 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
             .is('technicalProjectCompletedDate', null);
 
         if (conclusaoError?.message?.includes('technicalProjectCompletedDate')) {
-            await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Em Revisão Comercial');
+            await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS);
             return;
         }
 
         if (conclusaoError) throw conclusaoError;
     }
 
-    await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Em Revisão Comercial');
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS);
 }
 
 async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
@@ -277,10 +292,16 @@ async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
     await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Aguardando Aprovação');
 }
 
-const COMMERCIAL_REVISION_PROJECT_STATUS = 'Em Revisão Técnica';
+const COMMERCIAL_REVISION_PROJECT_STATUS = ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ;
 
 async function getEmRevisaoProjectStatusId() {
-    const candidateNames = ['Em Revisão Técnica', 'Em Revisão Comercial', 'Em Revisão', 'Em revisão'];
+    const candidateNames = [
+        ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ,
+        ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA,
+        ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL,
+        'Em Revisão',
+        'Em revisão'
+    ];
     const { data, error } = await supabaseClient
         .from('OrderProjectStatus')
         .select('id, name')
@@ -334,18 +355,9 @@ async function applyEmRevisaoStatusToProjects(orderProjectIds) {
 }
 
 async function resolveCommercialApprovalOrderProjectId(approval) {
-    let orderProjectId = approval?.orderProjectId;
-
-    if (!orderProjectId && approval?.id) {
-        const { data } = await supabaseClient
-            .from('CommercialApproval')
-            .select('orderProjectId')
-            .eq('id', approval.id)
-            .maybeSingle();
-        orderProjectId = data?.orderProjectId;
-    }
-
-    return orderProjectId ? Number(orderProjectId) : null;
+    if (approval?.orderProjectId) return Number(approval.orderProjectId);
+    if (approval?.id) return Number(approval.id);
+    return null;
 }
 
 async function applyEmRevisaoStatusForCommercialApproval(approval) {
@@ -436,8 +448,15 @@ async function applyApprovedStatusForCommercialApproval(approval) {
 
     const currentStatusName = project?.projectStatus?.name || '';
 
-    if (currentStatusName === 'Em Revisão Comercial' || currentStatusName === 'Em Revisão' || currentStatusName === 'Em revisão') {
+    if (isOrderProjectEmRevisaoComercialConsStatus(currentStatusName)
+        || isOrderProjectEmRevisaoComercialProjStatus(currentStatusName)) {
         await applyAguardandoAprovacaoStatusToProjects([orderProjectId]);
+    } else if (currentStatusName === 'Aguardando Aprovação') {
+        if (typeof applyTechnicalReviewerReviewRevisorStatusToProjects === 'function') {
+            await applyTechnicalReviewerReviewRevisorStatusToProjects([orderProjectId]);
+        } else {
+            await applyNomearStatusToProjects([orderProjectId]);
+        }
     } else {
         await applyNomearStatusToProjects([orderProjectId]);
     }
@@ -665,23 +684,6 @@ async function confirmApprovalDespiteOpenRequests(openRequests, projects) {
     );
 }
 
-async function getOpenCommercialApprovalsForProject(orderId, orderProjectId) {
-    if (!orderId || !orderProjectId) return [];
-
-    const { data, error } = await supabaseClient
-        .from('CommercialApproval')
-        .select('id, status, approved, orderProjectId, designerId, orderProject:OrderProject(id, name, projectCode)')
-        .eq('orderId', orderId)
-        .eq('orderProjectId', orderProjectId);
-
-    if (error) {
-        console.error('getOpenCommercialApprovalsForProject:', error);
-        return [];
-    }
-
-    return (data || []).filter(a => normalizeCommercialApproval(a).status !== 'Aprovado');
-}
-
 async function validateConsultorRequestAgainstOpenApproval(orderProjectId, existingRequest) {
     if (currentUser?.role !== 'Consultor' || !orderProjectId || !activeOrderId) {
         return true;
@@ -712,22 +714,8 @@ async function validateConsultorRequestAgainstOpenApproval(orderProjectId, exist
     return false;
 }
 
-async function insertCommercialApprovals(payloads) {
-    const selectColumns = 'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)';
-    let { data, error } = await supabaseClient
-        .from('CommercialApproval')
-        .insert(payloads)
-        .select(selectColumns);
-
-    if (error && payloads.some(p => p.status)) {
-        const withoutStatus = payloads.map(({ status, ...rest }) => rest);
-        ({ data, error } = await supabaseClient
-            .from('CommercialApproval')
-            .insert(withoutStatus)
-            .select(selectColumns));
-    }
-
-    return { error, data: data || [] };
+async function insertCommercialApprovals() {
+    return { error: null, data: [] };
 }
 
 let aprovacaoCaminhoModalResolver = null;
@@ -1014,7 +1002,7 @@ async function saveProjectCaminhoRedeAprovacao(projectId, path) {
         .eq('id', projectId);
 
     if (error?.message?.includes('approvalNetworkPath')) {
-        throw new Error('Campo approvalNetworkPath não encontrado. Execute supabase/create-order-project-aprovacao-path.sql no Supabase.');
+        throw new Error('Campo approvalNetworkPath não encontrado. Execute supabase/feats/add-order-project-conference-network-path.sql (ou create-order-project-aprovacao-path.sql) no Supabase.');
     }
 
     if (error) throw error;
@@ -1156,17 +1144,6 @@ async function submitCommercialApprovalFromPendencias(projectId) {
 
     try {
         setCommercialApprovalSubmitLoading(true, 'Registrando solicitação de aprovação...');
-        const payload = {
-            orderId: enrichedProject.orderId,
-            orderProjectId: normalizedId,
-            designerId: enrichedProject.designerId,
-            approved: false,
-            approvedAt: null,
-            status: 'Aguardando Aprovação'
-        };
-
-        const { error, data: insertedApprovals } = await insertCommercialApprovals([payload]);
-        if (error) throw error;
 
         setCommercialApprovalSubmitLoading(true, 'Atualizando status do projeto...');
         await applyEmRevisaoComercialStatusToProjects([normalizedId]);
@@ -1258,26 +1235,25 @@ window.editCommercialApproval = editCommercialApproval;
 
 async function isFirstCommercialApprovalForOrder(approval) {
     const orderId = Number(approval?.orderId);
-    const approvalId = Number(approval?.id);
-    if (!orderId || !approvalId) return false;
+    const orderProjectId = Number(approval?.orderProjectId || approval?.id);
+    if (!orderId || !orderProjectId) return false;
+
+    const statusIds = await getPendenciasStatusIdsByNames(['Aguardando Aprovação']);
+    if (!statusIds.length) return true;
 
     const { data, error } = await supabaseClient
-        .from('CommercialApproval')
-        .select('id, approved, status')
-        .eq('orderId', orderId);
+        .from('OrderProject')
+        .select('id')
+        .eq('orderId', orderId)
+        .in('statusId', statusIds)
+        .neq('id', orderProjectId);
 
     if (error) {
         console.error('isFirstCommercialApprovalForOrder:', error);
         return true;
     }
 
-    const hasOtherApproved = (data || []).some(record => {
-        if (Number(record.id) === approvalId) return false;
-        const status = record.status || (record.approved ? 'Aprovado' : '');
-        return status === 'Aprovado' || record.approved === true;
-    });
-
-    return !hasOtherApproved;
+    return !(data || []).length;
 }
 
 async function fetchCommercialApprovalOrderDeliveryContext(orderId) {
@@ -1386,23 +1362,20 @@ async function submitCommercialApprovalOrderDeliveryModal() {
 }
 
 async function hasUncompletedCommercialRevisions(approvalId) {
-    if (!approvalId) return false;
+    const orderProjectId = Number(approvalId);
+    if (!orderProjectId) return false;
 
-    let { data: revisions, error: revError } = await supabaseClient
-        .from('CommercialRevision')
-        .select('id, type')
-        .eq('commercialApprovalId', approvalId)
-        .eq('type', 'comercial');
-
-    if (revError?.message?.includes('type')) {
-        return false;
-    }
+    const { data: revisions, error: revError } = await supabaseClient
+        .from('Revision')
+        .select('id')
+        .eq('orderProjectId', orderProjectId)
+        .eq('revisionType', REVISION_TYPE_COMMERCIAL_COMMERCIAL);
 
     if (revError || !revisions?.length) return false;
 
     const revisionIds = revisions.map(r => r.id);
     const { data: activities, error: actError } = await supabaseClient
-        .from('CommercialRevisionActivity')
+        .from('RevisionActivity')
         .select('id')
         .in('revisionId', revisionIds)
         .eq('completed', false)
@@ -1488,37 +1461,15 @@ async function executeCommercialApproval(id) {
         currentStatusName = proj?.projectStatus?.name || '';
     }
 
-    const isMovingToAguardandoAprovacao = currentStatusName === 'Em Revisão Comercial' || currentStatusName === 'Em Revisão' || currentStatusName === 'Em revisão';
+    const isMovingToAguardandoAprovacao = isOrderProjectEmRevisaoComercialConsStatus(currentStatusName)
+        || isOrderProjectEmRevisaoComercialProjStatus(currentStatusName);
     const now = new Date().toISOString();
 
     setCommercialApprovalActionLoading(id, true, 'Registrando aprovação...');
 
     try {
         if (!isMovingToAguardandoAprovacao) {
-            let payload = {
-                approved: true,
-                approvedAt: now,
-                status: 'Aprovado'
-            };
-
-            let { error } = await supabaseClient
-                .from('CommercialApproval')
-                .update(payload)
-                .eq('id', id);
-
-            if (error && payload.status) {
-                const { status, ...payloadWithoutStatus } = payload;
-                ({ error } = await supabaseClient
-                    .from('CommercialApproval')
-                    .update(payloadWithoutStatus)
-                    .eq('id', id));
-            }
-
-            if (error) {
-                setCommercialApprovalActionLoading(id, true, `Erro ao aprovar: ${error.message}`, 'error');
-                await new Promise(resolve => setTimeout(resolve, 2200));
-                return;
-            }
+            // Status do projeto é atualizado abaixo; CommercialApproval removido (fase C).
         }
 
         setCommercialApprovalActionLoading(id, true, 'Atualizando status do projeto...');
@@ -1557,9 +1508,16 @@ async function executeCommercialApproval(id) {
 window.approveCommercialApproval = approveCommercialApproval;
 
 function normalizeCommercialApproval(record) {
+    if (!record) return record;
+    if (typeof buildProjectWorkflowContext === 'function' && record.statusId && !record.orderProjectId) {
+        return buildProjectWorkflowContext(record);
+    }
+    const statusName = getCommercialApprovalProjectStatusName(record);
     return {
         ...record,
-        status: record.status || (record.approved ? 'Aprovado' : 'Aguardando Aprovação')
+        orderProjectId: record.orderProjectId || record.id,
+        id: record.orderProjectId || record.id,
+        status: record.status || getCommercialWorkflowStatusLabel(statusName)
     };
 }
 
@@ -1587,30 +1545,10 @@ function sortCommercialApprovals(approvals) {
 }
 
 async function queryCommercialApprovals(orderId) {
-    const columnSets = [
-        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, createdAt, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, approvedAt, status, createdAt, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, orderProject:OrderProject(id, name, projectCode)',
-        '*'
-    ];
-
-    let lastError = null;
-
-    for (const columns of columnSets) {
-        const result = await supabaseClient
-            .from('CommercialApproval')
-            .select(columns)
-            .eq('orderId', orderId)
-            .order('id', { ascending: false });
-
-        if (!result.error) return result;
-        lastError = result.error;
+    if (typeof queryCommercialWorkflowProjects === 'function') {
+        return queryCommercialWorkflowProjects(orderId);
     }
-
-    return { data: null, error: lastError };
+    return { data: [], error: null };
 }
 
 function renderCommercialApprovalActions(approval, { showApprove, showRequestRevision, showEdit }) {
@@ -1655,6 +1593,7 @@ function renderCommercialApprovalCard(approval, context) {
     const approvalDate = approval.approved && approval.approvedAt
         ? formatDate(approval.approvedAt)
         : '—';
+    const revisions = revisionsByApproval[approval.id] || [];
     const revisionsLabel = revisions.length
         ? `${revisions.length} ${revisions.length > 1 ? 'revisões' : 'revisão'}`
         : 'Nenhuma';
@@ -1993,28 +1932,8 @@ function bindCommercialApprovalEvents() {
 
             setCommercialApprovalFormLoading(true, 'Salvando solicitação...');
 
-            const payloads = selectedProjectIds.map(projectId => {
-                const project = projects.find(item => Number(item.id) === Number(projectId));
-                return {
-                    orderId: activeOrderId,
-                    orderProjectId: projectId,
-                    designerId: project?.designerId,
-                    approved: false,
-                    approvedAt: null,
-                    status: 'Aguardando Aprovação'
-                };
-            }).filter(payload => payload.orderProjectId && payload.designerId);
-
-            if (!payloads.length) {
+            if (!selectedProjectIds.length) {
                 alertAppDialog('Não foi possível montar as solicitações com o responsável dos projetos.');
-                return;
-            }
-
-            const { error, data: insertedApprovals } = await insertCommercialApprovals(payloads);
-
-            if (error) {
-                setCommercialApprovalFormLoading(true, `Erro ao salvar aprovação: ${error.message}`, 'error');
-                await new Promise(resolve => setTimeout(resolve, 2200));
                 return;
             }
 

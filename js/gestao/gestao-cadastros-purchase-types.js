@@ -316,7 +316,7 @@ async function loadGestaoCompraStatusList() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="5" class="p-6 text-center text-xs text-amber-700">
-                    Nenhum status cadastrado. Execute <code>supabase/rename/phase-02-cabinetmaker-installer-purchasestatus.sql</code> no Supabase.
+                    Nenhum status cadastrado. Consulte <code>PENDING-PROD-SQL.md</code> ou <code>supabase/schema/</code>.
                 </td>
             </tr>
         `;

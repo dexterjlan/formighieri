@@ -1,13 +1,106 @@
+const ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS = 'Em Revisão Comercial Cons.';
+const ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ = 'Em Revisão Comercial Proj.';
+const ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR = 'Em Revisão Técnica Revisor';
+const ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_LIDER_LEGACY = 'Em Revisão Técnica Lider';
+const ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ = 'Em Revisão Técnica Proj.';
+const ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL = 'Em Revisão Comercial';
+const ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA = 'Em Revisão Técnica';
+
+const ORDER_PROJECT_LEGACY_REVISION_STATUS_NAMES = new Set([
+    'Em Revisão',
+    'Em revisão'
+]);
+
+function isOrderProjectEmRevisaoComercialConsStatus(statusName) {
+    const normalized = String(statusName || '').trim();
+    return normalized === ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS
+        || normalized === ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL;
+}
+
+function isOrderProjectEmRevisaoComercialProjStatus(statusName) {
+    const normalized = String(statusName || '').trim();
+    return normalized === ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ
+        || normalized === ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA
+        || ORDER_PROJECT_LEGACY_REVISION_STATUS_NAMES.has(normalized);
+}
+
+function isOrderProjectCommercialRevisionStatus(statusName) {
+    return isOrderProjectEmRevisaoComercialConsStatus(statusName)
+        || isOrderProjectEmRevisaoComercialProjStatus(statusName);
+}
+
+function isOrderProjectEmRevisaoTecnicaRevisorStatus(statusName) {
+    const normalized = String(statusName || '').trim();
+    return normalized === ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR
+        || normalized === ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_LIDER_LEGACY;
+}
+
+function isOrderProjectEmRevisaoTecnicaProjStatus(statusName) {
+    return String(statusName || '').trim() === ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ;
+}
+
+function isOrderProjectTechnicalReviewerReviewStatus(statusName) {
+    return isOrderProjectEmRevisaoTecnicaRevisorStatus(statusName)
+        || isOrderProjectEmRevisaoTecnicaProjStatus(statusName);
+}
+
+function normalizeOrderProjectWorkloadStatusName(statusName) {
+    if (ORDER_PROJECT_LEGACY_REVISION_STATUS_NAMES.has(statusName)
+        || statusName === ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA) {
+        return ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ;
+    }
+    if (statusName === ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL) {
+        return ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS;
+    }
+    return statusName;
+}
+
 function getOrderProjectStatusName(project) {
     return project?.projectStatus?.name || project?.statusName || '—';
 }
 
+function getOrderProjectStatusSortOrder(project) {
+    const fromJoin = project?.projectStatus?.sortOrder;
+    if (fromJoin != null && Number.isFinite(Number(fromJoin))) {
+        return Number(fromJoin);
+    }
+
+    const statusId = project?.statusId || project?.projectStatus?.id;
+    const statusName = getOrderProjectStatusName(project);
+
+    if (typeof gestaoProjectStatusesCache !== 'undefined' && gestaoProjectStatusesCache.length) {
+        const match = gestaoProjectStatusesCache.find(status =>
+            (statusId && Number(status.id) === Number(statusId))
+            || status.name === statusName
+        );
+        if (match?.sortOrder != null) {
+            return Number(match.sortOrder);
+        }
+    }
+
+    return null;
+}
+
+function isOrderProjectStatusInOrderRevisionsListRange(project) {
+    const sortOrder = getOrderProjectStatusSortOrder(project);
+    if (sortOrder == null) return false;
+    return sortOrder >= ORDER_PROJECT_REVISIONS_LIST_MIN_SORT_ORDER
+        && sortOrder <= ORDER_PROJECT_REVISIONS_LIST_MAX_SORT_ORDER;
+}
+
 const COMPLEMENTAR_PARENT_BLOCKED_FROM_SORT_ORDER = 10;
+
+const ORDER_PROJECT_REVISIONS_LIST_MIN_SORT_ORDER = 10;
+const ORDER_PROJECT_REVISIONS_LIST_MAX_SORT_ORDER = 14;
 
 const COMPLEMENTAR_PARENT_BLOCKED_STATUS_NAMES = new Set([
     'Aguardando Aprovação',
-    'Em Revisão Comercial',
-    'Em Revisão Técnica',
+    ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS,
+    ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ,
+    ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL,
+    ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
     'Em Revisão',
     'Em revisão',
     'Nomear',
@@ -64,8 +157,12 @@ const SUBSTITUICAO_MAX_ORIGINAL_SORT_ORDER = 8;
 
 const SUBSTITUICAO_BLOCKED_STATUS_NAMES = new Set([
     'Projeto Técnico',
-    'Em Revisão Comercial',
-    'Em Revisão Técnica',
+    ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS,
+    ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ,
+    ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL,
+    ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
     'Aguardando Aprovação',
     'Em Revisão',
     'Em revisão',

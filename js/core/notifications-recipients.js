@@ -436,6 +436,40 @@ async function fetchActiveConferenteRecipientEmails() {
     return unique.length ? unique : [NOTIFICATION_TEST_EMAIL];
 }
 
+async function fetchActiveReviewerRecipientEmails() {
+    if (NOTIFICATION_TEST_MODE) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+
+    let { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('email, isReviewer, isProjectLeader')
+        .eq('role', 'Projetista')
+        .eq('isActive', true)
+        .eq('isReviewer', true);
+
+    if (error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader')) {
+        ({ data, error } = await supabaseClient
+            .from('appUsers')
+            .select('email, isProjectLeader')
+            .eq('role', 'Projetista')
+            .eq('isActive', true)
+            .eq('isProjectLeader', true));
+    }
+
+    if (error) throw error;
+
+    const emails = (data || [])
+        .filter(user => user.isReviewer || user.isProjectLeader)
+        .map(user => user.email);
+
+    const unique = uniqueEmails(emails);
+    if (!unique.length && NOTIFICATION_TEST_MODE && NOTIFICATION_TEST_EMAIL) {
+        return [NOTIFICATION_TEST_EMAIL];
+    }
+    return unique;
+}
+
 async function fetchLiberacaoMedicaoRecipientEmails(orderId) {
     if (NOTIFICATION_TEST_MODE) {
         return [NOTIFICATION_TEST_EMAIL];

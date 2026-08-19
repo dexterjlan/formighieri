@@ -24,6 +24,12 @@ const USER_FLAG_CONFIG = [
         appliesTo: role => role === 'Projetista'
     },
     {
+        id: 'revisor',
+        label: 'Revisor',
+        hint: 'Revisão técnica do revisor antes de Nomear',
+        appliesTo: role => role === 'Projetista'
+    },
+    {
         id: 'detalhamento',
         label: 'Detalhamento',
         hint: 'Fluxo de detalhamento em produção',
@@ -94,6 +100,7 @@ function buildUserRoleBadges(u) {
     if ((isAdminUser || isConsultorUser) && u.isCommercialManager) badges.push('<span class="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-100">Gestor comercial</span>');
     if (canHaveGestorProjetos && u.isProjectsManager) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">Gestor de projetos</span>');
     if (isProjetistaUser && u.isPpcp) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">PPCP</span>');
+    if (isProjetistaUser && u.isReviewer) badges.push('<span class="text-[10px] bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-teal-100">Revisor</span>');
     if (isProjetistaUser && u.isDetailing) badges.push('<span class="text-[10px] bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-100">Detalhamento</span>');
     if (isMarceneiroUser && u.isFactoryManager) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
 
@@ -112,6 +119,7 @@ function buildUserFlagCheckbox(u, flag) {
         'gestor-comercial': Boolean(u.isCommercialManager),
         'gestor-projetos': Boolean(u.isProjectsManager),
         ppcp: Boolean(u.isPpcp),
+        revisor: Boolean(u.isReviewer ?? u.isProjectLeader),
         'gestor-fabrica': Boolean(u.isFactoryManager),
         detalhamento: Boolean(u.isDetailing)
     };
@@ -158,6 +166,7 @@ function mergeUserFlagChecks(u, checks) {
         isCommercialManager: checks['gestor-comercial'] ?? u.isCommercialManager,
         isProjectsManager: checks['gestor-projetos'] ?? u.isProjectsManager,
         isPpcp: checks.ppcp ?? u.isPpcp,
+        isReviewer: checks.revisor ?? u.isReviewer ?? u.isProjectLeader,
         isFactoryManager: checks['gestor-fabrica'] ?? u.isFactoryManager,
         isDetailing: checks.detalhamento ?? u.isDetailing
     };
@@ -318,10 +327,10 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isFactoryManager, isDetailing')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing')
         .order('name', { ascending: true });
 
-    if (result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isDetailing')) {
+    if (result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing')) {
         result = await supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager')
@@ -385,6 +394,7 @@ async function saveUserRole(userId) {
     const gestorComercialCheck = document.getElementById(`gestor-comercial-check-${userId}`);
     const gestorProjetosCheck = document.getElementById(`gestor-projetos-check-${userId}`);
     const ppcpCheck = document.getElementById(`ppcp-check-${userId}`);
+    const revisorCheck = document.getElementById(`revisor-check-${userId}`);
     const detalhamentoCheck = document.getElementById(`detalhamento-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const name = nameInput?.value.trim() || '';
@@ -393,6 +403,7 @@ async function saveUserRole(userId) {
     const isCommercialManager = (role === 'Admin' || role === 'Consultor') && Boolean(gestorComercialCheck?.checked);
     const isProjectsManager = (role === 'Admin' || role === 'Projetista') && Boolean(gestorProjetosCheck?.checked);
     const isPpcp = role === 'Projetista' && Boolean(ppcpCheck?.checked);
+    const isReviewer = role === 'Projetista' && Boolean(revisorCheck?.checked);
     const isDetailing = role === 'Projetista' && Boolean(detalhamentoCheck?.checked);
     const isFactoryManager = role === 'Marceneiro' && Boolean(gestorFabricaCheck?.checked);
 
@@ -413,13 +424,13 @@ async function saveUserRole(userId) {
         .eq('id', userId)
         .maybeSingle();
 
-    let payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isFactoryManager, isDetailing };
+    let payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing };
     let { error } = await supabaseClient
         .from('appUsers')
         .update(payload)
         .eq('id', userId);
 
-    if (error?.message?.includes('isFactoryManager') || error?.message?.includes('isPpcp') || error?.message?.includes('isDetailing')) {
+    if (error?.message?.includes('isFactoryManager') || error?.message?.includes('isPpcp') || error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader') || error?.message?.includes('isDetailing')) {
         payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager };
         ({ error } = await supabaseClient
             .from('appUsers')
@@ -455,6 +466,7 @@ async function saveUserRole(userId) {
             isCommercialManager,
             isProjectsManager,
             isPpcp,
+            isReviewer,
             isFactoryManager,
             isDetailing
         };

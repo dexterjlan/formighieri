@@ -13,6 +13,47 @@ function resetMultiSelectFilter(selectId, defaultValues = []) {
     });
 }
 
+function renderCheckboxFilterGroup(containerId, items = [], options = {}) {
+    const {
+        defaultCheckedValues = [],
+        inputName = containerId,
+        checkAllByDefault = !defaultCheckedValues.length
+    } = options;
+
+    return items.map((value, index) => {
+        const checked = checkAllByDefault || defaultCheckedValues.includes(value);
+        const inputId = `${containerId}-${index}`;
+        return `
+            <label for="${escapeHtml(inputId)}" class="fm-checkbox-filter__item flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                <input type="checkbox"
+                    id="${escapeHtml(inputId)}"
+                    class="fm-checkbox-filter__input h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    name="${escapeHtml(inputName)}"
+                    value="${escapeHtml(value)}"
+                    ${checked ? 'checked' : ''}>
+                <span>${escapeHtml(value)}</span>
+            </label>
+        `;
+    }).join('');
+}
+
+function getCheckboxFilterValues(containerId, defaultValues = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return [...defaultValues];
+
+    return [...container.querySelectorAll('input[type="checkbox"]:checked')]
+        .map(input => input.value);
+}
+
+function resetCheckboxFilter(containerId, defaultValues = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.checked = defaultValues.includes(input.value);
+    });
+}
+
 async function loadConsultantAndDesignerFilterOptions(options = {}) {
     const {
         consultantSelectId = null,

@@ -17,7 +17,48 @@ let revisionActivityAttachmentDrafts = new Map();
 let revisionActivityAttachmentExisting = new Map();
 let revisionActivityAttachmentRemovedIds = new Set();
 let revisionActivityImageTargetRowId = null;
+let revisionActivityImageTargetContext = null;
 const revisionActivityAttachmentUrlCache = new Map();
+
+const REVISION_ACTIVITY_ATTACHMENT_CONTEXTS = {
+    commercial: {
+        listSelector: '#revision-activities-list',
+        fileInputId: 'revision-activity-image-input',
+        resolveCanEdit(approval = null, activity = null) {
+            return canEditRevisionActivityAttachments(approval, activity);
+        },
+        resolveApproval() {
+            return typeof getCurrentApproval === 'function' ? getCurrentApproval() : null;
+        }
+    },
+    technicalReviewer: {
+        listSelector: '#tr-revision-activities-list',
+        fileInputId: 'tr-revision-activity-image-input',
+        resolveCanEdit() {
+            return typeof canReviewerEditTechnicalReviewerRevisionDescriptions === 'function'
+                && canReviewerEditTechnicalReviewerRevisionDescriptions();
+        },
+        resolveApproval() {
+            return typeof getCurrentTechnicalReviewerProject === 'function'
+                ? getCurrentTechnicalReviewerProject()
+                : null;
+        }
+    }
+};
+
+function findRevisionActivityRowByRowId(rowId) {
+    const escaped = CSS.escape(String(rowId));
+    return document.querySelector(`#revision-activities-list tr[data-row-id="${escaped}"]`)
+        || document.querySelector(`#tr-revision-activities-list tr[data-row-id="${escaped}"]`);
+}
+
+function getRevisionActivityAttachmentContextForRow(rowId) {
+    const tr = findRevisionActivityRowByRowId(rowId);
+    if (tr?.closest('#tr-revision-activities-list')) {
+        return REVISION_ACTIVITY_ATTACHMENT_CONTEXTS.technicalReviewer;
+    }
+    return REVISION_ACTIVITY_ATTACHMENT_CONTEXTS.commercial;
+}
 
 function getRevisionActivityStorageEnvPrefix() {
     return window.FORMIGHIERI_APP_ENV === 'prod' ? 'prod' : 'dev';
@@ -76,6 +117,7 @@ function resetRevisionActivityAttachments() {
     revisionActivityAttachmentExisting = new Map();
     revisionActivityAttachmentRemovedIds = new Set();
     revisionActivityImageTargetRowId = null;
+    revisionActivityImageTargetContext = null;
 }
 
 function getRevisionActivityImageForRow(rowId) {
@@ -108,8 +150,11 @@ function migrateRevisionActivityAttachmentDrafts(fromRowId, toRowId) {
     revisionActivityAttachmentDrafts.delete(fromKey);
 }
 
-function renderRevisionActivityAttachmentsHtml(rowId, approval = null, activity = null) {
-    const canEdit = canEditRevisionActivityAttachments(approval, activity);
+function renderRevisionActivityAttachmentsHtml(rowId, approval = null, activity = null, contextOrKey = null) {
+    const resolvedContext = typeof contextOrKey === 'string'
+        ? (REVISION_ACTIVITY_ATTACHMENT_CONTEXTS[contextOrKey] || getRevisionActivityAttachmentContextForRow(rowId))
+        : (contextOrKey || getRevisionActivityAttachmentContextForRow(rowId));
+    const canEdit = resolvedContext.resolveCanEdit(approval, activity);
     const { existing, draft } = getRevisionActivityImageForRow(rowId);
     const visibleItem = draft || existing;
 
@@ -157,21 +202,27 @@ function renderRevisionActivityAttachmentsHtml(rowId, approval = null, activity 
 }
 
 function refreshRevisionActivityAttachmentsForRow(rowId) {
-    const tr = document.querySelector(`#revision-activities-list tr[data-row-id="${CSS.escape(String(rowId))}"]`);
+    const tr = findRevisionActivityRowByRowId(rowId);
     if (!tr) return;
 
     const container = tr.querySelector('.revision-activity-attachments');
     if (!container) return;
 
-    const approval = typeof getCurrentApproval === 'function' ? getCurrentApproval() : null;
-    const completed = Boolean(tr.querySelector('.revision-activity-completed')?.checked);
-    container.outerHTML = renderRevisionActivityAttachmentsHtml(rowId, approval, { completed });
+    const context = getRevisionActivityAttachmentContextForRow(rowId);
+    const approval = context.resolveApproval();
+    const completed = Boolean(
+        tr.querySelector('.revision-activity-completed')?.checked
+        || tr.querySelector('.tr-revision-activity-completed')?.checked
+    );
+    container.outerHTML = renderRevisionActivityAttachmentsHtml(rowId, approval, { completed }, context);
     hydrateRevisionActivityAttachmentPreviews(tr);
 }
 
 function refreshAllRevisionActivityAttachments() {
-    document.querySelectorAll('#revision-activities-list tr[data-row-id]').forEach(tr => {
-        refreshRevisionActivityAttachmentsForRow(tr.dataset.rowId);
+    Object.values(REVISION_ACTIVITY_ATTACHMENT_CONTEXTS).forEach(context => {
+        document.querySelectorAll(`${context.listSelector} tr[data-row-id]`).forEach(tr => {
+            refreshRevisionActivityAttachmentsForRow(tr.dataset.rowId);
+        });
     });
 }
 
@@ -212,7 +263,7 @@ async function fetchRevisionActivityAttachmentsByActivityIds(activityIds = []) {
     if (!activityIds.length) return {};
 
     const { data, error } = await supabaseClient
-        .from('CommercialRevisionActivityAttachment')
+        .from('RevisionActivityAttachment')
         .select('id, revisionActivityId, storagePath, fileName, mimeType, fileSizeBytes, sortOrder, createdAt')
         .in('revisionActivityId', activityIds)
         .order('sortOrder', { ascending: true })
@@ -220,7 +271,7 @@ async function fetchRevisionActivityAttachmentsByActivityIds(activityIds = []) {
 
     if (error) {
         console.error('fetchRevisionActivityAttachmentsByActivityIds:', error);
-        if (error.message?.includes('CommercialRevisionActivityAttachment')) return {};
+        if (error.message?.includes('RevisionActivityAttachment')) return {};
         return {};
     }
 
@@ -319,7 +370,7 @@ async function deleteRevisionActivityAttachmentRecord(attachment) {
     }
 
     const { error } = await supabaseClient
-        .from('CommercialRevisionActivityAttachment')
+        .from('RevisionActivityAttachment')
         .delete()
         .eq('id', attachment.id);
 
@@ -342,7 +393,7 @@ async function insertRevisionActivityAttachmentRecord(activityId, file, storageP
     };
 
     const { data, error } = await supabaseClient
-        .from('CommercialRevisionActivityAttachment')
+        .from('RevisionActivityAttachment')
         .insert(payload)
         .select('id, revisionActivityId, storagePath, fileName, mimeType, fileSizeBytes, sortOrder, createdAt')
         .single();
@@ -398,9 +449,10 @@ async function persistRevisionActivityAttachments(revisionId, activityIdByRowId 
     }
 }
 
-function handleRevisionActivityImageSelect(fileList) {
+function handleRevisionActivityImageSelect(fileList, context = null) {
     const rowId = revisionActivityImageTargetRowId;
-    if (!rowId || !canEditRevisionActivityAttachments()) return;
+    const resolvedContext = context || revisionActivityImageTargetContext || REVISION_ACTIVITY_ATTACHMENT_CONTEXTS.commercial;
+    if (!rowId || !resolvedContext.resolveCanEdit()) return;
 
     const file = [...(fileList || [])][0];
     if (!file) return;
@@ -451,13 +503,14 @@ function openRevisionActivityAttachmentPreview(storagePath, fileName = 'Imagem')
     });
 }
 
-function bindRevisionActivityAttachmentEvents() {
-    document.getElementById('revision-activities-list')?.addEventListener('click', event => {
+function bindRevisionActivityAttachmentListEvents(listEl, context) {
+    listEl?.addEventListener('click', event => {
         const addBtn = event.target.closest('[data-add-revision-activity-image]');
         if (addBtn) {
-            if (!canEditRevisionActivityAttachments()) return;
+            if (!context.resolveCanEdit()) return;
             revisionActivityImageTargetRowId = addBtn.dataset.addRevisionActivityImage;
-            document.getElementById('revision-activity-image-input')?.click();
+            revisionActivityImageTargetContext = context;
+            document.getElementById(context.fileInputId)?.click();
             return;
         }
 
@@ -484,11 +537,30 @@ function bindRevisionActivityAttachmentEvents() {
             );
         }
     });
+}
+
+function bindRevisionActivityAttachmentEvents() {
+    bindRevisionActivityAttachmentListEvents(
+        document.getElementById('revision-activities-list'),
+        REVISION_ACTIVITY_ATTACHMENT_CONTEXTS.commercial
+    );
+    bindRevisionActivityAttachmentListEvents(
+        document.getElementById('tr-revision-activities-list'),
+        REVISION_ACTIVITY_ATTACHMENT_CONTEXTS.technicalReviewer
+    );
 
     document.getElementById('revision-activity-image-input')?.addEventListener('change', event => {
-        handleRevisionActivityImageSelect(event.target.files);
+        handleRevisionActivityImageSelect(event.target.files, REVISION_ACTIVITY_ATTACHMENT_CONTEXTS.commercial);
         event.target.value = '';
         revisionActivityImageTargetRowId = null;
+        revisionActivityImageTargetContext = null;
+    });
+
+    document.getElementById('tr-revision-activity-image-input')?.addEventListener('change', event => {
+        handleRevisionActivityImageSelect(event.target.files, REVISION_ACTIVITY_ATTACHMENT_CONTEXTS.technicalReviewer);
+        event.target.value = '';
+        revisionActivityImageTargetRowId = null;
+        revisionActivityImageTargetContext = null;
     });
 
     document.addEventListener('click', event => {

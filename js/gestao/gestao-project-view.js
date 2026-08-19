@@ -150,11 +150,18 @@ function fillProjectViewModal(project = {}, complementarChildren = []) {
     setText('project-view-montagem-inicio', formatProjectViewMontagemDate(project.internalAssemblyStartDate));
     setText('project-view-montagem-fim', formatProjectViewMontagemDate(project.internalAssemblyEndDate));
 
-    const networkPathEl = document.getElementById('project-view-caminho-rede');
-    const networkPath = project.approvalNetworkPath || '—';
-    if (networkPathEl) {
-        networkPathEl.textContent = networkPath;
-        networkPathEl.classList.toggle('project-view-path--empty', networkPath === '—');
+    const conferenceNetworkPathEl = document.getElementById('project-view-caminho-rede-conferencia');
+    const conferenceNetworkPath = project.conferenceNetworkPath || '—';
+    if (conferenceNetworkPathEl) {
+        conferenceNetworkPathEl.textContent = conferenceNetworkPath;
+        conferenceNetworkPathEl.classList.toggle('project-view-path--empty', conferenceNetworkPath === '—');
+    }
+
+    const approvalNetworkPathEl = document.getElementById('project-view-caminho-rede-aprovacao');
+    const approvalNetworkPath = project.approvalNetworkPath || '—';
+    if (approvalNetworkPathEl) {
+        approvalNetworkPathEl.textContent = approvalNetworkPath;
+        approvalNetworkPathEl.classList.toggle('project-view-path--empty', approvalNetworkPath === '—');
     }
 
     const childWrap = document.getElementById('project-view-complementar-child-wrap');
@@ -213,9 +220,9 @@ async function fetchProjectDetailsForView(projectId) {
     if (!normalizedId) return null;
 
     const selectVariants = [
-        'id, orderId, projectCode, name, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, technicalProjectCompletedDate, statusId, designerId, approvalNetworkPath, cabinetMakerId, internalAssemblyStartDate, internalAssemblyEndDate, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), cabinetMaker:CabinetMaker(id, name), order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name)), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
-        'id, orderId, projectCode, name, saleValue, deliveryDate, technicalProjectForecastEndDate, technicalProjectCompletedDate, statusId, designerId, approvalNetworkPath, cabinetMakerId, internalAssemblyStartDate, internalAssemblyEndDate, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name)), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
-        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, cabinetMakerId, internalAssemblyStartDate, internalAssemblyEndDate, isComplementary, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, technicalProjectCompletedDate, statusId, designerId, approvalNetworkPath, conferenceNetworkPath, cabinetMakerId, internalAssemblyStartDate, internalAssemblyEndDate, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), cabinetMaker:CabinetMaker(id, name), order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name)), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, technicalProjectForecastEndDate, technicalProjectCompletedDate, statusId, designerId, approvalNetworkPath, conferenceNetworkPath, cabinetMakerId, internalAssemblyStartDate, internalAssemblyEndDate, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), designer:appUsers!OrderProject_designerId_fkey(id, name), order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name)), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))',
+        'id, orderId, projectCode, name, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, conferenceNetworkPath, cabinetMakerId, internalAssemblyStartDate, internalAssemblyEndDate, isComplementary, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)'
     ];
 

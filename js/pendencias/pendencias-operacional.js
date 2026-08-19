@@ -973,7 +973,7 @@ async function fetchPendenciasImplantacoesAbertas() {
 
     if (error?.message?.includes('Implementation')) {
         return {
-            error: new Error('Tabela Implementation não encontrada. Execute supabase/rename/phase-03-purchase-implementation.sql no Supabase.'),
+            error: new Error('Tabela Implementation não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.'),
             projects: []
         };
     }

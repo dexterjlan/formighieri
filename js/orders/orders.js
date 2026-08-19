@@ -60,17 +60,73 @@ window.getOrderProjectPhaseDisplay = getOrderProjectPhaseDisplay;
 window.loadOrderPhasesForOrders = loadOrderPhasesForOrders;
 
 async function fetchOrderSummaryApprovals() {
-    const columnSets = ['orderId, status, approved', 'orderId, approved'];
+    const openStatusNames = typeof COMMERCIAL_WORKFLOW_OPEN_STATUSES !== 'undefined'
+        ? COMMERCIAL_WORKFLOW_OPEN_STATUSES
+        : [
+            'Aguardando Aprovação',
+            ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS,
+            ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ,
+            ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL,
+            ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA,
+            'Em Revisão',
+            'Em revisão'
+        ];
 
-    for (const columns of columnSets) {
-        const { data, error } = await supabaseClient
-            .from('CommercialApproval')
-            .select(columns);
-
-        if (!error) return data || [];
+    let statusIds = [];
+    if (typeof getPendenciasStatusIdsByNames === 'function') {
+        statusIds = await getPendenciasStatusIdsByNames([...new Set(openStatusNames)]);
     }
 
-    return [];
+    if (!statusIds.length) return [];
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('orderId, statusId, projectStatus:OrderProjectStatus(name)')
+        .in('statusId', statusIds);
+
+    if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('orderId, statusId')
+            .in('statusId', statusIds);
+    }
+
+    if (result.error) {
+        console.error('fetchOrderSummaryApprovals:', result.error);
+        return [];
+    }
+
+    let projects = result.data || [];
+    const needsEnrich = projects.some(project => project.statusId && !project.projectStatus);
+
+    if (needsEnrich) {
+        const statusIdList = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
+        if (statusIdList.length) {
+            const { data: statuses } = await supabaseClient
+                .from('OrderProjectStatus')
+                .select('id, name')
+                .in('id', statusIdList);
+
+            const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+            projects = projects.map(project => ({
+                ...project,
+                projectStatus: project.projectStatus || statusById[project.statusId] || null
+            }));
+        }
+    }
+
+    return projects.map(project => {
+        const statusName = getOrderProjectStatusName(project);
+        const status = typeof getCommercialWorkflowStatusLabel === 'function'
+            ? getCommercialWorkflowStatusLabel(statusName)
+            : statusName;
+
+        return {
+            orderId: project.orderId,
+            status,
+            approved: false
+        };
+    });
 }
 
 async function fetchOrderSummaryProjects() {

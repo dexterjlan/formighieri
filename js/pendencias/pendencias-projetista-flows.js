@@ -29,39 +29,6 @@ async function fetchEmRevisaoStatusChangedAtByProjectIds(projectIds) {
     return byProject;
 }
 
-async function fetchCommercialApprovalsByProjectIds(projectIds) {
-    if (!projectIds.length) return {};
-
-    const columnSets = [
-        'id, orderId, orderProjectId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, orderProjectId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, approvedAt, status, orderProject:OrderProject(id, name, projectCode)',
-        'id, orderId, designerId, approved, approvedAt, orderProject:OrderProject(id, name, projectCode)'
-    ];
-
-    let lastError = null;
-
-    for (const columns of columnSets) {
-        const result = await supabaseClient
-            .from('CommercialApproval')
-            .select(columns)
-            .in('orderProjectId', projectIds);
-
-        if (!result.error) {
-            const byProject = {};
-            (result.data || []).forEach(approval => {
-                if (approval.orderProjectId) {
-                    byProject[approval.orderProjectId] = normalizeCommercialApproval(approval);
-                }
-            });
-            return byProject;
-        }
-        lastError = result.error;
-    }
-
-    console.error('fetchCommercialApprovalsByProjectIds:', lastError);
-    return {};
-}
 
 function isPendenciasEmRevisaoOverviewMode() {
     return isAdmin() || isGestorProjetos();
@@ -305,8 +272,23 @@ function canAccessPendenciasProjetoTecnico() {
 
 function canSubmitCommercialApprovalFromPendencias(project, approval) {
     if (!project) return false;
-    if (approval && !isCommercialApprovalApproved(approval)) return false;
+
+    if (approval) {
+        const approvalStatusName = getCommercialApprovalProjectStatusName(approval)
+            || approval?.projectStatus?.name
+            || approval?.status
+            || '';
+        const hasOpenWorkflow = typeof isProjectInOpenCommercialWorkflow === 'function'
+            ? isProjectInOpenCommercialWorkflow(approvalStatusName)
+            : !isCommercialApprovalApproved(approval);
+
+        if (hasOpenWorkflow && !isCommercialApprovalApproved(approval)) {
+            return false;
+        }
+    }
+
     if (typeof isAdmin === 'function' ? isAdmin() : currentUser?.role === 'Admin') return true;
+    if (typeof isGestorProjetos === 'function' && isGestorProjetos()) return true;
 
     const designerId = project.designerId || approval?.designerId;
     if (!designerId) return false;

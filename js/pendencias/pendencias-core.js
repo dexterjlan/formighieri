@@ -1,7 +1,7 @@
 const PENDENCIAS_STATUS_AGUARDANDO_PT = 'Aguardando Projeto Técnico';
 const PENDENCIAS_STATUS_PROJETO_TECNICO = 'Projeto Técnico';
-const PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL = 'Em Revisão Comercial';
-const PENDENCIAS_STATUS_EM_REVISAO_TECNICA = 'Em Revisão Técnica';
+const PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL = ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS;
+const PENDENCIAS_STATUS_EM_REVISAO_TECNICA = ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ;
 const PENDENCIAS_STATUS_EM_REVISAO = 'Em Revisão';
 const PENDENCIAS_STATUS_VENDIDO = 'Vendido';
 const PENDENCIAS_STATUS_AGUARDANDO_OBRA = 'Aguardando Obra';
@@ -33,10 +33,12 @@ const PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES = [
 ];
 const PENDENCIAS_MINE_EXTRA_STATUSES = [
     PENDENCIAS_STATUS_PROJETO_TECNICO,
-    'Em Revisão Comercial',
-    'Em Revisão Técnica',
+    PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL,
+    PENDENCIAS_STATUS_EM_REVISAO_TECNICA,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
     'Aguardando Aprovação',
-    'Em Revisão',
+    PENDENCIAS_STATUS_EM_REVISAO,
     'Em revisão'
 ];
 
@@ -51,8 +53,10 @@ const PENDENCIAS_PROJECT_SELECT_FALLBACK = `
 const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
     PENDENCIAS_STATUS_AGUARDANDO_PT,
     PENDENCIAS_STATUS_PROJETO_TECNICO,
-    'Em Revisão Comercial',
+    PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL,
     PENDENCIAS_STATUS_EM_REVISAO_TECNICA,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
     'Aguardando Aprovação',
     'Aguardando PPCP',
     PENDENCIAS_STATUS_IMPLANTACAO
@@ -61,8 +65,10 @@ const PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES = [
 const PENDENCIAS_GESTOR_WORKLOAD_COLUMNS = [
     PENDENCIAS_STATUS_AGUARDANDO_PT,
     PENDENCIAS_STATUS_PROJETO_TECNICO,
-    'Em Revisão Comercial',
+    PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL,
     PENDENCIAS_STATUS_EM_REVISAO_TECNICA,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
+    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
     'Aguardando Aprovação',
     'Aguardando PPCP',
     PENDENCIAS_STATUS_IMPLANTACAO
@@ -171,10 +177,15 @@ function getPendenciasProjetistaMenuItems() {
             { id: 'aguardando-projeto-tecnico', label: 'Aguardando Projeto Técnico' },
             { id: 'projeto-tecnico', label: 'Projeto Técnico' },
             { id: 'projetos-terceiros', label: 'Projetos de Terceiros' },
-            { id: 'em-revisao', label: 'Em Revisão' },
+            { id: 'em-revisao', label: 'Em Revisão Comercial Proj.' },
+            { id: 'em-revisao-tecnica-proj', label: 'Em Revisão Técnica Proj.' },
             { id: 'requisicao', label: 'Requisição' },
             { id: 'nomear', label: 'Nomear' }
         );
+
+        if (canSeePendenciasReviewerItems()) {
+            items.splice(4, 0, { id: 'em-revisao-tecnica-revisor', label: 'Em Revisão Técnica Revisor' });
+        }
 
         if (canSeePendenciasPpcpItems()) {
             items.push(
@@ -264,7 +275,7 @@ function getPendenciasSidebarSections() {
             visible: canSeePendenciasConsultorMenu(),
             items: [
                 { id: 'conferencia', label: 'Conferência' },
-                { id: 'em-revisao-comercial', label: 'Em Revisão Comercial' },
+                { id: 'em-revisao-comercial', label: 'Em Revisão Comercial Cons.' },
                 { id: 'aguardando-aprovacao', label: 'Aguardando Aprovação' },
                 { id: 'projetos-terceiros', label: 'Projetos de Terceiros' },
                 { id: 'requisicoes', label: 'Requisições' }
@@ -653,6 +664,16 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'em-revisao') {
         loadPendenciasEmRevisao();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'em-revisao-tecnica-revisor') {
+        loadPendenciasEmRevisaoTecnicaRevisor();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'em-revisao-tecnica-proj') {
+        loadPendenciasEmRevisaoTecnicaProj();
         return;
     }
 

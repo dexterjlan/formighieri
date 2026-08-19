@@ -503,7 +503,8 @@ const PROCESS_EMAIL_TITLE = {
     montagem_externa_finalizada: 'Montagem Externa Finalizada',
     pedido_entregue: 'Pedido Entregue',
     third_party_project_status: 'Projeto de Terceiros — Atualização de Status',
-    third_party_designer_assigned: 'Projeto de Terceiros Atribuído'
+    third_party_designer_assigned: 'Projeto de Terceiros Atribuído',
+    technical_reviewer_revision_started: 'Revisão Iniciada'
 };
 function buildProcessEmailSubject(eventType, orderCode, clientName) {
     const prefix = PROCESS_EMAIL_TITLE[eventType] || 'Atualização de Processo';

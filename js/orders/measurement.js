@@ -1180,7 +1180,7 @@ async function loadMedicoes(orderId) {
     }
 
     if (result.error?.message?.includes('Measurement')) {
-        list.innerHTML = '<p class="text-xs text-amber-700 text-center py-6 bg-amber-50 rounded-xl border border-amber-100">Execute o SQL <code>supabase/rename/phase-04-measurement.sql</code> no Supabase.</p>';
+        list.innerHTML = '<p class="text-xs text-amber-700 text-center py-6 bg-amber-50 rounded-xl border border-amber-100">Atualize o banco conforme <code>PENDING-PROD-SQL.md</code> ou <code>supabase/schema/</code>.</p>';
         updateOrderTabCounts(undefined, undefined, 0);
         return;
     }
