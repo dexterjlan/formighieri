@@ -521,11 +521,13 @@
                     <div id="anteprojeto-projects-structure" class="space-y-4"></div>
                     <p id="anteprojeto-projects-empty-msg" class="text-xs text-slate-400 text-center py-2">Nenhum projeto adicionado.</p>
                 </div>
-                <div class="flex gap-2 pt-2">
+                <div class="flex flex-wrap gap-2 pt-2">
                     <button type="button" onclick="closeAnteprojetoModal()"
-                        class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
+                        class="flex-1 min-w-[7rem] bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium">Cancelar</button>
                     <button type="submit" id="anteprojeto-form-submit"
-                        class="flex-1 bg-sky-700 text-white py-2 rounded-lg text-xs font-medium">Criar Conferência</button>
+                        class="flex-1 min-w-[7rem] bg-slate-800 text-white py-2 rounded-lg text-xs font-medium">Salvar</button>
+                    <button type="button" id="btn-anteprojeto-modal-send"
+                        class="flex-1 min-w-[8rem] hidden bg-sky-700 text-white py-2 rounded-lg text-xs font-semibold">Enviar Conferência</button>
                 </div>
             </form>
             <div id="anteprojeto-modal-confirm-wrap" class="hidden pt-3 mt-3 border-t border-slate-100 space-y-2">

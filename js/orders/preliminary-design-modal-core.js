@@ -102,7 +102,12 @@ function setAnteprojetoModalFields(conference, options = {}) {
     const submitBtn = document.getElementById('anteprojeto-form-submit');
     if (submitBtn) {
         submitBtn.classList.toggle('hidden', readOnly || (!canEditStructure && !canEditConsultor));
+        submitBtn.textContent = conference && !isAnteprojetoConferenceDraft(conference)
+            ? 'Salvar Conferência'
+            : 'Salvar';
     }
+
+    updateAnteprojetoModalSendControls(conference);
 }
 
 function areAllAnteprojetoModalObservationsReady() {
@@ -133,6 +138,14 @@ function refreshPreliminaryDesignModalConfirmButton() {
     btn.classList.toggle('bg-slate-200', !allReady);
     btn.classList.toggle('text-slate-500', !allReady);
     btn.classList.toggle('cursor-not-allowed', !allReady);
+}
+
+function updateAnteprojetoModalSendControls(conference) {
+    const sendBtn = document.getElementById('btn-anteprojeto-modal-send');
+    if (!sendBtn) return;
+    const show = canSendAnteprojetoConference(conference);
+    sendBtn.classList.toggle('hidden', !show);
+    sendBtn.disabled = !show;
 }
 
 function updateAnteprojetoModalConfirmControls(conference) {
@@ -284,6 +297,11 @@ async function openPreliminaryDesignModal(conferenceId = null) {
         ? anteprojetoConferencesCache.find(c => Number(c.id) === Number(conferenceId))
         : null;
 
+    if (conference && !canViewAnteprojetoConference(conference)) {
+        alertAppDialog('Esta conferência ainda não foi enviada.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
     const readOnly = isAnteprojetoConferenceConfirmed(conference);
     const canEditStructure = canEditAnteprojetoConference(conference);
     const canExtendStructure = canExtendAnteprojetoConferenceStructure(conference);
@@ -328,7 +346,6 @@ async function openPreliminaryDesignModal(conferenceId = null) {
     }
 
     const title = document.getElementById('anteprojeto-modal-title');
-    const submitBtn = document.getElementById('anteprojeto-form-submit');
 
     if (conference) {
         title.textContent = readOnly ? 'Conferência de Anteprojeto' : 'Editar Conferência';
@@ -341,7 +358,6 @@ async function openPreliminaryDesignModal(conferenceId = null) {
     }
 
     setAnteprojetoModalFields(conference, { readOnly, canEditStructure, canExtendStructure, canEditConsultor });
-    submitBtn.textContent = conference ? 'Salvar Conferência' : 'Criar Conferência';
     updateAnteprojetoModalConfirmControls(conference);
     updateAnteprojetoModalApproveControls(conference);
     await updateAnteprojetoModalOrderContext(conference?.orderId || activeOrderId);
@@ -509,6 +525,7 @@ function scrollAnteprojetoModalToTop() {
 const ANTEPROJETO_MODAL_OVERLAY = createModalOverlayConfig('anteprojeto-modal', {
     disableElementIds: [
         'anteprojeto-form-submit',
+        'btn-anteprojeto-modal-send',
         'btn-add-anteprojeto-project',
         'btn-anteprojeto-modal-confirm',
         'btn-anteprojeto-modal-approve',
@@ -516,6 +533,7 @@ const ANTEPROJETO_MODAL_OVERLAY = createModalOverlayConfig('anteprojeto-modal', 
     ],
     reenableElementIdsOnHide: [
         'anteprojeto-form-submit',
+        'btn-anteprojeto-modal-send',
         'btn-add-anteprojeto-project',
         'btn-anteprojeto-modal-confirm',
         'btn-anteprojeto-modal-approve',
@@ -573,7 +591,10 @@ async function confirmPreliminaryDesignConference(conferenceId, options = {}) {
         if (error) throw error;
 
         setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
-        await applyConferenciaRealizadaStatusToProjects(getConferenceOrderProjectIds(conference));
+        await applyConferenciaRealizadaStatusToProjects(getConferenceOrderProjectIds(conference), {
+            conference,
+            orderId: conference.orderId
+        });
 
         setAnteprojetoConferenceActionLoading(true, 'Atualizando telas...');
         await refreshViewsAfterAnteprojetoConfirmation();

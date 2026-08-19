@@ -557,6 +557,7 @@ async function persistThirdPartyRevision() {
             }
             activityIdByRowId[activity.rowId] = inserted.id;
             activityIdByRowId[String(inserted.id)] = inserted.id;
+            activity.id = inserted.id;
         }
     }
 

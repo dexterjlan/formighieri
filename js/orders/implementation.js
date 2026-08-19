@@ -847,7 +847,7 @@ async function openImplementationModal(orderProjectId, projectName = '', options
         toggleModal('implantacao-modal', true);
     } catch (error) {
         if (error.message?.includes('ImplementationPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
-            alertAppDialog('Execute supabase/create-third-party-subtype.sql e supabase/create-implantacao-purchase-item.sql no Supabase.');
+            alertAppDialog('Execute supabase/feats/add-third-party-subtype-and-implementation-purchase-item.sql no Supabase SQL Editor de produção.');
         } else if (error.message?.includes('Implementation') || error.message?.includes('does not exist')) {
             alertAppDialog('Tabela Implementation não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.');
         } else {

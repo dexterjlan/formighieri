@@ -205,7 +205,7 @@ async function getAguardandoAprovacaoProjectStatusId() {
     return fallback?.id || null;
 }
 
-async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
+async function applyEmRevisaoComercialStatusToProjects(orderProjectIds, options = {}) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
@@ -236,7 +236,7 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
         .in('id', uniqueIds);
 
     if (fetchError?.message?.includes('technicalProjectCompletedDate')) {
-        await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS);
+        await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS, options);
         return;
     }
 
@@ -258,14 +258,14 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds) {
             .is('technicalProjectCompletedDate', null);
 
         if (conclusaoError?.message?.includes('technicalProjectCompletedDate')) {
-            await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS);
+            await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS, options);
             return;
         }
 
         if (conclusaoError) throw conclusaoError;
     }
 
-    await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS);
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS, options);
 }
 
 async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
@@ -330,7 +330,7 @@ async function getEmRevisaoProjectStatusId() {
     return null;
 }
 
-async function applyEmRevisaoStatusToProjects(orderProjectIds) {
+async function applyEmRevisaoStatusToProjects(orderProjectIds, options = {}) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
@@ -351,7 +351,7 @@ async function applyEmRevisaoStatusToProjects(orderProjectIds) {
 
     if (error) throw error;
 
-    await notifyOrderProjectStatusChangeForProjects(uniqueIds, COMMERCIAL_REVISION_PROJECT_STATUS);
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, COMMERCIAL_REVISION_PROJECT_STATUS, options);
 }
 
 async function resolveCommercialApprovalOrderProjectId(approval) {
@@ -360,11 +360,11 @@ async function resolveCommercialApprovalOrderProjectId(approval) {
     return null;
 }
 
-async function applyEmRevisaoStatusForCommercialApproval(approval) {
+async function applyEmRevisaoStatusForCommercialApproval(approval, options = {}) {
     const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
     if (!orderProjectId) return;
 
-    await applyEmRevisaoStatusToProjects([orderProjectId]);
+    await applyEmRevisaoStatusToProjects([orderProjectId], options);
 }
 
 async function applyAguardandoAprovacaoStatusForCommercialApproval(approval) {
@@ -374,11 +374,11 @@ async function applyAguardandoAprovacaoStatusForCommercialApproval(approval) {
     await applyAguardandoAprovacaoStatusToProjects([orderProjectId]);
 }
 
-async function applyEmRevisaoComercialStatusForCommercialApproval(approval) {
+async function applyEmRevisaoComercialStatusForCommercialApproval(approval, options = {}) {
     const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
     if (!orderProjectId) return;
 
-    await applyEmRevisaoComercialStatusToProjects([orderProjectId]);
+    await applyEmRevisaoComercialStatusToProjects([orderProjectId], options);
 }
 
 window.applyEmRevisaoComercialStatusForCommercialApproval = applyEmRevisaoComercialStatusForCommercialApproval;

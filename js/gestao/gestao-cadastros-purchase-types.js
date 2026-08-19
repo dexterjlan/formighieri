@@ -93,7 +93,7 @@ async function loadGestaoThirdPartySubtypesList() {
         tbody.innerHTML = `
             <tr>
                 <td colspan="${colspan}" class="p-6 text-center text-xs text-amber-700">
-                    Nenhum subtipo cadastrado. Execute <code>supabase/create-third-party-subtype.sql</code> no Supabase.
+                    Nenhum subtipo cadastrado. Execute <code>supabase/feats/add-third-party-subtype-and-implementation-purchase-item.sql</code> no Supabase.
                 </td>
             </tr>
         `;
@@ -196,7 +196,7 @@ async function deleteGestaoThirdPartySubtypeRow(row) {
 
     if (countError) {
         if (countError.message?.includes('ImplementationPurchaseItem')) {
-            alertAppDialog('Execute supabase/create-implantacao-purchase-item.sql no Supabase para habilitar a exclusão com verificação de uso.');
+            alertAppDialog('Execute supabase/feats/add-third-party-subtype-and-implementation-purchase-item.sql no Supabase para habilitar a exclusão com verificação de uso.');
             return;
         }
         alertAppDialog('Erro ao verificar uso do subtipo: ' + countError.message);

@@ -27,6 +27,67 @@ async function sendEmailViaGoogleAppsScript(payload) {
         clearTimeout(timeoutId);
     }
 }
+
+const REVISION_EMAIL_IMAGE_URL_TTL = 60 * 60 * 24 * 7;
+
+function getRevisionAttachmentBucketForPath(storagePath) {
+    if (String(storagePath || '').includes('/third-party/')) {
+        return typeof THIRD_PARTY_REVISION_ATTACHMENTS_BUCKET !== 'undefined'
+            ? THIRD_PARTY_REVISION_ATTACHMENTS_BUCKET
+            : 'third-party-revision-attachments';
+    }
+    return typeof REVISION_ACTIVITY_ATTACHMENTS_BUCKET !== 'undefined'
+        ? REVISION_ACTIVITY_ATTACHMENTS_BUCKET
+        : 'commercial-revision-attachments';
+}
+
+function getInMemoryRevisionAttachment(activity) {
+    const keys = [activity?.id, activity?.rowId].filter(Boolean).map(String);
+    for (const key of keys) {
+        if (typeof revisionActivityAttachmentExisting !== 'undefined') {
+            const existing = revisionActivityAttachmentExisting.get(key);
+            if (existing?.storagePath) return existing;
+        }
+        if (typeof thirdPartyRevisionAttachmentExisting !== 'undefined') {
+            const existing = thirdPartyRevisionAttachmentExisting.get(key);
+            if (existing?.storagePath) return existing;
+        }
+    }
+    return activity?.attachment || null;
+}
+
+async function signRevisionAttachmentUrlForEmail(storagePath) {
+    if (!storagePath) return null;
+    const { data, error } = await supabaseClient.storage
+        .from(getRevisionAttachmentBucketForPath(storagePath))
+        .createSignedUrl(storagePath, REVISION_EMAIL_IMAGE_URL_TTL);
+    if (error) {
+        console.warn('signRevisionAttachmentUrlForEmail:', error);
+        return null;
+    }
+    return data?.signedUrl || null;
+}
+
+async function enrichRevisionActivitiesForEmail(activities = []) {
+    if (!activities?.length) return activities || [];
+
+    const ids = activities.map(activity => Number(activity.id)).filter(Boolean);
+    let byActivity = {};
+    if (ids.length && typeof fetchRevisionActivityAttachmentsByActivityIds === 'function') {
+        byActivity = await fetchRevisionActivityAttachmentsByActivityIds(ids);
+    }
+
+    return Promise.all(activities.map(async activity => {
+        if (activity.imageUrl) return activity;
+        const attachment = (activity.id ? byActivity[String(activity.id)] : null)
+            || getInMemoryRevisionAttachment(activity);
+        const storagePath = attachment?.storagePath || null;
+        if (!storagePath) return activity;
+        const imageUrl = await signRevisionAttachmentUrlForEmail(storagePath);
+        return imageUrl ? { ...activity, imageUrl } : activity;
+    }));
+}
+
 async function notifyApprovalEmail(eventType, approval, options = {}) {
     if (!NOTIFICATIONS_ENABLED || !approval) return;
 
@@ -55,7 +116,7 @@ async function notifyApprovalEmail(eventType, approval, options = {}) {
             status: getApprovalStatusLabel(approval.status),
             actedByName: currentUser?.name || '-',
             actedByRole: currentUser?.role || '-',
-            activities: options.activities || null,
+            activities: await enrichRevisionActivitiesForEmail(options.activities || []),
             approvalNetworkPath
         };
 
@@ -107,7 +168,7 @@ async function notifyOrderRequestEmail(eventType, requestData) {
             consultantName: context.consultantName,
             projetistaName: context.projetistaName,
             requestProfile: requestData.requestProfile || 'Projetista',
-            requestText: requestData.designerRequest || '',
+            requestText: requestData.designerRequest || requestData.requestText || '',
             commercialResponse: requestData.commercialResponse || '',
             designerResponse: requestData.designerResponse || '',
             status: normalizeRequestStatus(requestData),
@@ -223,6 +284,10 @@ async function buildProcessNotificationPayload(eventType, options = {}) {
         projectSectionTitle: options.projectSectionTitle || 'Projetos',
         showProjectDetails: options.showProjectDetails !== false,
         extraFields: options.extraFields || [],
+        activities: options.activities || null,
+        activitiesTitle: options.activitiesTitle || 'Atividades',
+        observationGroups: options.observationGroups || null,
+        observationGroupsTitle: options.observationGroupsTitle || 'Observações da conferência',
         accentColor: options.accentColor || '#0d9488',
         actedByName: currentUser?.name || '—',
         actedByRole: currentUser?.role || '—'
@@ -287,6 +352,10 @@ async function notifyOrderProjectStatusChangeEmail(options = {}) {
         orderProjectIds = [],
         designerId = null,
         extraFields = [],
+        activities = null,
+        activitiesTitle = 'Atividades',
+        observationGroups = null,
+        observationGroupsTitle = 'Observações da conferência',
         buildProjectDetails = null,
         projectSectionTitle = 'Projetos',
         showProjectDetails = true,
@@ -318,12 +387,18 @@ async function notifyOrderProjectStatusChangeEmail(options = {}) {
             ? includeProjetista
             : roles.includes(PROJECT_STATUS_RECIPIENT_ROLE.PROJETISTA);
 
+        const emailActivities = await enrichRevisionActivitiesForEmail(activities || []);
+
         const payload = await buildProcessNotificationPayload('project_status_change', {
             orderId,
             orderProjectIds,
             designerId,
             includeProjetista: shouldIncludeProjetista,
             extraFields,
+            activities: emailActivities,
+            activitiesTitle,
+            observationGroups,
+            observationGroupsTitle,
             buildProjectDetails,
             projectSectionTitle,
             showProjectDetails,
@@ -393,7 +468,7 @@ async function notifyDesignerAssignedToProjectEmail(options = {}) {
 window.notifyDesignerAssignedToProjectEmail = notifyDesignerAssignedToProjectEmail;
 
 async function notifyTechnicalReviewerRevisionStartedEmail(options = {}) {
-    const { orderId, orderProjectIds = [], designerId = null } = options;
+    const { orderId, orderProjectIds = [], designerId = null, activities = null } = options;
     if (!NOTIFICATIONS_ENABLED || !orderId || !orderProjectIds.length) return;
 
     if (!isGoogleAppsScriptConfigured()) {
@@ -418,7 +493,9 @@ async function notifyTechnicalReviewerRevisionStartedEmail(options = {}) {
             orderProjectIds,
             designerId,
             includeProjetista: true,
-            accentColor: '#0d9488'
+            accentColor: '#0d9488',
+            activities: await enrichRevisionActivitiesForEmail(activities || []),
+            activitiesTitle: 'Atividades da revisão'
         });
 
         const subject = buildProjectStatusEmailSubject('Revisão Iniciada', payload.orderCode, payload.clientName);
@@ -490,25 +567,95 @@ async function notifyPlantaLevantadaEmail(options = {}) {
     }
 }
 
+function readConferenceObservationText(observation) {
+    if (typeof getObservationConferenteText === 'function') {
+        return String(getObservationConferenteText(observation) || '').trim();
+    }
+    return String(observation?.text || observation?.observation?.text || '').trim();
+}
+
+function readConferenceObservationDispositionLabel(observation) {
+    const disposition = typeof normalizeConsultorDisposition === 'function'
+        ? normalizeConsultorDisposition(observation)
+        : (observation?.consultantDisposition || null);
+    const label = typeof getConsultorDispositionLabel === 'function'
+        ? getConsultorDispositionLabel(disposition)
+        : '';
+    return label && label !== '—' ? label : '';
+}
+
+function buildConferenceObservationGroups(conference = {}) {
+    const projects = [...(conference.conferenceProjects || [])].sort(
+        (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+    );
+
+    return projects.map((project, projectIndex) => {
+        const projectName = project.orderProject?.name
+            || project.label
+            || `Projeto ${projectIndex + 1}`;
+        const modules = [...(project.modules || [])]
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
+                || ((Number(a.id) || 0) - (Number(b.id) || 0)))
+            .map(module => {
+                const raw = module.observations;
+                const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+                const observations = list.map(observation => ({
+                    text: readConferenceObservationText(observation),
+                    dispositionLabel: readConferenceObservationDispositionLabel(observation),
+                    consultantResponse: String(observation?.consultantResponse || '').trim()
+                })).filter(observation => observation.text);
+
+                return {
+                    moduleName: module.name || 'Módulo',
+                    observations
+                };
+            })
+            .filter(module => module.observations.length);
+
+        return { projectName, modules };
+    }).filter(project => project.modules.length);
+}
+
+function buildConferenceNotificationContent(conference = {}, overrides = {}) {
+    const sketchUpPath = overrides.sketchUpPath
+        ?? (typeof getConferenceSketchUpPath === 'function'
+            ? getConferenceSketchUpPath(conference)
+            : conference.sketchUpPath);
+    const conferenceObservation = overrides.conferenceObservation
+        ?? conference.conferenceObservation
+        ?? null;
+
+    const extraFields = [];
+    if (sketchUpPath) {
+        extraFields.push({ label: 'Caminho SketchUp', value: sketchUpPath });
+    }
+    if (conferenceObservation) {
+        extraFields.push({ label: 'Observação da conferência', value: conferenceObservation });
+    }
+
+    return {
+        extraFields,
+        observationGroups: buildConferenceObservationGroups(conference)
+    };
+}
+
 async function notifyConferenciaEnviadaEmail(options = {}) {
     const {
         orderId,
         orderProjectIds = [],
         designerId = null,
         sketchUpPath = null,
-        conferenceObservation = null
+        conferenceObservation = null,
+        conference = null
     } = options;
 
     if (!orderId || !orderProjectIds.length) return;
 
     try {
-        const extraFields = [];
-        if (sketchUpPath) {
-            extraFields.push({ label: 'Caminho SketchUp', value: sketchUpPath });
-        }
-        if (conferenceObservation) {
-            extraFields.push({ label: 'Observação da conferência', value: conferenceObservation });
-        }
+        const content = buildConferenceNotificationContent(conference || {}, {
+            sketchUpPath,
+            conferenceObservation
+        });
 
         await notifyOrderProjectStatusChangeEmail({
             statusName: 'Conferência Enviada',
@@ -519,7 +666,9 @@ async function notifyConferenciaEnviadaEmail(options = {}) {
             projectSectionTitle: 'Projetos da conferência',
             showProjectDetails: false,
             accentColor: '#8b5cf6',
-            extraFields
+            extraFields: content.extraFields,
+            observationGroups: content.observationGroups,
+            observationGroupsTitle: 'Observações da conferência'
         });
     } catch (err) {
         console.warn('notifyConferenciaEnviadaEmail:', err);
@@ -531,17 +680,22 @@ window.notifyPlantaLevantadaEmail = notifyPlantaLevantadaEmail;
 window.notifyConferenciaEnviadaEmail = notifyConferenciaEnviadaEmail;
 
 async function notifyConferenciaConfirmadaEmail(options = {}) {
-    const { orderId, orderProjectIds = [] } = options;
+    const { orderId, orderProjectIds = [], conference = null } = options;
     if (!orderId || !orderProjectIds.length) return;
 
     try {
+        const content = buildConferenceNotificationContent(conference || {});
+
         await notifyOrderProjectStatusChangeEmail({
             statusName: 'Conferência Realizada',
             orderId,
             orderProjectIds,
             showProjectDetails: false,
             projectSectionTitle: 'Projetos da conferência confirmada',
-            accentColor: '#0ea5e9'
+            accentColor: '#0ea5e9',
+            extraFields: content.extraFields,
+            observationGroups: content.observationGroups,
+            observationGroupsTitle: 'Observações da conferência'
         });
     } catch (err) {
         console.warn('notifyConferenciaConfirmadaEmail:', err);
@@ -929,14 +1083,16 @@ async function notifyThirdPartyProjectStatusEmail(options = {}) {
         }
 
         if (options.activities?.length) {
+            const revisionActivities = await enrichRevisionActivitiesForEmail(options.activities);
             extraFields.push({
                 label: 'Atividades da revisão',
-                value: options.activities.map((activity, index) => {
+                value: revisionActivities.map((activity, index) => {
                     const parts = [`${index + 1}. ${activity.description || '—'}`];
                     if (activity.observation) parts.push(`Obs: ${activity.observation}`);
                     if (activity.completed) parts.push('[Realizado]');
-                    return parts.join(' · ');
-                }).join('\n')
+                    if (activity.imageUrl) parts.push(`Imagem: ${activity.imageUrl}`);
+                    return parts.join('\n');
+                }).join('\n\n')
             });
         }
 

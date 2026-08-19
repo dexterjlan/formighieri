@@ -91,6 +91,9 @@ function buildOrderRequestEmailBody(payload) {
                 `   Realizado: ${activity.completed ? 'Sim' : 'Não'}`,
                 `   Observação: ${activity.observation || '—'}`
             );
+            if (activity.imageUrl) {
+                lines.push(`   Imagem: ${activity.imageUrl}`);
+            }
         });
     }
 
@@ -299,6 +302,9 @@ function buildApprovalEmailBody(payload) {
                 `   Realizado: ${activity.completed ? 'Sim' : 'Não'}`,
                 `   Observação: ${activity.observation || '—'}`
             );
+            if (activity.imageUrl) {
+                lines.push(`   Imagem: ${activity.imageUrl}`);
+            }
         });
     }
 
@@ -309,14 +315,108 @@ function buildApprovalEmailBody(payload) {
     return appendEmailNoReplyFooterText(lines.join('\n'));
 }
 
+function formatConferenceEmailLabeledValue(label, value) {
+    return `${label}: ${value || '—'}`;
+}
+
+function buildConferenceEmailLabeledHtml(label, value) {
+    return `<div style="margin:0 0 4px;font-size:13px;color:#0f172a;white-space:pre-wrap;">
+        <span style="font-weight:700;color:#475569;">${escapeHtml(label)}:</span>
+        ${escapeHtml(value || '—')}
+    </div>`;
+}
+
+function appendConferenceObservationGroupLines(lines, groups, title = 'Observações da conferência') {
+    if (!groups?.length) return lines;
+
+    lines.push('', title);
+    groups.forEach(project => {
+        lines.push('', formatConferenceEmailLabeledValue('Projeto', project.projectName));
+        (project.modules || []).forEach(module => {
+            lines.push(`  ${formatConferenceEmailLabeledValue('Módulo', module.moduleName)}`);
+            (module.observations || []).forEach(observation => {
+                lines.push(`    ${formatConferenceEmailLabeledValue('Conferente', observation.text)}`);
+                lines.push(`    ${formatConferenceEmailLabeledValue('Classificação', observation.dispositionLabel)}`);
+                lines.push(`    ${formatConferenceEmailLabeledValue('Resp. Consultor', observation.consultantResponse)}`);
+            });
+        });
+    });
+    return lines;
+}
+
+function buildConferenceObservationGroupsHtml(groups, title = 'Observações da conferência') {
+    if (!groups?.length) return '';
+
+    const projectRows = groups.map((project, projectIndex) => {
+        const moduleRows = (project.modules || []).map(module => {
+            const observationRows = (module.observations || []).map(observation => `
+                <tr>
+                    <td style="padding:6px 12px 10px 40px;vertical-align:top;">
+                        ${buildConferenceEmailLabeledHtml('Conferente', observation.text)}
+                        ${buildConferenceEmailLabeledHtml('Classificação', observation.dispositionLabel)}
+                        ${buildConferenceEmailLabeledHtml('Resp. Consultor', observation.consultantResponse)}
+                    </td>
+                </tr>
+            `).join('');
+
+            return `<tr>
+                    <td style="padding:8px 12px 4px 24px;vertical-align:top;">
+                        ${buildConferenceEmailLabeledHtml('Módulo', module.moduleName || 'Módulo')}
+                    </td>
+                </tr>${observationRows}`;
+        }).join('');
+
+        const projectBorder = projectIndex === 0 ? '' : 'border-top:1px solid #e2e8f0;';
+        return `<tr>
+                <td style="padding:10px 12px 6px;background:#f8fafc;${projectBorder}">
+                    ${buildConferenceEmailLabeledHtml('Projeto', project.projectName || 'Projeto')}
+                </td>
+            </tr>${moduleRows}`;
+    }).join('');
+
+    return `<div style="margin-top:16px;">
+        <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(title)}</p>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+          <tbody>${projectRows}</tbody>
+        </table>
+      </div>`;
+}
+
+function appendActivitiesEmailLines(lines, activities, title = 'Atividades') {
+    if (!activities?.length) return lines;
+
+    lines.push('', title);
+    activities.forEach((activity, index) => {
+        lines.push(
+            '',
+            `${index + 1}. ${activity.description || '-'}`,
+            `   Realizado: ${activity.completed ? 'Sim' : 'Não'}`,
+            `   Observação: ${activity.observation || '—'}`
+        );
+        if (activity.imageUrl) {
+            lines.push(`   Imagem: ${activity.imageUrl}`);
+        }
+    });
+    return lines;
+}
+
+function buildActivityImageEmailHtml(activity) {
+    if (!activity?.imageUrl) return '';
+    const url = escapeHtml(activity.imageUrl);
+    return `<div style="margin-top:6px;font-size:12px;word-break:break-all;">
+        <span style="font-weight:700;color:#475569;">Imagem:</span>
+        <a href="${url}" style="color:#2563eb;text-decoration:underline;">${url}</a>
+    </div>`;
+}
+
 function buildActivitiesEmailHtml(activities, title = 'Atividades') {
     if (!activities?.length) return '';
 
     const rows = activities.map(activity => `
         <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;">${escapeHtml(activity.description || '-')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap;">${escapeHtml(activity.description || '-')}${buildActivityImageEmailHtml(activity)}</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;text-align:center;vertical-align:middle;white-space:nowrap;">${activity.completed ? '<span style="color:#047857;font-weight:600;">Sim</span>' : '<span style="color:#94a3b8;">Não</span>'}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;">${escapeHtml(activity.observation || '—')}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;vertical-align:top;white-space:pre-wrap;">${escapeHtml(activity.observation || '—')}</td>
         </tr>
     `).join('');
 
@@ -528,7 +628,7 @@ function buildProcessEmailBody(payload) {
         lines.push(`Projetista: ${payload.projetistaName}`);
     }
 
-    if (payload.projectRows?.length) {
+    if (payload.projectRows?.length && !payload.observationGroups?.length) {
         lines.push('', payload.projectSectionTitle || 'Projetos');
         payload.projectRows.forEach(row => {
             if (payload.showProjectDetails === false) {
@@ -542,9 +642,19 @@ function buildProcessEmailBody(payload) {
 
     (payload.extraFields || []).forEach(field => {
         if (field.value) {
-            lines.push(`${field.label}: ${field.value}`);
+            lines.push('', `${field.label}:`, field.value);
         }
     });
+
+    if (payload.observationGroups?.length) {
+        appendConferenceObservationGroupLines(
+            lines,
+            payload.observationGroups,
+            payload.observationGroupsTitle || payload.activitiesTitle || 'Observações da conferência'
+        );
+    } else {
+        appendActivitiesEmailLines(lines, payload.activities, payload.activitiesTitle || 'Atividades');
+    }
 
     lines.push(
         '',
@@ -635,8 +745,16 @@ function buildProcessEmailHtml(payload) {
           <td style="padding:8px 12px;">${escapeHtml(payload.actedByName)} <span style="color:#64748b;">(${escapeHtml(payload.actedByRole)})</span></td>
         </tr>
       </table>
-      ${buildProcessProjectRowsHtml(payload.projectRows, payload.projectSectionTitle, payload.showProjectDetails !== false)}
+      ${payload.observationGroups?.length
+          ? ''
+          : buildProcessProjectRowsHtml(payload.projectRows, payload.projectSectionTitle, payload.showProjectDetails !== false)}
       ${buildProcessExtraFieldsHtml(payload.extraFields)}
+      ${payload.observationGroups?.length
+          ? buildConferenceObservationGroupsHtml(
+              payload.observationGroups,
+              payload.observationGroupsTitle || payload.activitiesTitle || 'Observações da conferência'
+          )
+          : buildActivitiesEmailHtml(payload.activities, payload.activitiesTitle || 'Atividades')}
       ${buildEmailNoReplyFooterHtml()}
     </div>
   </div>

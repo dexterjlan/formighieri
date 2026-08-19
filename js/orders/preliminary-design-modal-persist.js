@@ -302,10 +302,12 @@ async function persistAnteprojetoConferenceData(conferenceId, selectedProjects, 
     }
 }
 
-async function saveAnteprojetoConference() {
+async function saveAnteprojetoConference(options = {}) {
+    const send = Boolean(options.send);
     const conference = editingAnteprojetoConferenceId
-        ? anteprojetoConferencesCache.find(c => c.id === editingAnteprojetoConferenceId)
+        ? anteprojetoConferencesCache.find(c => Number(c.id) === Number(editingAnteprojetoConferenceId))
         : null;
+    const wasDraft = !conference || isAnteprojetoConferenceDraft(conference);
 
     const canEditStructure = canEditAnteprojetoConference(conference);
     const canExtendStructure = canExtendAnteprojetoConferenceStructure(conference);
@@ -369,9 +371,14 @@ async function saveAnteprojetoConference() {
 
     const now = new Date().toISOString();
     const isNewConference = !conference;
+    const nextStatus = send
+        ? ANTEPROJETO_CONFERENCE_STATUS_IN_PROGRESS
+        : (conference?.status || ANTEPROJETO_CONFERENCE_STATUS_DRAFT);
 
     try {
-        setAnteprojetoModalLoading(true, isNewConference ? 'Registrando conferência...' : 'Salvando conferência...');
+        setAnteprojetoModalLoading(true, send
+            ? 'Enviando conferência...'
+            : (isNewConference ? 'Salvando rascunho...' : 'Salvando conferência...'));
         let conferenceId = conference?.id;
 
         if (conference) {
@@ -382,6 +389,7 @@ async function saveAnteprojetoConference() {
                         designerId,
                         sketchUpPath,
                         conferenceObservation,
+                        ...(send && wasDraft ? { status: nextStatus } : {}),
                         updatedAt: now,
                         updatedById: currentUser.id
                     })
@@ -396,14 +404,19 @@ async function saveAnteprojetoConference() {
                     designerId,
                     sketchUpPath,
                     conferenceObservation,
-                    status: 'Em andamento',
+                    status: nextStatus,
                     createdById: currentUser.id,
                     updatedById: currentUser.id,
                     updatedAt: now
                 })
                 .select('id')
                 .single();
-            if (error) throw error;
+            if (error) {
+                if (/rascunho|status_check|AnteprojetoConference_status/i.test(error.message || '')) {
+                    throw new Error('Execute supabase/feats/add-preliminary-design-conference-draft-status.sql no Supabase para salvar rascunho.');
+                }
+                throw error;
+            }
             conferenceId = created.id;
         }
 
@@ -415,7 +428,7 @@ async function saveAnteprojetoConference() {
             { canEditStructure, canExtendStructure, canEditConsultor }
         );
 
-        if (isNewConference) {
+        if (send && wasDraft) {
             setAnteprojetoModalLoading(true, 'Atualizando status dos projetos...');
             await applyConferenciaEnviadaStatusToProjects(
                 selectedProjects.map(project => project.orderProjectId)
@@ -427,7 +440,23 @@ async function saveAnteprojetoConference() {
                     orderProjectIds: selectedProjects.map(project => project.orderProjectId),
                     designerId,
                     sketchUpPath,
-                    conferenceObservation
+                    conferenceObservation,
+                    conference: {
+                        sketchUpPath,
+                        conferenceObservation,
+                        conferenceProjects: selectedProjects.map(project => {
+                            const section = document.querySelector(
+                                `.anteprojeto-project-section[data-order-project-id="${project.orderProjectId}"]`
+                            );
+                            return {
+                                ...project,
+                                orderProject: { name: section?.dataset.projectLabel || 'Projeto' },
+                                modules: modules.filter(module => (
+                                    Number(module.orderProjectId) === Number(project.orderProjectId)
+                                ))
+                            };
+                        })
+                    }
                 });
             }
         }
@@ -443,14 +472,32 @@ async function saveAnteprojetoConference() {
 
         setAnteprojetoModalLoading(
             true,
-            isNewConference ? 'Conferência criada e notificação enviada!' : 'Conferência salva com sucesso!',
+            send ? 'Conferência enviada!' : 'Conferência salva com sucesso!',
             'success'
         );
         await new Promise(resolve => setTimeout(resolve, 900));
-        closePreliminaryDesignModal();
+        if (send) {
+            closePreliminaryDesignModal();
+        } else {
+            setAnteprojetoModalLoading(false);
+            editingAnteprojetoConferenceId = conferenceId;
+            await openPreliminaryDesignModal(conferenceId);
+        }
     } catch (error) {
         setAnteprojetoModalLoading(true, `Erro ao salvar conferência: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));
         setAnteprojetoModalLoading(false);
     }
+}
+
+async function sendAnteprojetoConference() {
+    const confirmed = await confirmAppDialog(
+        'A conferência será enviada ao consultor e os projetos passarão para Conferência Enviada.',
+        {
+            title: 'Enviar conferência?',
+            confirmLabel: 'Enviar Conferência'
+        }
+    );
+    if (!confirmed) return;
+    await saveAnteprojetoConference({ send: true });
 }

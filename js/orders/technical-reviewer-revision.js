@@ -585,6 +585,7 @@ async function persistTechnicalReviewerRevision() {
 
             activityIdByRowId[activity.rowId] = inserted.id;
             activityIdByRowId[String(inserted.id)] = inserted.id;
+            activity.id = inserted.id;
         }
     }
 
@@ -655,7 +656,8 @@ async function startTechnicalReviewerRevision() {
             await notifyTechnicalReviewerRevisionStartedEmail({
                 orderId: project.orderId,
                 orderProjectIds: [project.id],
-                designerId: project.designerId
+                designerId: project.designerId,
+                activities: collectTechnicalReviewerRevisionActivitiesFromDom()
             });
         }
 
@@ -781,7 +783,9 @@ async function sendTechnicalReviewerRevisionToDesigner() {
                 ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
                 {
                     orderId: project.orderId,
-                    designerId: project.designerId
+                    designerId: project.designerId,
+                    activities: result.activities,
+                    activitiesTitle: 'Atividades da revisão'
                 }
             );
         }
@@ -839,7 +843,14 @@ async function returnTechnicalReviewerRevisionToReviewer() {
         }
 
         setTechnicalReviewerRevisionModalLoading(true, 'Atualizando status do projeto...');
-        await applyTechnicalReviewerReviewRevisorStatusToProjects([project.id]);
+        await applyTechnicalReviewerReviewRevisorStatusToProjects([project.id], {
+            notificationOptions: {
+                orderId: project.orderId,
+                designerId: project.designerId,
+                activities: result.activities,
+                activitiesTitle: 'Atividades da revisão'
+            }
+        });
 
         setTechnicalReviewerRevisionModalLoading(true, 'Devolvido ao revisor!', 'success');
         await new Promise(resolve => setTimeout(resolve, 700));

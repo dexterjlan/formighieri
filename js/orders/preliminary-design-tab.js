@@ -38,6 +38,7 @@ function renderAnteprojetoObservationLeaf(obs) {
 function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const confirmed = isAnteprojetoConferenceConfirmed(conference);
     const approved = isAnteprojetoConferenceApproved(conference);
+    const isDraft = isAnteprojetoConferenceDraft(conference);
     const moduleObservations = getConferenceModuleObservations(conference);
     const classifiedCount = moduleObservations.filter(obs => normalizeConsultorDisposition(obs)).length;
     const canEdit = canEditAnteprojetoConference(conference) || canEditAnteprojetoConsultorFields(conference);
@@ -50,7 +51,9 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
         ? 'bg-indigo-100 text-indigo-800'
         : confirmed
             ? 'bg-emerald-100 text-emerald-800'
-            : 'bg-sky-100 text-sky-800';
+            : isDraft
+                ? 'bg-amber-100 text-amber-800'
+                : 'bg-sky-100 text-sky-800';
     const sketchUpPath = getConferenceSketchUpPath(conference);
     const conferenceObservation = conference.conferenceObservation || '';
     const managerObservation = conference.managerObservation || '';
@@ -58,7 +61,7 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const moduleCount = getConferenceModules(conference).length;
 
     const card = document.createElement('div');
-    card.className = `${approved ? 'bg-indigo-50/60 border-indigo-200' : confirmed ? 'bg-emerald-50/60 border-emerald-200' : 'bg-sky-50/50 border-sky-200'} rounded-xl border shadow-sm overflow-hidden`;
+    card.className = `${approved ? 'bg-indigo-50/60 border-indigo-200' : confirmed ? 'bg-emerald-50/60 border-emerald-200' : isDraft ? 'bg-amber-50/50 border-amber-200' : 'bg-sky-50/50 border-sky-200'} rounded-xl border shadow-sm overflow-hidden`;
 
     const header = document.createElement('div');
     header.className = 'px-4 py-3 bg-white/60 space-y-2 border-b border-slate-100';
@@ -310,6 +313,7 @@ async function loadPreliminaryDesignConferences(orderId) {
     let conferences = result.data || [];
     conferences = await attachModuleObservationsToConferences(conferences);
     conferences = await enrichAnteprojetoConferences(conferences, orderId);
+    conferences = conferences.filter(conference => canViewAnteprojetoConference(conference));
     anteprojetoConferencesCache = conferences;
 
     updateOrderTabCounts(undefined, conferences.length);

@@ -143,6 +143,17 @@ function getCurrentApproval() {
     return commercialApprovalsCache.find(a => a.id === currentRevisionApprovalId);
 }
 
+function getCommercialApprovalDesignerId(approval) {
+    if (approval?.designerId) return Number(approval.designerId);
+    const orderProjectId = Number(approval?.orderProjectId || approval?.id);
+    if (!orderProjectId) return null;
+    if (typeof orderProjectsCache !== 'undefined' && Array.isArray(orderProjectsCache)) {
+        const project = orderProjectsCache.find(item => Number(item.id) === orderProjectId);
+        if (project?.designerId) return Number(project.designerId);
+    }
+    return null;
+}
+
 function renderRevisionResizableText(text, tone = 'default') {
     const hasText = Boolean(text);
     const content = hasText ? escapeHtml(text) : '—';
@@ -693,8 +704,10 @@ async function openCommercialRevisionForRevision(approvalId, revisionId, viewOnl
     currentRevisionApprovalId = approvalId;
     editingRevisionId = revisionId;
 
+    const designerId = getCommercialApprovalDesignerId(approval);
     const isProjetistaAuthorized = currentUser?.role === 'Projetista'
-        && Number(approval.designerId) === Number(currentUser.id);
+        && designerId
+        && Number(designerId) === Number(currentUser.id);
     const isAdminAuthorized = currentUser?.role === 'Admin';
     const canConsultorEditExisting = canConsultorEditExistingTecnicaRevision(approval);
 
@@ -772,7 +785,7 @@ async function persistCommercialRevision() {
 
         if (currentRevisionType === 'tecnica') {
             if (typeof applyEmRevisaoStatusForCommercialApproval === 'function') {
-                await applyEmRevisaoStatusForCommercialApproval(approval);
+                await applyEmRevisaoStatusForCommercialApproval(approval, { skipEmail: true });
             }
         }
     }
@@ -809,6 +822,7 @@ async function persistCommercialRevision() {
 
             activityIdByRowId[activity.rowId] = inserted.id;
             activityIdByRowId[String(inserted.id)] = inserted.id;
+            activity.id = inserted.id;
         }
     }
 
@@ -892,7 +906,7 @@ async function startTechnicalRevision() {
             await notifyApprovalEmail('revision_started', {
                 ...approval,
                 status: 'Em revisão'
-            });
+            }, { activities: collectRevisionActivitiesFromDom() });
         }
 
         setCommercialRevisionModalLoading(true, 'Revisão iniciada!', 'success');
@@ -915,7 +929,34 @@ async function saveCommercialRevision() {
         if (!result.ok) return;
 
         const approval = getCurrentApproval();
-        if (approval && currentRevisionType === 'tecnica' && canConsultorEditExistingTecnicaRevision(approval) && !result.createdRevision) {
+        if (approval && result.createdRevision && typeof notifyApprovalEmail === 'function') {
+            setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+            if (currentRevisionType === 'tecnica' && typeof notifyOrderProjectStatusChangeForProjects === 'function') {
+                const orderProjectId = approval.orderProjectId
+                    || (typeof resolveCommercialApprovalOrderProjectId === 'function'
+                        ? await resolveCommercialApprovalOrderProjectId(approval)
+                        : null);
+                if (orderProjectId) {
+                    await notifyOrderProjectStatusChangeForProjects(
+                        [orderProjectId],
+                        typeof ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ !== 'undefined'
+                            ? ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ
+                            : 'Em Revisão Comercial Proj.',
+                        {
+                            orderId: approval.orderId,
+                            designerId: approval.designerId,
+                            activities: result.activities,
+                            activitiesTitle: 'Atividades da revisão'
+                        }
+                    );
+                }
+            } else {
+                await notifyApprovalEmail('revision_created', {
+                    ...approval,
+                    status: 'Em revisão'
+                }, { activities: result.activities });
+            }
+        } else if (approval && currentRevisionType === 'tecnica' && canConsultorEditExistingTecnicaRevision(approval) && !result.createdRevision) {
             setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
             await notifyApprovalEmail('revision_updated', {
                 ...approval,
@@ -984,7 +1025,7 @@ async function sendRevisionBackToApproval() {
         setCommercialRevisionModalLoading(true, 'Atualizando status do projeto...');
 
         if (typeof applyEmRevisaoComercialStatusForCommercialApproval === 'function') {
-            await applyEmRevisaoComercialStatusForCommercialApproval(approval);
+            await applyEmRevisaoComercialStatusForCommercialApproval(approval, { skipEmail: true });
         } else if (typeof applyAguardandoAprovacaoStatusForCommercialApproval === 'function') {
             await applyAguardandoAprovacaoStatusForCommercialApproval(approval);
         }
@@ -996,6 +1037,14 @@ async function sendRevisionBackToApproval() {
                 ...commercialApprovalsCache[cacheIdx],
                 status: ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS
             };
+        }
+
+        setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+        if (typeof notifyApprovalEmail === 'function') {
+            await notifyApprovalEmail('sent_back_to_approval', {
+                ...approval,
+                status: ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS
+            }, { activities: result.activities });
         }
 
         setCommercialRevisionModalLoading(true, 'Atualizando telas...');
@@ -1158,17 +1207,30 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
     });
 
     const showInHistoryModal = Boolean(options.showInHistoryModal);
-    const readOnly = Boolean(options.readOnly);
     const sortedRevisions = sortCommercialRevisionsDescending(revisions);
-    const currentRevision = sortedRevisions[0] || null;
+    const latestTechnicalRevision = sortCommercialRevisionsDescending(
+        revisions.filter(revision => revision.type === 'tecnica')
+    )[0] || null;
+    const latestTechnicalReviewerRevision = sortCommercialRevisionsDescending(
+        revisions.filter(revision => revision.type === 'technical_reviewer')
+    )[0] || null;
 
-    const isAuthorizedUser = currentUser?.role === 'Admin'
-        || (currentUser?.role === 'Projetista' && Number(approval?.designerId) === Number(currentUser?.id));
+    const designerId = getCommercialApprovalDesignerId(approval);
+    const isAssignedDesigner = currentUser?.role === 'Projetista'
+        && designerId
+        && Number(designerId) === Number(currentUser?.id);
+    const canDesignerOrAdminEdit = currentUser?.role === 'Admin' || isAssignedDesigner;
+    const isEmRevisao = isEmRevisaoTecnicaApproval(approval);
 
     const blocks = sortedRevisions.map((revision) => {
-        const isCurrentRevision = currentRevision && revision.id === currentRevision.id;
         const isComercial = revision.type === 'comercial';
         const isTechnicalReviewer = revision.type === 'technical_reviewer';
+        const isCurrentTechnical = !isComercial && !isTechnicalReviewer
+            && latestTechnicalRevision
+            && Number(revision.id) === Number(latestTechnicalRevision.id);
+        const isCurrentTechnicalReviewer = isTechnicalReviewer
+            && latestTechnicalReviewerRevision
+            && Number(revision.id) === Number(latestTechnicalReviewerRevision.id);
         
         let titleText = '';
         if (isComercial) {
@@ -1209,38 +1271,34 @@ function renderCommercialRevisionsSection(revisions, approval, options = {}) {
             `).join('')
             : `<tr><td colspan="4" class="py-2 text-xs text-slate-400">Nenhuma atividade registrada.</td></tr>`;
 
-        const isEmRevisao = isEmRevisaoTecnicaApproval(approval);
-        const canConsultorEditRevision = isCurrentRevision
-            && !isComercial
+        const canConsultorEditRevision = isCurrentTechnical
             && isEmRevisao
             && canEditRevisionActivitiesConsultor(approval);
-        const canEditThisRevision = isCurrentRevision && isEmRevisao && (
-            isAuthorizedUser || canConsultorEditRevision
+        const canEditThisRevision = isCurrentTechnical && isEmRevisao && (
+            canDesignerOrAdminEdit || canConsultorEditRevision
         );
 
         let editButtonHtml = '';
         const orderProjectId = approval.orderProjectId || approval.id;
 
-        if (!readOnly) {
-            if (isTechnicalReviewer && isCurrentRevision && !revision.revisionCompletedAt) {
-                const projectForAccess = {
-                    id: orderProjectId,
-                    designerId: approval.designerId,
-                    projectStatus: approval.projectStatus
-                };
-                const canEditTechnicalReviewer = isAdmin()
-                    || (typeof canDesignerActOnTechnicalReviewerProject === 'function'
-                        && canDesignerActOnTechnicalReviewerProject(projectForAccess))
-                    || (typeof canReviewerActOnProject === 'function'
-                        && canReviewerActOnProject(projectForAccess));
-                if (canEditTechnicalReviewer) {
-                    editButtonHtml = `<button type="button" onclick="openTechnicalReviewerRevisionForRevision(${orderProjectId}, ${revision.id}, false)"
-                        class="fm-revision-block__action text-xs bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap cursor-pointer">Editar</button>`;
-                }
-            } else if (!isTechnicalReviewer && canEditThisRevision) {
-                editButtonHtml = `<button type="button" onclick="openCommercialRevisionForRevision(${approval.id}, ${revision.id}, false)"
+        if (isCurrentTechnicalReviewer && !revision.revisionCompletedAt) {
+            const projectForAccess = {
+                id: orderProjectId,
+                designerId: approval.designerId,
+                projectStatus: approval.projectStatus
+            };
+            const canEditTechnicalReviewer = isAdmin()
+                || (typeof canDesignerActOnTechnicalReviewerProject === 'function'
+                    && canDesignerActOnTechnicalReviewerProject(projectForAccess))
+                || (typeof canReviewerActOnProject === 'function'
+                    && canReviewerActOnProject(projectForAccess));
+            if (canEditTechnicalReviewer) {
+                editButtonHtml = `<button type="button" onclick="openTechnicalReviewerRevisionForRevision(${orderProjectId}, ${revision.id}, false)"
                     class="fm-revision-block__action text-xs bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap cursor-pointer">Editar</button>`;
             }
+        } else if (canEditThisRevision) {
+            editButtonHtml = `<button type="button" onclick="openCommercialRevisionForRevision(${approval.id}, ${revision.id}, false)"
+                class="fm-revision-block__action text-xs bg-indigo-600 text-white hover:bg-indigo-700 px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap cursor-pointer">Editar</button>`;
         }
 
         const activityCount = revision.activities.length;

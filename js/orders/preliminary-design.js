@@ -107,6 +107,19 @@ function isAnteprojetoConferenceApproved(conference) {
     return conference?.status === 'Aprovada';
 }
 
+const ANTEPROJETO_CONFERENCE_STATUS_DRAFT = 'Rascunho';
+const ANTEPROJETO_CONFERENCE_STATUS_IN_PROGRESS = 'Em andamento';
+
+function isAnteprojetoConferenceDraft(conference) {
+    if (!conference) return true;
+    return conference.status === ANTEPROJETO_CONFERENCE_STATUS_DRAFT;
+}
+
+function canViewAnteprojetoConference(conference) {
+    if (!isAnteprojetoConferenceDraft(conference)) return true;
+    return canEditAnteprojetoConference(conference);
+}
+
 function canCreateAnteprojetoConference() {
     if (!activeOrderId) return false;
     return canCreateAsAdminOrConferente();
@@ -118,20 +131,33 @@ function canEditAnteprojetoConference(conference) {
         return canCreateAnteprojetoConference();
     }
     if (currentUser?.role === 'Admin') return true;
+    if (isAnteprojetoConferenceDraft(conference) && typeof isConferente === 'function' && isConferente()) {
+        return !conference.createdById || Number(conference.createdById) === Number(currentUser.id);
+    }
     return currentUser?.role === 'Projetista' && conference.designerId === currentUser.id;
 }
 
 function canExtendAnteprojetoConferenceStructure(conference) {
-    return !conference;
+    if (!conference) return canCreateAnteprojetoConference();
+    return isAnteprojetoConferenceDraft(conference) && canEditAnteprojetoConference(conference);
+}
+
+function canSendAnteprojetoConference(conference) {
+    if (conference && !isAnteprojetoConferenceDraft(conference)) return false;
+    return canEditAnteprojetoConference(conference);
 }
 
 function canEditAnteprojetoConsultorFields(conference) {
-    if (!conference || isAnteprojetoConferenceConfirmed(conference)) return false;
+    if (!conference || isAnteprojetoConferenceConfirmed(conference) || isAnteprojetoConferenceDraft(conference)) {
+        return false;
+    }
     return isAdminOrOrderConsultorForOrder(conference.orderId || activeOrderId);
 }
 
 function canConfirmAnteprojetoConference(conference) {
-    if (!conference || isAnteprojetoConferenceConfirmed(conference)) return false;
+    if (!conference || isAnteprojetoConferenceConfirmed(conference) || isAnteprojetoConferenceDraft(conference)) {
+        return false;
+    }
     return isAdminOrOrderConsultorForOrder(conference.orderId || activeOrderId);
 }
 
@@ -275,7 +301,7 @@ function getConferenceOrderProjectIds(conference) {
     )];
 }
 
-async function applyConferenciaRealizadaStatusToProjects(orderProjectIds) {
+async function applyConferenciaRealizadaStatusToProjects(orderProjectIds, options = {}) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
@@ -296,7 +322,19 @@ async function applyConferenciaRealizadaStatusToProjects(orderProjectIds) {
 
     if (error) throw error;
 
-    await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Conferência Realizada');
+    if (options.skipEmail) return;
+
+    const conference = options.conference || null;
+    if (conference && typeof notifyConferenciaConfirmadaEmail === 'function') {
+        await notifyConferenciaConfirmadaEmail({
+            orderId: conference.orderId || options.orderId,
+            orderProjectIds: uniqueIds,
+            conference
+        });
+        return;
+    }
+
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Conferência Realizada', options);
 }
 
 async function getAguardandoProjetoTecnicoStatusId() {
@@ -624,7 +662,10 @@ function bindPreliminaryDesignEvents() {
     });
     document.getElementById('anteprojeto-form')?.addEventListener('submit', async function (e) {
         e.preventDefault();
-        await saveAnteprojetoConference();
+        await saveAnteprojetoConference({ send: false });
+    });
+    document.getElementById('btn-anteprojeto-modal-send')?.addEventListener('click', async () => {
+        await sendAnteprojetoConference();
     });
 }
 
