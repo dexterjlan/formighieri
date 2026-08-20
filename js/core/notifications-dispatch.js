@@ -372,7 +372,10 @@ async function notifyOrderProjectStatusChangeEmail(options = {}) {
     }
 
     try {
-        const roles = getOrderProjectStatusEmailRoles(statusName);
+        const roles = [...new Set([
+            ...getOrderProjectStatusEmailRoles(statusName),
+            ...(options.extraRoles || [])
+        ])];
         const recipientEmails = await fetchEmailsForProjectStatusRoles(roles, { orderId, designerId });
         if (!recipientEmails.length) {
             console.warn('notifyOrderProjectStatusChangeEmail: sem destinatários', { statusName, roles, orderId });

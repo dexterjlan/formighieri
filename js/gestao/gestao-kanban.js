@@ -157,7 +157,12 @@ async function enrichProjectStatusHistoryEntries(entries) {
         || (entry.changedById && !entry.changedBy?.name)
     );
 
-    if (!needsEnrich) return entries;
+    if (!needsEnrich) {
+        return entries.map(entry => ({
+            ...entry,
+            observation: String(entry.observation || '').trim()
+        }));
+    }
 
     const statusIds = [...new Set(entries.flatMap(entry => [
         entry.previousStatusId,
@@ -179,6 +184,7 @@ async function enrichProjectStatusHistoryEntries(entries) {
 
     return entries.map(entry => ({
         ...entry,
+        observation: String(entry.observation || '').trim(),
         previousStatus: entry.previousStatus || statusById[entry.previousStatusId] || null,
         newStatus: entry.newStatus || statusById[entry.newStatusId] || null,
         changedBy: entry.changedBy || userById[entry.changedById] || null
@@ -199,6 +205,7 @@ async function fetchOrderProjectStatusHistory(orderProjectId) {
             changedAt,
             changedById,
             previousStatusDurationSeconds,
+            observation,
             previousStatus:OrderProjectStatus!previousStatusId(id, name),
             newStatus:OrderProjectStatus!newStatusId(id, name),
             changedBy:appUsers(id, name)
@@ -285,9 +292,26 @@ function buildProjectStatusHistorySegments(entries) {
             endAt: isLast ? null : entries[index + 1].changedAt,
             durationSeconds,
             changedBy: entry.changedBy?.name || '—',
+            observation: String(entry.observation || '').trim(),
             isCurrent: isLast
         };
     });
+}
+
+function getOrderProjectStatusHistoryObservation(entry) {
+    return String(entry?.observation || '').trim();
+}
+
+function renderProjectStatusHistoryObservationHtml(observation) {
+    const text = String(observation || '').trim();
+    if (!text) return '';
+
+    return `
+        <div class="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-left">
+            <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-800">Observação</div>
+            <div class="text-[11px] text-slate-700 mt-0.5 whitespace-pre-wrap">${escapeHtml(text)}</div>
+        </div>
+    `;
 }
 
 function renderProjectStatusHistoryToolbar(viewMode) {
@@ -327,7 +351,13 @@ function renderProjectStatusHistoryTimeline(entries) {
         const endLabel = segment.isCurrent
             ? 'Em andamento'
             : formatProjectStatusHistoryAxisDate(segment.endAt);
-        const tooltip = `${segment.statusName}\n${startLabel} → ${endLabel}\n${durationLabel} · ${segment.changedBy}`;
+        const tooltipParts = [
+            segment.statusName,
+            `${startLabel} → ${endLabel}`,
+            `${durationLabel} · ${segment.changedBy}`
+        ];
+        if (segment.observation) tooltipParts.push(segment.observation);
+        const tooltip = tooltipParts.join('\n');
 
         return `
             <div class="project-status-history-timeline__segment"
@@ -380,6 +410,7 @@ function renderProjectStatusHistoryTimeline(entries) {
                 <div class="project-status-history-timeline__legend-content min-w-0">
                     <div class="project-status-history-timeline__legend-title">${escapeHtml(segment.statusName)}</div>
                     <div class="project-status-history-timeline__legend-meta">${escapeHtml(periodLabel)} · ${escapeHtml(durationLabel)} · ${escapeHtml(segment.changedBy)}</div>
+                    ${renderProjectStatusHistoryObservationHtml(segment.observation)}
                 </div>
             </li>
         `;
@@ -474,6 +505,7 @@ function renderProjectStatusHistoryStep(entry, index) {
             <div class="text-sm font-bold text-indigo-900">${escapeHtml(statusName)}</div>
             <div class="text-[10px] text-slate-500 mt-1">${escapeHtml(changedAt)} · ${escapeHtml(changedBy)}</div>
             <div class="text-[10px] text-slate-400 mt-0.5">${isInitial ? 'Status inicial do projeto' : `Alterado de ${escapeHtml(entry.previousStatus?.name || '—')}`}</div>
+            ${renderProjectStatusHistoryObservationHtml(getOrderProjectStatusHistoryObservation(entry))}
         </div>
     `;
 }

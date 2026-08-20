@@ -855,6 +855,7 @@ function renderOrderExportStatusHistorySection(bundle) {
                     <td>${escapeHtml(formatOrderExportDateTime(entry.changedAt))}</td>
                     <td>${escapeHtml(entry.changedBy?.name || '—')}</td>
                     <td>${escapeHtml(durationLabel)}</td>
+                    <td>${escapeHtml(String(entry.observation || '').trim() || '—')}</td>
                 </tr>
             `;
         }).join('');
@@ -869,6 +870,7 @@ function renderOrderExportStatusHistorySection(bundle) {
                             <th>Data</th>
                             <th>Alterado por</th>
                             <th>Duração</th>
+                            <th>Observação</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>

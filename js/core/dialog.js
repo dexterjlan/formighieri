@@ -52,20 +52,6 @@ function applyAppDialogVariant(variant, showIcon = false) {
     }
 }
 
-function closeAppDialog(result) {
-    const modal = document.getElementById('app-dialog-modal');
-    if (modal) modal.classList.add('hidden');
-
-    document.getElementById('app-dialog-icon-wrap')?.classList.add('hidden');
-    document.removeEventListener('keydown', handleAppDialogKeydown);
-
-    if (appDialogResolver) {
-        const resolve = appDialogResolver;
-        appDialogResolver = null;
-        resolve(result);
-    }
-}
-
 function handleAppDialogKeydown(event) {
     if (!appDialogResolver) return;
 
@@ -75,9 +61,38 @@ function handleAppDialogKeydown(event) {
         return;
     }
 
+    const inputEl = document.getElementById('app-dialog-input');
+    const inputVisible = inputEl && !inputEl.classList.contains('hidden');
+    if (inputVisible) return;
+
     if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         closeAppDialog(true);
+    }
+}
+
+function closeAppDialog(result) {
+    const modal = document.getElementById('app-dialog-modal');
+    const inputEl = document.getElementById('app-dialog-input');
+    if (modal) modal.classList.add('hidden');
+
+    document.getElementById('app-dialog-icon-wrap')?.classList.add('hidden');
+    document.removeEventListener('keydown', handleAppDialogKeydown);
+
+    let resolved = result;
+    if (result === true && inputEl && !inputEl.classList.contains('hidden')) {
+        resolved = inputEl.value;
+    }
+
+    if (inputEl) {
+        inputEl.value = '';
+        inputEl.classList.add('hidden');
+    }
+
+    if (appDialogResolver) {
+        const resolve = appDialogResolver;
+        appDialogResolver = null;
+        resolve(resolved);
     }
 }
 
@@ -90,6 +105,9 @@ function showAppDialog(options = {}) {
         variant = 'confirm',
         showCancel = true,
         showIcon = false,
+        showInput = false,
+        inputPlaceholder = '',
+        inputValue = '',
         focusCancel = variant === 'danger'
     } = options;
 
@@ -97,6 +115,7 @@ function showAppDialog(options = {}) {
         const modal = document.getElementById('app-dialog-modal');
         const titleEl = document.getElementById('app-dialog-title');
         const messageEl = document.getElementById('app-dialog-message');
+        const inputEl = document.getElementById('app-dialog-input');
         const cancelBtn = document.getElementById('btn-app-dialog-cancel');
         const confirmBtn = document.getElementById('btn-app-dialog-confirm');
         const iconWrap = document.getElementById('app-dialog-icon-wrap');
@@ -117,6 +136,12 @@ function showAppDialog(options = {}) {
         confirmBtn.classList.toggle('flex-1', showCancel);
         confirmBtn.classList.toggle('w-full', !showCancel);
 
+        if (inputEl) {
+            inputEl.classList.toggle('hidden', !showInput);
+            inputEl.placeholder = inputPlaceholder;
+            inputEl.value = inputValue || '';
+        }
+
         if (iconWrap) {
             iconWrap.classList.toggle('hidden', !showIcon);
         }
@@ -125,6 +150,11 @@ function showAppDialog(options = {}) {
 
         modal.classList.remove('hidden');
         document.addEventListener('keydown', handleAppDialogKeydown);
+
+        if (showInput && inputEl) {
+            inputEl.focus();
+            return;
+        }
 
         if (showCancel) {
             (focusCancel ? cancelBtn : confirmBtn).focus();
@@ -176,6 +206,25 @@ function alertAppDialog(message, options = {}) {
     });
 }
 
+function promptAppDialog(message, options = {}) {
+    return showAppDialog({
+        ...options,
+        title: options.title || 'Observação',
+        message,
+        confirmLabel: options.confirmLabel || 'Confirmar',
+        cancelLabel: options.cancelLabel || 'Cancelar',
+        variant: options.variant || 'confirm',
+        showCancel: true,
+        showIcon: false,
+        showInput: true,
+        inputPlaceholder: options.placeholder || options.inputPlaceholder || 'Descreva o motivo...',
+        inputValue: options.value || options.inputValue || ''
+    }).then(result => {
+        if (result === false || result == null) return null;
+        return String(result);
+    });
+}
+
 function bindAppDialogEvents() {
     const cancelBtn = document.getElementById('btn-app-dialog-cancel');
     const confirmBtn = document.getElementById('btn-app-dialog-confirm');
@@ -192,4 +241,5 @@ function bindAppDialogEvents() {
 window.showAppDialog = showAppDialog;
 window.confirmAppDialog = confirmAppDialog;
 window.alertAppDialog = alertAppDialog;
+window.promptAppDialog = promptAppDialog;
 window.bindAppDialogEvents = bindAppDialogEvents;

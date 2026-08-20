@@ -86,6 +86,237 @@ function canShowOrderProjectVerRevisoesAction(approval) {
     return isOrderConsultorViewerForApproval(approval) || isAssignedProjetistaForApproval(approval);
 }
 
+function canShowOrderProjectVoltarRevisaoAction(project, orderId = null) {
+    if (typeof canActOnOrderProject === 'function' && !canActOnOrderProject(project)) return false;
+    if (getOrderProjectStatusName(project) !== 'Aguardando Aprovação') return false;
+    if (typeof isAdmin === 'function' && isAdmin()) return true;
+    if (currentUser?.role !== 'Consultor') return false;
+
+    const resolvedOrderId = Number(orderId || project?.orderId || project?.order?.id || activeOrderId);
+    const order = project?.order
+        || (typeof ordersCache !== 'undefined' && Array.isArray(ordersCache)
+            ? ordersCache.find(item => Number(item.id) === resolvedOrderId)
+            : null);
+
+    return typeof isCurrentUserOrderConsultor === 'function'
+        && isCurrentUserOrderConsultor(
+            getOrderConsultantNameFromRecord(order),
+            order?.consultantUserId || order?.consultor?.id
+        );
+}
+
+async function fetchOrderProjectForVoltarRevisao(projectId) {
+    const orderEmbed = typeof getOrderSalesOrderEmbed === 'function'
+        ? getOrderSalesOrderEmbed()
+        : 'order:salesOrders(id, consultantUserId, consultor:appUsers!consultantUserId(id, name))';
+
+    const { data, error } = await supabaseClient
+        .from('OrderProject')
+        .select(`id, orderId, statusId, projectStatus:OrderProjectStatus(id, name), ${orderEmbed}`)
+        .eq('id', projectId)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
+}
+
+async function attachObservationToLatestOrderProjectStatusHistory(orderProjectId, observation) {
+    const projectId = Number(orderProjectId);
+    const text = String(observation || '').trim();
+    if (!projectId || !text) return;
+
+    const { data, error } = await supabaseClient
+        .from('OrderProjectStatusHistory')
+        .select('id')
+        .eq('orderProjectId', projectId)
+        .order('changedAt', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        if (String(error.message || '').includes('observation')) {
+            throw new Error('Execute supabase/feats/add-order-project-status-history-observation.sql no Supabase.');
+        }
+        throw error;
+    }
+    if (!data?.id) return;
+
+    const { error: updateError } = await supabaseClient
+        .from('OrderProjectStatusHistory')
+        .update({ observation: text })
+        .eq('id', data.id);
+
+    if (updateError) {
+        if (String(updateError.message || '').includes('observation')) {
+            throw new Error('Execute supabase/feats/add-order-project-status-history-observation.sql no Supabase.');
+        }
+        throw updateError;
+    }
+}
+
+async function applyVoltarRevisaoComercialStatus(orderProjectId, observationText = '') {
+    if (typeof getEmRevisaoComercialProjectStatusId !== 'function') {
+        throw new Error('Não foi possível localizar o status de revisão comercial.');
+    }
+
+    const statusId = await getEmRevisaoComercialProjectStatusId();
+    if (!statusId) {
+        throw new Error(`Status "${ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS}" não encontrado.`);
+    }
+
+    const observation = String(observationText || '').trim();
+    const { data: rpcUpdated, error: rpcError } = await supabaseClient.rpc(
+        'set_order_project_status_with_observation',
+        {
+            p_order_project_id: Number(orderProjectId),
+            p_status_id: Number(statusId),
+            p_observation: observation,
+            p_updated_by_id: currentUser?.id || null
+        }
+    );
+
+    if (!rpcError && rpcUpdated === true) return;
+
+    const now = new Date().toISOString();
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            statusId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .eq('id', orderProjectId);
+
+    if (error) throw error;
+
+    await attachObservationToLatestOrderProjectStatusHistory(orderProjectId, observation);
+
+    if (rpcError && !String(rpcError.message || '').includes('Could not find the function')) {
+        console.warn('set_order_project_status_with_observation:', rpcError);
+    }
+}
+
+async function refreshTablesAfterVoltarRevisao(orderId) {
+    const normalizedOrderId = Number(orderId);
+    if (typeof refreshOrderProjectListAfterAction === 'function'
+        && normalizedOrderId
+        && Number(activeOrderId) === normalizedOrderId) {
+        await refreshOrderProjectListAfterAction(normalizedOrderId);
+    } else if (typeof refreshOrdersListSummary === 'function') {
+        await refreshOrdersListSummary();
+    }
+
+    if (typeof pendenciasActiveSection !== 'undefined'
+        && pendenciasActiveSection === 'consultor'
+        && pendenciasActiveItem === 'aguardando-aprovacao'
+        && typeof loadPendenciasConsultorAguardandoAprovacao === 'function') {
+        await loadPendenciasConsultorAguardandoAprovacao();
+    }
+}
+
+function isPendenciasViewVisibleForVoltarRevisao() {
+    const view = document.getElementById('pendencias-view');
+    return Boolean(view && !view.classList.contains('hidden'));
+}
+
+function isOrderProjectsPanelVisibleForVoltarRevisao() {
+    const content = document.getElementById('order-content');
+    return Boolean(content && !content.classList.contains('hidden'));
+}
+
+function setVoltarRevisaoActionLoading(active, message = 'Processando...', status = 'loading') {
+    if (isPendenciasViewVisibleForVoltarRevisao() && typeof setPendenciasActionLoading === 'function') {
+        setPendenciasActionLoading(active, message, status);
+        return;
+    }
+    if (isOrderProjectsPanelVisibleForVoltarRevisao() && typeof setOrderProjectsPanelActionLoading === 'function') {
+        setOrderProjectsPanelActionLoading(active, message, status);
+    }
+}
+
+async function waitVoltarRevisaoStatus(ms) {
+    if (typeof waitPendenciasStatus === 'function') {
+        await waitPendenciasStatus(ms);
+        return;
+    }
+    await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function returnOrderProjectToCommercialReview(projectId, options = {}) {
+    const normalizedId = Number(projectId);
+    if (!normalizedId) return false;
+
+    if (typeof promptAppDialog !== 'function') {
+        alertAppDialog('Não foi possível solicitar a observação.');
+        return false;
+    }
+
+    const observation = await promptAppDialog(
+        'Informe o motivo da solicitação de alteração do cliente. Essa observação fica no histórico de status.',
+        {
+            title: 'Voltar Revisão',
+            confirmLabel: 'Voltar Revisão',
+            placeholder: 'Descreva a alteração solicitada pelo cliente...'
+        }
+    );
+
+    if (observation == null) return false;
+
+    const observationText = String(observation).trim();
+    if (!observationText) {
+        alertAppDialog('Informe a observação para voltar o projeto à revisão comercial.');
+        return false;
+    }
+
+    setVoltarRevisaoActionLoading(true, 'Voltando o projeto para revisão comercial...');
+
+    try {
+        const project = await fetchOrderProjectForVoltarRevisao(normalizedId);
+        if (!project || !canShowOrderProjectVoltarRevisaoAction(project, project.orderId)) {
+            setVoltarRevisaoActionLoading(false);
+            alertAppDialog('O projeto não está mais em Aguardando Aprovação ou você não tem permissão para esta ação.');
+            return false;
+        }
+
+        await applyVoltarRevisaoComercialStatus(normalizedId, observationText);
+
+        if (typeof notifyOrderProjectStatusChangeForProjects === 'function') {
+            setVoltarRevisaoActionLoading(true, 'Enviando e-mail de notificação...');
+            await notifyOrderProjectStatusChangeForProjects(
+                [normalizedId],
+                ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS,
+                {
+                    extraFields: [{ label: 'Observação', value: observationText }],
+                    extraRoles: typeof PROJECT_STATUS_RECIPIENT_ROLE !== 'undefined'
+                        ? [PROJECT_STATUS_RECIPIENT_ROLE.GESTOR_COMERCIAL]
+                        : []
+                }
+            );
+        }
+
+        setVoltarRevisaoActionLoading(true, 'Atualizando telas...');
+        await refreshTablesAfterVoltarRevisao(project.orderId);
+        if (typeof options.onSuccess === 'function') {
+            await options.onSuccess();
+        }
+
+        setVoltarRevisaoActionLoading(true, 'Projeto voltou para Em Revisão Comercial Cons.', 'success');
+        await waitVoltarRevisaoStatus(900);
+        return true;
+    } catch (error) {
+        console.error('returnOrderProjectToCommercialReview:', error);
+        setVoltarRevisaoActionLoading(true, error.message || 'Erro ao voltar o projeto para revisão.', 'error');
+        await waitVoltarRevisaoStatus(1600);
+        return false;
+    } finally {
+        setVoltarRevisaoActionLoading(false);
+    }
+}
+
+window.canShowOrderProjectVoltarRevisaoAction = canShowOrderProjectVoltarRevisaoAction;
+window.returnOrderProjectToCommercialReview = returnOrderProjectToCommercialReview;
+
 async function fetchOrderProjectCommercialRevisionsContext(project, orderId) {
     if (!project?.id) return null;
 
@@ -262,6 +493,15 @@ function getOrderProjectActions(project, context = {}) {
                 approvalId: approvalCtx.id
             });
         }
+    }
+
+    if (canShowOrderProjectVoltarRevisaoAction(project, orderId)) {
+        actions.push({
+            id: 'voltar-revisao',
+            label: 'Voltar Revisão',
+            enabled: true,
+            projectId: project.id
+        });
     }
 
     if (revisions.length
@@ -565,6 +805,11 @@ async function handleOrderProjectAction(button) {
                 await openOrderProjectEntregaModal(projectId, projectName, {
                     onSuccess: () => refreshOrderProjectListAfterAction()
                 });
+            }
+            break;
+        case 'voltar-revisao':
+            if (typeof returnOrderProjectToCommercialReview === 'function' && projectId) {
+                await returnOrderProjectToCommercialReview(projectId);
             }
             break;
         case 'alterar-status':

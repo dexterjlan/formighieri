@@ -534,6 +534,12 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
             actionButtons.push(`<button type="button" onclick="openCommercialRevisionCommercialFromPendencias(${approval.id})"
                 class="text-xs bg-purple-100 text-purple-800 hover:bg-purple-200 px-2.5 py-1 rounded-lg font-medium">Revisão Comercial</button>`);
         }
+        if (!isEmRevisaoComercialView
+            && typeof canShowOrderProjectVoltarRevisaoAction === 'function'
+            && canShowOrderProjectVoltarRevisaoAction(project, project.orderId || project.order?.id)) {
+            actionButtons.push(`<button type="button" onclick="voltarRevisaoComercialFromPendencias(${project.id})"
+                class="text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 px-2.5 py-1 rounded-lg font-medium">Voltar Revisão</button>`);
+        }
 
         const actionCell = actionButtons.length
             ? `<div class="flex flex-wrap justify-end gap-1">${actionButtons.join('')}</div>`
@@ -682,9 +688,19 @@ async function openCommercialRevisionCommercialFromPendencias(approvalId) {
     await openCommercialRevisionModal(approval.id, 'comercial');
 }
 
+async function voltarRevisaoComercialFromPendencias(projectId) {
+    if (typeof returnOrderProjectToCommercialReview !== 'function') {
+        alertAppDialog('Não foi possível voltar o projeto para revisão.');
+        return;
+    }
+
+    await returnOrderProjectToCommercialReview(projectId);
+}
+
 window.approveCommercialApprovalFromPendencias = approveCommercialApprovalFromPendencias;
 window.openCommercialRevisionFromPendencias = openCommercialRevisionFromPendencias;
 window.openCommercialRevisionCommercialFromPendencias = openCommercialRevisionCommercialFromPendencias;
+window.voltarRevisaoComercialFromPendencias = voltarRevisaoComercialFromPendencias;
 
 async function fetchPendenciasConsultorRequisicaoRequests() {
     const overviewMode = isPendenciasConsultorConferenciaOverviewMode();
