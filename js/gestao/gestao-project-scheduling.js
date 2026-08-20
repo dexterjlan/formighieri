@@ -46,6 +46,7 @@ let gestaoProjectSchedulingForecastStatuses = [];
 let gestaoProjectSchedulingForecastByProjectId = new Map();
 let gestaoProjectSchedulingConferenceReviewersCache = [];
 let gestaoProjectSchedulingPpcpUsersCache = [];
+let gestaoProjectSchedulingMeasurementEventsCache = [];
 
 const GESTAO_PROJECT_SCHEDULING_ACTION_OVERLAY = createModalOverlayConfig('gestao-project-scheduling-action');
 
@@ -133,6 +134,38 @@ function resolveGestaoProjectSchedulingSelectedStatusId(statuses = []) {
 function getGestaoProjectSchedulingSelectedStatus() {
     const selectedId = Number(gestaoProjectSchedulingSelectedStatusId);
     return gestaoProjectSchedulingForecastStatuses.find(status => Number(status.id) === selectedId) || null;
+}
+
+function isGestaoProjectSchedulingConferenceStatus(status = getGestaoProjectSchedulingSelectedStatus()) {
+    return status?.name === ORDER_PROJECT_CONFERENCE_SENT_STATUS_NAME;
+}
+
+// Tipos de evento do calendário comercial cujo nome indica medição (ex.: "Medição").
+
+function isGestaoProjectSchedulingMeasurementCalendarEventTypeName(typeName) {
+    const normalized = String(typeName || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    return normalized.includes('medicao');
+}
+
+function getGestaoProjectSchedulingCalendarEventDateKey(event) {
+    return String(event?.eventDate || '').split('T')[0];
+}
+
+function formatGestaoProjectSchedulingEventTime(timeValue) {
+    if (!timeValue) return '';
+    return String(timeValue).slice(0, 5);
+}
+
+function getGestaoProjectSchedulingCalendarEventResponsibleName(event) {
+    if (event?.responsible?.name) return event.responsible.name;
+    const responsibleId = Number(event?.responsibleId);
+    if (!responsibleId) return '';
+    const fromReviewers = (gestaoProjectSchedulingConferenceReviewersCache || [])
+        .find(user => Number(user.id) === responsibleId);
+    return fromReviewers?.name || '';
 }
 
 function getGestaoProjectSchedulingSelectedStatusId() {
@@ -305,6 +338,63 @@ async function loadGestaoProjectSchedulingForecastsForCache() {
         projectIds,
         selectedStatusId
     );
+}
+
+async function loadGestaoProjectSchedulingMeasurementCalendarEvents() {
+    gestaoProjectSchedulingMeasurementEventsCache = [];
+
+    if (!isGestaoProjectSchedulingConferenceStatus()) return;
+
+    const typesResult = await supabaseClient
+        .from('CalendarEventType')
+        .select('id, name');
+    if (typesResult.error) {
+        console.error('loadGestaoProjectSchedulingMeasurementCalendarEvents types:', typesResult.error);
+        return;
+    }
+
+    const measurementTypeIds = (typesResult.data || [])
+        .filter(type => isGestaoProjectSchedulingMeasurementCalendarEventTypeName(type.name))
+        .map(type => Number(type.id))
+        .filter(Boolean);
+    if (!measurementTypeIds.length) return;
+
+    const selectWithResponsible = `
+        id, eventDate, eventTime, eventTypeId, description, orderId, clientId, responsibleId,
+        eventType:CalendarEventType(id, name),
+        client:Client(id, name),
+        order:salesOrders(orderCode, client:Client(name)),
+        responsible:appUsers!CalendarEvent_responsibleId_fkey(id, name)
+    `;
+    const selectWithoutResponsible = `
+        id, eventDate, eventTime, eventTypeId, description, orderId, clientId, responsibleId,
+        eventType:CalendarEventType(id, name),
+        client:Client(id, name),
+        order:salesOrders(orderCode, client:Client(name))
+    `;
+
+    let result = await supabaseClient
+        .from('CalendarEvent')
+        .select(selectWithResponsible)
+        .in('eventTypeId', measurementTypeIds)
+        .order('eventDate', { ascending: true })
+        .order('eventTime', { ascending: true });
+
+    if (result.error) {
+        result = await supabaseClient
+            .from('CalendarEvent')
+            .select(selectWithoutResponsible)
+            .in('eventTypeId', measurementTypeIds)
+            .order('eventDate', { ascending: true })
+            .order('eventTime', { ascending: true });
+    }
+
+    if (result.error) {
+        console.error('loadGestaoProjectSchedulingMeasurementCalendarEvents:', result.error);
+        return;
+    }
+
+    gestaoProjectSchedulingMeasurementEventsCache = result.data || [];
 }
 
 function startOfGestaoProjectSchedulingMonth(date) {
@@ -855,6 +945,72 @@ function buildGestaoProjectSchedulingProjects(orders, statuses, selectedStatus) 
     return entries;
 }
 
+function ensureGestaoProjectSchedulingDesignerGroup(groups, assigneeId, assigneeKind) {
+    const groupKey = assigneeId || 'none';
+    if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+            assigneeId,
+            assigneeKind,
+            assigneeName: getGestaoProjectSchedulingAssigneeNameById(assigneeId, assigneeKind),
+            projects: []
+        });
+    }
+    return groups.get(groupKey);
+}
+
+function getGestaoProjectSchedulingMeasurementEventClientName(event) {
+    return event?.client?.name
+        || event?.order?.client?.name
+        || '';
+}
+
+function getGestaoProjectSchedulingMeasurementEventOrderCode(event) {
+    return event?.order?.orderCode || '';
+}
+
+function matchesGestaoProjectSchedulingMeasurementEventFilters(event) {
+    const query = String(gestaoProjectSchedulingCalendarClientFilter || '').trim().toLowerCase();
+    if (!query) return true;
+
+    const clientName = getGestaoProjectSchedulingMeasurementEventClientName(event).toLowerCase();
+    const orderCode = getGestaoProjectSchedulingMeasurementEventOrderCode(event).toLowerCase();
+    return clientName.includes(query) || orderCode.includes(query);
+}
+
+function appendGestaoProjectSchedulingMeasurementEventBars(groups) {
+    const measurementItems = (gestaoProjectSchedulingMeasurementEventsCache || [])
+        .filter(event => getGestaoProjectSchedulingCalendarEventDateKey(event))
+        .filter(matchesGestaoProjectSchedulingMeasurementEventFilters)
+        .map(event => {
+            const dateKey = getGestaoProjectSchedulingCalendarEventDateKey(event);
+            const orderCode = getGestaoProjectSchedulingMeasurementEventOrderCode(event);
+            const clientName = getGestaoProjectSchedulingMeasurementEventClientName(event);
+
+            return {
+                project: { id: '', name: '' },
+                order: {
+                    id: event.orderId || null,
+                    orderCode,
+                    client: { name: clientName }
+                },
+                forecast: { startKey: dateKey, endKey: dateKey },
+                calendarEventId: event.id,
+                eventTime: event.eventTime || '',
+                isMeasurementEvent: true,
+                measurementResponsibleName: getGestaoProjectSchedulingCalendarEventResponsibleName(event)
+            };
+        });
+
+    if (!measurementItems.length) return;
+
+    groups.set('measurement', {
+        assigneeId: 0,
+        assigneeKind: 'measurement',
+        assigneeName: 'Medição',
+        projects: measurementItems
+    });
+}
+
 function buildGestaoProjectSchedulingDesignerGroups(entries) {
     const groups = new Map();
     const status = getGestaoProjectSchedulingSelectedStatus();
@@ -865,26 +1021,22 @@ function buildGestaoProjectSchedulingDesignerGroups(entries) {
         if (!forecast) return;
 
         const assigneeId = Number(getGestaoProjectSchedulingResolvedAssignee(entry.project)?.id) || 0;
-        const groupKey = assigneeId || 'none';
-
-        if (!groups.has(groupKey)) {
-            groups.set(groupKey, {
-                assigneeId,
-                assigneeKind,
-                assigneeName: getGestaoProjectSchedulingAssigneeNameById(assigneeId, assigneeKind),
-                projects: []
-            });
-        }
-
-        groups.get(groupKey).projects.push({
+        const group = ensureGestaoProjectSchedulingDesignerGroup(groups, assigneeId, assigneeKind);
+        group.projects.push({
             ...entry,
             forecast
         });
     });
 
-    return [...groups.values()].sort((left, right) =>
-        left.assigneeName.localeCompare(right.assigneeName, 'pt-BR')
-    );
+    if (isGestaoProjectSchedulingConferenceStatus(status)) {
+        appendGestaoProjectSchedulingMeasurementEventBars(groups);
+    }
+
+    return [...groups.values()].sort((left, right) => {
+        if (left.assigneeKind === 'measurement' && right.assigneeKind !== 'measurement') return -1;
+        if (right.assigneeKind === 'measurement' && left.assigneeKind !== 'measurement') return 1;
+        return left.assigneeName.localeCompare(right.assigneeName, 'pt-BR');
+    });
 }
 
 function updateGestaoProjectSchedulingProjectInCache(projectId, updates) {
@@ -1119,15 +1271,30 @@ function renderGestaoProjectSchedulingDesignerLane(laneItems, weekDays, todayKey
         const assigneeKind = item.assigneeKind || group.assigneeKind;
         const assigneeId = item.assigneeId != null ? item.assigneeId : group.assigneeId;
         const assigneeName = getGestaoProjectSchedulingAssigneeNameById(assigneeId, assigneeKind);
+        const eventTime = formatGestaoProjectSchedulingEventTime(item.eventTime);
+        const isMeasurement = Boolean(item.isMeasurementEvent);
+        const titleParts = isMeasurement
+            ? ['Medição', eventTime, orderCode, clientName].filter(Boolean)
+            : [assigneeName, orderCode, clientName, projectName];
+        const barTitle = isMeasurement ? 'Medição' : assigneeName;
+        const barMeta = isMeasurement
+            ? [orderCode !== '—' ? `Pedido ${orderCode}` : '', clientName, eventTime].filter(Boolean).join(' · ')
+            : `${clientName} · ${projectName}`;
+        const barClass = isMeasurement
+            ? 'gestao-project-scheduling-bar gestao-project-scheduling-bar--measurement'
+            : 'gestao-project-scheduling-bar';
+        const barStyle = isMeasurement
+            ? `grid-column: ${placement.startCol} / span ${placement.span};`
+            : `${getGestaoProjectSchedulingDesignerBarStyle(assigneeId)} grid-column: ${placement.startCol} / span ${placement.span};`;
 
         return `
             <button type="button"
-                class="gestao-project-scheduling-bar"
+                class="${barClass}"
                 data-order-project-id="${project.id}"
-                style="${getGestaoProjectSchedulingDesignerBarStyle(assigneeId)} grid-column: ${placement.startCol} / span ${placement.span};"
-                title="${escapeHtml(`${assigneeName} · ${orderCode} · ${clientName} · ${projectName}`)}">
-                <span class="gestao-project-scheduling-bar__title">${escapeHtml(assigneeName)}</span>
-                <span class="gestao-project-scheduling-bar__meta">${escapeHtml(clientName)} · ${escapeHtml(projectName)}</span>
+                style="${barStyle}"
+                title="${escapeHtml(titleParts.join(' · '))}">
+                <span class="gestao-project-scheduling-bar__title">${escapeHtml(barTitle)}</span>
+                <span class="gestao-project-scheduling-bar__meta">${escapeHtml(barMeta)}</span>
             </button>
         `;
     }).join('');
@@ -1249,11 +1416,21 @@ function renderGestaoProjectSchedulingLegend() {
     const legend = document.getElementById('gestao-project-scheduling-legend');
     if (!legend) return;
 
+    const measurementLegend = isGestaoProjectSchedulingConferenceStatus()
+        ? `
+            <span class="gestao-project-scheduling-legend-item">
+                <span class="gestao-project-scheduling-legend-swatch gestao-project-scheduling-legend-swatch--measurement"></span>
+                Medição (calendário)
+            </span>
+        `
+        : '';
+
     legend.innerHTML = `
         <span class="gestao-project-scheduling-legend-item">
             <span class="gestao-project-scheduling-legend-swatch gestao-project-scheduling-legend-swatch--bar"></span>
             Período previsto
         </span>
+        ${measurementLegend}
         <span class="gestao-project-scheduling-legend-item">
             <span class="gestao-project-scheduling-legend-swatch gestao-project-scheduling-legend-swatch--today"></span>
             Hoje
@@ -1795,6 +1972,7 @@ async function loadGestaoProjectScheduling() {
 
     gestaoProjectSchedulingProjectsCache = buildGestaoProjectSchedulingProjects(orders, statuses, selectedStatus);
     await loadGestaoProjectSchedulingForecastsForCache();
+    await loadGestaoProjectSchedulingMeasurementCalendarEvents();
     renderGestaoProjectSchedulingFilterSelects();
     updateGestaoProjectSchedulingAssigneeFilterVisibility();
     applyProjectSchedulingReadOnlyUi();

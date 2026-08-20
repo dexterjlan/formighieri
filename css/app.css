@@ -3998,6 +3998,10 @@ body.montagem-prog-resizing {
     border-color: rgb(252 211 77);
 }
 
+.gestao-project-scheduling-legend-swatch--measurement {
+    background: linear-gradient(135deg, #b91c1c, #ef4444);
+}
+
 .gestao-project-scheduling-view-toggle {
     display: inline-flex;
     border: 1px solid rgb(226 232 240);
@@ -4206,6 +4210,10 @@ body.montagem-prog-resizing {
 
 .gestao-project-scheduling-bar:hover {
     filter: brightness(1.05);
+}
+
+.gestao-project-scheduling-bar--measurement {
+    background: linear-gradient(135deg, #b91c1c, #ef4444);
 }
 
 .gestao-project-scheduling-bar__title {
