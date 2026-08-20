@@ -2,3 +2,4 @@ supabase/
 google-apps-script/
 PENDING-PROD-SQL.md
 .cursor/rules/push-prod-sql-reminder.mdc
+scripts/backup-prod-db.env
