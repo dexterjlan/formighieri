@@ -3,7 +3,8 @@ let pesquisasActiveSection = 'revisions';
 const PESQUISAS_SECTIONS = [
     { id: 'revisions', label: 'Revisões' },
     { id: 'requests', label: 'Requisições' },
-    { id: 'purchases', label: 'Compras' }
+    { id: 'purchases', label: 'Compras' },
+    { id: 'detailing', label: 'Detalhamento' }
 ];
 
 function canAccessPesquisas() {
@@ -56,6 +57,13 @@ async function loadPesquisasContent() {
     if (pesquisasActiveSection === 'purchases') {
         if (typeof loadPesquisasPurchasesQuery === 'function') {
             await loadPesquisasPurchasesQuery();
+        }
+        return;
+    }
+
+    if (pesquisasActiveSection === 'detailing') {
+        if (typeof loadPesquisasDetailingQuery === 'function') {
+            await loadPesquisasDetailingQuery();
         }
     }
 }
@@ -182,6 +190,10 @@ function bindPesquisasQueryForm(sectionId, onSearch, defaultStatuses = [], extra
         (extra.selectIds || []).forEach(selectId => {
             const select = document.getElementById(selectId);
             if (select) select.value = '';
+        });
+        (extra.textIds || []).forEach(inputId => {
+            const input = document.getElementById(inputId);
+            if (input) input.value = '';
         });
         (extra.checkboxFilters || []).forEach(filter => {
             resetCheckboxFilter(filter.containerId, filter.defaultValues || []);

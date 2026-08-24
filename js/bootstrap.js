@@ -81,6 +81,7 @@ const SCRIPTS = [
     'js/pesquisas/pesquisas-revisions-query.js',
     'js/pesquisas/pesquisas-requests-query.js',
     'js/pesquisas/pesquisas-purchases-query.js',
+    'js/pesquisas/pesquisas-detailing-query.js',
     'js/admin/system-settings.js',
     'js/admin/import-pedido-settings.js',
     'js/core/auth.js',
