@@ -44,6 +44,13 @@ function normalizeIsoDateValue(dateStr) {
     return String(dateStr).split('T')[0];
 }
 
+function getLocalIsoDate(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function pickLatestIsoDate(...dates) {
     let latest = '';
 
@@ -237,6 +244,91 @@ async function persistSalesOrderClientDeliveryDate(orderId, clientDeliveryDate, 
             ? `A data de entrega não foi gravada (valor atual no banco: ${verified}).`
             : 'Não foi possível salvar a data de entrega do pedido. Execute supabase/create-gestao-order-fields.sql no Supabase.'
     );
+}
+
+function syncSalesOrderSaleDateCaches(orderId, saleDate) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return;
+
+    if (typeof ordersCache !== 'undefined') {
+        const cacheIndex = ordersCache.findIndex(order => Number(order.id) === normalizedOrderId);
+        if (cacheIndex >= 0) {
+            ordersCache[cacheIndex] = {
+                ...ordersCache[cacheIndex],
+                saleDate
+            };
+        }
+    }
+
+    if (typeof gestaoOrdersCache !== 'undefined') {
+        const cacheIndex = gestaoOrdersCache.findIndex(order => Number(order.id) === normalizedOrderId);
+        if (cacheIndex >= 0) {
+            gestaoOrdersCache[cacheIndex] = {
+                ...gestaoOrdersCache[cacheIndex],
+                saleDate
+            };
+        }
+    }
+
+    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === normalizedOrderId) {
+        const detSaleDate = document.getElementById('det-sale-date');
+        if (detSaleDate) {
+            const formatted = typeof formatGestaoDate === 'function'
+                ? formatGestaoDate(saleDate)
+                : (saleDate || '—');
+            detSaleDate.innerText = `Data de venda: ${formatted}`;
+        }
+    }
+}
+
+async function persistSalesOrderSaleDate(orderId, saleDate, contextOverride = null) {
+    const normalizedOrderId = Number(orderId);
+    const normalizedDate = normalizeIsoDateValue(saleDate);
+    if (!normalizedOrderId || !normalizedDate) {
+        throw new Error('Informe a data de venda do pedido.');
+    }
+
+    const context = {
+        ...(await resolveSalesOrderUpdateContext(normalizedOrderId)),
+        ...(contextOverride || {})
+    };
+    const orderCode = context.orderCode || '';
+    const now = new Date().toISOString();
+    const userId = currentUser?.id || null;
+
+    const attempts = [
+        { saleDate: normalizedDate, updatedAt: now, updatedById: userId },
+        { saleDate: normalizedDate, updatedAt: now },
+        { saleDate: normalizedDate }
+    ];
+
+    let lastError = null;
+
+    for (const attempt of attempts) {
+        const cleanPayload = Object.fromEntries(
+            Object.entries(attempt).filter(([, value]) => value !== undefined && value !== null && value !== '')
+        );
+        if (!cleanPayload.saleDate) continue;
+
+        let query = supabaseClient.from('salesOrders').update(cleanPayload);
+        query = orderCode
+            ? query.eq('orderCode', String(orderCode).trim())
+            : query.eq('id', normalizedOrderId);
+
+        const { error } = await query;
+        if (error) {
+            lastError = error;
+            if (error.message?.includes('saleDate')) {
+                throw new Error('Execute supabase/feats/add-sales-order-sale-date.sql no Supabase.');
+            }
+            continue;
+        }
+
+        syncSalesOrderSaleDateCaches(normalizedOrderId, normalizedDate);
+        return normalizedDate;
+    }
+
+    throw lastError || new Error('Não foi possível salvar a data de venda do pedido.');
 }
 
 async function persistSalesOrderActualDeliveryDate(orderId, actualDeliveryDate, options = {}) {

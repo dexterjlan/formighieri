@@ -450,6 +450,7 @@ function renderOrdersList() {
             <div class="min-w-0">
                 <div class="text-sm font-bold text-slate-900 leading-snug">${escapeHtml(getOrderClientName(o))}</div>
                 <div class="text-[11px] text-slate-500 mt-1">📋 Consultor: ${escapeHtml(getOrderConsultantNameFromRecord(o))}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">🏷️ Venda: ${escapeHtml(typeof formatGestaoDate === 'function' ? formatGestaoDate(o.saleDate) : (o.saleDate || '—'))}</div>
                 <div class="text-[11px] text-slate-500 mt-0.5">📅 ${escapeHtml(formatOrderDeliverySummary(o.id, o.clientDeliveryDate, { prefix: 'Entrega' }))}</div>
                 ${renderOrderSummaryBadges(o.id)}
             </div>
@@ -661,6 +662,12 @@ function switchOrderDetailTab(tab) {
 async function openOrderModal() {
     document.getElementById('order-form')?.reset();
     if (document.getElementById('ord-client-id')) document.getElementById('ord-client-id').value = '';
+    const saleDateInput = document.getElementById('ord-sale-date');
+    if (saleDateInput) {
+        saleDateInput.value = typeof getLocalIsoDate === 'function'
+            ? getLocalIsoDate()
+            : new Date().toISOString().slice(0, 10);
+    }
     await loadConsultants();
     toggleModal('order-modal', true);
 }
@@ -710,6 +717,13 @@ async function selectOrder(id) {
     document.getElementById("det-client").innerText = getOrderClientName(order);
     document.getElementById("det-info").innerText =
         `📋 Consultor: ${getOrderConsultantNameFromRecord(order)} | Criado por: ${order.creator?.name || 'Sistema'}`;
+    const saleDateEl = document.getElementById("det-sale-date");
+    if (saleDateEl) {
+        const saleDateLabel = typeof formatGestaoDate === 'function'
+            ? formatGestaoDate(order.saleDate)
+            : (order.saleDate || '—');
+        saleDateEl.innerText = `Data de venda: ${saleDateLabel}`;
+    }
     document.getElementById("det-delivery").innerText = formatOrderDeliverySummary(order.id, order.clientDeliveryDate);
 
     await loadOrderPhasesForOrders(ordersCache.length ? ordersCache : [order]);
@@ -819,6 +833,15 @@ function bindOrderEvents() {
             return;
         }
 
+        const saleDate = typeof normalizeIsoDateValue === 'function'
+            ? normalizeIsoDateValue(document.getElementById("ord-sale-date")?.value || '')
+            : (document.getElementById("ord-sale-date")?.value || '');
+        if (!saleDate) {
+            alertAppDialog("Informe a data de venda.");
+            document.getElementById("ord-sale-date")?.focus();
+            return;
+        }
+
         const { data: existing } = await supabaseClient
             .from('salesOrders')
             .select('id')
@@ -834,11 +857,16 @@ function bindOrderEvents() {
             orderCode,
             clientId,
             consultantUserId,
+            saleDate,
             createdById: currentUser.id,
             updatedById: currentUser.id
         };
 
-        const { error } = await supabaseClient.from('salesOrders').insert([payload]);
+        let { error } = await supabaseClient.from('salesOrders').insert([payload]);
+        if (error?.message?.includes('saleDate')) {
+            alertAppDialog("Execute supabase/feats/add-sales-order-sale-date.sql no Supabase.");
+            return;
+        }
         if (error) {
             alertAppDialog("Erro ao salvar pedido: " + error.message);
             return;

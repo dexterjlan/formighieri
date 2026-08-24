@@ -377,6 +377,7 @@ function renderOrderExportOrderSection(bundle) {
             ? getOrderConsultantNameFromRecord(order) : ''),
         orderExportField('Criado por', order.creator?.name || 'Sistema'),
         orderExportField('Data de criação', formatOrderExportDateTime(order.createdAt)),
+        orderExportField('Data de venda', formatOrderExportDate(order.saleDate)),
         orderExportField('Entrega', deliverySummary)
     ].join('');
 

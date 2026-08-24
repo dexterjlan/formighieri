@@ -13,6 +13,12 @@ async function openGestaoCreateOrderForm() {
     await loadGestaoConsultants();
     clearGestaoOrderProjectsDraft();
     clearGestaoOrderPhasesDraft();
+    const saleDateInput = document.getElementById('gestao-ord-sale-date');
+    if (saleDateInput) {
+        saleDateInput.value = typeof getLocalIsoDate === 'function'
+            ? getLocalIsoDate()
+            : new Date().toISOString().slice(0, 10);
+    }
     syncGestaoOrderClientDeliveryField();
     showGestaoPedidoFormPanel();
 }
@@ -34,6 +40,10 @@ async function openGestaoEditOrderForm(orderId) {
         document.getElementById('gestao-ord-client-id').value = order.clientId || order.client?.id || '';
     }
     document.getElementById('gestao-ord-client-delivery').value = toGestaoInputDate(order.clientDeliveryDate);
+    const saleDateInput = document.getElementById('gestao-ord-sale-date');
+    if (saleDateInput) {
+        saleDateInput.value = toGestaoInputDate(order.saleDate);
+    }
 
     await loadGestaoFormOptions();
     await loadGestaoConsultants({
@@ -563,7 +573,7 @@ function renderGestaoOrdersListRows(orders) {
     if (!tbody) return;
 
     if (!orders.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-xs text-slate-400">Nenhum pedido encontrado.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-xs text-slate-400">Nenhum pedido encontrado.</td></tr>';
         return;
     }
 
@@ -575,6 +585,7 @@ function renderGestaoOrdersListRows(orders) {
             <td class="p-3 font-mono text-xs font-bold text-slate-700">${escapeHtml(order.orderCode || '—')}</td>
             <td class="p-3 text-slate-800">${escapeHtml(getOrderClientName(order) || '—')}</td>
             <td class="p-3 text-slate-500">${escapeHtml(getOrderConsultantNameFromRecord(order) || '—')}</td>
+            <td class="p-3 text-slate-600 whitespace-nowrap">${formatGestaoDate(order.saleDate)}</td>
             <td class="p-3 text-slate-600 whitespace-nowrap">${formatGestaoDate(order.clientDeliveryDate)}</td>
             <td class="p-3 text-slate-600">${projectCount}</td>
             <td class="p-3">
@@ -592,12 +603,12 @@ async function loadGestaoOrdersList() {
     const tbody = document.getElementById('gestao-orders-list');
     if (!tbody) return;
 
-    tbody.innerHTML = '<tr><td colspan="6" class="p-6 text-center text-xs text-slate-400">Carregando pedidos...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-xs text-slate-400">Carregando pedidos...</td></tr>';
 
     const result = await fetchGestaoOrders(getGestaoOrdersListFilters());
 
     if (result.error) {
-        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-xs text-red-500">Erro ao carregar pedidos: ${escapeHtml(result.error.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-xs text-red-500">Erro ao carregar pedidos: ${escapeHtml(result.error.message)}</td></tr>`;
         return;
     }
 
@@ -1031,6 +1042,15 @@ async function saveGestaoOrder(event) {
         return;
     }
 
+    const saleDate = typeof normalizeIsoDateValue === 'function'
+        ? normalizeIsoDateValue(document.getElementById('gestao-ord-sale-date')?.value || '')
+        : (document.getElementById('gestao-ord-sale-date')?.value || '');
+    if (!saleDate) {
+        alertAppDialog('Informe a data de venda.');
+        document.getElementById('gestao-ord-sale-date')?.focus();
+        return;
+    }
+
     const projects = gestaoOrderProjectsDraft || [];
     const isEditingOrder = Boolean(resolveGestaoOrderIdForSave());
 
@@ -1110,6 +1130,7 @@ async function saveGestaoOrder(event) {
                 orderCode,
                 clientId,
                 consultantUserId,
+                saleDate,
                 createdById: currentUser.id,
                 updatedById: currentUser.id,
                 updatedAt: now
@@ -1128,6 +1149,10 @@ async function saveGestaoOrder(event) {
                     .insert(fallback)
                     .select('id')
                     .single());
+            }
+
+            if (error?.message?.includes('saleDate')) {
+                throw new Error('Execute supabase/feats/add-sales-order-sale-date.sql no Supabase.');
             }
 
             if (error) throw error;
@@ -1185,6 +1210,10 @@ async function saveGestaoOrder(event) {
             updatedAt: now
         });
 
+        if (typeof persistSalesOrderSaleDate === 'function') {
+            await persistSalesOrderSaleDate(orderId, saleDate, { orderCode });
+        }
+
         if (typeof syncSalesOrdersConsultantName === 'function') {
             await syncSalesOrdersConsultantName(previousConsultantName, consultantName, consultantUserId);
         }
@@ -1207,6 +1236,7 @@ async function saveGestaoOrder(event) {
         }
     } catch (error) {
         const sqlHint = error.message?.includes('clientDeliveryDate')
+            || error.message?.includes('saleDate')
             || error.message?.includes('projectCode')
             || error.message?.includes('statusId')
             || error.message?.includes('OrderProjectStatus')
