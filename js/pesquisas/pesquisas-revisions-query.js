@@ -1,5 +1,7 @@
 const PESQUISAS_REVISIONS_STATUS_OPTIONS = ['Aberta', 'Iniciado', 'Encerrada'];
 const PESQUISAS_REVISIONS_DEFAULT_CHECKED_STATUSES = ['Aberta', 'Iniciado'];
+const PESQUISAS_REVISIONS_TYPE_OPTIONS = ['Comercial', 'Técnica', 'Revisor', 'Terceiro'];
+const PESQUISAS_REVISIONS_TABLE_COLSPAN = 12;
 let pesquisasRevisionsCache = [];
 
 function getRevisionSearchTypeLabel(revisionType) {
@@ -71,6 +73,13 @@ function getRevisionSearchContext(revision) {
     const thirdPartyProject = revision.thirdPartyProject || null;
     const orderProject = revision.orderProject || thirdPartyProject?.orderProject || null;
     const order = orderProject?.order || thirdPartyProject?.order || null;
+    const designer = thirdPartyProject?.designer || orderProject?.designer || null;
+    const designerId = Number(
+        thirdPartyProject?.designerId
+        || orderProject?.designerId
+        || designer?.id
+        || 0
+    ) || null;
 
     let projectName = orderProject?.name || '—';
     if (thirdPartyProject) {
@@ -84,6 +93,9 @@ function getRevisionSearchContext(revision) {
     return {
         orderCode: order?.orderCode || '—',
         clientName: getOrderClientName(order) || '—',
+        consultantName: getOrderConsultantNameFromRecord(order) || '—',
+        designerName: designer?.name || '—',
+        designerId,
         projectName,
         orderProjectId: revision.orderProjectId || orderProject?.id || null,
         thirdPartyProjectId: revision.thirdPartyProjectId || null
@@ -91,14 +103,22 @@ function getRevisionSearchContext(revision) {
 }
 
 async function fetchPesquisasRevisions() {
+    const designerEmbed = typeof ORDER_PROJECT_DESIGNER_EMBED === 'string'
+        ? ORDER_PROJECT_DESIGNER_EMBED
+        : 'designer:appUsers!OrderProject_designerId_fkey(id, name)';
+    const thirdPartyDesignerEmbed = typeof THIRD_PARTY_PROJECT_DESIGNER_EMBED === 'string'
+        ? THIRD_PARTY_PROJECT_DESIGNER_EMBED
+        : 'designer:appUsers!ThirdPartyProject_designerId_fkey(id, name)';
     const orderProjectEmbed = `
-        id, name, projectCode, orderId,
+        id, name, projectCode, orderId, designerId,
+        ${designerEmbed},
         order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
     `;
     const thirdPartyEmbed = `
-        id, orderId, orderProjectId, status,
+        id, orderId, orderProjectId, status, designerId,
+        ${thirdPartyDesignerEmbed},
         thirdPartySubtype:ThirdPartySubtype(id, name),
-        orderProject:OrderProject(id, name, projectCode),
+        orderProject:OrderProject(id, name, projectCode, designerId, ${designerEmbed}),
         order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
     `;
 
@@ -155,9 +175,10 @@ async function enrichPesquisasRevisionsWithThirdPartyProjects(revisions = []) {
         const { data, error } = await supabaseClient
             .from('ThirdPartyProject')
             .select(`
-                id, orderId, orderProjectId, status,
+                id, orderId, orderProjectId, status, designerId,
+                designer:appUsers!ThirdPartyProject_designerId_fkey(id, name),
                 thirdPartySubtype:ThirdPartySubtype(id, name),
-                orderProject:OrderProject(id, name, projectCode),
+                orderProject:OrderProject(id, name, projectCode, designerId, designer:appUsers!OrderProject_designerId_fkey(id, name)),
                 order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
             `)
             .in('id', missingThirdPartyIds);
@@ -217,7 +238,7 @@ async function searchPesquisasRevisions() {
     const countEl = document.getElementById('pesquisas-revisions-count');
     if (!tbody || !countEl) return;
 
-    tbody.innerHTML = `<tr><td colspan="10" class="p-4 text-xs text-slate-400 text-center">Carregando...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${PESQUISAS_REVISIONS_TABLE_COLSPAN}" class="p-4 text-xs text-slate-400 text-center">Carregando...</td></tr>`;
 
     try {
         if (!pesquisasRevisionsCache.length) {
@@ -225,21 +246,35 @@ async function searchPesquisasRevisions() {
         }
 
         const filters = getPesquisasTextFilters('revisions');
+        const consultantFilter = document.getElementById('pesquisas-revisions-consultor')?.value || '';
+        const designerFilter = document.getElementById('pesquisas-revisions-projetista')?.value || '';
+        const typeFilters = getCheckboxFilterValues(
+            'pesquisas-revisions-tipo',
+            [...PESQUISAS_REVISIONS_TYPE_OPTIONS]
+        );
         const sequentialMaps = buildRevisionSequentialMaps(pesquisasRevisionsCache);
 
         const rows = pesquisasRevisionsCache.filter(revision => {
             const context = getRevisionSearchContext(revision);
-            return matchesPesquisasTextFilters(revision, filters, {
+            if (!matchesPesquisasTextFilters(revision, filters, {
                 orderCode: () => context.orderCode,
                 clientName: () => context.clientName,
                 status: () => getRevisionSearchStatusLabel(revision)
-            });
+            })) {
+                return false;
+            }
+            if (consultantFilter && context.consultantName !== consultantFilter) return false;
+            if (designerFilter && String(context.designerId || '') !== String(designerFilter)) return false;
+            if (typeFilters.length && !typeFilters.includes(getRevisionSearchTypeLabel(revision.revisionType))) {
+                return false;
+            }
+            return true;
         });
 
         countEl.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
 
         if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-xs text-slate-400">Nenhuma revisão encontrada.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${PESQUISAS_REVISIONS_TABLE_COLSPAN}" class="p-6 text-center text-xs text-slate-400">Nenhuma revisão encontrada.</td></tr>`;
             return;
         }
 
@@ -256,6 +291,8 @@ async function searchPesquisasRevisions() {
                 <tr class="border-b border-slate-100 last:border-0">
                     <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(context.orderCode)}</td>
                     <td class="p-3 text-xs text-slate-700">${escapeHtml(context.clientName)}</td>
+                    <td class="p-3 text-xs text-slate-600">${escapeHtml(context.consultantName)}</td>
+                    <td class="p-3 text-xs text-slate-600">${escapeHtml(context.designerName)}</td>
                     <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(context.projectName)}</td>
                     <td class="p-3 text-xs text-slate-600">${escapeHtml(getRevisionSearchTypeLabel(revision.revisionType))}</td>
                     <td class="p-3 text-xs text-slate-600 text-center">${getRevisionSearchSequential(revision, sequentialMaps)}</td>
@@ -275,7 +312,7 @@ async function searchPesquisasRevisions() {
         }).join('');
     } catch (error) {
         console.error('searchPesquisasRevisions:', error);
-        tbody.innerHTML = `<tr><td colspan="10" class="p-4 text-xs text-red-500 text-center">Erro ao carregar revisões: ${escapeHtml(error.message || 'Erro desconhecido')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${PESQUISAS_REVISIONS_TABLE_COLSPAN}" class="p-4 text-xs text-red-500 text-center">Erro ao carregar revisões: ${escapeHtml(error.message || 'Erro desconhecido')}</td></tr>`;
         countEl.textContent = '0 registros';
     }
 }
@@ -290,6 +327,8 @@ async function loadPesquisasRevisionsQuery() {
     const tableHeadHtml = `
         <th class="text-left p-3 font-semibold">Pedido</th>
         <th class="text-left p-3 font-semibold">Cliente</th>
+        <th class="text-left p-3 font-semibold">Consultor</th>
+        <th class="text-left p-3 font-semibold">Projetista</th>
         <th class="text-left p-3 font-semibold">Projeto</th>
         <th class="text-left p-3 font-semibold">Tipo Requisição</th>
         <th class="text-center p-3 font-semibold">Sequencial</th>
@@ -300,6 +339,33 @@ async function loadPesquisasRevisionsQuery() {
         <th class="text-left p-3 font-semibold w-24">Ação</th>
     `;
 
+    const extraFiltersHtml = `
+        <div>
+            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Consultor</label>
+            <select id="pesquisas-revisions-consultor"
+                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                <option value="">Todos</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Projetista</label>
+            <select id="pesquisas-revisions-projetista"
+                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                <option value="">Todos</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Tipo Requisição</label>
+            <div id="pesquisas-revisions-tipo"
+                class="fm-checkbox-filter flex flex-col gap-1.5 max-h-32 overflow-y-auto border border-slate-200 rounded-lg px-3 py-2 bg-white">
+                ${renderCheckboxFilterGroup('pesquisas-revisions-tipo', PESQUISAS_REVISIONS_TYPE_OPTIONS, {
+                    defaultCheckedValues: PESQUISAS_REVISIONS_TYPE_OPTIONS,
+                    inputName: 'revisions-tipo'
+                })}
+            </div>
+        </div>
+    `;
+
     content.innerHTML = renderPesquisasQueryShell(
         'revisions',
         'Revisões',
@@ -307,10 +373,29 @@ async function loadPesquisasRevisionsQuery() {
         statusOptions,
         tableHeadHtml,
         'pesquisas-revisions-list',
-        defaultCheckedStatuses
+        defaultCheckedStatuses,
+        extraFiltersHtml
     );
 
-    bindPesquisasQueryForm('revisions', searchPesquisasRevisions, defaultCheckedStatuses);
+    bindPesquisasQueryForm('revisions', searchPesquisasRevisions, defaultCheckedStatuses, {
+        selectIds: ['pesquisas-revisions-consultor', 'pesquisas-revisions-projetista'],
+        checkboxFilters: [{
+            containerId: 'pesquisas-revisions-tipo',
+            defaultValues: [...PESQUISAS_REVISIONS_TYPE_OPTIONS]
+        }]
+    });
+
+    if (typeof loadConsultantAndDesignerFilterOptions === 'function') {
+        try {
+            await loadConsultantAndDesignerFilterOptions({
+                consultantSelectId: 'pesquisas-revisions-consultor',
+                designerSelectId: 'pesquisas-revisions-projetista'
+            });
+        } catch (error) {
+            console.warn('loadPesquisasRevisionsQuery filters:', error);
+        }
+    }
+
     await searchPesquisasRevisions();
 }
 

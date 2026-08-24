@@ -91,7 +91,7 @@ function updatePesquisasNav() {
     }
 }
 
-function renderPesquisasQueryShell(sectionId, title, description, statusOptions, tableHeadHtml, tableBodyId, defaultCheckedStatuses = null) {
+function renderPesquisasQueryShell(sectionId, title, description, statusOptions, tableHeadHtml, tableBodyId, defaultCheckedStatuses = null, extraFiltersHtml = '') {
     const statusContainerId = `pesquisas-${sectionId}-status`;
     const checkedStatuses = defaultCheckedStatuses ?? statusOptions;
     const statusOptionsHtml = renderCheckboxFilterGroup(statusContainerId, statusOptions, {
@@ -115,6 +115,7 @@ function renderPesquisasQueryShell(sectionId, title, description, statusOptions,
                         <input type="text" id="pesquisas-${sectionId}-cliente" placeholder="Nome do cliente"
                             class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
                     </div>
+                    ${extraFiltersHtml}
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Status</label>
                         <div id="${statusContainerId}"
@@ -166,7 +167,7 @@ function matchesPesquisasTextFilters(row, filters, getters = {}) {
     return true;
 }
 
-function bindPesquisasQueryForm(sectionId, onSearch, defaultStatuses = []) {
+function bindPesquisasQueryForm(sectionId, onSearch, defaultStatuses = [], extra = {}) {
     document.getElementById(`pesquisas-${sectionId}-form`)?.addEventListener('submit', event => {
         event.preventDefault();
         onSearch();
@@ -178,6 +179,13 @@ function bindPesquisasQueryForm(sectionId, onSearch, defaultStatuses = []) {
         if (pedidoInput) pedidoInput.value = '';
         if (clienteInput) clienteInput.value = '';
         resetCheckboxFilter(`pesquisas-${sectionId}-status`, defaultStatuses);
+        (extra.selectIds || []).forEach(selectId => {
+            const select = document.getElementById(selectId);
+            if (select) select.value = '';
+        });
+        (extra.checkboxFilters || []).forEach(filter => {
+            resetCheckboxFilter(filter.containerId, filter.defaultValues || []);
+        });
         onSearch();
     });
 }
