@@ -39,7 +39,7 @@ function renderPendenciasThirdPartyGestorRow(project, projetistas = []) {
     `;
 }
 
-function renderPendenciasThirdPartyProjetistaRow(project) {
+function renderPendenciasThirdPartyProjetistaRow(project, overviewMode = false) {
     const canAct = canActThirdPartyProjectAsProjetista(project);
     const isOpen = project.status === THIRD_PARTY_PROJECT_STATUS_OPEN;
     const isInReview = project.status === THIRD_PARTY_PROJECT_STATUS_IN_REVIEW;
@@ -80,6 +80,9 @@ function renderPendenciasThirdPartyProjetistaRow(project) {
     return `
         <tr data-third-party-project-id="${project.id}">
             ${renderPendenciasThirdPartyProjectIdentityCells(project)}
+            ${overviewMode
+                ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(project.designer?.name || '—')}</td>`
+                : ''}
             <td class="p-3">
                 <input type="text"
                     class="pendencias-third-party-path-input w-full min-w-[12rem] px-2 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-violet-600"
@@ -346,8 +349,10 @@ async function loadPendenciasThirdPartyProjetista() {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando projetos de terceiros...</p>';
     }
 
-    const overviewMode = isAdmin() || (typeof canSeePendenciasGestorProjetosMenu === 'function'
-        && canSeePendenciasGestorProjetosMenu());
+    const overviewMode = typeof isPendenciasProjetistaOverviewMode === 'function'
+        ? isPendenciasProjetistaOverviewMode()
+        : (isAdmin() || (typeof canSeePendenciasGestorProjetosMenu === 'function'
+            && canSeePendenciasGestorProjetosMenu()));
     const projects = await fetchThirdPartyProjectsForProjetista(currentUser?.id, {
         includeAll: overviewMode
     });
@@ -356,7 +361,7 @@ async function loadPendenciasThirdPartyProjetista() {
 
     if (!content) return;
 
-    const rows = projects.map(renderPendenciasThirdPartyProjetistaRow).join('');
+    const rows = projects.map(project => renderPendenciasThirdPartyProjetistaRow(project, overviewMode)).join('');
 
     content.innerHTML = `
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -382,6 +387,7 @@ async function loadPendenciasThirdPartyProjetista() {
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
                                 <th class="text-left p-3 font-semibold">Projeto</th>
+                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="text-left p-3 font-semibold min-w-[12rem]">Caminho do arquivo</th>
                                 <th class="text-left p-3 font-semibold w-44">Ações</th>
                             </tr>

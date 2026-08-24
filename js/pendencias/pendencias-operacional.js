@@ -602,11 +602,14 @@ function renderPendenciasPpcpProjectList(config) {
     if (!content) return;
 
     const canAct = canActPendenciasPpcpStatus();
+    const showDesigner = typeof isPendenciasProjetistaOverviewMode === 'function'
+        && isPendenciasProjetistaOverviewMode();
     const labelFn = config.projectLabelFn || getPendenciasProjectLabel;
     const rows = projects.map(project => {
         const orderCode = project.order?.orderCode || '—';
         const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = labelFn(project);
+        const designerName = project.designer?.name || '—';
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const statusName = getPendenciasProjectStatusName(project);
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
@@ -625,6 +628,7 @@ function renderPendenciasPpcpProjectList(config) {
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+                ${showDesigner ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3">
                     <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
@@ -656,6 +660,7 @@ function renderPendenciasPpcpProjectList(config) {
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
+                                ${showDesigner ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Status</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
@@ -787,7 +792,9 @@ async function fetchPendenciasNomearProjects() {
     }
 
     const userId = Number(currentUser?.id);
-    const overviewMode = isAdmin() || isGestorProjetos();
+    const overviewMode = typeof isPendenciasProjetistaOverviewMode === 'function'
+        ? isPendenciasProjetistaOverviewMode()
+        : (isAdmin() || isGestorProjetos());
     const result = await queryPendenciasProjects(
         overviewMode
             ? { statusId }
@@ -795,16 +802,22 @@ async function fetchPendenciasNomearProjects() {
     );
 
     if (result.error) {
-        return { error: result.error, projects: [] };
+        return { error: result.error, projects: [], overviewMode };
+    }
+
+    let projects = sortPendenciasByDeliveryDate(result.data || []);
+    if (overviewMode && typeof enrichPendenciasProjectsWithDesigner === 'function') {
+        projects = await enrichPendenciasProjectsWithDesigner(projects);
     }
 
     return {
         error: null,
-        projects: sortPendenciasByDeliveryDate(result.data || [])
+        overviewMode,
+        projects
     };
 }
 
-function renderPendenciasNomearList(projects) {
+function renderPendenciasNomearList(projects, overviewMode = false) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
@@ -816,6 +829,7 @@ function renderPendenciasNomearList(projects) {
         const orderCode = project.order?.orderCode || '—';
         const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = labelFn(project);
+        const designerName = project.designer?.name || '—';
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const statusName = getPendenciasProjectStatusName(project);
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
@@ -832,6 +846,7 @@ function renderPendenciasNomearList(projects) {
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+                ${overviewMode ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3">
                     <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
@@ -849,7 +864,9 @@ function renderPendenciasNomearList(projects) {
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                 <div>
                     <h3 class="font-bold text-sm text-slate-900">Nomear</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos aguardando nomeação pelo projetista responsável.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">${overviewMode
+                        ? 'Todos os projetos aguardando nomeação pelo projetista responsável.'
+                        : 'Projetos aguardando nomeação pelo projetista responsável.'}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-nomear"
                     class="order-tab-action-btn text-xs bg-white border border-purple-200 text-purple-800 px-3 py-1.5 rounded-lg font-medium hover:bg-purple-50">
@@ -863,6 +880,7 @@ function renderPendenciasNomearList(projects) {
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
+                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Status</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
@@ -902,14 +920,14 @@ async function loadPendenciasNomear() {
         return;
     }
 
-    const { error, projects } = await fetchPendenciasNomearProjects();
+    const { error, projects, overviewMode } = await fetchPendenciasNomearProjects();
 
     if (error) {
         renderPendenciasPlaceholder('Nomear', `Erro ao carregar: ${error.message}`);
         return;
     }
 
-    renderPendenciasNomearList(projects);
+    renderPendenciasNomearList(projects, overviewMode);
 }
 
 async function loadPendenciasAguardandoPpcp() {
@@ -1056,6 +1074,8 @@ function renderPendenciasImplantacaoList(projects) {
     if (!content) return;
 
     const canAct = canActPendenciasPpcpStatus();
+    const showDesigner = typeof isPendenciasProjetistaOverviewMode === 'function'
+        && isPendenciasProjetistaOverviewMode();
     const labelFn = typeof getPendenciasProjectDetailLabel === 'function'
         ? getPendenciasProjectDetailLabel
         : (project => project?.name || 'Projeto');
@@ -1064,6 +1084,7 @@ function renderPendenciasImplantacaoList(projects) {
         const orderCode = project.order?.orderCode || '—';
         const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = labelFn(project);
+        const designerName = project.designer?.name || '—';
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const statusLabel = project.implantacaoStatus || getPendenciasProjectStatusName(project);
         const statusClass = typeof getImplantacaoStatusBadgeClass === 'function' && project.implantacaoStatus
@@ -1082,6 +1103,7 @@ function renderPendenciasImplantacaoList(projects) {
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+                ${showDesigner ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3">
                     <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
@@ -1117,6 +1139,7 @@ function renderPendenciasImplantacaoList(projects) {
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
+                                ${showDesigner ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Status</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>

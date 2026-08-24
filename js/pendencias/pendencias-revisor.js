@@ -6,7 +6,7 @@ function canSeePendenciasReviewerItems() {
 }
 
 function isPendenciasTechnicalReviewerOverviewMode() {
-    return isAdmin() || isGestorProjetos();
+    return isPendenciasProjetistaOverviewMode() || isGestorProjetos();
 }
 
 function canAccessPendenciasEmRevisaoTecnicaRevisor() {

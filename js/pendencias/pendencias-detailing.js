@@ -30,17 +30,23 @@ async function fetchPendenciasDetalhamentosSemProjetista() {
     return { error: null, records: data || [] };
 }
 
-async function fetchPendenciasDetalhamentosForProjetista(designerId) {
-    if (!designerId) {
+async function fetchPendenciasDetalhamentosForProjetista(designerId, options = {}) {
+    const includeAll = options.includeAll === true;
+    if (!includeAll && !designerId) {
         return { error: null, records: [] };
     }
 
-    const { data, error } = await supabaseClient
+    let query = supabaseClient
         .from('Detailing')
         .select(DETALHAMENTO_PENDENCIAS_SELECT)
-        .eq('designerId', designerId)
         .in('status', [DETALHAMENTO_STATUS_AGUARDANDO, DETALHAMENTO_STATUS_EM_ANDAMENTO])
         .order('createdAt', { ascending: true });
+
+    if (!includeAll) {
+        query = query.eq('designerId', designerId);
+    }
+
+    const { data, error } = await query;
 
     if (error?.message?.includes('Detailing')) {
         return {
@@ -246,17 +252,21 @@ async function loadPendenciasProjetistaDetalhamento() {
     content.innerHTML = '<p class="text-xs text-slate-400 p-4">Carregando...</p>';
 
     const userId = Number(currentUser?.id);
-    const { error, records } = await fetchPendenciasDetalhamentosForProjetista(userId);
+    const overviewMode = typeof isPendenciasProjetistaOverviewMode === 'function'
+        && isPendenciasProjetistaOverviewMode();
+    const { error, records } = await fetchPendenciasDetalhamentosForProjetista(userId, {
+        includeAll: overviewMode
+    });
 
     if (error) {
         content.innerHTML = `<p class="text-xs text-red-500 p-4">${escapeHtml(error.message)}</p>`;
         return;
     }
 
-    renderPendenciasProjetistaDetalhamentoList(records.map(mapPendenciasDetalhamentoRow));
+    renderPendenciasProjetistaDetalhamentoList(records.map(mapPendenciasDetalhamentoRow), overviewMode);
 }
 
-function renderPendenciasProjetistaDetalhamentoList(rows) {
+function renderPendenciasProjetistaDetalhamentoList(rows, overviewMode = false) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
@@ -265,6 +275,7 @@ function renderPendenciasProjetistaDetalhamentoList(rows) {
         const clientName = getOrderClientName(row.order) || '—';
         const projectLabel = getPendenciasProjectDetailLabel(row);
         const deliveryDate = formatPendenciasDeliveryDate(row.deliveryDate);
+        const designerName = row.designerName || '—';
         const statusClass = getDetalhamentoStatusBadgeClass(row.detalhamentoStatus);
         const canStart = row.detalhamentoStatus === DETALHAMENTO_STATUS_AGUARDANDO;
         const canOpen = row.detalhamentoStatus === DETALHAMENTO_STATUS_EM_ANDAMENTO || canStart;
@@ -273,6 +284,7 @@ function renderPendenciasProjetistaDetalhamentoList(rows) {
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+                ${overviewMode ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 <td class="p-3 text-xs text-slate-600 max-w-[12rem] truncate" title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</td>
@@ -306,7 +318,9 @@ function renderPendenciasProjetistaDetalhamentoList(rows) {
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                 <div>
                     <h3 class="text-sm font-bold text-slate-800">Detalhamento</h3>
-                    <p class="text-xs text-slate-500 mt-0.5">Projetos atribuídos a você aguardando início ou em andamento.</p>
+                    <p class="text-xs text-slate-500 mt-0.5">${overviewMode
+                        ? 'Todos os detalhamentos aguardando início ou em andamento.'
+                        : 'Projetos atribuídos a você aguardando início ou em andamento.'}</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-projetista-detalhamento"
                     class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
@@ -320,6 +334,7 @@ function renderPendenciasProjetistaDetalhamentoList(rows) {
                             <tr>
                                 <th class="p-3 font-semibold">Pedido</th>
                                 <th class="p-3 font-semibold">Cliente</th>
+                                ${overviewMode ? '<th class="p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="p-3 font-semibold">Projeto</th>
                                 <th class="p-3 font-semibold">Entrega Proj. Téc.</th>
                                 <th class="p-3 font-semibold">Pasta (implantação)</th>

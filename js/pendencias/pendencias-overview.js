@@ -6,17 +6,17 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         requisicoes: 'Requisições aguardando resposta do consultor.'
     },
     projetista: {
-        'aguardando-projeto-tecnico': 'Projetos aguardando projeto técnico associados a você.',
-        'projeto-tecnico': 'Projetos em projeto técnico associados a você.',
-        'projetos-terceiros': 'Projetos de terceiros não aprovados sob sua responsabilidade.',
-        'em-revisao': 'Projetos em revisão comercial (projetista) sob sua responsabilidade.',
+        'aguardando-projeto-tecnico': 'Projetos aguardando projeto técnico associados ao projetista.',
+        'projeto-tecnico': 'Projetos em projeto técnico associados ao projetista.',
+        'projetos-terceiros': 'Projetos de terceiros não aprovados sob responsabilidade do projetista.',
+        'em-revisao': 'Projetos em revisão comercial (projetista) sob responsabilidade do projetista.',
         'em-revisao-tecnica-revisor': 'Projetos aguardando revisão técnica do revisor.',
-        'em-revisao-tecnica-proj': 'Projetos em revisão técnica do projetista sob sua responsabilidade.',
-        requisicao: 'Requisições aguardando sua resposta.',
+        'em-revisao-tecnica-proj': 'Projetos em revisão técnica do projetista.',
+        requisicao: 'Requisições aguardando resposta do projetista.',
         nomear: 'Projetos aguardando nomeação pelo projetista responsável.',
         'aguardando-ppcp': 'Projetos aguardando implantação PPCP.',
         implantacao: 'Implantações em aberto (não encerradas).',
-        detalhamento: 'Detalhamentos atribuídos a você aguardando início ou em andamento.',
+        detalhamento: 'Detalhamentos aguardando início ou em andamento.',
         'aguardando-medicao': 'Pedidos com projetos aguardando medição.',
         'aguardando-planta': 'Medições com projetos aguardando planta levantada.',
         conferencias: 'Pedidos com projetos em planta levantada aguardando conferência.'
@@ -80,8 +80,9 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             }
             case 'projetista:projetos-terceiros': {
                 if (typeof fetchThirdPartyProjectsForProjetista !== 'function') return null;
-                const overviewMode = isAdmin() || (typeof canSeePendenciasGestorProjetosMenu === 'function'
-                    && canSeePendenciasGestorProjetosMenu());
+                const overviewMode = typeof isPendenciasProjetistaOverviewMode === 'function'
+                    ? isPendenciasProjetistaOverviewMode()
+                    : isAdmin();
                 const projects = await fetchThirdPartyProjectsForProjetista(currentUser?.id, {
                     includeAll: overviewMode
                 });
@@ -116,7 +117,10 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 return error ? null : projects.length;
             }
             case 'projetista:detalhamento': {
-                const { error, records } = await fetchPendenciasDetalhamentosForProjetista(currentUser?.id);
+                const { error, records } = await fetchPendenciasDetalhamentosForProjetista(currentUser?.id, {
+                    includeAll: typeof isPendenciasProjetistaOverviewMode === 'function'
+                        && isPendenciasProjetistaOverviewMode()
+                });
                 return error ? null : records.length;
             }
             case 'projetista:aguardando-medicao': {

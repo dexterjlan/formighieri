@@ -45,6 +45,8 @@ async function fetchPendenciasAguardandoProjetoTecnico() {
         };
     }
 
+    const overviewMode = typeof isPendenciasProjetistaOverviewMode === 'function'
+        && isPendenciasProjetistaOverviewMode();
     const userId = Number(currentUser?.id);
     const mineStatusIds = await getPendenciasStatusIdsByNames([
         PENDENCIAS_STATUS_AGUARDANDO_PT,
@@ -57,25 +59,30 @@ async function fetchPendenciasAguardandoProjetoTecnico() {
     });
 
     if (unassignedResult.error) {
-        return { error: unassignedResult.error, unassigned: [], mine: [] };
+        return { error: unassignedResult.error, unassigned: [], mine: [], overviewMode };
     }
 
     let mine = [];
-    if (userId && mineStatusIds.length) {
-        const mineResult = await queryPendenciasProjects({
-            statusIds: mineStatusIds,
-            designerId: userId
-        });
+    if ((overviewMode || userId) && mineStatusIds.length) {
+        const mineResult = await queryPendenciasProjects(
+            overviewMode
+                ? { statusIds: mineStatusIds, assignedOnly: true }
+                : { statusIds: mineStatusIds, designerId: userId }
+        );
 
         if (mineResult.error) {
-            return { error: mineResult.error, unassigned: [], mine: [] };
+            return { error: mineResult.error, unassigned: [], mine: [], overviewMode };
         }
 
         mine = mineResult.data || [];
+        if (overviewMode && typeof enrichPendenciasProjectsWithDesigner === 'function') {
+            mine = await enrichPendenciasProjectsWithDesigner(mine);
+        }
     }
 
     return {
         error: null,
+        overviewMode,
         unassigned: sortPendenciasByDeliveryDate(unassignedResult.data || []),
         mine: sortPendenciasByForecastStartThenDelivery(mine)
     };
@@ -274,7 +281,7 @@ function renderPendenciasWorkloadPrevisaoInputs(project) {
     `;
 }
 
-function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characteristicsMap = new Map()) {
+function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characteristicsMap = new Map(), overviewMode = false) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
@@ -317,6 +324,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const projectLabel = getPendenciasProjectDetailLabel(project);
         const statusName = getPendenciasProjectStatusName(project);
+        const showDesignerColumn = Boolean(options.showDesignerColumn);
         const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
         const showPrevisaoStartColumn = Boolean(options.showPrevisaoStartColumn);
         const showPrevisaoEndColumn = Boolean(options.showPrevisaoEndColumn);
@@ -346,6 +354,9 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
+                ${showDesignerColumn
+                    ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(project.designer?.name || '—')}</td>`
+                    : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
                 ${showPrevisaoStartColumn
@@ -365,6 +376,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
 
     const renderTable = (title, rows, emptyMessage, options = {}) => {
         const lastColumnLabel = options.lastColumnLabel || 'Ação';
+        const showDesignerColumn = Boolean(options.showDesignerColumn);
         const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
         const showPrevisaoStartColumn = Boolean(options.showPrevisaoStartColumn);
         const showPrevisaoEndColumn = Boolean(options.showPrevisaoEndColumn);
@@ -386,6 +398,7 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
+                                ${showDesignerColumn ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
                                 ${showPrevisaoStartColumn
@@ -422,14 +435,18 @@ function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characte
                 </button>
             </div>
             ${renderTable(
-                'Associados a mim',
+                overviewMode ? 'Associados a projetistas' : 'Associados a mim',
                 mine.map(project => renderRow(project, 'mine', {
+                    showDesignerColumn: overviewMode,
                     showPrevisaoStartColumn: true,
                     showPrevisaoEndColumn: true,
                     showActionColumn: true
                 })),
-                'Nenhum projeto associado a você.',
+                overviewMode
+                    ? 'Nenhum projeto associado a projetistas.'
+                    : 'Nenhum projeto associado a você.',
                 {
+                    showDesignerColumn: overviewMode,
                     showPrevisaoStartColumn: true,
                     showPrevisaoEndColumn: true,
                     showActionColumn: true
@@ -1157,7 +1174,7 @@ async function loadPendenciasAguardandoProjetoTecnico() {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando projetos...</p>';
     }
 
-    const { error, mine } = await fetchPendenciasAguardandoProjetoTecnico();
+    const { error, mine, overviewMode } = await fetchPendenciasAguardandoProjetoTecnico();
     if (error) {
         renderPendenciasPlaceholder(
             'Aguardando Projeto Técnico',
@@ -1166,5 +1183,5 @@ async function loadPendenciasAguardandoProjetoTecnico() {
         return;
     }
 
-    renderPendenciasAguardandoProjetoTecnicoList([], mine, new Map());
+    renderPendenciasAguardandoProjetoTecnicoList([], mine, new Map(), overviewMode);
 }

@@ -130,6 +130,10 @@ function canSeeAllPendenciasMenus() {
     return isAdmin();
 }
 
+function isPendenciasProjetistaOverviewMode() {
+    return isAdmin();
+}
+
 function canSeePendenciasConsultorMenu() {
     return canSeeAllPendenciasMenus()
         || currentUser?.role === 'Consultor'
@@ -525,7 +529,7 @@ function sortPendenciasByEffectiveDeliveryDate(projects, phasesByOrderId = {}) {
 }
 
 async function queryPendenciasProjects(filters = {}) {
-    const { statusId, statusIds, designerId, unassignedOnly = false } = filters;
+    const { statusId, statusIds, designerId, unassignedOnly = false, assignedOnly = false } = filters;
 
     const buildQuery = (selectColumns, withInactiveFilter = true) => {
         let query = supabaseClient.from('OrderProject').select(selectColumns);
@@ -533,6 +537,7 @@ async function queryPendenciasProjects(filters = {}) {
         if (statusIds?.length) query = query.in('statusId', statusIds);
         if (designerId) query = query.eq('designerId', designerId);
         if (unassignedOnly) query = query.is('designerId', null);
+        if (assignedOnly) query = query.not('designerId', 'is', null);
         if (withInactiveFilter) {
             query = query.eq('isComplementary', false).eq('isReplaced', false);
         }

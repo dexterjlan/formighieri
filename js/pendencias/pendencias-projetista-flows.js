@@ -31,7 +31,7 @@ async function fetchEmRevisaoStatusChangedAtByProjectIds(projectIds) {
 
 
 function isPendenciasEmRevisaoOverviewMode() {
-    return isAdmin() || isGestorProjetos();
+    return isPendenciasProjetistaOverviewMode() || isGestorProjetos();
 }
 
 function canAccessPendenciasEmRevisao() {
@@ -263,7 +263,7 @@ async function loadPendenciasEmRevisao() {
 }
 
 function isPendenciasProjetoTecnicoOverviewMode() {
-    return isAdmin() || isGestorProjetos();
+    return isPendenciasProjetistaOverviewMode() || isGestorProjetos();
 }
 
 function canAccessPendenciasProjetoTecnico() {
@@ -451,7 +451,7 @@ async function loadPendenciasProjetoTecnico() {
 }
 
 function isPendenciasRequisicaoOverviewMode() {
-    return isAdmin() || isGestorProjetos();
+    return isPendenciasProjetistaOverviewMode() || isGestorProjetos();
 }
 
 function canAccessPendenciasRequisicao() {
