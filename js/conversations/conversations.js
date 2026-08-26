@@ -1,6 +1,75 @@
 let convOrderProjectsCache = [];
+let convModalContext = getDefaultConvModalContext();
 
 const CONV_PROJECT_STATUS_END = 'Projeto Técnico';
+
+function getDefaultConvModalContext() {
+    return {
+        requestType: REQUEST_TYPE_PROJECT,
+        lockOrderProjectId: null,
+        lockOrderProjectLabel: null,
+        lockDesignerId: null,
+        source: 'order'
+    };
+}
+
+function isConvModalDetailingContext() {
+    return convModalContext?.requestType === REQUEST_TYPE_DETAILING
+        || convModalContext?.source === 'detailing';
+}
+
+function applyConvModalContextFromRequest(conv) {
+    convModalContext = {
+        requestType: getRequestType(conv),
+        lockOrderProjectId: conv?.orderProjectId || null,
+        lockOrderProjectLabel: conv?.orderProject?.name || null,
+        lockDesignerId: conv?.designerId || null,
+        source: isDetailingRequest(conv) ? 'detailing' : 'order'
+    };
+}
+
+function getConvModalTitle(conv, mode) {
+    const detailing = conv ? isDetailingRequest(conv) : isConvModalDetailingContext();
+    if (mode === 'create') {
+        return detailing ? 'Nova Requisição de Detalhamento' : 'Nova Requisição';
+    }
+    if (mode === 'view') {
+        return detailing ? 'Detalhes da Requisição de Detalhamento' : 'Detalhes da Requisição';
+    }
+    if (mode === 'respond') {
+        return detailing ? 'Responder Requisição de Detalhamento' : 'Responder Requisição';
+    }
+    return detailing ? 'Editar Requisição de Detalhamento' : 'Editar Requisição';
+}
+
+function upsertConversationIntoCache(request) {
+    if (!request?.id) return;
+    const id = Number(request.id);
+    const index = conversationsCache.findIndex(item => Number(item.id) === id);
+    if (index >= 0) {
+        conversationsCache[index] = { ...conversationsCache[index], ...request };
+        return;
+    }
+    conversationsCache = [...conversationsCache, request];
+}
+
+async function refreshRequestRelatedViews() {
+    const queryView = document.getElementById('conversations-query-view');
+    if (queryView && !queryView.classList.contains('hidden') && typeof searchConversations === 'function') {
+        searchConversations();
+    } else if (activeOrderId) {
+        await loadConversations(activeOrderId);
+    }
+
+    if (typeof loadPendenciasConsultorRequisicoes === 'function'
+        && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
+        await loadPendenciasConsultorRequisicoes();
+    }
+
+    if (typeof refreshDetalhamentoRequestsIfModalOpen === 'function') {
+        await refreshDetalhamentoRequestsIfModalOpen();
+    }
+}
 
 async function loadConvProjectStatusesForFilter() {
     if (typeof loadGestaoProjectStatuses === 'function') {
@@ -95,10 +164,18 @@ async function loadProjetistas() {
 }
 
 function resetConvResponseFields() {
+    const consultorResponse = document.getElementById('conv-response');
+    const designerResponse = document.getElementById('conv-designer-response');
     document.getElementById('conv-response-wrap').classList.add('hidden');
     document.getElementById('conv-designer-response-wrap').classList.add('hidden');
-    document.getElementById('conv-response').value = '';
-    document.getElementById('conv-designer-response').value = '';
+    if (consultorResponse) {
+        consultorResponse.value = '';
+        setConvFieldDisabled(consultorResponse, false);
+    }
+    if (designerResponse) {
+        designerResponse.value = '';
+        setConvFieldDisabled(designerResponse, false);
+    }
     document.getElementById('conv-response-date-display').textContent = '—';
     document.getElementById('conv-designer-response-date-display').textContent = '—';
 }
@@ -107,20 +184,24 @@ function setupConvResponseFields(conv) {
     resetConvResponseFields();
     if (!conv) return;
 
-    if (isRequestWaitingConsultor(conv) && canRespondAsConsultor(conv)) {
+    const canEditConsultor = isRequestWaitingConsultor(conv) && canRespondAsConsultor(conv);
+    if (canEditConsultor || conv.commercialResponse) {
         document.getElementById('conv-response-wrap').classList.remove('hidden');
         document.getElementById('conv-response').value = conv.commercialResponse || '';
         const responseDate = conv.commercialResponse ? getResponseDisplayDate(conv) : null;
         document.getElementById('conv-response-date-display').textContent =
             responseDate ? formatDate(responseDate) : '—';
+        setConvFieldDisabled(document.getElementById('conv-response'), !canEditConsultor);
     }
 
-    if (isRequestWaitingProjetista(conv) && canEditProjetistaResponse(conv)) {
+    const canEditDesigner = isRequestWaitingProjetista(conv) && canEditProjetistaResponse(conv);
+    if (canEditDesigner || conv.designerResponse) {
         document.getElementById('conv-designer-response-wrap').classList.remove('hidden');
         document.getElementById('conv-designer-response').value = conv.designerResponse || '';
         const responseDate = conv.designerResponse ? getResponseDisplayDate(conv) : null;
         document.getElementById('conv-designer-response-date-display').textContent =
             responseDate ? formatDate(responseDate) : '—';
+        setConvFieldDisabled(document.getElementById('conv-designer-response'), !canEditDesigner);
     }
 }
 
@@ -174,6 +255,7 @@ function getConvOrderProjectById(projectId) {
 }
 
 function shouldLockConvDesignerFromProject() {
+    if (isConvModalDetailingContext()) return false;
     if (editingConversationId) return false;
     if (currentUser?.role === 'Projetista') return false;
     if (currentUser?.role === 'Consultor') return true;
@@ -226,10 +308,43 @@ async function applyConvDesignerFromSelectedProject() {
     setConvFieldDisabled(designerSelect, true);
 }
 
-async function openConvModal() {
+async function applyConvModalDetailingLocks() {
+    if (!isConvModalDetailingContext()) return;
+
+    const projectId = convModalContext.lockOrderProjectId;
+    const designerId = convModalContext.lockDesignerId;
+    const projectSelect = document.getElementById('conv-order-project');
+    const designerSelect = document.getElementById('conv-designer');
+
+    if (projectId && projectSelect) {
+        const exists = [...projectSelect.options].some(option => Number(option.value) === Number(projectId));
+        if (!exists) {
+            const option = document.createElement('option');
+            option.value = String(projectId);
+            option.textContent = convModalContext.lockOrderProjectLabel || 'Projeto';
+            projectSelect.appendChild(option);
+        }
+        projectSelect.value = String(projectId);
+    }
+    if (designerId) {
+        await ensureDesignerInConvSelect(designerId);
+        if (designerSelect) designerSelect.value = String(designerId);
+    }
+}
+
+async function openConvModal(options = {}) {
+    convModalContext = {
+        ...getDefaultConvModalContext(),
+        ...options
+    };
+    if (options.orderId) {
+        activeOrderId = Number(options.orderId);
+    }
+
     editingConversationId = null;
-    document.getElementById("conv-modal-title").textContent = "Nova Requisição";
+    document.getElementById("conv-modal-title").textContent = getConvModalTitle(null, 'create');
     document.getElementById("conv-form-submit").textContent = "Criar Requisição";
+    document.getElementById("conv-form-submit")?.classList.remove('hidden');
     document.getElementById("conv-form").reset();
     resetConvResponseFields();
     resetConvActivities();
@@ -240,8 +355,9 @@ async function openConvModal() {
     updateConvAttachmentModalControls(null);
     await Promise.all([
         loadProjetistas(),
-        loadConvOrderProjects()
+        loadConvOrderProjects(convModalContext.lockOrderProjectId)
     ]);
+    await applyConvModalDetailingLocks();
     setupConvModalFieldLocks(null);
     toggleModal('conv-modal', true);
 }
@@ -249,6 +365,7 @@ async function openConvModal() {
 function closeConvModal() {
     setConvFormLoading(false);
     editingConversationId = null;
+    convModalContext = getDefaultConvModalContext();
     document.getElementById("conv-form-submit")?.classList.remove('hidden');
     toggleModal('conv-modal', false);
 }
@@ -312,10 +429,11 @@ function setupConvModalFieldLocks(conv) {
     const isEdit = Boolean(conv);
     const respondOnly = isConvRespondOnlyMode(conv);
     const lockRequestField = respondOnly || isRequestFromConference(conv);
+    const lockDetailingFields = !isEdit && isConvModalDetailingContext();
 
-    setConvFieldDisabled(document.getElementById('conv-order-project'), isEdit);
+    setConvFieldDisabled(document.getElementById('conv-order-project'), isEdit || lockDetailingFields);
 
-    if (isEdit || currentUser?.role === 'Projetista') {
+    if (isEdit || currentUser?.role === 'Projetista' || lockDetailingFields) {
         setConvFieldDisabled(document.getElementById('conv-designer'), true);
     } else {
         applyConvDesignerFromSelectedProject();
@@ -334,14 +452,16 @@ function setupConvModalFieldLocks(conv) {
 }
 
 async function editConversation(id) {
-    const conv = conversationsCache.find(c => c.id === id);
+    const conv = conversationsCache.find(c => Number(c.id) === Number(id));
     if (!conv || !canEditConversation(conv)) return;
 
+    applyConvModalContextFromRequest(conv);
     editingConversationId = id;
     const respondOnly = isConvRespondOnlyMode(conv);
-    document.getElementById("conv-modal-title").textContent = respondOnly
-        ? 'Responder Requisição'
-        : 'Editar Requisição';
+    document.getElementById("conv-modal-title").textContent = getConvModalTitle(
+        conv,
+        respondOnly ? 'respond' : 'edit'
+    );
     document.getElementById("conv-form-submit").textContent = respondOnly
         ? 'Salvar'
         : 'Salvar Alterações';
@@ -370,8 +490,9 @@ async function viewConversationDetails(id) {
     const conv = conversationsCache.find(c => Number(c.id) === Number(id));
     if (!conv) return;
 
+    applyConvModalContextFromRequest(conv);
     editingConversationId = id;
-    document.getElementById("conv-modal-title").textContent = 'Detalhes da Requisição';
+    document.getElementById("conv-modal-title").textContent = getConvModalTitle(conv, 'view');
     document.getElementById("conv-form-submit")?.classList.add('hidden');
     setupConvProfileFields(true, conv);
     setupConvResponseFields(conv);
@@ -494,6 +615,8 @@ function buildRequestResponseSection(conv, activities = []) {
 
 window.openConvModal = openConvModal;
 window.closeConvModal = closeConvModal;
+window.isConvModalDetailingContext = isConvModalDetailingContext;
+window.upsertConversationIntoCache = upsertConversationIntoCache;
 window.editConversation = editConversation;
 window.viewConversationDetails = viewConversationDetails;
 
@@ -538,7 +661,7 @@ async function loadConversations(orderId) {
         conversationsCache = convs;
         updateOrderTabCounts(undefined, undefined, undefined, convs.length);
 
-        const designerIds = [...new Set(convs.map(c => c.designerId).filter(Boolean))];
+        const designerIds = [...new Set(conversationsCache.map(c => c.designerId).filter(Boolean))];
         let projetistaNames = {};
 
         if (designerIds.length) {
@@ -552,7 +675,7 @@ async function loadConversations(orderId) {
             });
         }
 
-        const requestIds = convs.map(c => c.id);
+        const requestIds = conversationsCache.map(c => c.id);
         const [activitiesByRequest, attachmentsByRequest] = await Promise.all([
             fetchRequestActivitiesByRequestIds(requestIds),
             fetchOrderRequestAttachmentsByRequestIds(requestIds)
@@ -560,7 +683,7 @@ async function loadConversations(orderId) {
 
         list.innerHTML = "";
 
-        sortOrderRequests(convs).forEach(c => {
+        sortOrderRequests(conversationsCache).forEach(c => {
             const status = normalizeRequestStatus(c);
             const canEdit = canEditConversation(c);
             const statusClass = getRequestStatusBadgeClass(status);
@@ -590,6 +713,7 @@ async function loadConversations(orderId) {
                     <div class="flex items-center gap-2 shrink-0">
                         ${canEdit ? `<button type="button" onclick="editConversation(${c.id})"
                             class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1 rounded-lg font-medium">Editar</button>` : ''}
+                        ${typeof getRequestTypeBadgeHtml === 'function' ? getRequestTypeBadgeHtml(c) : ''}
                         <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
                     </div>
                 </div>
@@ -660,11 +784,7 @@ async function replyConsultorConversation(id) {
             });
         }
 
-        await loadConversations(activeOrderId);
-        if (typeof loadPendenciasConsultorRequisicoes === 'function'
-            && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
-            await loadPendenciasConsultorRequisicoes();
-        }
+        await refreshRequestRelatedViews();
     } finally {
         setRequestReplyLoading(id, 'consultor', false);
     }
@@ -732,7 +852,7 @@ async function replyProjetistaConversation(id) {
             });
         }
 
-        await loadConversations(activeOrderId);
+        await refreshRequestRelatedViews();
     } finally {
         setRequestReplyLoading(id, 'projetista', false);
     }
@@ -798,7 +918,7 @@ function setConvFormLoading(active, message = 'Processando...', status = 'loadin
     fields.forEach(field => { field.disabled = show; });
 
     if (!show && editingConversationId) {
-        const conv = conversationsCache.find(c => c.id === editingConversationId);
+        const conv = conversationsCache.find(c => Number(c.id) === Number(editingConversationId));
         setupConvModalFieldLocks(conv);
         updateConvAttachmentModalControls(conv);
     }
@@ -806,7 +926,7 @@ function setConvFormLoading(active, message = 'Processando...', status = 'loadin
 
 async function encerrarConversationFromModal() {
     const existing = editingConversationId
-        ? conversationsCache.find(conv => conv.id === editingConversationId)
+        ? conversationsCache.find(conv => Number(conv.id) === Number(editingConversationId))
         : null;
 
     if (!existing || !canEncerrarConvModalRequest(existing)) {
@@ -889,15 +1009,7 @@ async function encerrarConversationFromModal() {
         });
 
         setConvFormLoading(true, 'Atualizando telas...');
-        if (!document.getElementById('conversations-query-view').classList.contains('hidden')) {
-            searchConversations();
-        } else if (activeOrderId) {
-            await loadConversations(activeOrderId);
-        }
-        if (typeof loadPendenciasConsultorRequisicoes === 'function'
-            && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
-            await loadPendenciasConsultorRequisicoes();
-        }
+        await refreshRequestRelatedViews();
 
         setConvFormLoading(true, 'Requisição encerrada!', 'success');
         await new Promise(resolve => setTimeout(resolve, 900));
@@ -925,10 +1037,17 @@ function bindConversationEvents() {
         const requestActivities = collectRequestActivitiesFromDom().filter(a => a.description);
 
         const existing = editingConversationId
-            ? conversationsCache.find(c => c.id === editingConversationId)
+            ? conversationsCache.find(c => Number(c.id) === Number(editingConversationId))
             : null;
         const respondOnly = existing && isConvRespondOnlyMode(existing);
         const lockDesignerRequest = Boolean(existing && (respondOnly || isRequestFromConference(existing)));
+
+        if (isConvModalDetailingContext() && !editingConversationId) {
+            if (!orderProjectId || !designerId) {
+                alertAppDialog('A requisição de detalhamento precisa do projetista e do projeto.');
+                return;
+            }
+        }
 
         if (!lockDesignerRequest && !designerRequest) {
             alertAppDialog("Informe a solicitação.");
@@ -1092,20 +1211,34 @@ function bindConversationEvents() {
                     designerRequest,
                     orderProjectId,
                     requestProfile,
+                    requestType: isConvModalDetailingContext()
+                        ? REQUEST_TYPE_DETAILING
+                        : REQUEST_TYPE_PROJECT,
                     status: getInitialRequestStatus(requestProfile),
                     createdById: currentUser.id,
                     updatedById: currentUser.id
                 };
 
+                let insertPayload = payload;
                 let createdRequest = null;
                 let { data, error } = await supabaseClient
                     .from('OrderRequest')
-                    .insert([payload])
+                    .insert([insertPayload])
                     .select('*')
                     .single();
 
+                if (error?.message?.includes('requestType')) {
+                    const { requestType: _omitType, ...payloadWithoutType } = insertPayload;
+                    insertPayload = payloadWithoutType;
+                    ({ data, error } = await supabaseClient
+                        .from('OrderRequest')
+                        .insert([insertPayload])
+                        .select('*')
+                        .single());
+                }
+
                 if (error?.message?.includes('orderProjectId')) {
-                    const { orderProjectId: _omit, ...payloadWithoutProject } = payload;
+                    const { orderProjectId: _omit, ...payloadWithoutProject } = insertPayload;
                     ({ data, error } = await supabaseClient
                         .from('OrderRequest')
                         .insert([payloadWithoutProject])
@@ -1135,15 +1268,7 @@ function bindConversationEvents() {
             }
 
             setConvFormLoading(true, 'Atualizando telas...');
-            if (!document.getElementById("conversations-query-view").classList.contains("hidden")) {
-                searchConversations();
-            } else if (activeOrderId) {
-                loadConversations(activeOrderId);
-            }
-            if (typeof loadPendenciasConsultorRequisicoes === 'function'
-                && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
-                await loadPendenciasConsultorRequisicoes();
-            }
+            await refreshRequestRelatedViews();
 
             setConvFormLoading(true, editingConversationId ? 'Requisição salva com sucesso!' : 'Requisição criada com sucesso!', 'success');
             await new Promise(resolve => setTimeout(resolve, 900));

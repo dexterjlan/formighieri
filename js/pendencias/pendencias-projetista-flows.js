@@ -524,7 +524,7 @@ async function fetchPendenciasRequisicaoRequests() {
         return { error: result.error, overviewMode, requests: [] };
     }
 
-    let requests = (result.data || []).filter(request => isRequestWaitingProjetista(request));
+    let requests = (result.data || []).filter(request => isRequestWaitingProjetista(request) && isProjectRequest(request));
 
     if (!overviewMode) {
         requests = requests.filter(request => Number(request.designerId) === userId);

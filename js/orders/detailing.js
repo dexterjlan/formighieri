@@ -6,7 +6,9 @@ const DETALHAMENTO_PROJECT_STATUS_EM_PRODUCAO = 'Em Produção';
 let activeDetalhamentoOrderProjectId = null;
 let activeDetalhamentoRecord = null;
 let activeDetalhamentoProjectName = '';
+let activeDetalhamentoOrderId = null;
 let detalhamentoProjetistasCache = [];
+let detalhamentoRequestsCache = [];
 
 function canActDetalhamentoGestor() {
     return isAdmin() || isGestorProjetos();
@@ -15,6 +17,13 @@ function canActDetalhamentoGestor() {
 function canActDetalhamentoProjetista(record = activeDetalhamentoRecord) {
     if (!record || !isDetalhamento()) return false;
     return Number(record.designerId) === Number(currentUser?.id);
+}
+
+function canCreateDetalhamentoRequest(record = activeDetalhamentoRecord) {
+    if (!record?.designerId) return false;
+    if (record.status === DETALHAMENTO_STATUS_PRONTO) return false;
+    if (isAdmin()) return true;
+    return canActDetalhamentoProjetista(record);
 }
 
 function canAccessDetalhamentoModal() {
@@ -195,6 +204,7 @@ function updateDetalhamentoActionButtons(record = activeDetalhamentoRecord) {
     const btnAssociar = document.getElementById('btn-detalhamento-associar');
     const btnIniciar = document.getElementById('btn-detalhamento-iniciar');
     const btnEncerrar = document.getElementById('btn-detalhamento-encerrar');
+    const btnNovaRequisicao = document.getElementById('btn-detalhamento-nova-requisicao');
     const serverFolderField = document.getElementById('detalhamento-server-folder-field');
     const designerSelect = document.getElementById('detalhamento-designer-select');
     const designerReadonlyWrap = document.getElementById('detalhamento-designer-readonly-wrap');
@@ -220,6 +230,11 @@ function updateDetalhamentoActionButtons(record = activeDetalhamentoRecord) {
     if (btnEncerrar) {
         btnEncerrar.classList.toggle('hidden', !(canProjetista && isEmAndamento));
         btnEncerrar.disabled = !(canProjetista && isEmAndamento);
+    }
+    if (btnNovaRequisicao) {
+        const canCreate = canCreateDetalhamentoRequest(record);
+        btnNovaRequisicao.classList.toggle('hidden', !canCreate);
+        btnNovaRequisicao.disabled = !canCreate;
     }
 
     const serverEditable = canProjetista && isEmAndamento;
@@ -276,6 +291,7 @@ async function openDetailingModal(orderProjectId, projectName = '') {
         document.getElementById('detalhamento-modal-project-name').textContent = activeDetalhamentoProjectName;
         populateDetalhamentoForm(activeDetalhamentoRecord);
         toggleModal('detalhamento-modal', true);
+        await loadDetalhamentoRequestsList();
     } catch (error) {
         alertAppDialog(`Erro ao abrir detalhamento: ${error.message}`);
     }
@@ -289,6 +305,8 @@ function closeDetailingModal() {
     activeDetalhamentoOrderProjectId = null;
     activeDetalhamentoRecord = null;
     activeDetalhamentoProjectName = '';
+    activeDetalhamentoOrderId = null;
+    detalhamentoRequestsCache = [];
     setDetalhamentoModalLoading(false);
 }
 
@@ -408,6 +426,26 @@ async function handleDetalhamentoEncerrar() {
     const serverFolderPath = document.getElementById('detalhamento-server-folder-path')?.value?.trim() || '';
     if (!serverFolderPath) {
         alertAppDialog('Informe a pasta no servidor do projeto para encerrar o detalhamento.');
+        return;
+    }
+
+    try {
+        const requests = await fetchDetalhamentoRequests(activeDetalhamentoOrderProjectId);
+        detalhamentoRequestsCache = requests;
+        renderDetalhamentoRequestsList(requests);
+
+        const openCount = requests.filter(isRequestOpen).length;
+        if (openCount) {
+            alertAppDialog(
+                openCount === 1
+                    ? 'Há 1 requisição de detalhamento em aberto. Todas as requisições precisam estar respondidas para encerrar o detalhamento.'
+                    : `Há ${openCount} requisições de detalhamento em aberto. Todas as requisições precisam estar respondidas para encerrar o detalhamento.`,
+                { variant: 'warning', title: 'Requisições em aberto' }
+            );
+            return;
+        }
+    } catch (error) {
+        alertAppDialog(`Não foi possível conferir as requisições de detalhamento: ${error.message}`);
         return;
     }
 
@@ -538,6 +576,187 @@ function findLastEmProducaoHistoryIndex(entries = []) {
 
 window.findLastEmProducaoHistoryIndex = findLastEmProducaoHistoryIndex;
 
+async function resolveDetalhamentoOrderId() {
+    if (activeDetalhamentoOrderId) return activeDetalhamentoOrderId;
+    if (!activeDetalhamentoOrderProjectId) return null;
+
+    const fromRecord = activeDetalhamentoRecord?.orderProject?.orderId
+        || activeDetalhamentoRecord?.orderId;
+    if (fromRecord) {
+        activeDetalhamentoOrderId = Number(fromRecord);
+        return activeDetalhamentoOrderId;
+    }
+
+    const { data, error } = await supabaseClient
+        .from('OrderProject')
+        .select('orderId')
+        .eq('id', activeDetalhamentoOrderProjectId)
+        .maybeSingle();
+
+    if (error) {
+        console.warn('resolveDetalhamentoOrderId:', error);
+        return null;
+    }
+
+    activeDetalhamentoOrderId = data?.orderId ? Number(data.orderId) : null;
+    return activeDetalhamentoOrderId;
+}
+
+async function fetchDetalhamentoRequests(orderProjectId) {
+    if (!orderProjectId) return [];
+
+    let result = await supabaseClient
+        .from('OrderRequest')
+        .select('*, orderProject:OrderProject(id, name, environmentType:EnvironmentType(name))')
+        .eq('orderProjectId', orderProjectId)
+        .eq('requestType', REQUEST_TYPE_DETAILING)
+        .order('createdAt', { ascending: false });
+
+    if (result.error?.message?.includes('requestType')) {
+        throw new Error('Coluna requestType não encontrada. Execute o script SQL de tipos de requisição.');
+    }
+
+    if (result.error?.message?.includes('orderProject')) {
+        result = await supabaseClient
+            .from('OrderRequest')
+            .select('*')
+            .eq('orderProjectId', orderProjectId)
+            .eq('requestType', REQUEST_TYPE_DETAILING)
+            .order('createdAt', { ascending: false });
+    }
+
+    if (result.error) throw result.error;
+    return result.data || [];
+}
+
+function renderDetalhamentoRequestsList(requests) {
+    const list = document.getElementById('detalhamento-requests-list');
+    if (!list) return;
+
+    if (!requests.length) {
+        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">Nenhuma requisição de detalhamento.</p>';
+        return;
+    }
+
+    const sorted = typeof sortOrderRequests === 'function'
+        ? sortOrderRequests(requests)
+        : requests;
+
+    list.innerHTML = sorted.map(request => {
+        const status = normalizeRequestStatus(request);
+        const statusClass = getRequestStatusBadgeClass(status);
+        const canEdit = typeof canEditConversation === 'function' && canEditConversation(request);
+        const canRespond = canEdit
+            && isRequestWaitingConsultor(request)
+            && typeof canRespondAsConsultor === 'function'
+            && canRespondAsConsultor(request);
+        const actionLabel = canRespond ? 'Responder' : (canEdit ? 'Abrir' : 'Ver');
+        const snippet = typeof truncateText === 'function'
+            ? truncateText(request.designerRequest || '', 80)
+            : (request.designerRequest || '');
+
+        return `
+            <div class="flex items-center justify-between gap-2 border border-slate-200 rounded-lg px-3 py-2 ${getRequestHighlightBgClass(request)}">
+                <div class="min-w-0">
+                    <p class="text-xs font-medium text-slate-800 truncate">${escapeHtml(snippet)}</p>
+                    <p class="text-[10px] text-slate-500 mt-0.5">${request.createdAt && typeof formatDate === 'function' ? formatDate(request.createdAt) : '—'}</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(status)}</span>
+                    <button type="button" data-detalhamento-request-id="${request.id}"
+                        class="text-xs bg-white/80 text-slate-700 hover:bg-white px-2 py-1 rounded-lg font-medium">
+                        ${actionLabel}
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadDetalhamentoRequestsList() {
+    const list = document.getElementById('detalhamento-requests-list');
+    if (!list || !activeDetalhamentoOrderProjectId) return;
+
+    list.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">Carregando requisições...</p>';
+
+    try {
+        detalhamentoRequestsCache = await fetchDetalhamentoRequests(activeDetalhamentoOrderProjectId);
+        renderDetalhamentoRequestsList(detalhamentoRequestsCache);
+    } catch (error) {
+        detalhamentoRequestsCache = [];
+        list.innerHTML = `<p class="text-xs text-red-500 text-center py-3">${escapeHtml(error.message || 'Erro ao carregar requisições.')}</p>`;
+    }
+}
+
+async function refreshDetalhamentoRequestsIfModalOpen() {
+    if (document.getElementById('detalhamento-modal')?.classList.contains('hidden')) return;
+    await loadDetalhamentoRequestsList();
+}
+
+async function openDetalhamentoRequestModal() {
+    if (!canCreateDetalhamentoRequest()) {
+        alertAppDialog('Somente o projetista de detalhamento pode criar esta requisição.', {
+            variant: 'warning',
+            title: 'Aviso'
+        });
+        return;
+    }
+
+    const orderId = await resolveDetalhamentoOrderId();
+    const designerId = Number(activeDetalhamentoRecord?.designerId);
+    if (!orderId || !activeDetalhamentoOrderProjectId || !designerId) {
+        alertAppDialog('Não foi possível abrir a requisição deste detalhamento.');
+        return;
+    }
+
+    if (typeof openConvModal !== 'function') {
+        alertAppDialog('Tela de requisição indisponível.');
+        return;
+    }
+
+    await openConvModal({
+        requestType: REQUEST_TYPE_DETAILING,
+        source: 'detailing',
+        orderId,
+        lockOrderProjectId: activeDetalhamentoOrderProjectId,
+        lockOrderProjectLabel: activeDetalhamentoProjectName || 'Projeto',
+        lockDesignerId: designerId
+    });
+}
+
+async function openDetalhamentoRequest(requestId) {
+    const id = Number(requestId);
+    const request = detalhamentoRequestsCache.find(item => Number(item.id) === id);
+    if (!request) {
+        alertAppDialog('Requisição não encontrada.');
+        return;
+    }
+
+    const orderId = await resolveDetalhamentoOrderId();
+    if (orderId) activeOrderId = orderId;
+
+    if (typeof upsertConversationIntoCache === 'function') {
+        upsertConversationIntoCache(request);
+    } else {
+        conversationsCache = [...conversationsCache.filter(item => Number(item.id) !== id), request];
+    }
+
+    if (typeof canEditConversation === 'function' && canEditConversation(request)
+        && typeof editConversation === 'function') {
+        await editConversation(id);
+        return;
+    }
+
+    if (typeof viewConversationDetails === 'function') {
+        await viewConversationDetails(id);
+    }
+}
+
+window.loadDetalhamentoRequestsList = loadDetalhamentoRequestsList;
+window.refreshDetalhamentoRequestsIfModalOpen = refreshDetalhamentoRequestsIfModalOpen;
+window.openDetalhamentoRequestModal = openDetalhamentoRequestModal;
+window.openDetalhamentoRequest = openDetalhamentoRequest;
+
 function renderProjectViewDetailingSection(record) {
     const wrap = document.getElementById('project-view-detalhamento-wrap');
     if (!wrap) return;
@@ -587,6 +806,12 @@ function bindDetailingEvents() {
     document.getElementById('btn-detalhamento-associar')?.addEventListener('click', handleDetalhamentoAssociar);
     document.getElementById('btn-detalhamento-iniciar')?.addEventListener('click', handleDetalhamentoIniciar);
     document.getElementById('btn-detalhamento-encerrar')?.addEventListener('click', handleDetalhamentoEncerrar);
+    document.getElementById('btn-detalhamento-nova-requisicao')?.addEventListener('click', openDetalhamentoRequestModal);
+    document.getElementById('detalhamento-requests-list')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-detalhamento-request-id]');
+        if (!button) return;
+        openDetalhamentoRequest(button.dataset.detalhamentoRequestId);
+    });
 }
 
 const bindDetalhamentoEvents = bindDetailingEvents;

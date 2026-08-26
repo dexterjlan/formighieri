@@ -628,11 +628,19 @@ function getSelectedNewApprovalProjectIds() {
 async function getOpenRequestsForProjects(orderId, projectIds) {
     if (!orderId || !projectIds.length) return [];
 
-    const { data, error } = await supabaseClient
+    let { data, error } = await supabaseClient
         .from('OrderRequest')
-        .select('id, orderProjectId, status, requestProfile')
+        .select('id, orderProjectId, status, requestProfile, requestType')
         .eq('orderId', orderId)
         .in('orderProjectId', projectIds);
+
+    if (error?.message?.includes('requestType')) {
+        ({ data, error } = await supabaseClient
+            .from('OrderRequest')
+            .select('id, orderProjectId, status, requestProfile')
+            .eq('orderId', orderId)
+            .in('orderProjectId', projectIds));
+    }
 
     if (error) {
         if (error.message?.includes('orderProjectId')) return [];
@@ -640,7 +648,7 @@ async function getOpenRequestsForProjects(orderId, projectIds) {
         return [];
     }
 
-    return (data || []).filter(isRequestOpen);
+    return (data || []).filter(req => isRequestOpen(req) && isProjectRequest(req));
 }
 
 async function blockCommercialApprovalWhenOpenRequests(orderId, projectIds) {

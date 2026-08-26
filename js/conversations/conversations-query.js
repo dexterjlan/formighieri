@@ -24,7 +24,7 @@ async function searchConversations() {
     await ensureSystemSettingsLoaded();
     syncRequestProfileColumnVisibility();
     const showProfile = canSeeRequestProfileField();
-    const tableColSpan = showProfile ? 11 : 10;
+    const tableColSpan = showProfile ? 12 : 11;
 
     const { data: convs, error } = await supabaseClient
         .from('OrderRequest')
@@ -117,6 +117,7 @@ async function searchConversations() {
             <td class="p-3" style="${cellStyle}">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${status}</span>
             </td>
+            <td class="p-3" style="${cellStyle}">${getRequestTypeBadgeHtml(r)}</td>
             ${profileCell}
             <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${r.designerRequest || ''}">${truncateText(r.designerRequest)}</td>
             <td class="p-3 text-xs text-slate-600 max-w-[180px]" style="${cellStyle}" title="${getRequestResponseSummary(r)}">${truncateText(getRequestResponseSummary(r))}</td>

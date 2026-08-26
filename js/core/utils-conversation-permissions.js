@@ -1,3 +1,33 @@
+const REQUEST_TYPE_PROJECT = 'project';
+const REQUEST_TYPE_DETAILING = 'detailing';
+
+function getRequestType(conv) {
+    return conv?.requestType === REQUEST_TYPE_DETAILING
+        ? REQUEST_TYPE_DETAILING
+        : REQUEST_TYPE_PROJECT;
+}
+
+function isDetailingRequest(conv) {
+    return getRequestType(conv) === REQUEST_TYPE_DETAILING;
+}
+
+function isProjectRequest(conv) {
+    return !isDetailingRequest(conv);
+}
+
+function formatRequestType(requestType) {
+    return requestType === REQUEST_TYPE_DETAILING ? 'Detalhamento' : 'Projeto';
+}
+
+function getRequestTypeBadgeHtml(conv) {
+    const type = getRequestType(conv);
+    const label = formatRequestType(type);
+    const badgeClass = typeof getRequestTypeBadgeClass === 'function'
+        ? getRequestTypeBadgeClass(type)
+        : 'bg-slate-100 text-slate-600';
+    return `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${badgeClass}">${escapeHtml(label)}</span>`;
+}
+
 function canEditConsultorResponse() {
     return currentUser?.role === 'Admin' || currentUser?.role === 'Consultor';
 }
@@ -201,6 +231,18 @@ function setupConvProfileFields(isEdit, conv) {
         return;
     }
 
+    const forceProjetista = typeof isConvModalDetailingContext === 'function'
+        && isConvModalDetailingContext();
+
+    if (forceProjetista) {
+        if (canSeeProfile) {
+            readOnlyWrap.classList.remove('hidden');
+            readOnlyLabel.textContent = formatRequestProfile('Projetista');
+        }
+        updateConvRequestLabel('Projetista');
+        return;
+    }
+
     if (currentUser.role === 'Admin') {
         adminWrap.classList.remove('hidden');
         profileSelect.required = true;
@@ -219,6 +261,9 @@ function setupConvProfileFields(isEdit, conv) {
 }
 
 function getRequestProfileForCreate() {
+    if (typeof isConvModalDetailingContext === 'function' && isConvModalDetailingContext()) {
+        return 'Projetista';
+    }
     if (currentUser.role === 'Admin') {
         return document.getElementById('conv-profile').value.trim();
     }

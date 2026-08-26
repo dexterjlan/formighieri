@@ -480,6 +480,25 @@ function mergeProgramacaoProducaoSummaryMonthGroups(pendingGroups, fechamentoMon
     });
 }
 
+function getProgramacaoProducaoCurrentMonthKey() {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${now.getFullYear()}-${month}`;
+}
+
+function filterProgramacaoProducaoSummaryMonthGroups(groups) {
+    const currentMonthKey = getProgramacaoProducaoCurrentMonthKey();
+
+    return (groups || []).filter(monthGroup => {
+        const monthKey = monthGroup.monthKey;
+        if (!monthKey || monthKey === 'sem-data') {
+            return Boolean(monthGroup.projectCount);
+        }
+        if (monthKey >= currentMonthKey) return true;
+        return Boolean(monthGroup.projectCount);
+    });
+}
+
 function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel) {
     const pendingTotalLabel = typeof formatSaleValue === 'function'
         ? formatSaleValue(monthGroup.totalSaleValue || 0)
@@ -577,8 +596,9 @@ function renderProgramacaoProducaoSummary(projects) {
         pendingGroups,
         programacaoProducaoCache.fechamentoMonthGroups || []
     );
+    const visibleGroups = filterProgramacaoProducaoSummaryMonthGroups(mergedGroups);
 
-    return renderProgramacaoProducaoSummaryMonthGroups(mergedGroups, emptyMonthLabel);
+    return renderProgramacaoProducaoSummaryMonthGroups(visibleGroups, emptyMonthLabel);
 }
 
 function renderProgramacaoProducaoOrdersList(orders, options = {}) {

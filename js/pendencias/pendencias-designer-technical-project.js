@@ -40,7 +40,6 @@ async function fetchPendenciasAguardandoProjetoTecnico() {
     if (!aguardandoStatusId) {
         return {
             error: new Error(`Status "${PENDENCIAS_STATUS_AGUARDANDO_PT}" não encontrado.`),
-            unassigned: [],
             mine: []
         };
     }
@@ -48,42 +47,29 @@ async function fetchPendenciasAguardandoProjetoTecnico() {
     const overviewMode = typeof isPendenciasProjetistaOverviewMode === 'function'
         && isPendenciasProjetistaOverviewMode();
     const userId = Number(currentUser?.id);
-    const mineStatusIds = await getPendenciasStatusIdsByNames([
-        PENDENCIAS_STATUS_AGUARDANDO_PT,
-        ...PENDENCIAS_MINE_EXTRA_STATUSES
-    ]);
 
-    const unassignedResult = await queryPendenciasProjects({
-        statusId: aguardandoStatusId,
-        unassignedOnly: true
-    });
-
-    if (unassignedResult.error) {
-        return { error: unassignedResult.error, unassigned: [], mine: [], overviewMode };
+    if (!overviewMode && !userId) {
+        return { error: null, overviewMode, mine: [] };
     }
 
-    let mine = [];
-    if ((overviewMode || userId) && mineStatusIds.length) {
-        const mineResult = await queryPendenciasProjects(
-            overviewMode
-                ? { statusIds: mineStatusIds, assignedOnly: true }
-                : { statusIds: mineStatusIds, designerId: userId }
-        );
+    const mineResult = await queryPendenciasProjects(
+        overviewMode
+            ? { statusId: aguardandoStatusId, assignedOnly: true }
+            : { statusId: aguardandoStatusId, designerId: userId }
+    );
 
-        if (mineResult.error) {
-            return { error: mineResult.error, unassigned: [], mine: [], overviewMode };
-        }
+    if (mineResult.error) {
+        return { error: mineResult.error, mine: [], overviewMode };
+    }
 
-        mine = mineResult.data || [];
-        if (overviewMode && typeof enrichPendenciasProjectsWithDesigner === 'function') {
-            mine = await enrichPendenciasProjectsWithDesigner(mine);
-        }
+    let mine = mineResult.data || [];
+    if (overviewMode && typeof enrichPendenciasProjectsWithDesigner === 'function') {
+        mine = await enrichPendenciasProjectsWithDesigner(mine);
     }
 
     return {
         error: null,
         overviewMode,
-        unassigned: sortPendenciasByDeliveryDate(unassignedResult.data || []),
         mine: sortPendenciasByForecastStartThenDelivery(mine)
     };
 }
@@ -281,42 +267,9 @@ function renderPendenciasWorkloadPrevisaoInputs(project) {
     `;
 }
 
-function renderPendenciasAguardandoProjetoTecnicoList(unassigned, mine, characteristicsMap = new Map(), overviewMode = false) {
+function renderPendenciasAguardandoProjetoTecnicoList(mine, overviewMode = false) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
-
-    const renderUnassignedTable = () => {
-        const rows = unassigned.map(project => renderPendenciasSemResponsavelProjectRow(
-            project,
-            characteristicsMap,
-            { mode: 'projetista', showPrevisao: false, showAction: false }
-        ));
-
-        return `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Sem responsável</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${unassigned.length} projeto${unassigned.length === 1 ? '' : 's'} · associação pelo gestor de projetos</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-aguardando-pt"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${unassigned.length
-                ? `<div class="overflow-x-auto">
-                    <table class="pendencias-sem-projetista-table w-full text-sm min-w-[60rem]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            ${renderPendenciasSemResponsavelTableHead(false, { showPrevisao: false, showAction: false })}
-                        </thead>
-                        <tbody>${rows.join('')}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto aguardando projeto técnico sem responsável.</p>'}
-        </div>
-    `;
-    };
 
     const renderRow = (project, mode, options = {}) => {
         const orderCode = project.order?.orderCode || '—';
@@ -1183,5 +1136,5 @@ async function loadPendenciasAguardandoProjetoTecnico() {
         return;
     }
 
-    renderPendenciasAguardandoProjetoTecnicoList([], mine, new Map(), overviewMode);
+    renderPendenciasAguardandoProjetoTecnicoList(mine || [], overviewMode);
 }

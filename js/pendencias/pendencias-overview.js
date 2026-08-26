@@ -3,7 +3,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         conferencia: 'Conferências enviadas aguardando retorno do consultor.',
         'em-revisao-comercial': 'Projetos em revisão comercial (consultor) aguardando aprovação.',
         'aguardando-aprovacao': 'Projetos aguardando aprovação comercial.',
-        requisicoes: 'Requisições aguardando resposta do consultor.'
+        requisicoes: 'Requisições (projeto e detalhamento) aguardando resposta do consultor.'
     },
     projetista: {
         'aguardando-projeto-tecnico': 'Projetos aguardando projeto técnico associados ao projetista.',
@@ -71,8 +71,8 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 return projects.length;
             }
             case 'projetista:aguardando-projeto-tecnico': {
-                const { error, unassigned, mine } = await fetchPendenciasAguardandoProjetoTecnico();
-                return error ? null : (unassigned.length + mine.length);
+                const { error, mine } = await fetchPendenciasAguardandoProjetoTecnico();
+                return error ? null : mine.length;
             }
             case 'projetista:projeto-tecnico': {
                 const { error, projects } = await fetchPendenciasProjetoTecnicoProjects();

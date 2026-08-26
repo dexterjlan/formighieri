@@ -168,6 +168,7 @@ async function notifyOrderRequestEmail(eventType, requestData) {
             consultantName: context.consultantName,
             projetistaName: context.projetistaName,
             requestProfile: requestData.requestProfile || 'Projetista',
+            requestType: requestData.requestType || REQUEST_TYPE_PROJECT,
             requestText: requestData.designerRequest || requestData.requestText || '',
             commercialResponse: requestData.commercialResponse || '',
             designerResponse: requestData.designerResponse || '',
@@ -180,7 +181,8 @@ async function notifyOrderRequestEmail(eventType, requestData) {
         const subject = buildOrderRequestEmailSubject(
             eventType,
             payload.orderCode,
-            payload.clientName
+            payload.clientName,
+            requestData.requestType
         );
         const body = buildOrderRequestEmailBody(payload);
         const html = buildOrderRequestEmailHtml(payload);

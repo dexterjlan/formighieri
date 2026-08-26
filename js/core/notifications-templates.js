@@ -39,9 +39,10 @@ function buildEmailBrandHeaderHtml(eventTitle, accentColor = '#f59e0b') {
     </div>`;
 }
 
-function buildOrderRequestEmailSubject(eventType, orderCode, clientName) {
+function buildOrderRequestEmailSubject(eventType, orderCode, clientName, requestType) {
     const eventLabel = eventType === 'created' ? 'Criada' : 'Respondida';
-    let subject = `Requisição ${eventLabel}: Pedido ${orderCode}`;
+    const typeSuffix = requestType === REQUEST_TYPE_DETAILING ? ' de Detalhamento' : '';
+    let subject = `Requisição${typeSuffix} ${eventLabel}: Pedido ${orderCode}`;
     if (clientName && clientName !== '-') {
         subject += `, ${clientName}`;
     }
@@ -67,6 +68,7 @@ function buildOrderRequestEmailBody(payload) {
         `Cliente: ${payload.clientName}`,
         `Consultor: ${payload.consultantName}`,
         `Projetista: ${payload.projetistaName}`,
+        `Tipo: ${typeof formatRequestType === 'function' ? formatRequestType(payload.requestType) : 'Projeto'}`,
         `Status: ${payload.status}`,
         `Ação por: ${payload.actedByName} (${payload.actedByRole})`,
         '',
@@ -151,6 +153,10 @@ function buildOrderRequestEmailHtml(payload) {
         <tr>
           <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Projetista</td>
           <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.projetistaName)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Tipo</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(typeof formatRequestType === 'function' ? formatRequestType(payload.requestType) : 'Projeto')}</td>
         </tr>
         <tr>
           <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Status</td>

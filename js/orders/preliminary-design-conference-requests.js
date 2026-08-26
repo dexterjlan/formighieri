@@ -37,13 +37,14 @@ async function insertConferenceOrderRequest({
     createdById
 }) {
     const now = new Date().toISOString();
-    const payload = {
+    let payload = {
         orderId,
         orderProjectId,
         designerId,
         designerRequest: ANTEPROJETO_CONFERENCE_REQUEST_TEXT,
         requestProfile,
         status: getInitialRequestStatus(requestProfile),
+        requestType: REQUEST_TYPE_PROJECT,
         fromConference: 'Y',
         createdById,
         updatedById: createdById,
@@ -56,6 +57,16 @@ async function insertConferenceOrderRequest({
         .insert([payload])
         .select('*')
         .single();
+
+    if (error?.message?.includes('requestType')) {
+        const { requestType: _omitType, ...fallbackPayload } = payload;
+        ({ data, error } = await supabaseClient
+            .from('OrderRequest')
+            .insert([fallbackPayload])
+            .select('*')
+            .single());
+        payload = fallbackPayload;
+    }
 
     if (error?.message?.includes('fromConference')) {
         const { fromConference: _omit, ...fallbackPayload } = payload;

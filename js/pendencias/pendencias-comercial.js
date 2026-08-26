@@ -756,8 +756,8 @@ function renderPendenciasConsultorRequisicaoList(requests, overviewMode) {
     if (!content) return;
 
     const subtitle = overviewMode
-        ? 'Requisições em aberto aguardando resposta do consultor.'
-        : 'Requisições dos seus pedidos aguardando sua resposta.';
+        ? 'Requisições em aberto aguardando resposta do consultor, inclusive de Detalhamento.'
+        : 'Requisições dos seus pedidos aguardando sua resposta, inclusive de Detalhamento.';
 
     const rows = requests.map(request => {
         const orderCode = request.order?.orderCode || '—';
@@ -780,6 +780,7 @@ function renderPendenciasConsultorRequisicaoList(requests, overviewMode) {
                     ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>`
                     : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
+                <td class="p-3">${getRequestTypeBadgeHtml(request)}</td>
                 <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${request.createdAt ? formatDate(request.createdAt) : '—'}</td>
                 <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
             </tr>
@@ -804,13 +805,14 @@ function renderPendenciasConsultorRequisicaoList(requests, overviewMode) {
             </div>
             ${requests.length
                 ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[${overviewMode ? '920' : '820'}px]">
+                    <table class="w-full text-sm min-w-[${overviewMode ? '1000' : '900'}px]">
                         <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
                                 ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
                                 <th class="text-left p-3 font-semibold">Projeto</th>
+                                <th class="text-left p-3 font-semibold">Tipo</th>
                                 <th class="text-left p-3 font-semibold">Data Abertura</th>
                                 <th class="text-right p-3 font-semibold w-40">Ações</th>
                             </tr>

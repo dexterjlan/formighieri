@@ -575,6 +575,7 @@ function renderOrderExportRequestsSection(bundle) {
                 ${orderExportSubheading(`Requisição #${request.id}`)}
                 <div class="order-export-fields order-export-fields--grid">
                     ${orderExportField('Status', status)}
+                    ${orderExportField('Tipo', typeof formatRequestType === 'function' ? formatRequestType(request.requestType) : 'Projeto')}
                     ${orderExportField('Projetista', designerNames[request.designerId] || '—')}
                     ${orderExportField('Consultor', consultantName)}
                     ${orderExportField('Projeto', projectLabel)}

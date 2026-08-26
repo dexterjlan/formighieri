@@ -135,20 +135,25 @@ function loadScript(src) {
 }
 
 async function loadAppVersion() {
-    const el = document.getElementById('app-version');
-    if (!el) return;
+    const els = document.querySelectorAll('#app-version, #login-app-version');
+    if (!els.length) return;
 
+    let version = APP_CACHE_VERSION;
     try {
         const response = await fetch(`VERSION?${Date.now()}`);
-        if (!response.ok) return;
-
-        const version = (await response.text()).trim();
-        if (version) {
-            el.textContent = ` v${version}`;
+        if (response.ok) {
+            const text = (await response.text()).trim();
+            if (text) version = text;
         }
     } catch (error) {
         console.warn('loadAppVersion:', error);
     }
+
+    if (!version) return;
+
+    els.forEach(el => {
+        el.textContent = el.id === 'app-version' ? ` v${version}` : `v${version}`;
+    });
 }
 
 async function bootstrap() {

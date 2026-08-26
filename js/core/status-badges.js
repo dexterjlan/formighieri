@@ -47,6 +47,11 @@ const REQUEST_PROFILE_BADGE_CLASSES = {
     'Consultor': 'bg-amber-100 text-amber-800'
 };
 
+const REQUEST_TYPE_BADGE_CLASSES = {
+    project: 'bg-slate-100 text-slate-600',
+    detailing: 'bg-indigo-100 text-indigo-800'
+};
+
 const DETALHAMENTO_STATUS_BADGE_CLASSES = {
     'Pronto': 'bg-emerald-100 text-emerald-800',
     'Detalhamento': 'bg-violet-100 text-violet-800'
@@ -97,6 +102,10 @@ function getRequestStatusBadgeClass(status) {
 
 function getRequestProfileBadgeClass(profile) {
     return getStatusBadgeClass(profile, REQUEST_PROFILE_BADGE_CLASSES, 'bg-slate-100 text-slate-600');
+}
+
+function getRequestTypeBadgeClass(requestType) {
+    return getStatusBadgeClass(requestType, REQUEST_TYPE_BADGE_CLASSES, 'bg-slate-100 text-slate-600');
 }
 
 function getDetalhamentoStatusBadgeClass(status) {

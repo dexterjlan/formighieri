@@ -104,7 +104,7 @@ async function searchPesquisasRequests() {
     const countEl = document.getElementById('pesquisas-requests-count');
     if (!tbody || !countEl) return;
 
-    tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-xs text-slate-400 text-center">Carregando...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-xs text-slate-400 text-center">Carregando...</td></tr>`;
 
     try {
         if (!pesquisasRequestsCache.length) {
@@ -121,7 +121,7 @@ async function searchPesquisasRequests() {
         countEl.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
 
         if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-xs text-slate-400">Nenhuma requisição encontrada.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-xs text-slate-400">Nenhuma requisição encontrada.</td></tr>`;
             return;
         }
 
@@ -133,6 +133,7 @@ async function searchPesquisasRequests() {
                     <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(request.order?.orderCode || '—')}</td>
                     <td class="p-3 text-xs text-slate-700">${escapeHtml(getOrderClientName(request.order) || '—')}</td>
                     <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(request.projectName || '—')}</td>
+                    <td class="p-3">${getRequestTypeBadgeHtml(request)}</td>
                     <td class="p-3 text-xs">
                         <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(status)}</span>
                     </td>
@@ -146,7 +147,7 @@ async function searchPesquisasRequests() {
         }).join('');
     } catch (error) {
         console.error('searchPesquisasRequests:', error);
-        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-xs text-red-500 text-center">Erro ao carregar requisições: ${escapeHtml(error.message || 'Erro desconhecido')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-xs text-red-500 text-center">Erro ao carregar requisições: ${escapeHtml(error.message || 'Erro desconhecido')}</td></tr>`;
         countEl.textContent = '0 registros';
     }
 }
@@ -162,6 +163,7 @@ async function loadPesquisasRequestsQuery() {
         <th class="text-left p-3 font-semibold">Pedido</th>
         <th class="text-left p-3 font-semibold">Cliente</th>
         <th class="text-left p-3 font-semibold">Projeto</th>
+        <th class="text-left p-3 font-semibold">Tipo</th>
         <th class="text-left p-3 font-semibold">Status</th>
         <th class="text-left p-3 font-semibold w-24">Ação</th>
     `;
