@@ -97,7 +97,7 @@ function fillSystemSettingsForm(settings = systemSettingsCache) {
 }
 
 async function showSystemSettings() {
-    if (!isAdmin()) return;
+    if (!isAdmin() || isThirdParty()) return;
     hideSubViews();
     document.getElementById('system-settings-view').classList.remove('hidden');
     updateMainNavActive('settings');

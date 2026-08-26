@@ -1,3 +1,39 @@
+async function persistAppUserUpdate(payload, column, value, email, role) {
+    const flagged = typeof withProdThirdPartyFlag === 'function'
+        ? withProdThirdPartyFlag(payload, email, role)
+        : payload;
+    let { error } = await supabaseClient
+        .from('appUsers')
+        .update(flagged)
+        .eq(column, value);
+
+    if (error?.message?.includes('isThirdParty')) {
+        ({ error } = await supabaseClient
+            .from('appUsers')
+            .update(payload)
+            .eq(column, value));
+    }
+
+    return { error };
+}
+
+async function persistAppUserInsert(payload, email, role) {
+    const flagged = typeof withProdThirdPartyFlag === 'function'
+        ? withProdThirdPartyFlag(payload, email, role)
+        : payload;
+    let result = await supabaseClient
+        .from('appUsers')
+        .insert(flagged);
+
+    if (result.error?.message?.includes('isThirdParty')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .insert(payload);
+    }
+
+    return result;
+}
+
 async function enterApp(authUserId) {
     if (enterAppInProgress) {
         return enterAppInProgress;
@@ -47,11 +83,7 @@ async function ensureAppUserOnRegister(user, name, email, role, session = null) 
     }
 
     if (byAuth) {
-        const { error } = await supabaseClient
-            .from('appUsers')
-            .update({ name, email, role })
-            .eq('id', byAuth.id);
-        return { error };
+        return persistAppUserUpdate({ name, email, role }, 'id', byAuth.id, email, role);
     }
 
     const { data: byEmail, error: readByEmailError } = await supabaseClient
@@ -65,26 +97,22 @@ async function ensureAppUserOnRegister(user, name, email, role, session = null) 
     }
 
     if (byEmail) {
-        const { error } = await supabaseClient
-            .from('appUsers')
-            .update({ authId: user.id, name, role })
-            .eq('id', byEmail.id);
-        return { error };
+        return persistAppUserUpdate({ authId: user.id, name, role }, 'id', byEmail.id, email, role);
     }
 
-    const { error } = await supabaseClient
-        .from('appUsers')
-        .insert({ authId: user.id, email, name, role, isActive: true });
+    const insertResult = await persistAppUserInsert({
+        authId: user.id,
+        email,
+        name,
+        role,
+        isActive: true
+    }, email, role);
 
-    if (error?.code === '23505') {
-        const { error: updateError } = await supabaseClient
-            .from('appUsers')
-            .update({ name, email, role })
-            .eq('authId', user.id);
-        return { error: updateError };
+    if (insertResult.error?.code === '23505') {
+        return persistAppUserUpdate({ name, email, role }, 'authId', user.id, email, role);
     }
 
-    return { error };
+    return insertResult;
 }
 
 async function syncRegisteredUserProfile(user, name, email, role, session = null) {
@@ -98,10 +126,13 @@ async function syncRegisteredUserProfile(user, name, email, role, session = null
         .maybeSingle();
 
     if (existing) {
-        const { error: updateError } = await supabaseClient
-            .from('appUsers')
-            .update({ name, email, role })
-            .eq('id', existing.id);
+        const { error: updateError } = await persistAppUserUpdate(
+            { name, email, role },
+            'id',
+            existing.id,
+            email,
+            role
+        );
         return updateError;
     }
 
@@ -119,7 +150,7 @@ async function applyMissingRoleFromMetadata(profile, user) {
         .from('appUsers')
         .update({ role: metadataRole })
         .eq('id', normalized.id)
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty')
         .single();
 
     if (error) {
@@ -133,11 +164,11 @@ async function applyMissingRoleFromMetadata(profile, user) {
 async function queryAppUserByAuthId(authUserId) {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty')
         .eq('authId', authUserId)
         .maybeSingle();
 
-    if (result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isDetailing')) {
+    if (result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isThirdParty')) {
         result = await supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager')
@@ -157,7 +188,7 @@ async function refreshCurrentUserProfile() {
 
     let query = supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing');
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty');
 
     if (authId) {
         query = query.eq('authId', authId);
@@ -167,7 +198,7 @@ async function refreshCurrentUserProfile() {
 
     let { data, error } = await query.maybeSingle();
 
-    if (error?.message?.includes('isPpcp') || error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader') || error?.message?.includes('isFactoryManager') || error?.message?.includes('isDetailing')) {
+    if (error?.message?.includes('isPpcp') || error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader') || error?.message?.includes('isFactoryManager') || error?.message?.includes('isDetailing') || error?.message?.includes('isThirdParty')) {
         let fallbackQuery = supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager');
@@ -240,17 +271,32 @@ async function loadUserProfile(authUserId) {
         }
     }
 
-    const { data: created, error: insertError } = await supabaseClient
+    const insertPayload = {
+        authId: user.id,
+        email: user.email,
+        name: user.user_metadata?.name || user.email,
+        role: metadataRole,
+        isActive: true
+    };
+    const flaggedPayload = typeof withProdThirdPartyFlag === 'function'
+        ? withProdThirdPartyFlag(insertPayload, user.email, metadataRole)
+        : insertPayload;
+
+    let createdResult = await supabaseClient
         .from('appUsers')
-        .insert({
-            authId: user.id,
-            email: user.email,
-            name: user.user_metadata?.name || user.email,
-            role: metadataRole,
-            isActive: true
-        })
+        .insert(flaggedPayload)
         .select('*')
         .single();
+
+    if (createdResult.error?.message?.includes('isThirdParty')) {
+        createdResult = await supabaseClient
+            .from('appUsers')
+            .insert(insertPayload)
+            .select('*')
+            .single();
+    }
+
+    const { data: created, error: insertError } = createdResult;
 
     if (created) {
         currentUser = normalizeAppUserProfile(created);

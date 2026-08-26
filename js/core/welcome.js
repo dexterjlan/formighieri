@@ -130,6 +130,13 @@ async function renderWelcomeFlowchart() {
 }
 
 function showWelcome() {
+    if (typeof isThirdParty === 'function' && isThirdParty()
+        && typeof canAccessPendencias === 'function' && canAccessPendencias()
+        && typeof showPendencias === 'function') {
+        showPendencias();
+        return;
+    }
+
     hideSubViews();
     document.getElementById('welcome-view')?.classList.remove('hidden');
     updateMainNavActive('home');
@@ -146,6 +153,11 @@ function showWelcome() {
 }
 
 function updateWelcomeActions() {
+    const ordersBtn = document.getElementById('btn-welcome-go-orders');
+    if (ordersBtn) {
+        ordersBtn.classList.toggle('hidden', typeof isThirdParty === 'function' && isThirdParty());
+    }
+
     const pendenciasBtn = document.getElementById('btn-welcome-go-pendencias');
     if (pendenciasBtn) {
         pendenciasBtn.classList.toggle('hidden', !canAccessPendencias());

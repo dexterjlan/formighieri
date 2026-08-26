@@ -734,8 +734,9 @@ function sumGestaoRelatorioSaleValues(projects) {
     }, 0);
 }
 
+// Já produzido: prioriza a data fim da montagem interna; senão, o mês programado.
 function getGestaoRelatorioFechamentoProducaoProjectMonthKey(project) {
-    return getGestaoRelatorioMonthKey(project?.productionMonth || project?.internalAssemblyEndDate);
+    return getGestaoRelatorioMonthKey(project?.internalAssemblyEndDate || project?.productionMonth);
 }
 
 function getGestaoRelatorioFechamentoProducaoTotals(projects) {

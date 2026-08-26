@@ -1,5 +1,38 @@
+const COMPANY_EMAIL_DOMAINS = ['formighierimoveis.com.br', 'formighierimadeiras.com.br'];
+
 function isAdmin() {
     return currentUser?.role === 'Admin';
+}
+
+function getEmailDomain(email) {
+    const value = String(email || '').trim().toLowerCase();
+    const at = value.lastIndexOf('@');
+    if (at <= 0 || at === value.length - 1) return '';
+    return value.slice(at + 1);
+}
+
+function isCompanyEmail(email) {
+    return COMPANY_EMAIL_DOMAINS.includes(getEmailDomain(email));
+}
+
+function isProdAppEnvironment() {
+    return typeof FORMIGHIERI_APP_ENV !== 'undefined' && FORMIGHIERI_APP_ENV === 'prod';
+}
+
+function shouldAutoMarkThirdParty(email, role) {
+    if (!isProdAppEnvironment()) return false;
+    if (role === 'Admin') return false;
+    if (!getEmailDomain(email)) return false;
+    return !isCompanyEmail(email);
+}
+
+function withProdThirdPartyFlag(payload, email, role) {
+    if (!shouldAutoMarkThirdParty(email, role)) return payload;
+    return { ...payload, isThirdParty: true };
+}
+
+function isThirdParty(user = currentUser) {
+    return Boolean(user?.isThirdParty);
 }
 
 function normalizeAppUserProfile(profile) {
@@ -13,7 +46,8 @@ function normalizeAppUserProfile(profile) {
         isPpcp: Boolean(profile.isPpcp),
         isFactoryManager: Boolean(profile.isFactoryManager),
         isDetailing: Boolean(profile.isDetailing),
-        isReviewer: Boolean(profile.isReviewer ?? profile.isProjectLeader)
+        isReviewer: Boolean(profile.isReviewer ?? profile.isProjectLeader),
+        isThirdParty: Boolean(profile.isThirdParty)
     };
 }
 
@@ -95,23 +129,26 @@ function canActCompraModal(user = currentUser) {
 }
 
 function canSeeQueryNav(user = currentUser) {
+    if (isThirdParty(user)) return false;
     if (typeof QUERY_NAV_ENABLED !== 'undefined' && !QUERY_NAV_ENABLED) return false;
     return !isMarceneiro(user) && !isCompras(user);
 }
 
 function canAccessGestao(user = currentUser) {
-    return user?.role === 'Admin'
+    if (!user || isThirdParty(user)) return false;
+    return user.role === 'Admin'
         || isGestorComercial(user)
         || isGestorProjetos(user)
         || isGestorFabrica(user);
 }
 
 function canAccessMontagemProgramacao(user = currentUser) {
+    if (isThirdParty(user)) return false;
     return isAdmin(user) || isGestorProjetos(user);
 }
 
 function canViewProjectScheduling(user = currentUser) {
-    return Boolean(user);
+    return Boolean(user) && !isThirdParty(user);
 }
 
 function canEditProjectScheduling(user = currentUser) {
@@ -119,7 +156,7 @@ function canEditProjectScheduling(user = currentUser) {
 }
 
 function canViewProgramacaoMontagem(user = currentUser) {
-    return Boolean(user);
+    return Boolean(user) && !isThirdParty(user);
 }
 
 function canEditProgramacaoMontagem(user = currentUser) {
@@ -127,13 +164,17 @@ function canEditProgramacaoMontagem(user = currentUser) {
 }
 
 function canAccessCalendar(user = currentUser) {
-    if (!user) return false;
+    if (!user || isThirdParty(user)) return false;
     return isAdmin(user)
         || user.role === 'Consultor'
         || isConferente(user)
         || isGestorComercial(user)
         || isGestorProjetos(user)
         || isGestorFabrica(user);
+}
+
+function canAccessOrdersDashboard(user = currentUser) {
+    return Boolean(user) && !isThirdParty(user);
 }
 
 function canAccessGoogleCalendar(user = currentUser) {

@@ -320,7 +320,8 @@ function applyProgramacaoProducaoOrderFilters(orders) {
     return (orders || []).filter(order => {
         if (hideWithMonth && orderProgramacaoProducaoHasMonthDefined(order)) return false;
         if (clientTerm) {
-            const name = getOrderClientName(order).toLocaleLowerCase('pt-BR');
+            const name = String(order.clientName || getOrderClientName(order.order) || '')
+                .toLocaleLowerCase('pt-BR');
             if (!name.includes(clientTerm)) return false;
         }
         return true;
@@ -459,7 +460,16 @@ function mergeProgramacaoProducaoSummaryMonthGroups(pendingGroups, fechamentoMon
     });
 
     (fechamentoMonthGroups || []).forEach(monthGroup => {
-        if (!byMonthKey[monthGroup.monthKey]) return;
+        if (!byMonthKey[monthGroup.monthKey]) {
+            byMonthKey[monthGroup.monthKey] = {
+                monthKey: monthGroup.monthKey,
+                clients: [],
+                projectCount: 0,
+                totalSaleValue: 0,
+                fechamento: monthGroup
+            };
+            return;
+        }
         byMonthKey[monthGroup.monthKey].fechamento = monthGroup;
     });
 

@@ -8,7 +8,7 @@ const PESQUISAS_SECTIONS = [
 ];
 
 function canAccessPesquisas() {
-    return Boolean(currentUser?.id);
+    return Boolean(currentUser?.id) && !isThirdParty();
 }
 
 function renderPesquisasSidebar() {

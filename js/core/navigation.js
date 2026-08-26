@@ -193,6 +193,15 @@ async function restoreAppNavState() {
     suppressAppNavPersist = true;
 
     try {
+        if (typeof isThirdParty === 'function' && isThirdParty()) {
+            await restorePendenciasView({
+                view: 'pendencias',
+                pendenciasSection: state.pendenciasSection,
+                pendenciasItem: state.pendenciasItem
+            });
+            return true;
+        }
+
         const legacyViewMap = {
             'programacao-projetos': 'project-scheduling'
         };
@@ -262,14 +271,25 @@ async function showMainPanel() {
     if (appShellReady) return;
 
     const restored = await restoreAppNavState();
-    if (!restored) showWelcome();
+    if (!restored) {
+        if (typeof isThirdParty === 'function' && isThirdParty()
+            && typeof canAccessPendencias === 'function' && canAccessPendencias()
+            && typeof showPendencias === 'function') {
+            showPendencias();
+        } else {
+            showWelcome();
+        }
+    }
 
     if (typeof initApp === 'function') initApp();
     appShellReady = true;
 }
 
 function updateAdminNav() {
-    document.getElementById("btn-system-settings").classList.toggle("hidden", !isAdmin());
+    const thirdParty = typeof isThirdParty === 'function' && isThirdParty();
+    document.getElementById("btn-inicio")?.classList.toggle("hidden", thirdParty);
+    document.getElementById("btn-back-dashboard")?.classList.toggle("hidden", thirdParty);
+    document.getElementById("btn-system-settings").classList.toggle("hidden", !isAdmin() || thirdParty);
     document.getElementById("btn-gestao").classList.toggle("hidden", !canAccessGestao());
     document.getElementById("btn-conversations-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-approvals-query").classList.toggle("hidden", !canSeeQueryNav());
@@ -327,6 +347,15 @@ function hideSubViews() {
 }
 
 function showDashboard() {
+    if (typeof canAccessOrdersDashboard === 'function' && !canAccessOrdersDashboard()) {
+        if (typeof canAccessPendencias === 'function' && canAccessPendencias() && typeof showPendencias === 'function') {
+            showPendencias();
+        } else {
+            showWelcome();
+        }
+        return;
+    }
+
     hideSubViews();
     document.getElementById("dashboard-view").classList.remove("hidden");
     updateMainNavActive('dashboard');
