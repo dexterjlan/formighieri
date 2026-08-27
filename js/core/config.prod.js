@@ -3,7 +3,7 @@ window.FORMIGHIERI_CONFIG_PROD = {
     label: 'Produção',
     SUPABASE_URL: 'https://doizeeeyvhrhghelpocz.supabase.co',
     SUPABASE_KEY: 'sb_publishable_ts8vXjQPV6BL5lTts9Ny_Q_R0O3vvjh',
-    APP_PUBLIC_URL: 'https://dexterjlan.github.io/formighieri',
+    APP_PUBLIC_URL: 'https://fgp.formighieri.com.br',
     NOTIFICATION_TEST_MODE: false,
     NOTIFICATION_TEST_EMAIL: '',
     GOOGLE_CALENDAR_SYNC_ENABLED: true,

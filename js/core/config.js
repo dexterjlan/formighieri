@@ -29,7 +29,7 @@ function getAppPublicUrl() {
     }
 
     if (FORMIGHIERI_APP_ENV === 'prod') {
-        return 'https://dexterjlan.github.io/formighieri';
+        return 'https://fgp.formighieri.com.br';
     }
 
     return window.location.origin.replace(/\/$/, '');

@@ -17,7 +17,7 @@ function getFgpEmailProdPublicUrl() {
     if (prodUrl) {
         return String(prodUrl).replace(/\/$/, '');
     }
-    return 'https://dexterjlan.github.io/formighieri';
+    return 'https://fgp.formighieri.com.br';
 }
 
 function getFgpLogoEmailUrl() {

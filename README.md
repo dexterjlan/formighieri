@@ -45,7 +45,8 @@ Depois acesse `http://localhost:3000`.
 2. No repositório: **Settings → Pages → Build and deployment**.
 3. Em **Source**, selecione **GitHub Actions** (não "Deploy from branch").
 4. O workflow `.github/workflows/deploy-pages.yml` publica o site a cada push na `main`.
-5. URL do projeto: `https://<usuario>.github.io/formighieri/`
+5. URL de produção: `https://fgp.formighieri.com.br/` (domínio customizado no GitHub Pages; o arquivo `CNAME` na raiz do repositório mantém o apontamento).
+6. URL alternativa do GitHub Pages: `https://<usuario>.github.io/formighieri/`
 
 Se o workflow falhar, abra a aba **Actions** no GitHub e confira o log da execução.
 
