@@ -443,6 +443,140 @@ function bindAuthEvents() {
         }
     });
 
+    document.getElementById("forgot-password-form")?.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const btn = document.getElementById("btn-forgot-password-submit");
+        const statusEl = document.getElementById("forgot-password-status");
+        const originalText = btn?.textContent || "Enviar link";
+        const email = document.getElementById("forgot-password-email")?.value.trim().toLowerCase();
+
+        if (!email) {
+            alertAppDialog("Informe o e-mail da conta.", { variant: "error", title: "Erro" });
+            return;
+        }
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Enviando...";
+        }
+        if (statusEl) {
+            statusEl.textContent = "Enviando link de recuperação...";
+            statusEl.classList.remove("hidden", "text-red-600");
+            statusEl.classList.add("text-slate-500");
+        }
+
+        try {
+            const redirectTo = typeof getAppPublicUrl === "function"
+                ? getAppPublicUrl()
+                : window.location.origin.replace(/\/$/, "");
+
+            const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+                redirectTo
+            });
+
+            // Mesma mensagem com ou sem conta, para não revelar se o e-mail existe.
+            if (error && !isPasswordRecoveryEnumerationError(error)) {
+                console.error("resetPasswordForEmail:", error);
+                alertAppDialog("Não foi possível enviar o e-mail: " + formatAuthError(error), {
+                    variant: "error",
+                    title: "Erro"
+                });
+                return;
+            }
+
+            alertAppDialog(
+                "Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.",
+                { variant: "success", title: "E-mail enviado" }
+            );
+            document.getElementById("forgot-password-form")?.reset();
+            showLoginScreen();
+        } catch (err) {
+            console.error("forgot-password:", err);
+            alertAppDialog(err.message || "Erro ao enviar o e-mail de recuperação.");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+            if (statusEl) {
+                statusEl.textContent = "";
+                statusEl.classList.add("hidden");
+            }
+        }
+    });
+
+    document.getElementById("reset-password-form")?.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const password = document.getElementById("reset-password")?.value || "";
+        const passwordConfirm = document.getElementById("reset-password-confirm")?.value || "";
+        const btn = document.getElementById("btn-reset-password-submit");
+        const statusEl = document.getElementById("reset-password-status");
+        const originalText = btn?.textContent || "Salvar nova senha";
+
+        if (password.length < 6) {
+            alertAppDialog("A senha deve ter no mínimo 6 caracteres.");
+            return;
+        }
+        if (password !== passwordConfirm) {
+            alertAppDialog("As senhas não coincidem.");
+            return;
+        }
+
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = "Salvando...";
+        }
+        if (statusEl) {
+            statusEl.textContent = "Atualizando senha...";
+            statusEl.classList.remove("hidden");
+        }
+
+        try {
+            const { error } = await supabaseClient.auth.updateUser({ password });
+            if (error) {
+                console.error("updateUser password:", error);
+                alertAppDialog("Não foi possível atualizar a senha: " + formatAuthError(error), {
+                    variant: "error",
+                    title: "Erro"
+                });
+                return;
+            }
+
+            passwordRecoveryPending = false;
+            clearAuthRedirectUrl();
+
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            await alertAppDialog("Senha atualizada com sucesso.", {
+                variant: "success",
+                title: "Senha redefinida"
+            });
+            if (session?.user) {
+                await enterApp(session.user.id);
+            } else {
+                showLoginScreen();
+            }
+        } catch (err) {
+            console.error("reset-password:", err);
+            alertAppDialog(err.message || "Erro ao atualizar a senha.");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+            if (statusEl) {
+                statusEl.textContent = "";
+                statusEl.classList.add("hidden");
+            }
+        }
+    });
+
+    document.getElementById("btn-reset-back-login")?.addEventListener("click", async function () {
+        passwordRecoveryPending = false;
+        clearAuthRedirectUrl();
+        await supabaseClient.auth.signOut();
+        showLoginScreen();
+    });
+
     document.getElementById("btn-logout").addEventListener("click", async function () {
         if (typeof clearAppNavState === 'function') clearAppNavState();
         await supabaseClient.auth.signOut();
@@ -453,14 +587,81 @@ function bindAuthEvents() {
         if (event === 'SIGNED_OUT') {
             currentUser = null;
             appShellReady = false;
+            passwordRecoveryPending = false;
             if (typeof clearAppNavState === 'function') clearAppNavState();
             return;
         }
+        if (event === 'PASSWORD_RECOVERY') {
+            beginPasswordRecovery();
+            return;
+        }
         if (!session) return;
-        if (event === 'TOKEN_REFRESHED') return;
+        if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+            if (passwordRecoveryPending || isPasswordRecoveryRedirect()) {
+                beginPasswordRecovery();
+                return;
+            }
+            if (hasAuthCallbackCode()) {
+                await new Promise((resolve) => setTimeout(resolve, 500));
+                if (passwordRecoveryPending) {
+                    beginPasswordRecovery();
+                    return;
+                }
+            }
             if (appShellReady) return;
             await enterApp(session.user.id);
         }
     });
+
+    if (passwordRecoveryPending) {
+        beginPasswordRecovery();
+    }
+}
+
+function isPasswordRecoveryRedirect() {
+    try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('type') === 'recovery') return true;
+        const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+        return hashParams.get('type') === 'recovery';
+    } catch {
+        return false;
+    }
+}
+
+function hasAuthCallbackCode() {
+    try {
+        return Boolean(new URLSearchParams(window.location.search).get('code'));
+    } catch {
+        return false;
+    }
+}
+
+function isPasswordRecoveryEnumerationError(error) {
+    const message = String(error?.message || error?.code || '').toLowerCase();
+    return message.includes('user not found')
+        || message.includes('unable to validate email')
+        || message.includes('email not found');
+}
+
+function clearAuthRedirectUrl() {
+    try {
+        const url = new URL(window.location.href);
+        url.hash = '';
+        url.searchParams.delete('code');
+        url.searchParams.delete('type');
+        history.replaceState(null, '', url.pathname + url.search);
+    } catch {
+        history.replaceState(null, '', window.location.pathname);
+    }
+}
+
+function beginPasswordRecovery() {
+    passwordRecoveryPending = true;
+    const resetScreen = document.getElementById('reset-password-screen');
+    if (resetScreen && !resetScreen.classList.contains('hidden')) return;
+    if (typeof showResetPasswordScreen === 'function') {
+        showResetPasswordScreen();
+    }
 }

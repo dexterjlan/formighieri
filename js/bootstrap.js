@@ -3,6 +3,7 @@ const APP_CACHE_VERSION = '1.0.0';
 const PARTIALS = [
     'partials/login.html',
     'partials/register.html',
+    'partials/forgot-password.html',
     'partials/main-panel.html',
     'partials/modals.html'
 ];

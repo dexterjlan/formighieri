@@ -35,12 +35,25 @@ function clearAppNavState() {
     }
 }
 
+function hideAuthScreens() {
+    const login = document.getElementById('login-screen');
+    const register = document.getElementById('register-screen');
+    const forgot = document.getElementById('forgot-password-screen');
+    const reset = document.getElementById('reset-password-screen');
+
+    login?.classList.add('hidden');
+    register?.classList.add('hidden');
+    register?.classList.remove('flex');
+    forgot?.classList.add('hidden');
+    forgot?.classList.remove('flex');
+    reset?.classList.add('hidden');
+    reset?.classList.remove('flex');
+}
+
 function revealAuthenticatedShell() {
     if (!currentUser) return;
 
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('register-screen').classList.add('hidden');
-    document.getElementById('register-screen').classList.remove('flex');
+    hideAuthScreens();
     document.getElementById('main-panel').classList.remove('hidden');
 
     const roleLabel = currentUser.role || 'Sem perfil';

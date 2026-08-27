@@ -48,6 +48,24 @@ if (!SUPABASE_URL || !SUPABASE_KEY || SUPABASE_URL.includes('SUBSTITUA')) {
 const { createClient } = window.supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+function readPasswordRecoveryRedirect() {
+    try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('type') === 'recovery') return true;
+        const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+        return hashParams.get('type') === 'recovery';
+    } catch {
+        return false;
+    }
+}
+
+let passwordRecoveryPending = readPasswordRecoveryRedirect();
+supabaseClient.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY') {
+        passwordRecoveryPending = true;
+    }
+});
+
 const FORMIGHIERI_DEV_SUPABASE_PROJECT_REF = 'phpcrboxtduethlqvkot';
 
 function isDevSupabaseEnvironment() {
