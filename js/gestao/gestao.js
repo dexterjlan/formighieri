@@ -121,6 +121,35 @@ function updateGestaoCalendarLayout(options = {}) {
     layout?.classList.toggle('gestao-view-layout--full', !showSidebar);
 }
 
+let kanbanOpenedFromGestao = false;
+
+async function showKanbanView(options = {}) {
+    if (typeof canViewKanban === 'function' && !canViewKanban()) return;
+
+    kanbanOpenedFromGestao = Boolean(options.fromGestao);
+
+    if (typeof hideSubViews === 'function') hideSubViews();
+    document.getElementById('gestao-view')?.classList.remove('hidden');
+    updateGestaoCalendarLayout(options);
+    if (typeof updateMainNavActive === 'function') {
+        updateMainNavActive(options.fromGestao ? 'gestao' : 'kanban');
+    }
+    if (typeof updateAdminNav === 'function') updateAdminNav();
+    if (options.fromGestao) {
+        updateGestaoCadastrosNavVisibility();
+    }
+
+    showGestaoKanbanPanel();
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({
+            view: options.fromGestao ? 'gestao' : 'kanban',
+            gestaoNav: 'kanban'
+        });
+    }
+}
+
+window.showKanbanView = showKanbanView;
+
 async function showProjectSchedulingView(options = {}) {
     if (!canViewProjectScheduling()) return;
 
@@ -1459,7 +1488,7 @@ function bindGestaoEvents() {
     });
     document.getElementById('gestao-nav-kanban')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
-        showGestaoKanbanPanel();
+        showKanbanView({ fromGestao: true });
     });
     document.getElementById('gestao-nav-cronograma-pedido')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
@@ -1478,7 +1507,9 @@ function bindGestaoEvents() {
         showGestaoPerformancePanel();
     });
     document.getElementById('btn-gestao-kanban-refresh')?.addEventListener('click', loadGestaoKanban);
-    document.getElementById('btn-gestao-project-history-back')?.addEventListener('click', showGestaoKanbanPanel);
+    document.getElementById('btn-gestao-project-history-back')?.addEventListener('click', () => {
+        showKanbanView({ fromGestao: kanbanOpenedFromGestao });
+    });
     document.getElementById('gestao-kanban-board')?.addEventListener('click', async (event) => {
         const button = event.target.closest('.gestao-kanban-history-btn');
         if (!button) return;

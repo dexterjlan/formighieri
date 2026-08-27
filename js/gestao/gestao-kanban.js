@@ -540,7 +540,7 @@ function renderProjectStatusHistoryFlow(entries, detailingRecord = null) {
 }
 
 async function openGestaoProjectStatusHistory(context = {}) {
-    if (!canAccessGestao()) return;
+    if (typeof canViewKanban === 'function' ? !canViewKanban() : !canAccessGestao()) return;
 
     const orderProjectId = Number(context.orderProjectId);
     if (!orderProjectId) return;
@@ -1134,7 +1134,7 @@ async function resolveGestaoKanbanExportData() {
 }
 
 async function exportGestaoKanbanToExcel() {
-    if (!canAccessGestao()) return;
+    if (typeof canViewKanban === 'function' ? !canViewKanban() : !canAccessGestao()) return;
 
     const button = document.getElementById('btn-gestao-kanban-export');
     const originalLabel = button?.querySelector('span')?.textContent || 'Exportar Excel';

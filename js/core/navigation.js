@@ -118,7 +118,8 @@ async function restoreGestaoView(state) {
             if (typeof showGestaoDashboardPanel === 'function') showGestaoDashboardPanel();
         },
         kanban: () => {
-            if (typeof showGestaoKanbanPanel === 'function') showGestaoKanbanPanel();
+            if (typeof showKanbanView === 'function') showKanbanView({ fromGestao: true });
+            else if (typeof showGestaoKanbanPanel === 'function') showGestaoKanbanPanel();
         },
         'cronograma-pedido': () => {
             if (typeof showGestaoCronogramaPedidoPanel === 'function') showGestaoCronogramaPedidoPanel();
@@ -255,6 +256,12 @@ async function restoreAppNavState() {
                     return true;
                 }
                 return false;
+            case 'kanban':
+                if (typeof showKanbanView === 'function') {
+                    await showKanbanView();
+                    return true;
+                }
+                return false;
             case 'programacao-montagem':
                 if (typeof showProgramacaoMontagemView === 'function') {
                     await showProgramacaoMontagemView();
@@ -307,6 +314,7 @@ function updateAdminNav() {
     document.getElementById("btn-conversations-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-approvals-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-calendario").classList.toggle("hidden", !canAccessCalendar());
+    document.getElementById("btn-kanban")?.classList.toggle("hidden", typeof canViewKanban === 'function' ? !canViewKanban() : true);
     document.getElementById("btn-project-scheduling")?.classList.toggle("hidden", !canViewProjectScheduling());
     document.getElementById("btn-programacao-montagem")?.classList.toggle("hidden", !canViewProgramacaoMontagem());
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
@@ -326,6 +334,7 @@ function updateMainNavActive(activeView) {
         requests: document.getElementById('btn-conversations-query'),
         approvals: document.getElementById('btn-approvals-query'),
         calendar: document.getElementById('btn-calendario'),
+        kanban: document.getElementById('btn-kanban'),
         'project-scheduling': document.getElementById('btn-project-scheduling'),
         'programacao-montagem': document.getElementById('btn-programacao-montagem'),
         gestao: document.getElementById('btn-gestao'),
@@ -417,6 +426,9 @@ function bindNavigationEvents() {
     document.getElementById("btn-approvals-query").addEventListener("click", showApprovalsQuery);
     document.getElementById("btn-project-scheduling")?.addEventListener("click", () => {
         if (typeof showProjectSchedulingView === 'function') showProjectSchedulingView();
+    });
+    document.getElementById("btn-kanban")?.addEventListener("click", () => {
+        if (typeof showKanbanView === 'function') showKanbanView();
     });
     document.getElementById("btn-programacao-montagem")?.addEventListener("click", () => {
         if (typeof showProgramacaoMontagemView === 'function') showProgramacaoMontagemView();

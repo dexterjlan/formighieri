@@ -147,6 +147,10 @@ function canAccessMontagemProgramacao(user = currentUser) {
     return isAdmin(user) || isGestorProjetos(user);
 }
 
+function canViewKanban(user = currentUser) {
+    return Boolean(user) && !isThirdParty(user);
+}
+
 function canViewProjectScheduling(user = currentUser) {
     return Boolean(user) && !isThirdParty(user);
 }
