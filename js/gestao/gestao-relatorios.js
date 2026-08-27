@@ -26,8 +26,9 @@ const GESTAO_PIE_PALETTE = [
     '#84cc16', '#0ea5e9', '#7c3aed'
 ];
 
-function getGestaoRelatorioProjectLabel(project) {
-    const code = project.projectCode ? `${project.projectCode} · ` : '';
+function getGestaoRelatorioProjectLabel(project, options = {}) {
+    const includeCode = options.includeProjectCode !== false;
+    const code = includeCode && project.projectCode ? `${project.projectCode} · ` : '';
     const env = project.environmentType?.name ? ` (${project.environmentType.name})` : '';
     return `${code}${project.name || '—'}${env}`;
 }
@@ -575,7 +576,7 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
 
     return `
         <tr class="${rowClass}">
-            <td class="${cellPadding} text-xs ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(`${labelPrefix}${getGestaoRelatorioProjectLabel(project)}`)}</td>
+            <td class="${cellPadding} text-xs ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(`${labelPrefix}${getGestaoRelatorioProjectLabel(project, options)}`)}</td>
             <td class="p-2">
                 ${parentOnly ? '<span class="text-[10px] text-slate-400">—</span>' : `
                 <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
@@ -587,20 +588,20 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
     `;
 }
 
-function renderGestaoRelatorioPedidosPendentesProjectTreeRows(projectTree) {
+function renderGestaoRelatorioPedidosPendentesProjectTreeRows(projectTree, options = {}) {
     return (projectTree || []).map(({ project, children, parentPending }) => {
         const parentRow = parentPending
-            ? renderGestaoRelatorioPedidosPendentesProjectRow(project)
-            : renderGestaoRelatorioPedidosPendentesProjectRow(project, { parentOnly: true });
+            ? renderGestaoRelatorioPedidosPendentesProjectRow(project, options)
+            : renderGestaoRelatorioPedidosPendentesProjectRow(project, { ...options, parentOnly: true });
         const childRows = (children || [])
-            .map(child => renderGestaoRelatorioPedidosPendentesProjectRow(child, { nested: true }))
+            .map(child => renderGestaoRelatorioPedidosPendentesProjectRow(child, { ...options, nested: true }))
             .join('');
 
         return `${parentRow}${childRows}`;
     }).join('');
 }
 
-function renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup) {
+function renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup, options = {}) {
     const orderCode = orderGroup.order?.orderCode || '—';
     const deliveryDate = typeof formatGestaoDate === 'function'
         ? formatGestaoDate(orderGroup.clientDeliveryDate)
@@ -609,7 +610,7 @@ function renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup) {
         ? formatSaleValue(orderGroup.totalSaleValue)
         : orderGroup.totalSaleValue;
     const projectCount = orderGroup.projectCount ?? (orderGroup.projects || []).length;
-    const projectRows = renderGestaoRelatorioPedidosPendentesProjectTreeRows(orderGroup.projectTree);
+    const projectRows = renderGestaoRelatorioPedidosPendentesProjectTreeRows(orderGroup.projectTree, options);
 
     return `
         <tbody class="border-b border-slate-100 last:border-0">
@@ -638,7 +639,7 @@ function getGestaoRelatorioPedidosPendentesClientDeliveryDatesLabel(clientGroup)
         .join(' · ');
 }
 
-function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup) {
+function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup, options = {}) {
     const totalLabel = typeof formatSaleValue === 'function'
         ? formatSaleValue(clientGroup.totalSaleValue)
         : clientGroup.totalSaleValue;
@@ -668,7 +669,7 @@ function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup) {
                                 <th class="text-right p-2.5 font-semibold">Valor pedido</th>
                             </tr>
                         </thead>
-                        ${clientGroup.orders.map(renderGestaoRelatorioPedidosPendentesOrderRow).join('')}
+                        ${clientGroup.orders.map(orderGroup => renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup, options)).join('')}
                     </table>
                 </div>
             </div>
@@ -860,7 +861,7 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, option
         });
 }
 
-function renderGestaoRelatorioFechamentoProducaoProjectRow(project) {
+function renderGestaoRelatorioFechamentoProducaoProjectRow(project, options = {}) {
     const orderCode = project.order?.orderCode || '—';
     const fimMontagem = typeof formatGestaoDate === 'function'
         ? formatGestaoDate(project.internalAssemblyEndDate)
@@ -872,14 +873,14 @@ function renderGestaoRelatorioFechamentoProducaoProjectRow(project) {
     return `
         <tr class="border-b border-slate-100 last:border-0">
             <td class="p-2.5 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-            <td class="p-2.5 text-xs font-medium text-slate-800">${escapeHtml(getGestaoRelatorioProjectLabel(project))}</td>
+            <td class="p-2.5 text-xs font-medium text-slate-800">${escapeHtml(getGestaoRelatorioProjectLabel(project, options))}</td>
             <td class="p-2.5 text-xs text-slate-500 whitespace-nowrap">${escapeHtml(fimMontagem)}</td>
             <td class="p-2.5 text-xs text-slate-700 whitespace-nowrap text-right font-medium">${escapeHtml(saleValue)}</td>
         </tr>
     `;
 }
 
-function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup) {
+function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options = {}) {
     const totalLabel = typeof formatSaleValue === 'function'
         ? formatSaleValue(clientGroup.totalSaleValue)
         : clientGroup.totalSaleValue;
@@ -906,7 +907,7 @@ function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup) {
                                 <th class="text-right p-2.5 font-semibold">Valor</th>
                             </tr>
                         </thead>
-                        <tbody>${clientGroup.projects.map(renderGestaoRelatorioFechamentoProducaoProjectRow).join('')}</tbody>
+                        <tbody>${clientGroup.projects.map(project => renderGestaoRelatorioFechamentoProducaoProjectRow(project, options)).join('')}</tbody>
                     </table>
                 </div>
             </div>

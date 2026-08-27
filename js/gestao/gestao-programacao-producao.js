@@ -514,7 +514,7 @@ function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel)
     const pendingBody = (monthGroup.clients || []).length
         ? (monthGroup.clients || []).map(clientGroup =>
             typeof renderGestaoRelatorioPedidosPendentesClientGroup === 'function'
-                ? renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup)
+                ? renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup, { includeProjectCode: false })
                 : ''
         ).join('')
         : '';
@@ -525,7 +525,7 @@ function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel)
                 <p class="text-[10px] font-semibold uppercase text-emerald-700 px-1">Já produzidos</p>
                 ${fechamento.clients.map(clientGroup =>
                     typeof renderGestaoRelatorioFechamentoProducaoClientGroup === 'function'
-                        ? renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup)
+                        ? renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, { includeProjectCode: false })
                         : ''
                 ).join('')}
             </div>
