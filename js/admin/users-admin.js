@@ -300,7 +300,12 @@ function renderUsersAdminCards(users) {
                 </div>
                 <div class="mt-2 pt-2 border-t border-slate-200/70">
                     ${typeof renderUserCalendarColorPickerHtml === 'function'
-                        ? renderUserCalendarColorPickerHtml(u, { disabled: !isActive })
+                        ? renderUserCalendarColorPickerHtml(u, {
+                            disabled: !isActive,
+                            takenHexes: typeof getTakenCalendarColorHexes === 'function'
+                                ? getTakenCalendarColorHexes(usersAdminCache, u.id)
+                                : undefined
+                        })
                         : ''}
                 </div>
             </div>
@@ -420,9 +425,11 @@ async function saveUserRole(userId) {
     const detalhamentoCheck = document.getElementById(`detalhamento-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const terceiroCheck = document.getElementById(`terceiro-check-${userId}`);
-    const calendarColor = normalizeGoogleCalendarColorHex(
-        document.getElementById(`calendar-color-${userId}`)?.value
-    ) || resolveUserCalendarPaletteColor({ id: userId }).hex;
+    const calendarColor = (typeof normalizeGoogleCalendarColorHex === 'function'
+        ? normalizeGoogleCalendarColorHex(getCalendarColorInput(userId)?.value)
+        : '') || (typeof resolveUserCalendarPaletteColor === 'function'
+            ? resolveUserCalendarPaletteColor({ id: userId }).hex
+            : '');
     const name = nameInput?.value.trim() || '';
     const role = select?.value;
     const isConferenceReviewer = role === 'Projetista' && Boolean(conferenteCheck?.checked);
@@ -443,6 +450,14 @@ async function saveUserRole(userId) {
     if (!role) {
         alertAppDialog("Selecione Admin, Projetista, Consultor, Marceneiro ou Compras.");
         return;
+    }
+
+    if (calendarColor && typeof getTakenCalendarColorHexes === 'function') {
+        const taken = getTakenCalendarColorHexes(usersAdminCache, userId);
+        if (taken.has(calendarColor)) {
+            alertAppDialog(`Essa cor já está em uso por ${taken.get(calendarColor)}. Escolha outra.`);
+            return;
+        }
     }
 
     const { data: previousUser } = await supabaseClient
@@ -531,14 +546,31 @@ async function toggleUserActive(userId, currentlyActive) {
         return;
     }
 
-    const { error } = await supabaseClient
+    const nextActive = !currentlyActive;
+    const payload = { isActive: nextActive };
+    if (!nextActive && typeof INACTIVE_USER_CALENDAR_COLOR !== 'undefined') {
+        payload.calendarColor = INACTIVE_USER_CALENDAR_COLOR.hex;
+    }
+
+    let { error } = await supabaseClient
         .from('appUsers')
-        .update({ isActive: !currentlyActive })
+        .update(payload)
         .eq('id', userId);
+
+    if (error?.message?.includes('calendarColor')) {
+        ({ error } = await supabaseClient
+            .from('appUsers')
+            .update({ isActive: nextActive })
+            .eq('id', userId));
+    }
 
     if (error) {
         alertAppDialog("Erro ao atualizar status: " + error.message);
         return;
+    }
+
+    if (typeof invalidateCalendarUsersCache === 'function') {
+        invalidateCalendarUsersCache();
     }
 
     loadUsersAdminList();

@@ -30,6 +30,17 @@ const GOOGLE_CALENDAR_PALETTE = [
     { id: 'birch', label: 'Cinza', hex: '#a79b8e', googleEventColor: '8' }
 ];
 
+const INACTIVE_USER_CALENDAR_COLOR = {
+    id: 'inactive',
+    label: 'Branco',
+    hex: '#ffffff',
+    googleEventColor: '8'
+};
+
+function isInactiveCalendarColorHex(hex) {
+    return normalizeGoogleCalendarColorHex(hex) === INACTIVE_USER_CALENDAR_COLOR.hex;
+}
+
 function normalizeGoogleCalendarColorHex(value) {
     const hex = String(value || '').trim().toLowerCase();
     if (!/^#[0-9a-f]{6}$/.test(hex)) return '';
@@ -69,14 +80,40 @@ function getCalendarColorContrast(hex) {
     };
     const luminance = 0.2126 * toLinear(rgb.r) + 0.7152 * toLinear(rgb.g) + 0.0722 * toLinear(rgb.b);
     const fg = luminance > 0.4 ? '#1f1f1f' : '#ffffff';
-    const border = `rgb(${Math.round(rgb.r * 0.78)}, ${Math.round(rgb.g * 0.78)}, ${Math.round(rgb.b * 0.78)})`;
+    const border = luminance > 0.85
+        ? 'rgb(203 213 225)'
+        : `rgb(${Math.round(rgb.r * 0.78)}, ${Math.round(rgb.g * 0.78)}, ${Math.round(rgb.b * 0.78)})`;
     return { fg, border };
 }
 
 function resolveUserCalendarPaletteColor(user) {
+    if (user?.isActive === false) {
+        return INACTIVE_USER_CALENDAR_COLOR;
+    }
+
     const assigned = getGoogleCalendarPaletteColor(user?.calendarColor);
     if (assigned) return assigned;
+
+    if (isInactiveCalendarColorHex(user?.calendarColor)) {
+        return INACTIVE_USER_CALENDAR_COLOR;
+    }
+
     return getGoogleCalendarPaletteColorByUserId(user?.id);
+}
+
+function getTakenCalendarColorHexes(users, exceptUserId) {
+    const taken = new Map();
+    (users || []).forEach(user => {
+        if (Number(user.id) === Number(exceptUserId)) return;
+        if (user.isActive === false) return;
+
+        const color = resolveUserCalendarPaletteColor(user);
+        if (!color?.hex || color.id === 'inactive' || isInactiveCalendarColorHex(color.hex)) return;
+        if (!taken.has(color.hex)) {
+            taken.set(color.hex, user.name || 'Outro usuário');
+        }
+    });
+    return taken;
 }
 
 function getCalendarResponsiblePaletteColor(event) {
@@ -104,34 +141,48 @@ function getGoogleCalendarEventColorId(event) {
 function renderUserCalendarColorPickerHtml(user, options = {}) {
     const disabled = Boolean(options.disabled);
     const selectedHex = resolveUserCalendarPaletteColor(user).hex;
+    const takenHexes = options.takenHexes instanceof Map ? options.takenHexes : new Map();
 
     const swatches = GOOGLE_CALENDAR_PALETTE.map(color => {
-        const selected = color.hex === selectedHex ? ' is-selected' : '';
+        const isSelected = color.hex === selectedHex;
+        const takenName = !isSelected && takenHexes.get(color.hex);
+        const isTaken = Boolean(takenName);
+        const selected = isSelected ? ' is-selected' : '';
+        const takenClass = isTaken ? ' is-taken' : '';
+        const title = isTaken
+            ? `${color.label} (em uso por ${takenName})`
+            : color.label;
         return `<button type="button"
-            class="user-calendar-color-swatch${selected}"
+            class="user-calendar-color-swatch${selected}${takenClass}"
             data-calendar-color="${color.hex}"
-            title="${escapeHtml(color.label)}"
-            aria-label="${escapeHtml(color.label)}"
-            aria-pressed="${color.hex === selectedHex ? 'true' : 'false'}"
+            title="${escapeHtml(title)}"
+            aria-label="${escapeHtml(title)}"
+            aria-pressed="${isSelected ? 'true' : 'false'}"
             style="background:${color.hex}"
-            ${disabled ? 'disabled' : ''}></button>`;
+            ${disabled || isTaken ? 'disabled' : ''}></button>`;
     }).join('');
+
+    const caption = options.caption || 'Cor do calendário';
 
     return `
         <div class="user-calendar-color-field" data-user-id="${user.id}">
-            <p class="text-[9px] font-semibold uppercase text-slate-400 mb-1">Cor do calendário</p>
-            <div class="user-calendar-color-picker" role="radiogroup" aria-label="Cor do calendário">
+            <p class="text-[9px] font-semibold uppercase text-slate-400 mb-1">${escapeHtml(caption)}</p>
+            <div class="user-calendar-color-picker" role="radiogroup" aria-label="${escapeHtml(caption)}">
                 ${swatches}
             </div>
-            <input type="hidden" id="calendar-color-${user.id}" value="${escapeHtml(selectedHex)}">
+            <input type="hidden" data-calendar-color-input="${user.id}" value="${escapeHtml(selectedHex)}">
         </div>
     `;
 }
 
-function bindUserCalendarColorPicker(userId) {
-    const field = document.querySelector(`.user-calendar-color-field[data-user-id="${userId}"]`);
+function getCalendarColorInput(userId, root = document) {
+    return root.querySelector(`[data-calendar-color-input="${userId}"]`);
+}
+
+function bindUserCalendarColorPicker(userId, root = document) {
+    const field = root.querySelector(`.user-calendar-color-field[data-user-id="${userId}"]`);
     const picker = field?.querySelector('.user-calendar-color-picker');
-    const hidden = document.getElementById(`calendar-color-${userId}`);
+    const hidden = field?.querySelector(`[data-calendar-color-input="${userId}"]`);
     if (!picker || !hidden || picker.dataset.bound === '1') return;
 
     picker.dataset.bound = '1';

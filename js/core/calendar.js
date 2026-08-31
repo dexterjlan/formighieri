@@ -254,14 +254,12 @@ async function loadCalendarUsers() {
     let result = await supabaseClient
         .from('appUsers')
         .select('id, name, role, isActive, calendarColor')
-        .eq('isActive', true)
         .order('name', { ascending: true });
 
     if (result.error?.message?.includes('calendarColor')) {
         result = await supabaseClient
             .from('appUsers')
             .select('id, name, role, isActive')
-            .eq('isActive', true)
             .order('name', { ascending: true });
     }
 
@@ -278,6 +276,10 @@ async function loadCalendarUsers() {
 
 function invalidateCalendarUsersCache() {
     calendarUsersCache = [];
+}
+
+function getActiveCalendarUsers() {
+    return calendarUsersCache.filter(user => user.isActive !== false);
 }
 
 async function loadCalendarEventsForVisibleRange(viewMode = calendarViewMode, anchor = calendarViewAnchor) {
@@ -536,14 +538,15 @@ function populateCalendarFilterSelects() {
 
     if (!responsibleSelect) return;
 
-    if (!calendarUsersCache.length) {
+    const activeUsers = getActiveCalendarUsers();
+    if (!activeUsers.length) {
         responsibleSelect.innerHTML = '<option value="">Todos os responsáveis</option>';
         return;
     }
 
     responsibleSelect.innerHTML = [
         '<option value="">Todos os responsáveis</option>',
-        ...calendarUsersCache.map(user => `
+        ...activeUsers.map(user => `
             <option value="${user.id}" ${String(user.id) === String(calendarFilterResponsibleId) ? 'selected' : ''}>
                 ${escapeHtml(user.name)} (${escapeHtml(user.role || '—')})
             </option>
@@ -562,14 +565,15 @@ function populateCalendarResponsibleSelect(selectedId = '') {
     const select = document.getElementById('cal-event-responsible');
     if (!select) return;
 
-    if (!calendarUsersCache.length) {
+    const activeUsers = getActiveCalendarUsers();
+    if (!activeUsers.length) {
         select.innerHTML = '<option value="">Nenhum usuário ativo</option>';
         return;
     }
 
     select.innerHTML = [
         '<option value="">Selecione...</option>',
-        ...calendarUsersCache.map(user => `
+        ...activeUsers.map(user => `
             <option value="${user.id}" ${String(user.id) === String(selectedId) ? 'selected' : ''}>
                 ${escapeHtml(user.name)} (${escapeHtml(user.role || '—')})
             </option>
@@ -622,7 +626,7 @@ async function openCalendarEventModal(event = null, presetDate = calendarSelecte
 
     let responsibleId = event?.responsibleId || event?.responsible?.id || '';
     if (!event && currentUser?.id) {
-        const currentUserInList = calendarUsersCache.some(user => String(user.id) === String(currentUser.id));
+        const currentUserInList = getActiveCalendarUsers().some(user => String(user.id) === String(currentUser.id));
         if (currentUserInList) {
             responsibleId = currentUser.id;
         }
@@ -1039,6 +1043,113 @@ async function exportCalendarToIcs() {
     );
 }
 
+function sortCalendarColorUsers(users) {
+    const currentId = Number(currentUser?.id);
+    return [...users].sort((a, b) => {
+        const aSelf = Number(a.id) === currentId;
+        const bSelf = Number(b.id) === currentId;
+        if (aSelf !== bSelf) return aSelf ? -1 : 1;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+    });
+}
+
+function renderCalendarColorsModalList() {
+    const listEl = document.getElementById('calendar-colors-list');
+    if (!listEl) return;
+
+    const users = sortCalendarColorUsers(getActiveCalendarUsers());
+    if (!users.length) {
+        listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Nenhum usuário ativo.</p>';
+        return;
+    }
+
+    const takenHexes = getTakenCalendarColorHexes(users, currentUser?.id);
+
+    listEl.innerHTML = users.map(user => {
+        const color = resolveUserCalendarPaletteColor(user);
+        const isSelf = Number(user.id) === Number(currentUser?.id);
+        const pickerHtml = isSelf
+            ? renderUserCalendarColorPickerHtml(user, { takenHexes, caption: 'Escolher outra cor' })
+            : '';
+
+        return `
+            <article class="calendar-colors-user ${isSelf ? 'is-self' : ''}">
+                <span class="calendar-colors-user__swatch" style="background:${color.hex}" title="${escapeHtml(color.label)}"></span>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-slate-900">
+                        ${escapeHtml(user.name || '—')}
+                        ${isSelf ? '<span class="text-amber-700 font-medium">(você)</span>' : ''}
+                    </p>
+                    <p class="text-[11px] text-slate-500">${escapeHtml(color.label)}</p>
+                    ${pickerHtml}
+                </div>
+            </article>
+        `;
+    }).join('');
+
+    if (currentUser?.id) {
+        bindUserCalendarColorPicker(currentUser.id, listEl);
+    }
+}
+
+async function openCalendarColorsModal() {
+    if (!canAccessCalendar()) return;
+
+    const listEl = document.getElementById('calendar-colors-list');
+    if (listEl) {
+        listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-6">Carregando...</p>';
+    }
+
+    toggleModal('calendar-colors-modal', true);
+    invalidateCalendarUsersCache();
+    await loadCalendarUsers();
+    renderCalendarColorsModalList();
+}
+
+async function saveCurrentUserCalendarColor() {
+    if (!currentUser?.id) return;
+
+    const hex = normalizeGoogleCalendarColorHex(
+        getCalendarColorInput(currentUser.id, document.getElementById('calendar-colors-modal'))?.value
+    );
+    if (!getGoogleCalendarPaletteColor(hex)) {
+        alertAppDialog('Selecione uma cor da paleta.');
+        return;
+    }
+
+    invalidateCalendarUsersCache();
+    const users = await loadCalendarUsers();
+    const taken = getTakenCalendarColorHexes(users, currentUser.id);
+    if (taken.has(hex)) {
+        alertAppDialog(`Essa cor já está em uso por ${taken.get(hex)}. Escolha outra.`);
+        renderCalendarColorsModalList();
+        return;
+    }
+
+    const saveBtn = document.getElementById('btn-calendar-colors-save');
+    if (saveBtn) saveBtn.disabled = true;
+
+    try {
+        const { error } = await supabaseClient
+            .from('appUsers')
+            .update({ calendarColor: hex })
+            .eq('id', currentUser.id);
+
+        if (error) {
+            alertAppDialog(`Erro ao salvar cor: ${error.message}`);
+            return;
+        }
+
+        currentUser.calendarColor = hex;
+        invalidateCalendarUsersCache();
+        await refreshCalendarView();
+        toggleModal('calendar-colors-modal', false);
+        alertAppDialog('Cor atualizada com sucesso.', { variant: 'success', title: 'Sucesso' });
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
 function showCalendar() {
     if (!canAccessCalendar()) return;
 
@@ -1100,6 +1211,8 @@ function bindCalendarEvents() {
     document.getElementById('btn-calendar-prev')?.addEventListener('click', () => shiftCalendarPeriod(-1));
     document.getElementById('btn-calendar-next')?.addEventListener('click', () => shiftCalendarPeriod(1));
     document.getElementById('btn-calendar-today')?.addEventListener('click', goToCalendarToday);
+    document.getElementById('btn-calendar-colors')?.addEventListener('click', openCalendarColorsModal);
+    document.getElementById('btn-calendar-colors-save')?.addEventListener('click', saveCurrentUserCalendarColor);
     document.getElementById('btn-calendar-new')?.addEventListener('click', () => openCalendarEventModal());
     document.getElementById('btn-calendar-export-ics')?.addEventListener('click', exportCalendarToIcs);
     document.getElementById('btn-calendar-sync-google')?.addEventListener('click', () => {
