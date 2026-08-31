@@ -298,6 +298,11 @@ function renderUsersAdminCards(users) {
                         </button>
                     </div>
                 </div>
+                <div class="mt-2 pt-2 border-t border-slate-200/70">
+                    ${typeof renderUserCalendarColorPickerHtml === 'function'
+                        ? renderUserCalendarColorPickerHtml(u, { disabled: !isActive })
+                        : ''}
+                </div>
             </div>
         `;
 
@@ -312,6 +317,9 @@ function renderUsersAdminCards(users) {
         };
 
         renderUserFlagsGrid(flagsGrid, u, isActive, initialRole);
+        if (typeof bindUserCalendarColorPicker === 'function') {
+            bindUserCalendarColorPicker(u.id);
+        }
 
         if (roleSelect && !roleSelect.disabled) {
             roleSelect.addEventListener('change', async () => {
@@ -334,8 +342,15 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty, calendarColor')
         .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('calendarColor')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty')
+            .order('name', { ascending: true });
+    }
 
     if (result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isThirdParty')) {
         result = await supabaseClient
@@ -405,6 +420,9 @@ async function saveUserRole(userId) {
     const detalhamentoCheck = document.getElementById(`detalhamento-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const terceiroCheck = document.getElementById(`terceiro-check-${userId}`);
+    const calendarColor = normalizeGoogleCalendarColorHex(
+        document.getElementById(`calendar-color-${userId}`)?.value
+    ) || resolveUserCalendarPaletteColor({ id: userId }).hex;
     const name = nameInput?.value.trim() || '';
     const role = select?.value;
     const isConferenceReviewer = role === 'Projetista' && Boolean(conferenteCheck?.checked);
@@ -433,11 +451,19 @@ async function saveUserRole(userId) {
         .eq('id', userId)
         .maybeSingle();
 
-    let payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty };
+    let payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty, calendarColor };
     let { error } = await supabaseClient
         .from('appUsers')
         .update(payload)
         .eq('id', userId);
+
+    if (error?.message?.includes('calendarColor')) {
+        payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty };
+        ({ error } = await supabaseClient
+            .from('appUsers')
+            .update(payload)
+            .eq('id', userId));
+    }
 
     if (error?.message?.includes('isFactoryManager') || error?.message?.includes('isPpcp') || error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader') || error?.message?.includes('isDetailing') || error?.message?.includes('isThirdParty')) {
         payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager };
@@ -478,10 +504,15 @@ async function saveUserRole(userId) {
             isReviewer,
             isFactoryManager,
             isDetailing,
-            isThirdParty
+            isThirdParty,
+            calendarColor
         };
         currentUser = normalizeAppUserProfile(currentUser);
         refreshLoggedInUserDisplay();
+    }
+
+    if (typeof invalidateCalendarUsersCache === 'function') {
+        invalidateCalendarUsersCache();
     }
 
     alertAppDialog('Usuário atualizado com sucesso.', { variant: 'success', title: 'Sucesso' });

@@ -220,7 +220,7 @@ async function loadConvOrderProjects(selectedId) {
 
     convOrderProjectsCache = filteredProjects;
 
-    select.innerHTML = '<option value="">Nenhum</option>';
+    select.innerHTML = '<option value="">Selecione...</option>';
 
     if (!filteredProjects.length) {
         const emptyLabel = projects.length
@@ -431,7 +431,11 @@ function setupConvModalFieldLocks(conv) {
     const lockRequestField = respondOnly || isRequestFromConference(conv);
     const lockDetailingFields = !isEdit && isConvModalDetailingContext();
 
-    setConvFieldDisabled(document.getElementById('conv-order-project'), isEdit || lockDetailingFields);
+    const hasProject = Boolean(conv?.orderProjectId);
+    setConvFieldDisabled(
+        document.getElementById('conv-order-project'),
+        (isEdit && hasProject) || lockDetailingFields
+    );
 
     if (isEdit || currentUser?.role === 'Projetista' || lockDetailingFields) {
         setConvFieldDisabled(document.getElementById('conv-designer'), true);
@@ -514,7 +518,7 @@ async function viewConversationDetails(id) {
         'conv-request'
     ].forEach(fieldId => setConvFieldDisabled(document.getElementById(fieldId), true));
 
-    document.querySelectorAll('#conv-modal textarea, #conv-modal input:not([type="hidden"]), #conv-modal select, #conv-modal button[data-request-activity], #conv-modal [data-add-request-attachment], #conv-modal [data-remove-request-attachment]').forEach(element => {
+    document.querySelectorAll('#conv-modal textarea, #conv-modal input:not([type="hidden"]), #conv-modal select, #conv-modal button[data-request-activity], #conv-modal [data-add-request-attachment], #conv-modal [data-remove-request-attachment], #conv-modal [data-add-request-activity-image], #conv-modal [data-remove-request-draft-attachment], #conv-modal [data-remove-request-existing-attachment], #conv-modal [data-remove-existing-attachment]').forEach(element => {
         if (element.id === 'conv-form-submit') return;
         setConvFieldDisabled(element, true);
         element.disabled = true;
@@ -680,6 +684,13 @@ async function loadConversations(orderId) {
             fetchRequestActivitiesByRequestIds(requestIds),
             fetchOrderRequestAttachmentsByRequestIds(requestIds)
         ]);
+        const activityIds = Object.values(activitiesByRequest)
+            .flat()
+            .map(activity => Number(activity.id))
+            .filter(Boolean);
+        const driveByActivity = typeof fetchRequestActivityDriveFilesByActivityIds === 'function'
+            ? await fetchRequestActivityDriveFilesByActivityIds(activityIds)
+            : {};
 
         list.innerHTML = "";
 
@@ -725,9 +736,17 @@ async function loadConversations(orderId) {
                 </div>
             `;
 
+            const requestAttachments = attachmentsByRequest[c.id] || [];
+            const { legacy, byActivity: storageByActivity } = typeof partitionOrderRequestAttachments === 'function'
+                ? partitionOrderRequestAttachments(requestAttachments)
+                : { legacy: requestAttachments, byActivity: {} };
+            const byActivity = typeof mergeRequestActivityAttachmentMaps === 'function'
+                ? mergeRequestActivityAttachmentMaps(storageByActivity, driveByActivity)
+                : storageByActivity;
+
             const body = div.querySelector('.collapsible-list-body');
-            appendRequestActivitiesToCard(body, c, activitiesByRequest[c.id] || []);
-            appendOrderRequestAttachmentsToCard(body, c.id, attachmentsByRequest[c.id] || []);
+            appendRequestActivitiesToCard(body, c, activitiesByRequest[c.id] || [], byActivity);
+            appendOrderRequestAttachmentsToCard(body, c.id, legacy);
             body.insertAdjacentHTML('beforeend', buildRequestResponseSection(c, activitiesByRequest[c.id] || []));
             list.appendChild(div);
         });
@@ -1042,11 +1061,15 @@ function bindConversationEvents() {
         const respondOnly = existing && isConvRespondOnlyMode(existing);
         const lockDesignerRequest = Boolean(existing && (respondOnly || isRequestFromConference(existing)));
 
-        if (isConvModalDetailingContext() && !editingConversationId) {
-            if (!orderProjectId || !designerId) {
-                alertAppDialog('A requisição de detalhamento precisa do projetista e do projeto.');
-                return;
-            }
+        if (!orderProjectId) {
+            alertAppDialog('Selecione o projeto da requisição.');
+            document.getElementById('conv-order-project')?.focus();
+            return;
+        }
+
+        if (isConvModalDetailingContext() && !editingConversationId && !designerId) {
+            alertAppDialog('A requisição de detalhamento precisa do projetista e do projeto.');
+            return;
         }
 
         if (!lockDesignerRequest && !designerRequest) {
@@ -1058,7 +1081,7 @@ function bindConversationEvents() {
 
         try {
             const canProceed = await validateConsultorRequestAgainstOpenApproval(
-                respondOnly ? (existing?.orderProjectId ?? null) : orderProjectId,
+                respondOnly ? (existing?.orderProjectId || orderProjectId) : orderProjectId,
                 existing
             );
             if (!canProceed) return;
@@ -1070,7 +1093,7 @@ function bindConversationEvents() {
                     const updatePayload = {
                         designerId: existing.designerId,
                         designerRequest: existing.designerRequest,
-                        orderProjectId: existing.orderProjectId ?? null,
+                        orderProjectId: existing.orderProjectId || orderProjectId,
                         updatedAt: new Date().toISOString(),
                         updatedById: currentUser.id
                     };
@@ -1094,7 +1117,12 @@ function bindConversationEvents() {
                     }
 
                     if (canPersistRequestActivities(existing)) {
-                        await persistRequestActivities(editingConversationId, requestActivities);
+                        await persistRequestActivitiesWithAttachments(
+                            editingConversationId,
+                            requestActivities,
+                            existing.orderId || activeOrderId,
+                            existing.orderProjectId
+                        );
                     }
 
                     const responseText = getConvModalDraftResponseText(existing);
@@ -1118,7 +1146,7 @@ function bindConversationEvents() {
                 const updatePayload = {
                     designerId: existing.designerId,
                     designerRequest: lockDesignerRequest ? existing.designerRequest : designerRequest,
-                    orderProjectId: existing.orderProjectId ?? null,
+                    orderProjectId: existing.orderProjectId || orderProjectId,
                     updatedAt: new Date().toISOString(),
                     updatedById: currentUser.id
                 };
@@ -1171,14 +1199,12 @@ function bindConversationEvents() {
                 }
 
                 if (canPersistRequestActivities(existing)) {
-                    await persistRequestActivities(editingConversationId, requestActivities);
-                }
-
-                if (!respondOnly) {
                     setConvFormLoading(true, 'Salvando imagens...');
-                    await persistOrderRequestAttachments(
+                    await persistRequestActivitiesWithAttachments(
                         editingConversationId,
-                        existing.orderId || activeOrderId
+                        requestActivities,
+                        existing.orderId || activeOrderId,
+                        existing.orderProjectId || orderProjectId
                     );
                 }
 
@@ -1237,15 +1263,6 @@ function bindConversationEvents() {
                         .single());
                 }
 
-                if (error?.message?.includes('orderProjectId')) {
-                    const { orderProjectId: _omit, ...payloadWithoutProject } = insertPayload;
-                    ({ data, error } = await supabaseClient
-                        .from('OrderRequest')
-                        .insert([payloadWithoutProject])
-                        .select('*')
-                        .single());
-                }
-
                 createdRequest = data;
 
                 if (error) {
@@ -1254,11 +1271,13 @@ function bindConversationEvents() {
                 }
 
                 if (createdRequest) {
-                    await persistRequestActivities(createdRequest.id, requestActivities);
-                    if (convAttachmentDraftFiles.length) {
-                        setConvFormLoading(true, 'Enviando imagens...');
-                        await persistOrderRequestAttachments(createdRequest.id, activeOrderId);
-                    }
+                    setConvFormLoading(true, 'Salvando imagens...');
+                    await persistRequestActivitiesWithAttachments(
+                        createdRequest.id,
+                        requestActivities,
+                        activeOrderId,
+                        orderProjectId
+                    );
                     setConvFormLoading(true, 'Enviando notificação por e-mail...');
                     await notifyOrderRequestEmail('created', {
                         ...createdRequest,

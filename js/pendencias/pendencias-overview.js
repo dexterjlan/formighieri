@@ -15,7 +15,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         requisicao: 'Requisições aguardando resposta do projetista.',
         nomear: 'Projetos aguardando nomeação pelo projetista responsável.',
         'aguardando-ppcp': 'Projetos aguardando implantação PPCP.',
-        implantacao: 'Implantações em aberto (não encerradas).',
+        implantacao: 'Implantações em aberto associadas ao PPCP.',
         detalhamento: 'Detalhamentos aguardando início ou em andamento.',
         'aguardando-medicao': 'Pedidos com projetos aguardando medição.',
         'aguardando-planta': 'Medições com projetos aguardando planta levantada.',

@@ -1,5 +1,5 @@
 /**
- * Web App FGP — e-mails + roteamento para Google Calendar.
+ * Web App FGP — e-mails + roteamento para Google Calendar e Google Drive.
  *
  * No projeto Apps Script "Notificacoes":
  * - Este arquivo costuma ser o "Código.gs" (arquivo principal).
@@ -14,13 +14,30 @@
  * - https://www.googleapis.com/auth/calendar
  * - https://www.googleapis.com/auth/gmail.send
  * - https://www.googleapis.com/auth/script.external_request
+ * - https://www.googleapis.com/auth/drive
  */
 
 var NOTIFICATION_FROM_EMAIL = 'formighieri.notificacoes@gmail.com';
 
+function parseWebAppPostBody_(e) {
+  var params = (e && e.parameter) || {};
+  if (params.payload) {
+    var parsed = JSON.parse(params.payload);
+    if (params.transport) parsed.transport = params.transport;
+    return parsed;
+  }
+  var contents = e && e.postData && e.postData.contents;
+  if (!contents) return {};
+  return JSON.parse(contents);
+}
+
 function doPost(e) {
   try {
-    var body = JSON.parse(e.postData.contents);
+    var body = parseWebAppPostBody_(e);
+
+    if (body.action && String(body.action).indexOf('drive_') === 0) {
+      return handleDrivePostRequest_(body);
+    }
 
     // Calendário FGP → Google (FormighieriGoogleCalendar.gs)
     if (body.action && String(body.action).indexOf('calendar_') === 0) {
@@ -30,6 +47,20 @@ function doPost(e) {
     // E-mail (fluxo original do FGP)
     return handleEmailRequest_(body);
   } catch (err) {
+    return jsonResponse_({ ok: false, error: String(err) }, 500);
+  }
+}
+
+function doGet(e) {
+  try {
+    if (e && e.parameter && String(e.parameter.action || '').indexOf('drive_') === 0) {
+      return handleDriveGetRequest_(e);
+    }
+    return jsonResponse_({ ok: true, service: 'fgp' });
+  } catch (err) {
+    if (e && e.parameter) {
+      return driveGetResponse_(e.parameter, { ok: false, error: String(err) });
+    }
     return jsonResponse_({ ok: false, error: String(err) }, 500);
   }
 }

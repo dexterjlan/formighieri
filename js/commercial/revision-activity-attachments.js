@@ -46,8 +46,11 @@ const REVISION_ACTIVITY_ATTACHMENT_CONTEXTS = {
     }
 };
 
-function findRevisionActivityRowByRowId(rowId) {
+function findRevisionActivityRowByRowId(rowId, listSelector = null) {
     const escaped = CSS.escape(String(rowId));
+    if (listSelector) {
+        return document.querySelector(`${listSelector} tr[data-row-id="${escaped}"]`);
+    }
     return document.querySelector(`#revision-activities-list tr[data-row-id="${escaped}"]`)
         || document.querySelector(`#tr-revision-activities-list tr[data-row-id="${escaped}"]`);
 }
@@ -105,6 +108,165 @@ function canEditRevisionActivityAttachments(approval = null, activity = null) {
         && canEditRevisionActivitiesConsultor(resolvedApproval);
 }
 
+function isRevisionDriveAttachment(item) {
+    return Boolean(item && (item.driveFileId || item.entityType === 'RevisionActivity'));
+}
+
+function revisionAttachmentRemovalKey(item) {
+    if (!item?.id) return '';
+    return `${isRevisionDriveAttachment(item) ? 'drive' : 'storage'}:${item.id}`;
+}
+
+function revisionAttachmentPreviewAttrs(item, storageAttr = 'data-revision-attachment-storage-path') {
+    if (isRevisionDriveAttachment(item)) {
+        if (typeof driveFilePreviewImgAttrs === 'function') {
+            return driveFilePreviewImgAttrs(item);
+        }
+        const previewUrl = typeof resolveDriveFilePreviewUrl === 'function'
+            ? resolveDriveFilePreviewUrl(item)
+            : (item.url || '');
+        const openUrl = typeof resolveDriveFileViewUrl === 'function'
+            ? (resolveDriveFileViewUrl(item) || previewUrl)
+            : previewUrl;
+        return `src="${escapeHtml(previewUrl)}" referrerpolicy="no-referrer" data-attachment-drive-url="${escapeHtml(openUrl)}"`;
+    }
+    return `${storageAttr}="${escapeHtml(item.storagePath || '')}"`;
+}
+
+async function resolveRevisionDriveFolderContext() {
+    let orderId = null;
+    let orderProjectId = null;
+    let orderCode = '';
+    let projectName = '';
+
+    const approval = typeof getCurrentApproval === 'function' ? getCurrentApproval() : null;
+    if (approval) {
+        orderProjectId = Number(approval.orderProjectId || approval.id) || null;
+        orderId = Number(approval.orderId || approval.order?.id || 0) || null;
+        projectName = typeof getCommercialApprovalProjectName === 'function'
+            ? getCommercialApprovalProjectName(approval)
+            : (approval.orderProject?.name || '');
+        orderCode = approval.order?.orderCode || '';
+    }
+
+    const reviewerProject = typeof getCurrentTechnicalReviewerProject === 'function'
+        ? getCurrentTechnicalReviewerProject()
+        : null;
+    if (reviewerProject) {
+        orderProjectId = orderProjectId || Number(reviewerProject.id) || null;
+        orderId = orderId || Number(reviewerProject.orderId || reviewerProject.order?.id || 0) || null;
+        projectName = projectName || reviewerProject.name || '';
+        orderCode = orderCode || reviewerProject.order?.orderCode || '';
+    }
+
+    const thirdPartyProject = typeof getCurrentThirdPartyRevisionProject === 'function'
+        ? getCurrentThirdPartyRevisionProject()
+        : null;
+    if (thirdPartyProject) {
+        orderId = orderId || Number(thirdPartyProject.orderId || thirdPartyProject.order?.id || 0) || null;
+        projectName = projectName || thirdPartyProject.name || '';
+        orderCode = orderCode || thirdPartyProject.order?.orderCode || '';
+    }
+
+    if (!orderCode && orderId && typeof ordersCache !== 'undefined') {
+        orderCode = ordersCache.find(order => Number(order.id) === Number(orderId))?.orderCode || '';
+    }
+    if (!orderCode && orderId) {
+        const { data, error } = await supabaseClient
+            .from('salesOrders')
+            .select('orderCode')
+            .eq('id', orderId)
+            .maybeSingle();
+        if (error) throw error;
+        orderCode = data?.orderCode || '';
+    }
+
+    if (!projectName && orderProjectId) {
+        if (typeof orderProjectsCache !== 'undefined') {
+            projectName = orderProjectsCache.find(project => Number(project.id) === Number(orderProjectId))?.name || '';
+        }
+        if (!projectName) {
+            const { data, error } = await supabaseClient
+                .from('OrderProject')
+                .select('name, orderId')
+                .eq('id', orderProjectId)
+                .maybeSingle();
+            if (error) throw error;
+            projectName = data?.name || '';
+            orderId = orderId || Number(data?.orderId || 0) || null;
+        }
+    }
+
+    if (!orderCode || !projectName) {
+        throw new Error('Não foi possível identificar o pedido e o projeto para o Drive.');
+    }
+
+    return {
+        folderKind: DRIVE_FILE_FOLDER_KIND.REVISION,
+        entityType: DRIVE_FILE_ENTITY_TYPE.REVISION_ACTIVITY,
+        orderId,
+        orderProjectId,
+        orderCode,
+        projectName,
+        folderPath: buildDriveFolderPath(orderCode, projectName, DRIVE_FILE_FOLDER_KIND.REVISION),
+        replaceByEntity: true
+    };
+}
+
+function updateRevisionImageUploadProgress(sent, total) {
+    if (!total) return;
+    const pct = Math.min(100, Math.round((sent / total) * 100));
+    const message = `Enviando imagem da atividade (${pct}%)...`;
+    const pairs = [
+        ['commercial-revision-loading', typeof setCommercialRevisionModalLoading === 'function' ? setCommercialRevisionModalLoading : null],
+        ['technical-reviewer-revision-loading', typeof setTechnicalReviewerRevisionModalLoading === 'function' ? setTechnicalReviewerRevisionModalLoading : null],
+        ['third-party-revision-loading', typeof setThirdPartyRevisionModalLoading === 'function' ? setThirdPartyRevisionModalLoading : null]
+    ];
+    pairs.forEach(([overlayId, setter]) => {
+        const overlay = document.getElementById(overlayId);
+        if (!overlay || overlay.classList.contains('hidden') || typeof setter !== 'function') return;
+        setter(true, message);
+    });
+}
+
+async function persistRevisionDriveUploads(drafts, existing, activityIdByRowId = {}) {
+    const hasDraft = Object.entries(activityIdByRowId).some(([rowId, rawActivityId]) => {
+        const activityId = Number(rawActivityId);
+        return Boolean(activityId && (drafts.get(String(rowId)) || drafts.get(String(activityId))));
+    });
+    if (!hasDraft) return;
+
+    const folderContext = await resolveRevisionDriveFolderContext();
+    const uploadedActivityIds = new Set();
+
+    for (const [rowId, rawActivityId] of Object.entries(activityIdByRowId)) {
+        const activityId = Number(rawActivityId);
+        if (!activityId || uploadedActivityIds.has(activityId)) continue;
+
+        const draft = drafts.get(String(rowId)) || drafts.get(String(activityId));
+        if (!draft) continue;
+
+        const safeName = sanitizeRevisionActivityAttachmentFileName(draft.file.name);
+        const record = await saveDriveFileUpload(
+            draft.file,
+            {
+                ...folderContext,
+                entityId: activityId,
+                fileName: `atividade-${activityId}-${safeName}`
+            },
+            updateRevisionImageUploadProgress
+        );
+
+        if (draft.previewUrl) {
+            URL.revokeObjectURL(draft.previewUrl);
+        }
+        drafts.delete(String(rowId));
+        drafts.delete(String(activityId));
+        existing.set(String(activityId), record);
+        uploadedActivityIds.add(activityId);
+    }
+}
+
 function resetRevisionActivityAttachments() {
     revisionActivityAttachmentDrafts.forEach(draft => {
         if (draft?.previewUrl) {
@@ -123,7 +285,7 @@ function resetRevisionActivityAttachments() {
 function getRevisionActivityImageForRow(rowId) {
     const key = String(rowId);
     const existingRaw = revisionActivityAttachmentExisting.get(key) || null;
-    const existing = existingRaw && !revisionActivityAttachmentRemovedIds.has(existingRaw.id)
+    const existing = existingRaw && !revisionActivityAttachmentRemovedIds.has(revisionAttachmentRemovalKey(existingRaw))
         ? existingRaw
         : null;
     const draft = revisionActivityAttachmentDrafts.get(key) || null;
@@ -176,12 +338,13 @@ function renderRevisionActivityAttachmentsHtml(rowId, approval = null, activity 
             <div class="revision-activity-attachment-item__preview-wrap">
                 <img alt="${escapeHtml(existing.fileName || 'Imagem')}"
                     class="revision-activity-attachment-item__preview"
-                    data-revision-attachment-storage-path="${escapeHtml(existing.storagePath)}">
+                    ${revisionAttachmentPreviewAttrs(existing)}>
             </div>
             ${canEdit ? `
                 <button type="button"
                     class="revision-activity-attachment-item__remove"
                     data-remove-revision-existing-attachment="${existing.id}"
+                    data-remove-revision-existing-source="${isRevisionDriveAttachment(existing) ? 'drive' : 'storage'}"
                     aria-label="Remover imagem">×</button>
             ` : ''}
         </div>
@@ -201,14 +364,16 @@ function renderRevisionActivityAttachmentsHtml(rowId, approval = null, activity 
     `;
 }
 
-function refreshRevisionActivityAttachmentsForRow(rowId) {
-    const tr = findRevisionActivityRowByRowId(rowId);
+function refreshRevisionActivityAttachmentsForRow(rowId, contextOrKey = null) {
+    const context = typeof contextOrKey === 'string'
+        ? (REVISION_ACTIVITY_ATTACHMENT_CONTEXTS[contextOrKey] || getRevisionActivityAttachmentContextForRow(rowId))
+        : (contextOrKey || getRevisionActivityAttachmentContextForRow(rowId));
+    const tr = findRevisionActivityRowByRowId(rowId, context?.listSelector);
     if (!tr) return;
 
     const container = tr.querySelector('.revision-activity-attachments');
     if (!container) return;
 
-    const context = getRevisionActivityAttachmentContextForRow(rowId);
     const approval = context.resolveApproval();
     const completed = Boolean(
         tr.querySelector('.revision-activity-completed')?.checked
@@ -221,7 +386,7 @@ function refreshRevisionActivityAttachmentsForRow(rowId) {
 function refreshAllRevisionActivityAttachments() {
     Object.values(REVISION_ACTIVITY_ATTACHMENT_CONTEXTS).forEach(context => {
         document.querySelectorAll(`${context.listSelector} tr[data-row-id]`).forEach(tr => {
-            refreshRevisionActivityAttachmentsForRow(tr.dataset.rowId);
+            refreshRevisionActivityAttachmentsForRow(tr.dataset.rowId, context);
         });
     });
 }
@@ -257,32 +422,6 @@ async function getRevisionActivityAttachmentSignedUrl(storagePath) {
 
     revisionActivityAttachmentUrlCache.set(storagePath, data.signedUrl);
     return data.signedUrl;
-}
-
-async function fetchRevisionActivityAttachmentsByActivityIds(activityIds = []) {
-    if (!activityIds.length) return {};
-
-    const { data, error } = await supabaseClient
-        .from('RevisionActivityAttachment')
-        .select('id, revisionActivityId, storagePath, fileName, mimeType, fileSizeBytes, sortOrder, createdAt')
-        .in('revisionActivityId', activityIds)
-        .order('sortOrder', { ascending: true })
-        .order('createdAt', { ascending: true });
-
-    if (error) {
-        console.error('fetchRevisionActivityAttachmentsByActivityIds:', error);
-        if (error.message?.includes('RevisionActivityAttachment')) return {};
-        return {};
-    }
-
-    const byActivity = {};
-    (data || []).forEach(item => {
-        const key = String(item.revisionActivityId);
-        if (!byActivity[key]) {
-            byActivity[key] = item;
-        }
-    });
-    return byActivity;
 }
 
 async function loadRevisionActivityAttachmentsForActivities(activities = []) {
@@ -333,11 +472,11 @@ function removeRevisionActivityAttachmentDraft(rowId) {
     refreshRevisionActivityAttachmentsForRow(rowId);
 }
 
-function markRevisionActivityAttachmentRemoved(attachmentId) {
+function markRevisionActivityAttachmentRemoved(attachmentId, source = 'storage') {
     const numericId = Number(attachmentId);
     if (!numericId) return;
 
-    revisionActivityAttachmentRemovedIds.add(numericId);
+    revisionActivityAttachmentRemovedIds.add(`${source === 'drive' ? 'drive' : 'storage'}:${numericId}`);
     refreshAllRevisionActivityAttachments();
 }
 
@@ -361,6 +500,13 @@ async function uploadRevisionActivityAttachmentFile(revisionId, activityId, file
 async function deleteRevisionActivityAttachmentRecord(attachment) {
     if (!attachment) return;
 
+    if (isRevisionDriveAttachment(attachment)) {
+        if (typeof deleteDriveFileRecord === 'function') {
+            await deleteDriveFileRecord(attachment);
+        }
+        return;
+    }
+
     const { error: storageError } = await supabaseClient.storage
         .from(REVISION_ACTIVITY_ATTACHMENTS_BUCKET)
         .remove([attachment.storagePath]);
@@ -381,66 +527,23 @@ async function deleteRevisionActivityAttachmentRecord(attachment) {
     revisionActivityAttachmentUrlCache.delete(attachment.storagePath);
 }
 
-async function insertRevisionActivityAttachmentRecord(activityId, file, storagePath, sortOrder) {
-    const payload = {
-        revisionActivityId: activityId,
-        storagePath,
-        fileName: file.name,
-        mimeType: file.type || 'image/jpeg',
-        fileSizeBytes: file.size,
-        sortOrder,
-        createdById: currentUser?.id || null
-    };
-
-    const { data, error } = await supabaseClient
-        .from('RevisionActivityAttachment')
-        .insert(payload)
-        .select('id, revisionActivityId, storagePath, fileName, mimeType, fileSizeBytes, sortOrder, createdAt')
-        .single();
-
-    if (error) {
-        throw error;
-    }
-
-    return data;
-}
-
-async function uploadRevisionActivityDraftForRow(rowId, revisionId, activityId) {
-    const key = String(rowId);
-    const draft = revisionActivityAttachmentDrafts.get(key);
-    if (!draft) return;
-
-    const storagePath = await uploadRevisionActivityAttachmentFile(revisionId, activityId, draft.file);
-    const record = await insertRevisionActivityAttachmentRecord(
-        activityId,
-        draft.file,
-        storagePath,
-        1
-    );
-
-    if (draft.previewUrl) {
-        URL.revokeObjectURL(draft.previewUrl);
-    }
-
-    revisionActivityAttachmentDrafts.delete(key);
-    revisionActivityAttachmentExisting.set(String(activityId), record);
-}
-
 async function persistRevisionActivityAttachments(revisionId, activityIdByRowId = {}) {
     if (!revisionId) return { ok: true };
 
     try {
-        const deletedIds = new Set(revisionActivityAttachmentRemovedIds);
+        const deletedKeys = new Set(revisionActivityAttachmentRemovedIds);
         for (const [activityId, attachment] of revisionActivityAttachmentExisting.entries()) {
-            if (!attachment || !deletedIds.has(attachment.id)) continue;
+            if (!attachment || !deletedKeys.has(revisionAttachmentRemovalKey(attachment))) continue;
             await deleteRevisionActivityAttachmentRecord(attachment);
             revisionActivityAttachmentExisting.delete(activityId);
         }
         revisionActivityAttachmentRemovedIds.clear();
 
-        for (const activityId of [...new Set(Object.values(activityIdByRowId).map(Number).filter(Boolean))]) {
-            await uploadRevisionActivityDraftForRow(String(activityId), revisionId, activityId);
-        }
+        await persistRevisionDriveUploads(
+            revisionActivityAttachmentDrafts,
+            revisionActivityAttachmentExisting,
+            activityIdByRowId
+        );
 
         return { ok: true };
     } catch (error) {
@@ -456,6 +559,11 @@ function handleRevisionActivityImageSelect(fileList, context = null) {
 
     const file = [...(fileList || [])][0];
     if (!file) return;
+
+    if (typeof isGoogleDriveAppsScriptConfigured === 'function' && !isGoogleDriveAppsScriptConfigured()) {
+        alertAppDialog('Drive não configurado no Apps Script.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
 
     if (hasRevisionActivityImage(rowId)) {
         alertAppDialog('Cada atividade permite apenas uma imagem. Remova a atual para adicionar outra.');
@@ -483,10 +591,18 @@ function renderRevisionActivityAttachmentsReadonlyHtml(attachment = null) {
         <div class="revision-activity-attachments__readonly">
             <button type="button"
                 class="revision-activity-attachment-thumb"
-                data-open-revision-attachment-storage-path="${escapeHtml(attachment.storagePath)}"
+                ${isRevisionDriveAttachment(attachment)
+                    ? `data-open-revision-attachment-drive-url="${escapeHtml(
+                        (typeof resolveDriveFileViewUrl === 'function'
+                            ? resolveDriveFileViewUrl(attachment)
+                            : (typeof resolveDriveFilePreviewUrl === 'function'
+                                ? resolveDriveFilePreviewUrl(attachment)
+                                : attachment.url)) || ''
+                    )}"`
+                    : `data-open-revision-attachment-storage-path="${escapeHtml(attachment.storagePath || '')}"`}
                 title="${escapeHtml(attachment.fileName || 'Imagem')}">
                 <img alt="${escapeHtml(attachment.fileName || 'Imagem')}"
-                    data-revision-attachment-storage-path="${escapeHtml(attachment.storagePath)}">
+                    ${revisionAttachmentPreviewAttrs(attachment)}>
             </button>
         </div>
     `;
@@ -525,11 +641,21 @@ function bindRevisionActivityAttachmentListEvents(listEl, context) {
 
         const removeExistingBtn = event.target.closest('[data-remove-revision-existing-attachment]');
         if (removeExistingBtn) {
-            markRevisionActivityAttachmentRemoved(Number(removeExistingBtn.dataset.removeRevisionExistingAttachment));
+            markRevisionActivityAttachmentRemoved(
+                Number(removeExistingBtn.dataset.removeRevisionExistingAttachment),
+                removeExistingBtn.dataset.removeRevisionExistingSource || 'storage'
+            );
             return;
         }
 
         const previewImg = event.target.closest('.revision-activity-attachment-item__preview');
+        if (previewImg?.dataset.attachmentDriveUrl) {
+            openImageAttachmentLightbox(
+                previewImg.dataset.attachmentDriveUrl,
+                previewImg.getAttribute('alt') || 'Imagem'
+            );
+            return;
+        }
         if (previewImg?.dataset.revisionAttachmentStoragePath) {
             openRevisionActivityAttachmentPreview(
                 previewImg.dataset.revisionAttachmentStoragePath,
@@ -564,6 +690,15 @@ function bindRevisionActivityAttachmentEvents() {
     });
 
     document.addEventListener('click', event => {
+        const driveThumb = event.target.closest('[data-open-revision-attachment-drive-url]');
+        if (driveThumb) {
+            openImageAttachmentLightbox(
+                driveThumb.dataset.openRevisionAttachmentDriveUrl,
+                driveThumb.getAttribute('title') || 'Imagem'
+            );
+            return;
+        }
+
         const thumb = event.target.closest('[data-open-revision-attachment-storage-path]');
         if (!thumb) return;
 

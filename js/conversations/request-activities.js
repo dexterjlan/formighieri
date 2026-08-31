@@ -231,7 +231,12 @@ async function saveRequestActivitiesFromModal() {
 
     try {
         if (activities.length && canPersistRequestActivities(conv)) {
-            await persistRequestActivities(editingConversationId, activities);
+            await persistRequestActivitiesWithAttachments(
+                editingConversationId,
+                activities,
+                conv.orderId || activeOrderId,
+                conv.orderProjectId
+            );
         }
 
         if (responseText && (canRespondAsConsultor(conv) || canRespondAsProjetista(conv))) {
@@ -328,6 +333,9 @@ function updateRequestActivityModalControls(conv) {
     if (typeof updateConvModalEncerrarButton === 'function') {
         updateConvModalEncerrarButton();
     }
+    if (typeof refreshAllRequestActivityAttachments === 'function') {
+        refreshAllRequestActivityAttachments();
+    }
     const emptyMsg = document.getElementById('conv-activities-empty-msg');
     const hasRows = document.querySelectorAll('#conv-activities-list tr').length > 0;
     if (emptyMsg) {
@@ -351,6 +359,9 @@ function renderRequestActivityRow(activity, conv) {
             <textarea rows="2" class="request-activity-description revision-resizable-input px-2 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600 disabled:bg-slate-50"
                 placeholder="Descreva a atividade..."
                 ${canEditDescriptions ? '' : 'disabled'}>${escapeHtml(activity.description || '')}</textarea>
+            ${typeof renderRequestActivityAttachmentsHtml === 'function'
+                ? renderRequestActivityAttachmentsHtml(rowId, conv)
+                : ''}
         </td>
         <td class="p-3 align-middle text-center">
             <input type="checkbox" class="request-activity-completed h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
@@ -394,8 +405,12 @@ function addRequestActivityRow(activity = {}, conv = null) {
         activity.tempId = `temp-${requestActivityRowCounter}`;
     }
 
-    document.getElementById('conv-activities-list').appendChild(renderRequestActivityRow(activity, request));
+    const tr = renderRequestActivityRow(activity, request);
+    document.getElementById('conv-activities-list').appendChild(tr);
     document.getElementById('conv-activities-empty-msg').classList.add('hidden');
+    if (typeof hydrateConvAttachmentPreviewImages === 'function') {
+        hydrateConvAttachmentPreviewImages(tr);
+    }
     updateRequestActivityModalControls(request);
     if (typeof updateConvModalEncerrarButton === 'function') {
         updateConvModalEncerrarButton();
@@ -410,6 +425,7 @@ function collectRequestActivitiesFromDom() {
         const completed = tr.querySelector('.request-activity-completed')?.checked || false;
 
         return {
+            rowId,
             id: isPersisted ? Number(rowId) : null,
             description: tr.querySelector('.request-activity-description')?.value.trim() || '',
             completed,
@@ -429,6 +445,7 @@ function collectRequestActivitiesFromCard(requestId) {
         const completed = tr.querySelector('.request-activity-completed')?.checked || false;
 
         return {
+            rowId,
             id: rowId ? Number(rowId) : null,
             description: tr.querySelector('.request-activity-description')?.value.trim()
                 || tr.querySelector('td:first-child')?.textContent.trim()
@@ -497,12 +514,14 @@ async function fetchRequestActivitiesByRequestIds(requestIds) {
 }
 
 async function persistRequestActivities(requestId, activities) {
-    if (!requestId || !activities) return;
+    const activityIdByRowId = {};
+    if (!requestId || !activities) return activityIdByRowId;
 
     const filtered = activities.filter(a => a.description);
     const now = new Date().toISOString();
 
     for (const activity of filtered) {
+        const rowId = String(activity.rowId || activity.id || '');
         const payload = {
             description: activity.description,
             completed: activity.completed,
@@ -518,23 +537,49 @@ async function persistRequestActivities(requestId, activities) {
                 .update(payload)
                 .eq('id', activity.id);
             if (error) {
-                console.warn('persistRequestActivities update:', error);
+                throw error;
             }
+            if (rowId) activityIdByRowId[rowId] = activity.id;
+            activityIdByRowId[String(activity.id)] = activity.id;
         } else {
-            const { error } = await supabaseClient
+            const { data, error } = await supabaseClient
                 .from('OrderRequestActivity')
-                .insert([{ ...payload, orderRequestId: requestId }]);
-            if (error) {
-                console.warn('persistRequestActivities insert:', error);
+                .insert([{ ...payload, orderRequestId: requestId }])
+                .select('id')
+                .single();
+            if (error || !data?.id) {
+                throw error || new Error('Não foi possível criar a atividade.');
             }
+            if (typeof migrateRequestActivityAttachmentDrafts === 'function' && rowId) {
+                migrateRequestActivityAttachmentDrafts(rowId, data.id);
+            }
+            if (rowId) activityIdByRowId[rowId] = data.id;
+            activityIdByRowId[String(data.id)] = data.id;
+            activity.id = data.id;
         }
     }
+
+    return activityIdByRowId;
 }
 
-function renderRequestActivityReadonlyRow(activity) {
+async function persistRequestActivitiesWithAttachments(requestId, activities, orderId, orderProjectId = null) {
+    const activityIdByRowId = await persistRequestActivities(requestId, activities);
+    if (orderId && typeof persistOrderRequestAttachments === 'function') {
+        await persistOrderRequestAttachments(requestId, orderId, activityIdByRowId, orderProjectId);
+    }
+    return activityIdByRowId;
+}
+
+function renderRequestActivityReadonlyRow(activity, attachment = null) {
+    const imageHtml = typeof renderRequestActivityAttachmentsReadonlyHtml === 'function'
+        ? renderRequestActivityAttachmentsReadonlyHtml(attachment)
+        : '';
     return `
         <tr class="border-t border-slate-100">
-            <td class="py-2 pr-2 align-top">${renderRevisionResizableText(activity.description)}</td>
+            <td class="py-2 pr-2 align-top">
+                ${renderRevisionResizableText(activity.description)}
+                ${imageHtml}
+            </td>
             <td class="py-2 px-2 text-center text-xs align-middle">
                 ${activity.completed
                     ? '<span class="text-emerald-700 font-semibold">Sim</span>'
@@ -546,12 +591,18 @@ function renderRequestActivityReadonlyRow(activity) {
     `;
 }
 
-function renderRequestActivityCardRow(activity, conv, canComplete) {
+function renderRequestActivityCardRow(activity, conv, canComplete, attachment = null) {
     const rowId = activity.id;
     const completedAt = activity.completedAt || '';
+    const imageHtml = typeof renderRequestActivityAttachmentsReadonlyHtml === 'function'
+        ? renderRequestActivityAttachmentsReadonlyHtml(attachment)
+        : '';
     return `
         <tr data-row-id="${rowId}" ${completedAt ? `data-completed-at="${completedAt}"` : ''}>
-            <td class="py-2 pr-2 align-top text-xs text-slate-800">${escapeHtml(activity.description || '—')}</td>
+            <td class="py-2 pr-2 align-top text-xs text-slate-800">
+                ${escapeHtml(activity.description || '—')}
+                ${imageHtml}
+            </td>
             <td class="py-2 px-2 text-center align-middle">
                 <input type="checkbox" class="request-activity-completed h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     ${activity.completed ? 'checked' : ''}
@@ -591,15 +642,23 @@ function bindRequestActivityCardEvents(container, conv) {
     });
 }
 
-function appendRequestActivitiesToCard(container, conv, activities) {
+function appendRequestActivitiesToCard(container, conv, activities, attachmentsByActivity = {}) {
     if (!activities?.length) return;
 
     const canComplete = canEditRequestActivityCompletion(conv);
     const isClosed = isRequestClosed(conv);
     const isReadOnly = isClosed || !canComplete;
     const rowsHtml = isReadOnly
-        ? activities.map(renderRequestActivityReadonlyRow).join('')
-        : activities.map(activity => renderRequestActivityCardRow(activity, conv, canComplete)).join('');
+        ? activities.map(activity => renderRequestActivityReadonlyRow(
+            activity,
+            attachmentsByActivity[activity.id] || null
+        )).join('')
+        : activities.map(activity => renderRequestActivityCardRow(
+            activity,
+            conv,
+            canComplete,
+            attachmentsByActivity[activity.id] || null
+        )).join('');
 
     const section = document.createElement('div');
     section.className = 'bg-violet-50/60 border border-violet-100 rounded-xl overflow-hidden';
@@ -630,6 +689,9 @@ function appendRequestActivitiesToCard(container, conv, activities) {
     `;
     container.appendChild(section);
     bindRequestActivityCardEvents(section, conv);
+    if (typeof hydrateOrderRequestAttachmentCards === 'function') {
+        hydrateOrderRequestAttachmentCards(section);
+    }
     if (canComplete) {
         updateRequestReplyControls(conv.id);
     }

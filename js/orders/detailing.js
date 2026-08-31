@@ -292,6 +292,9 @@ async function openDetailingModal(orderProjectId, projectName = '') {
         populateDetalhamentoForm(activeDetalhamentoRecord);
         toggleModal('detalhamento-modal', true);
         await loadDetalhamentoRequestsList();
+        if (typeof loadDetailingDriveFiles === 'function') {
+            loadDetailingDriveFiles();
+        }
     } catch (error) {
         alertAppDialog(`Erro ao abrir detalhamento: ${error.message}`);
     }
@@ -307,6 +310,9 @@ function closeDetailingModal() {
     activeDetalhamentoProjectName = '';
     activeDetalhamentoOrderId = null;
     detalhamentoRequestsCache = [];
+    if (typeof detailingDriveContext !== 'undefined') {
+        detailingDriveContext = null;
+    }
     setDetalhamentoModalLoading(false);
 }
 
@@ -812,6 +818,9 @@ function bindDetailingEvents() {
         if (!button) return;
         openDetalhamentoRequest(button.dataset.detalhamentoRequestId);
     });
+    if (typeof bindDetailingDriveEvents === 'function') {
+        bindDetailingDriveEvents();
+    }
 }
 
 const bindDetalhamentoEvents = bindDetailingEvents;

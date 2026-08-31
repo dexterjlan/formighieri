@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '1.0.2';
+const APP_CACHE_VERSION = '1.0.4';
 
 const PARTIALS = [
     'partials/login.html',
@@ -32,8 +32,10 @@ const SCRIPTS = [
     'js/core/order-code-picker.js',
     'js/core/navigation.js',
     'js/core/responsive.js',
+    'js/core/calendar-colors.js',
     'js/core/calendar.js',
     'js/core/calendar-google-sync.js',
+    'js/core/drive-files.js',
     'js/core/welcome.js',
     'js/conversations/conversations-query.js',
     'js/admin/users-admin.js',
@@ -64,6 +66,7 @@ const SCRIPTS = [
     'js/orders/purchase.js',
     'js/orders/implementation.js',
     'js/orders/detailing.js',
+    'js/orders/detailing-drive.js',
     'js/pendencias/pendencias-core.js',
     'js/pendencias/pendencias-designer-technical-project.js',
     'js/pendencias/pendencias-third-party.js',

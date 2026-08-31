@@ -753,6 +753,16 @@ async function updatePendenciasPpcpProjectStatus(projectId, expectedStatusName, 
         return;
     }
 
+    if (targetStatusName === PENDENCIAS_STATUS_IMPLANTACAO
+        && typeof createImplantacaoForProject === 'function') {
+        await createImplantacaoForProject(projectId);
+    }
+
+    if (targetStatusName === PENDENCIAS_STATUS_IMPLANTACAO
+        && typeof notifyOrderProjectStatusChangeForProjects === 'function') {
+        await notifyOrderProjectStatusChangeForProjects([projectId], PENDENCIAS_STATUS_IMPLANTACAO);
+    }
+
     await reloadActivePendenciasPpcpList();
 }
 
@@ -974,6 +984,8 @@ async function fetchPendenciasImplantacoesAbertas() {
     const statusEncerrado = typeof IMPLANTACAO_STATUS_ENCERRADO === 'string'
         ? IMPLANTACAO_STATUS_ENCERRADO
         : 'Encerrado';
+    const overviewMode = typeof isImplantacaoPendenciasOverviewMode === 'function'
+        && isImplantacaoPendenciasOverviewMode();
 
     if (typeof fetchOrderProjectsInImplantacaoStatus === 'function'
         && typeof ensureImplantacaoRecordsForProjects === 'function') {
@@ -983,11 +995,43 @@ async function fetchPendenciasImplantacoesAbertas() {
         }
     }
 
-    const { data: implantacoes, error } = await supabaseClient
+    const implementationSelect = 'id, status, orderProjectId, designerId, updatedAt, designer:appUsers!Implementation_designerId_fkey(id, name)';
+    let query = supabaseClient
         .from('Implementation')
-        .select('id, status, orderProjectId, updatedAt')
+        .select(implementationSelect)
         .neq('status', statusEncerrado)
         .order('updatedAt', { ascending: false });
+
+    if (!overviewMode) {
+        const userId = Number(currentUser?.id);
+        if (!userId) {
+            return { error: null, projects: [] };
+        }
+        query = query.eq('designerId', userId);
+    }
+
+    let { data: implantacoes, error } = await query;
+
+    if (error?.message?.includes('designerId') && error.message.includes('does not exist')) {
+        return {
+            error: new Error('Execute supabase/feats/add-implementation-designer.sql no Supabase SQL Editor.'),
+            projects: []
+        };
+    }
+
+    if (error?.message?.includes('designer')) {
+        let retryQuery = supabaseClient
+            .from('Implementation')
+            .select('id, status, orderProjectId, designerId, updatedAt')
+            .neq('status', statusEncerrado)
+            .order('updatedAt', { ascending: false });
+        if (!overviewMode) {
+            retryQuery = retryQuery.eq('designerId', Number(currentUser?.id));
+        }
+        const fallback = await retryQuery;
+        implantacoes = fallback.data;
+        error = fallback.error;
+    }
 
     if (error?.message?.includes('Implementation')) {
         return {
@@ -1038,12 +1082,15 @@ async function fetchPendenciasImplantacoesAbertas() {
         return {
             ...base,
             implementationId: implantacao.id,
-            implantacaoStatus: implantacao.status
+            implantacaoStatus: implantacao.status,
+            implementationDesignerId: implantacao.designerId || null,
+            implementationDesignerName: implantacao.designer?.name || '—'
         };
     });
 
     return {
         error: null,
+        overviewMode,
         projects: sortPendenciasByDeliveryDate(projects)
     };
 }
@@ -1059,23 +1106,22 @@ async function loadPendenciasImplantacao() {
         return;
     }
 
-    const { error, projects } = await fetchPendenciasImplantacoesAbertas();
+    const { error, projects, overviewMode } = await fetchPendenciasImplantacoesAbertas();
 
     if (error) {
         renderPendenciasPlaceholder('Implantação', `Erro ao carregar: ${error.message}`);
         return;
     }
 
-    renderPendenciasImplantacaoList(projects);
+    renderPendenciasImplantacaoList(projects, overviewMode);
 }
 
-function renderPendenciasImplantacaoList(projects) {
+function renderPendenciasImplantacaoList(projects, overviewMode = false) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
     const canAct = canActPendenciasPpcpStatus();
-    const showDesigner = typeof isPendenciasProjetistaOverviewMode === 'function'
-        && isPendenciasProjetistaOverviewMode();
+    const showPpcp = Boolean(overviewMode);
     const labelFn = typeof getPendenciasProjectDetailLabel === 'function'
         ? getPendenciasProjectDetailLabel
         : (project => project?.name || 'Projeto');
@@ -1084,7 +1130,7 @@ function renderPendenciasImplantacaoList(projects) {
         const orderCode = project.order?.orderCode || '—';
         const clientName = getOrderClientName(project.order) || '—';
         const projectLabel = labelFn(project);
-        const designerName = project.designer?.name || '—';
+        const ppcpName = project.implementationDesignerName || '—';
         const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
         const statusLabel = project.implantacaoStatus || getPendenciasProjectStatusName(project);
         const statusClass = typeof getImplantacaoStatusBadgeClass === 'function' && project.implantacaoStatus
@@ -1103,7 +1149,7 @@ function renderPendenciasImplantacaoList(projects) {
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
                 <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${showDesigner ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
+                ${showPpcp ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(ppcpName)}</td>` : ''}
                 <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
                 <td class="p-3">
                     <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
@@ -1116,9 +1162,11 @@ function renderPendenciasImplantacaoList(projects) {
         `;
     }).join('');
 
-    const subtitle = canAct
-        ? 'Implantações em aberto. Abra o checklist para enviar à produção ou compras.'
-        : 'Visualização das implantações em aberto.';
+    const subtitle = overviewMode
+        ? 'Todas as implantações em aberto, com o PPCP responsável.'
+        : (canAct
+            ? 'Suas implantações em aberto. Abra o checklist para enviar à produção ou compras.'
+            : 'Visualização das suas implantações em aberto.');
 
     content.innerHTML = `
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1139,7 +1187,7 @@ function renderPendenciasImplantacaoList(projects) {
                             <tr>
                                 <th class="text-left p-3 font-semibold">Pedido</th>
                                 <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${showDesigner ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
+                                ${showPpcp ? '<th class="text-left p-3 font-semibold">PPCP</th>' : ''}
                                 <th class="text-left p-3 font-semibold">Projeto</th>
                                 <th class="text-left p-3 font-semibold">Status</th>
                                 <th class="text-left p-3 font-semibold">Entrega</th>
@@ -1149,7 +1197,11 @@ function renderPendenciasImplantacaoList(projects) {
                         <tbody>${rows}</tbody>
                     </table>
                 </div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhuma implantação em aberto.</p>'}
+                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${
+                    overviewMode
+                        ? 'Nenhuma implantação em aberto.'
+                        : 'Nenhuma implantação associada a você.'
+                }</p>`}
         </div>
     `;
 

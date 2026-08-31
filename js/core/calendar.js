@@ -52,14 +52,16 @@ function getCalendarEventTypeName(event) {
     return event?.eventType?.name || '';
 }
 
-function getCalendarEventTypeClass(event) {
-    const slug = slugifyCalendarEventTypeName(getCalendarEventTypeName(event));
-    return `calendar-event-chip--${slug}`;
+function getCalendarEventTypeSlug(event) {
+    return slugifyCalendarEventTypeName(getCalendarEventTypeName(event));
 }
 
-function getCalendarDayEventCardClass(event) {
-    const slug = slugifyCalendarEventTypeName(getCalendarEventTypeName(event));
-    return `calendar-day-event-card--${slug}`;
+function getCalendarEventTypeBadgeClass(event) {
+    return `calendar-event-type calendar-event-type--${getCalendarEventTypeSlug(event)}`;
+}
+
+function getCalendarResponsibleStyleAttr(event) {
+    return `style="${getCalendarResponsibleCssVars(event)}"`;
 }
 
 function getCalendarEventTooltipClass(event) {
@@ -82,15 +84,20 @@ function getCalendarEventResponsibleLabel(event) {
     return event?.responsible?.name || '—';
 }
 
-function getCalendarEventDisplayParts(event) {
-    const parts = [getCalendarEventResponsibleLabel(event)];
-    const clientLabel = getCalendarEventClientLabel(event);
-    const orderLabel = getCalendarEventOrderLabel(event);
+function getCalendarEventDetailLines(event) {
+    const clientLabel = getCalendarEventClientLabel(event) || '—';
+    const orderLabel = getCalendarEventOrderLabel(event) || '—';
+    return [
+        `Resp:${getCalendarEventResponsibleLabel(event)}`,
+        `Cliente: ${clientLabel}`,
+        `Pedido:${orderLabel}`
+    ];
+}
 
-    if (clientLabel) parts.push(clientLabel);
-    if (orderLabel) parts.push(`Pedido ${orderLabel}`);
-
-    return parts;
+function renderCalendarEventDetailLinesHtml(event, lineClass) {
+    return getCalendarEventDetailLines(event)
+        .map(line => `<span class="${lineClass}">${escapeHtml(line)}</span>`)
+        .join('');
 }
 
 function getCalendarEventTooltipRows(event) {
@@ -244,11 +251,21 @@ function populateCalendarEventTypeSelects(selectedId = '') {
 async function loadCalendarUsers() {
     if (calendarUsersCache.length) return calendarUsersCache;
 
-    const { data, error } = await supabaseClient
+    let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, role, isActive')
+        .select('id, name, role, isActive, calendarColor')
         .eq('isActive', true)
         .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('calendarColor')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, role, isActive')
+            .eq('isActive', true)
+            .order('name', { ascending: true });
+    }
+
+    const { data, error } = result;
 
     if (error) {
         console.error('loadCalendarUsers:', error);
@@ -257,6 +274,10 @@ async function loadCalendarUsers() {
 
     calendarUsersCache = data || [];
     return calendarUsersCache;
+}
+
+function invalidateCalendarUsersCache() {
+    calendarUsersCache = [];
 }
 
 async function loadCalendarEventsForVisibleRange(viewMode = calendarViewMode, anchor = calendarViewAnchor) {
@@ -335,14 +356,20 @@ function renderCalendarDayCell(dateKey, options = {}) {
     } = options;
     const dayEvents = getCalendarEventsByDate(dateKey);
     const chips = dayEvents.slice(0, maxChips).map(event => {
-        const summary = getCalendarEventDisplayParts(event).join(' · ');
+        const typeName = getCalendarEventTypeName(event) || 'Evento';
         return `
         <button type="button"
-            class="calendar-event-chip ${getCalendarEventTypeClass(event)}"
+            class="calendar-event-chip"
+            ${getCalendarResponsibleStyleAttr(event)}
             data-calendar-event-id="${event.id}"
-            aria-label="${escapeHtml(getCalendarEventDisplayParts(event).join(', '))}">
-            <span class="calendar-event-chip__time">${escapeHtml(formatCalendarTimeValue(event.eventTime))}</span>
-            <span class="calendar-event-chip__summary">${escapeHtml(summary)}</span>
+            aria-label="${escapeHtml([typeName, ...getCalendarEventDetailLines(event)].join(', '))}">
+            <span class="calendar-event-chip__head">
+                <span class="${getCalendarEventTypeBadgeClass(event)}">${escapeHtml(typeName)}</span>
+                <span class="calendar-event-chip__time">${escapeHtml(formatCalendarTimeValue(event.eventTime))}</span>
+            </span>
+            <span class="calendar-event-chip__lines">
+                ${renderCalendarEventDetailLinesHtml(event, 'calendar-event-chip__line')}
+            </span>
         </button>
     `;
     }).join('');
@@ -464,23 +491,23 @@ function renderCalendarDayEvents() {
     }
 
     listEl.innerHTML = dayEvents.map(event => {
-        const clientLabel = getCalendarEventClientLabel(event);
-        const orderLabel = getCalendarEventOrderLabel(event);
-        const responsibleLabel = getCalendarEventResponsibleLabel(event);
+        const typeName = getCalendarEventTypeName(event) || 'Evento';
         const descriptionHtml = event.description
             ? `<p class="calendar-day-event-card__description">${escapeHtml(event.description)}</p>`
             : '';
 
         return `
             <button type="button"
-                class="calendar-day-event-card ${getCalendarDayEventCardClass(event)}"
+                class="calendar-day-event-card"
+                ${getCalendarResponsibleStyleAttr(event)}
                 data-calendar-event-id="${event.id}">
                 <div class="calendar-day-event-card__top">
                     <span class="calendar-day-event-card__time">${escapeHtml(formatCalendarTimeValue(event.eventTime))}</span>
+                    <span class="${getCalendarEventTypeBadgeClass(event)}">${escapeHtml(typeName)}</span>
                 </div>
-                <p class="calendar-day-event-card__responsible">${escapeHtml(responsibleLabel)}</p>
-                ${clientLabel ? `<p class="calendar-day-event-card__client">${escapeHtml(clientLabel)}</p>` : ''}
-                ${orderLabel ? `<p class="calendar-day-event-card__order">Pedido ${escapeHtml(orderLabel)}</p>` : ''}
+                <p class="calendar-day-event-card__lines">
+                    ${renderCalendarEventDetailLinesHtml(event, 'calendar-day-event-card__line')}
+                </p>
                 ${descriptionHtml}
             </button>
         `;
@@ -914,6 +941,7 @@ function buildCalendarIcsEventLines(event) {
         `DTEND;TZID=America/Sao_Paulo:${dtEnd}`,
         `SUMMARY:${escapeIcsText(buildCalendarIcsEventSummary(event))}`,
         `DESCRIPTION:${escapeIcsText(buildCalendarIcsEventDescription(event))}`,
+        `COLOR:${getCalendarResponsibleColorHex(event)}`,
         'END:VEVENT'
     ];
 }
@@ -1028,6 +1056,7 @@ function showCalendar() {
 
 window.showCalendar = showCalendar;
 window.showGoogleCalendar = showCalendar;
+window.invalidateCalendarUsersCache = invalidateCalendarUsersCache;
 
 function bindCalendarTooltipEvents() {
     const calendarView = document.getElementById('calendar-view');

@@ -54,7 +54,9 @@ function buildCalendarGoogleSyncPayload(event) {
         eventTime: String(event.eventTime || '09:00:00').slice(0, 8),
         summary: summaryParts.join(' - '),
         description: descriptionLines.join('\n'),
-        durationMinutes: 60
+        durationMinutes: 60,
+        colorHex: getCalendarResponsibleColorHex(event),
+        googleEventColor: getGoogleCalendarEventColorId(event)
     };
 }
 
@@ -117,8 +119,11 @@ async function fetchCalendarEventForGoogleSync(eventId) {
     }
 
     const event = result.data;
-    if (!event.responsible && event.responsibleId && calendarUsersCache?.length) {
-        event.responsible = calendarUsersCache.find(user => Number(user.id) === Number(event.responsibleId)) || null;
+    if (event.responsibleId && calendarUsersCache?.length) {
+        const cached = calendarUsersCache.find(user => Number(user.id) === Number(event.responsibleId));
+        if (cached) {
+            event.responsible = { ...cached, ...(event.responsible || {}) };
+        }
     }
 
     return event;

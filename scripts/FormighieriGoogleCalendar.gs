@@ -83,6 +83,98 @@ function parseFgpEventDateTime_(eventDate, eventTime) {
   return new Date(year, month - 1, day, hours, minutes, 0);
 }
 
+function applyFgpGoogleEventColor_(cal, googleEvent, calendar) {
+  var colorHex = String(calendar.colorHex || '').trim().toLowerCase();
+  var googleEventColor = String(calendar.googleEventColor || '').trim();
+
+  if (googleEventColor) {
+    try {
+      googleEvent.setColor(googleEventColor);
+    } catch (ignored) {}
+  }
+
+  if (colorHex && cal) {
+    applyFgpEventLabelColor_(cal, googleEvent, colorHex);
+  }
+}
+
+function getGoogleCalendarApiToken_() {
+  return ScriptApp.getOAuthToken();
+}
+
+function fetchGoogleCalendarJson_(url, options) {
+  var token = getGoogleCalendarApiToken_();
+  var params = options || {};
+  var response = UrlFetchApp.fetch(url, {
+    method: params.method || 'get',
+    contentType: 'application/json',
+    headers: {
+      Authorization: 'Bearer ' + token
+    },
+    payload: params.payload || undefined,
+    muteHttpExceptions: true
+  });
+  var status = response.getResponseCode();
+  var bodyText = response.getContentText() || '';
+  if (status < 200 || status >= 300) {
+    return null;
+  }
+  try {
+    return bodyText ? JSON.parse(bodyText) : {};
+  } catch (ignored) {
+    return null;
+  }
+}
+
+function getGoogleEventApiId_(googleEvent) {
+  return String(googleEvent.getId() || '').replace(/@google\.com$/i, '');
+}
+
+function applyFgpEventLabelColor_(cal, googleEvent, colorHex) {
+  try {
+    var calendarId = encodeURIComponent(cal.getId());
+    var calendarUrl = 'https://www.googleapis.com/calendar/v3/calendars/' + calendarId;
+    var resource = fetchGoogleCalendarJson_(calendarUrl);
+    if (!resource) return false;
+
+    var labels = (resource.labelProperties && resource.labelProperties.eventLabels) || [];
+    var found = null;
+    for (var i = 0; i < labels.length; i++) {
+      if (String(labels[i].backgroundColor || '').toLowerCase() === colorHex) {
+        found = labels[i];
+        break;
+      }
+    }
+
+    if (!found) {
+      found = {
+        id: Utilities.getUuid(),
+        backgroundColor: colorHex,
+        name: 'FGP ' + colorHex
+      };
+      labels.push(found);
+      var patched = fetchGoogleCalendarJson_(calendarUrl, {
+        method: 'patch',
+        payload: JSON.stringify({
+          labelProperties: {
+            eventLabels: labels
+          }
+        })
+      });
+      if (!patched) return false;
+    }
+
+    var eventUrl = 'https://www.googleapis.com/calendar/v3/calendars/' + calendarId
+      + '/events/' + encodeURIComponent(getGoogleEventApiId_(googleEvent));
+    return Boolean(fetchGoogleCalendarJson_(eventUrl, {
+      method: 'patch',
+      payload: JSON.stringify({ eventLabelId: found.id })
+    }));
+  } catch (ignored) {
+    return false;
+  }
+}
+
 function upsertFgpCalendarEvent_(calendar) {
   var cal = getOrCreateFgpGoogleCalendar_(calendar.calendarName);
   var start = parseFgpEventDateTime_(calendar.eventDate, calendar.eventTime);
@@ -98,12 +190,14 @@ function upsertFgpCalendarEvent_(calendar) {
         existing.setTitle(summary);
         existing.setTime(start, end);
         existing.setDescription(description);
+        applyFgpGoogleEventColor_(cal, existing, calendar);
         return { ok: true, googleCalendarEventId: existing.getId() };
       }
     } catch (ignored) {}
   }
 
   var created = cal.createEvent(summary, start, end, { description: description });
+  applyFgpGoogleEventColor_(cal, created, calendar);
   return { ok: true, googleCalendarEventId: created.getId() };
 }
 
@@ -257,7 +351,9 @@ function testarSyncCalendarioDev() {
       eventDate: '2026-08-15',
       eventTime: '14:00:00',
       summary: 'Teste Apps Script FGP',
-      description: 'Executado manualmente no editor'
+      description: 'Executado manualmente no editor',
+      colorHex: '#d50000',
+      googleEventColor: '11'
     }
   });
   Logger.log(output.getContent());

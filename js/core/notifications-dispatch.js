@@ -46,14 +46,25 @@ function getInMemoryRevisionAttachment(activity) {
     for (const key of keys) {
         if (typeof revisionActivityAttachmentExisting !== 'undefined') {
             const existing = revisionActivityAttachmentExisting.get(key);
-            if (existing?.storagePath) return existing;
+            if (existing?.storagePath || existing?.driveFileId || existing?.url) return existing;
         }
         if (typeof thirdPartyRevisionAttachmentExisting !== 'undefined') {
             const existing = thirdPartyRevisionAttachmentExisting.get(key);
-            if (existing?.storagePath) return existing;
+            if (existing?.storagePath || existing?.driveFileId || existing?.url) return existing;
         }
     }
     return activity?.attachment || null;
+}
+
+function resolveRevisionAttachmentImageUrlForEmail(attachment) {
+    if (!attachment) return null;
+    if (attachment.driveFileId || attachment.entityType === 'RevisionActivity') {
+        if (typeof resolveDriveFileDownloadUrl === 'function') {
+            return resolveDriveFileDownloadUrl(attachment) || null;
+        }
+        return attachment.url || null;
+    }
+    return null;
 }
 
 async function signRevisionAttachmentUrlForEmail(storagePath) {
@@ -81,6 +92,10 @@ async function enrichRevisionActivitiesForEmail(activities = []) {
         if (activity.imageUrl) return activity;
         const attachment = (activity.id ? byActivity[String(activity.id)] : null)
             || getInMemoryRevisionAttachment(activity);
+        const driveUrl = resolveRevisionAttachmentImageUrlForEmail(attachment);
+        if (driveUrl) {
+            return { ...activity, imageUrl: driveUrl };
+        }
         const storagePath = attachment?.storagePath || null;
         if (!storagePath) return activity;
         const imageUrl = await signRevisionAttachmentUrlForEmail(storagePath);

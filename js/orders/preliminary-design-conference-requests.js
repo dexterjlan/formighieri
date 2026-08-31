@@ -77,15 +77,6 @@ async function insertConferenceOrderRequest({
             .single());
     }
 
-    if (error?.message?.includes('orderProjectId')) {
-        const { orderProjectId: _omit, ...fallbackPayload } = payload;
-        ({ data, error } = await supabaseClient
-            .from('OrderRequest')
-            .insert([fallbackPayload])
-            .select('*')
-            .single());
-    }
-
     if (error) throw error;
     return data;
 }

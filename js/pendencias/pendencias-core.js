@@ -172,6 +172,10 @@ function canActPendenciasPpcpStatus() {
     return canSeeAllPendenciasMenus() || isPpcp();
 }
 
+function isImplantacaoPendenciasOverviewMode() {
+    return isAdmin() || isGestorProjetos();
+}
+
 function getPendenciasProjetistaMenuItems() {
     const items = [];
     const showProjetistaWork = canSeeAllPendenciasMenus() || currentUser?.role === 'Projetista';

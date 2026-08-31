@@ -112,10 +112,10 @@
                     </p>
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-500 mb-1">Projeto</label>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Projeto <span class="text-red-500">*</span></label>
                     <select id="conv-order-project"
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none">
-                        <option value="">Nenhum</option>
+                        <option value="">Selecione...</option>
                     </select>
                 </div>
                 <div>
@@ -127,17 +127,18 @@
                 <div><label id="conv-request-label" class="block text-xs font-semibold text-slate-500 mb-1">Solicitação</label><textarea id="conv-request" rows="3"
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none"
                         required></textarea></div>
-                <div id="conv-attachments-wrap" class="space-y-2">
+                <div id="conv-attachments-wrap" class="hidden space-y-2">
                     <div class="flex justify-between items-center gap-2">
-                        <p class="text-xs font-semibold text-slate-500 uppercase">Imagens <span class="text-slate-400 font-normal normal-case">(opcional)</span></p>
-                        <button type="button" id="btn-add-conv-attachment"
-                            class="text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium">
+                        <p class="text-xs font-semibold text-slate-500 uppercase">Imagens anteriores
+                            <span class="text-slate-400 font-normal normal-case">(da requisição)</span></p>
+                        <button type="button" id="btn-add-conv-attachment" class="hidden"
+                            aria-hidden="true">
                             + Adicionar imagem
                         </button>
-                        <input type="file" id="conv-attachment-input" class="hidden" accept="image/*" multiple>
+                        <input type="file" id="conv-attachment-input" class="hidden" accept="image/*">
                     </div>
                     <div id="conv-attachments-list" class="conv-attachments-grid"></div>
-                    <p id="conv-attachments-empty-msg" class="text-xs text-slate-400 text-center py-2">Nenhuma imagem adicionada.</p>
+                    <p id="conv-attachments-empty-msg" class="hidden text-xs text-slate-400 text-center py-2">Nenhuma imagem adicionada.</p>
                 </div>
                 <div id="conv-activities-wrap" class="space-y-3">
                     <div class="flex justify-between items-center gap-2">
@@ -164,6 +165,7 @@
                             <tbody id="conv-activities-list" class="divide-y divide-slate-100"></tbody>
                         </table>
                     </div>
+                    <input type="file" id="conv-activity-image-input" class="hidden" accept="image/*">
                     <p id="conv-activities-empty-msg" class="hidden text-xs text-slate-400 text-center py-2">Nenhuma atividade adicionada.</p>
                     <p id="conv-activities-reply-hint" class="hidden text-[10px] text-amber-700">Marque todas as atividades como realizadas antes de responder.</p>
                     <div id="conv-activities-save-wrap" class="hidden flex justify-end">
@@ -1028,6 +1030,31 @@
                     <label for="detalhamento-server-folder-path" class="block text-xs font-semibold text-slate-700 mb-1">Pasta no servidor</label>
                     <input type="text" id="detalhamento-server-folder-path" placeholder="Caminho da pasta no servidor"
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                </div>
+
+                <div id="detalhamento-drive-section" class="border border-slate-200 rounded-xl p-3 space-y-2">
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <h4 class="text-xs font-semibold text-slate-700 uppercase">Arquivos no Drive</h4>
+                            <p id="detalhamento-drive-path" class="text-[11px] text-slate-400 mt-0.5 truncate">FGP / pedido / projeto / detalhamento</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Somente PDF ou ZIP, até 100 MB.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button type="button" id="btn-detalhamento-drive-refresh"
+                                class="text-xs bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-50">
+                                Atualizar
+                            </button>
+                            <button type="button" id="btn-detalhamento-drive-upload"
+                                class="text-xs bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-800">
+                                Enviar arquivo
+                            </button>
+                            <input type="file" id="detalhamento-drive-file-input" class="hidden" multiple accept=".pdf,.zip,application/pdf,application/zip">
+                        </div>
+                    </div>
+                    <p id="detalhamento-drive-status" class="hidden text-xs text-slate-500"></p>
+                    <div id="detalhamento-drive-list" class="space-y-1.5">
+                        <p class="text-xs text-slate-400 text-center py-3">Carregando arquivos...</p>
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3 text-sm">

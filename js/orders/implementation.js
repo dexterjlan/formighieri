@@ -49,8 +49,22 @@ function canAccessImplantacaoModal() {
         || (typeof canSeePendenciasComprasMenu === 'function' && canSeePendenciasComprasMenu());
 }
 
-function canActImplantacao() {
-    return canActPendenciasPpcpStatus();
+function canActImplantacao(record = activeImplantacaoRecord) {
+    if (typeof canActPendenciasPpcpStatus !== 'function' || !canActPendenciasPpcpStatus()) {
+        return false;
+    }
+    if (typeof isAdmin === 'function' && isAdmin()) return true;
+    if (typeof isPpcp !== 'function' || !isPpcp()) return false;
+
+    const designerId = Number(record?.designerId || 0);
+    if (!designerId) return false;
+    return designerId === Number(currentUser?.id);
+}
+
+function resolveImplementationDesignerId(options = {}) {
+    const fromOptions = Number(options.designerId || 0);
+    if (fromOptions) return fromOptions;
+    return Number(currentUser?.id || 0) || null;
 }
 
 function formatImplantacaoComercialDate(dateStr) {
@@ -401,7 +415,7 @@ function allImplantacaoThirdPartyProjectsApprovedAndSent() {
 }
 
 function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
-    const canAct = canActImplantacao();
+    const canAct = canActImplantacao(record);
     const values = readImplantacaoFormValues();
     const status = record?.status || IMPLANTACAO_STATUS_ABERTO;
     const isEncerrado = status === IMPLANTACAO_STATUS_ENCERRADO;
@@ -508,13 +522,17 @@ async function fetchImplementationByOrderProjectId(orderProjectId) {
 window.fetchImplementationByOrderProjectId = fetchImplementationByOrderProjectId;
 window.fetchImplantacaoByOrderProjectId = fetchImplementationByOrderProjectId;
 
-async function createImplantacaoRecord(orderProjectId) {
+async function createImplantacaoRecord(orderProjectId, options = {}) {
     const now = new Date().toISOString();
+    const designerId = Object.prototype.hasOwnProperty.call(options, 'designerId')
+        ? (Number(options.designerId) || null)
+        : resolveImplementationDesignerId(options);
     const { data, error } = await supabaseClient
         .from('Implementation')
         .insert({
             orderProjectId,
             status: IMPLANTACAO_STATUS_ABERTO,
+            designerId,
             createdById: currentUser?.id || null,
             updatedById: currentUser?.id || null,
             updatedAt: now
@@ -522,19 +540,40 @@ async function createImplantacaoRecord(orderProjectId) {
         .select('*')
         .single();
 
-    if (error) throw error;
+    if (error) {
+        if (error.message?.includes('designerId')) {
+            throw new Error('Execute supabase/feats/add-implementation-designer.sql no Supabase SQL Editor.');
+        }
+        throw error;
+    }
 
     await ensureStandardImplementationPurchaseItems(data.id);
     return data;
 }
 
-async function ensureImplantacaoRecord(orderProjectId) {
+async function ensureImplantacaoRecord(orderProjectId, options = {}) {
     const existing = await fetchImplementationByOrderProjectId(orderProjectId);
     if (existing) {
         await ensureStandardImplementationPurchaseItems(existing.id);
+        const designerId = Number(options.designerId || 0);
+        if (designerId && !existing.designerId) {
+            const now = new Date().toISOString();
+            const { data, error } = await supabaseClient
+                .from('Implementation')
+                .update({
+                    designerId,
+                    updatedById: currentUser?.id || null,
+                    updatedAt: now
+                })
+                .eq('id', existing.id)
+                .select('*')
+                .single();
+            if (error) throw error;
+            return data || existing;
+        }
         return existing;
     }
-    return createImplantacaoRecord(orderProjectId);
+    return createImplantacaoRecord(orderProjectId, options);
 }
 
 async function isOrderProjectInImplantacaoStatus(orderProjectId) {
@@ -587,7 +626,7 @@ async function ensureImplementationRecordsForProjects(projects = []) {
         if (!projectId) continue;
 
         try {
-            const record = await ensureImplantacaoRecord(projectId);
+            const record = await ensureImplantacaoRecord(projectId, { designerId: null });
             if (record) recordsByProjectId[projectId] = record;
         } catch (error) {
             console.warn('ensureImplementationRecordsForProjects:', projectId, error);
@@ -908,7 +947,9 @@ function waitImplantacaoStatus(ms) {
 }
 
 async function createImplantacaoForProject(orderProjectId) {
-    await ensureImplantacaoRecord(orderProjectId);
+    await ensureImplantacaoRecord(orderProjectId, {
+        designerId: currentUser?.id || null
+    });
 }
 
 async function handleImplantacaoSalvar() {

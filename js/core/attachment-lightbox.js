@@ -8,7 +8,7 @@ function openImageAttachmentLightbox(url, fileName = 'Imagem') {
     overlay.className = 'conv-attachment-lightbox';
     overlay.innerHTML = `
         <button type="button" class="conv-attachment-lightbox__close" aria-label="Fechar">×</button>
-        <img src="${url}" alt="${escapeHtml(fileName)}" class="conv-attachment-lightbox__image">
+        <img src="${escapeHtml(url)}" alt="${escapeHtml(fileName)}" class="conv-attachment-lightbox__image" referrerpolicy="no-referrer">
     `;
 
     const close = () => overlay.remove();

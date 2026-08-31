@@ -57,7 +57,13 @@ function resetThirdPartyRevisionAttachments() {
 function getThirdPartyRevisionImageForRow(rowId) {
     const key = String(rowId);
     const existingRaw = thirdPartyRevisionAttachmentExisting.get(key) || null;
-    const existing = existingRaw && !thirdPartyRevisionAttachmentRemovedIds.has(existingRaw.id) ? existingRaw : null;
+    const removalKey = typeof revisionAttachmentRemovalKey === 'function'
+        ? revisionAttachmentRemovalKey(existingRaw)
+        : (existingRaw?.id || '');
+    const existing = existingRaw && !thirdPartyRevisionAttachmentRemovedIds.has(removalKey)
+        && !thirdPartyRevisionAttachmentRemovedIds.has(existingRaw.id)
+        ? existingRaw
+        : null;
     const draft = thirdPartyRevisionAttachmentDrafts.get(key) || null;
     return { existing, draft };
 }
@@ -94,9 +100,11 @@ function renderThirdPartyRevisionAttachmentsHtml(rowId, canEdit) {
         <div class="revision-activity-attachment-item">
             <div class="revision-activity-attachment-item__preview-wrap">
                 <img alt="${escapeHtml(existing.fileName || 'Imagem')}" class="revision-activity-attachment-item__preview"
-                    data-tp-revision-attachment-path="${escapeHtml(existing.storagePath)}">
+                    ${typeof revisionAttachmentPreviewAttrs === 'function'
+                        ? revisionAttachmentPreviewAttrs(existing, 'data-tp-revision-attachment-path')
+                        : `data-tp-revision-attachment-path="${escapeHtml(existing.storagePath || '')}"`}>
             </div>
-            ${canEdit ? `<button type="button" class="revision-activity-attachment-item__remove" data-remove-tp-revision-existing="${existing.id}">×</button>` : ''}
+            ${canEdit ? `<button type="button" class="revision-activity-attachment-item__remove" data-remove-tp-revision-existing="${existing.id}" data-remove-tp-revision-source="${typeof isRevisionDriveAttachment === 'function' && isRevisionDriveAttachment(existing) ? 'drive' : 'storage'}">×</button>` : ''}
         </div>
     `) : '';
 
@@ -139,28 +147,42 @@ async function loadThirdPartyRevisionAttachmentsForActivities(activities = []) {
     const activityIds = activities.map(activity => Number(activity.id)).filter(Boolean);
     if (!activityIds.length) return;
 
-    const { data, error } = await supabaseClient
-        .from('RevisionActivityAttachment')
-        .select('id, revisionActivityId, storagePath, fileName, mimeType, fileSizeBytes, sortOrder, createdAt')
-        .in('revisionActivityId', activityIds);
+    const byActivity = typeof fetchRevisionActivityAttachmentsByActivityIds === 'function'
+        ? await fetchRevisionActivityAttachmentsByActivityIds(activityIds)
+        : {};
 
-    if (error?.message?.includes('RevisionActivityAttachment')) return;
-    if (error) throw error;
-
-    (data || []).forEach(item => {
-        thirdPartyRevisionAttachmentExisting.set(String(item.revisionActivityId), item);
+    Object.entries(byActivity).forEach(([activityId, item]) => {
+        thirdPartyRevisionAttachmentExisting.set(String(activityId), item);
     });
 }
 
 async function persistThirdPartyRevisionAttachments(revisionId, activityIdByRowId = {}) {
     const deletedIds = new Set(thirdPartyRevisionAttachmentRemovedIds);
     for (const [activityId, attachment] of thirdPartyRevisionAttachmentExisting.entries()) {
-        if (!attachment || !deletedIds.has(attachment.id)) continue;
-        await supabaseClient.storage.from(THIRD_PARTY_REVISION_ATTACHMENTS_BUCKET).remove([attachment.storagePath]);
-        await supabaseClient.from('RevisionActivityAttachment').delete().eq('id', attachment.id);
+        const removalKey = typeof revisionAttachmentRemovalKey === 'function'
+            ? revisionAttachmentRemovalKey(attachment)
+            : attachment?.id;
+        if (!attachment || (!deletedIds.has(removalKey) && !deletedIds.has(attachment.id))) continue;
+        if (typeof isRevisionDriveAttachment === 'function' && isRevisionDriveAttachment(attachment)) {
+            if (typeof deleteDriveFileRecord === 'function') {
+                await deleteDriveFileRecord(attachment);
+            }
+        } else {
+            await supabaseClient.storage.from(THIRD_PARTY_REVISION_ATTACHMENTS_BUCKET).remove([attachment.storagePath]);
+            await supabaseClient.from('RevisionActivityAttachment').delete().eq('id', attachment.id);
+        }
         thirdPartyRevisionAttachmentExisting.delete(activityId);
     }
     thirdPartyRevisionAttachmentRemovedIds.clear();
+
+    if (typeof persistRevisionDriveUploads === 'function') {
+        await persistRevisionDriveUploads(
+            thirdPartyRevisionAttachmentDrafts,
+            thirdPartyRevisionAttachmentExisting,
+            activityIdByRowId
+        );
+        return;
+    }
 
     for (const [rowId, activityId] of Object.entries(activityIdByRowId)) {
         const draft = thirdPartyRevisionAttachmentDrafts.get(String(rowId));
@@ -207,12 +229,24 @@ function bindThirdPartyRevisionAttachmentEvents() {
                 thirdPartyRevisionAttachmentDrafts.delete(rowId);
                 refreshThirdPartyRevisionAttachmentsForRow(rowId);
             }
+            return;
         }
         const removeExisting = event.target.closest('[data-remove-tp-revision-existing]');
         if (removeExisting) {
-            thirdPartyRevisionAttachmentRemovedIds.add(Number(removeExisting.dataset.removeTpRevisionExisting));
+            const source = removeExisting.dataset.removeTpRevisionSource || 'storage';
+            const numericId = Number(removeExisting.dataset.removeTpRevisionExisting);
+            thirdPartyRevisionAttachmentRemovedIds.add(source === 'drive' ? `drive:${numericId}` : `storage:${numericId}`);
+            thirdPartyRevisionAttachmentRemovedIds.add(numericId);
             refreshThirdPartyRevisionAttachmentsForRow(
                 removeExisting.closest('[data-tp-revision-activity-row-id]')?.dataset.tpRevisionActivityRowId
+            );
+            return;
+        }
+        const previewImg = event.target.closest('.revision-activity-attachment-item__preview');
+        if (previewImg?.dataset.attachmentDriveUrl) {
+            openImageAttachmentLightbox(
+                previewImg.dataset.attachmentDriveUrl,
+                previewImg.getAttribute('alt') || 'Imagem'
             );
         }
     });
@@ -223,6 +257,10 @@ function bindThirdPartyRevisionAttachmentEvents() {
         event.target.value = '';
         thirdPartyRevisionImageTargetRowId = null;
         if (!rowId || !file || !canEditThirdPartyRevisionActivityFields()) return;
+        if (typeof isGoogleDriveAppsScriptConfigured === 'function' && !isGoogleDriveAppsScriptConfigured()) {
+            alertAppDialog('Drive não configurado no Apps Script.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
         if (hasThirdPartyRevisionImage(rowId)) {
             alertAppDialog('Cada atividade permite apenas uma imagem.');
             return;

@@ -240,8 +240,6 @@ async function fetchRevisionActivityAttachmentsByActivityIds(activityIds = []) {
 
     if (error) {
         console.error('fetchRevisionActivityAttachmentsByActivityIds:', error);
-        if (error.message?.includes('RevisionActivityAttachment')) return {};
-        return {};
     }
 
     const byActivity = {};
@@ -251,6 +249,27 @@ async function fetchRevisionActivityAttachmentsByActivityIds(activityIds = []) {
             byActivity[key] = item;
         }
     });
+
+    if (typeof fetchDriveFilesByEntityIds === 'function'
+        && typeof DRIVE_FILE_ENTITY_TYPE !== 'undefined'
+        && typeof DRIVE_FILE_FOLDER_KIND !== 'undefined') {
+        try {
+            const driveByActivity = await fetchDriveFilesByEntityIds({
+                entityType: DRIVE_FILE_ENTITY_TYPE.REVISION_ACTIVITY,
+                entityIds: uniqueIds,
+                folderKind: DRIVE_FILE_FOLDER_KIND.REVISION
+            });
+            Object.entries(driveByActivity || {}).forEach(([activityId, item]) => {
+                byActivity[activityId] = {
+                    ...item,
+                    revisionActivityId: Number(activityId)
+                };
+            });
+        } catch (driveError) {
+            console.warn('fetchRevisionActivityAttachmentsByActivityIds drive:', driveError);
+        }
+    }
+
     return byActivity;
 }
 
