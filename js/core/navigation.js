@@ -50,6 +50,32 @@ function hideAuthScreens() {
     reset?.classList.remove('flex');
 }
 
+function setAppSessionLoading(active, message = 'Entrando no FGP...', detail = 'Abrindo sua última tela') {
+    const overlay = document.getElementById('app-session-loading');
+    if (!overlay) return;
+
+    overlay.classList.toggle('hidden', !active);
+    overlay.setAttribute('aria-hidden', active ? 'false' : 'true');
+    overlay.setAttribute('aria-busy', active ? 'true' : 'false');
+
+    if (active) {
+        const msgEl = document.getElementById('app-session-loading-msg');
+        const detailEl = document.getElementById('app-session-loading-detail');
+        if (msgEl && message) msgEl.textContent = message;
+        if (detailEl && detail) detailEl.textContent = detail;
+    }
+
+    document.body.classList.toggle('overflow-hidden', Boolean(active));
+}
+
+function showAppSessionLoading(message, detail) {
+    setAppSessionLoading(true, message, detail);
+}
+
+function hideAppSessionLoading() {
+    setAppSessionLoading(false);
+}
+
 function revealAuthenticatedShell() {
     if (!currentUser) return;
 
@@ -248,8 +274,11 @@ async function restoreAppNavState() {
                 await restorePesquisasView(state);
                 return true;
             case 'calendar':
-                if (typeof showCalendar === 'function') showCalendar();
-                return true;
+                if (typeof showCalendar === 'function') {
+                    await showCalendar();
+                    return true;
+                }
+                return false;
             case 'project-scheduling':
                 if (typeof showProjectSchedulingView === 'function') {
                     await showProjectSchedulingView();

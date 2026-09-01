@@ -34,15 +34,21 @@ async function persistAppUserInsert(payload, email, role) {
     return result;
 }
 
-async function enterApp(authUserId) {
+async function enterApp(authUserId, authUser = null) {
     if (enterAppInProgress) {
         return enterAppInProgress;
     }
 
     enterAppInProgress = (async () => {
-        await loadUserProfile(authUserId);
-        await loadSystemSettings();
-        showMainPanel();
+        showAppSessionLoading('Entrando no FGP...', 'Carregando seu perfil');
+        await Promise.all([
+            loadUserProfile(authUserId, authUser),
+            typeof loadSystemSettings === 'function'
+                ? loadSystemSettings()
+                : Promise.resolve()
+        ]);
+        showAppSessionLoading('Abrindo sua última tela...', 'Quase lá');
+        await showMainPanel();
     })();
 
     try {
@@ -52,6 +58,7 @@ async function enterApp(authUserId) {
         alertAppDialog(err.message || "Erro ao entrar no sistema.");
         currentUser = null;
     } finally {
+        hideAppSessionLoading();
         enterAppInProgress = null;
     }
 }
@@ -221,10 +228,17 @@ async function refreshCurrentUserProfile() {
     if (typeof updateAdminNav === 'function') updateAdminNav();
 }
 
-async function loadUserProfile(authUserId) {
-    const { data: profile, error: profileError } = await queryAppUserByAuthId(authUserId);
+async function loadUserProfile(authUserId, authUser = null) {
+    const profilePromise = queryAppUserByAuthId(authUserId);
+    const userPromise = authUser?.id
+        ? Promise.resolve(authUser)
+        : supabaseClient.auth.getUser().then(({ data }) => data?.user || null);
 
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    const [{ data: profile, error: profileError }, user] = await Promise.all([
+        profilePromise,
+        userPromise
+    ]);
+
     if (!user) {
         throw new Error("Sessão inválida.");
     }
@@ -314,6 +328,7 @@ function bindAuthEvents() {
         const originalText = btn.textContent;
         btn.disabled = true;
         btn.textContent = "Entrando...";
+        showAppSessionLoading('Entrando no FGP...', 'Validando acesso');
 
         try {
             const email = document.getElementById("login-email").value.trim().toLowerCase();
@@ -325,13 +340,15 @@ function bindAuthEvents() {
             });
 
             if (error || !data.user) {
+                hideAppSessionLoading();
                 alertAppDialog("Usuário ou senha inválidos." + (error ? " " + formatAuthError(error) : ""), { variant: 'error', title: 'Erro' });
                 return;
             }
 
-            await enterApp(data.user.id);
+            await enterApp(data.user.id, data.user);
         } catch (err) {
             console.error("login:", err);
+            hideAppSessionLoading();
             alertAppDialog(err.message || "Erro ao entrar no sistema.");
         } finally {
             btn.disabled = false;
@@ -417,7 +434,7 @@ function bindAuthEvents() {
             }
 
             if (data.session) {
-                await enterApp(data.user.id);
+                await enterApp(data.user.id, data.user);
                 document.getElementById("register-form").reset();
                 return;
             }
@@ -551,7 +568,7 @@ function bindAuthEvents() {
                 title: "Senha redefinida"
             });
             if (session?.user) {
-                await enterApp(session.user.id);
+                await enterApp(session.user.id, session.user);
             } else {
                 showLoginScreen();
             }
@@ -610,7 +627,8 @@ function bindAuthEvents() {
                 }
             }
             if (appShellReady) return;
-            await enterApp(session.user.id);
+            showAppSessionLoading('Entrando no FGP...', 'Restaurando sua sessão');
+            await enterApp(session.user.id, session.user);
         }
     });
 

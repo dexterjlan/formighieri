@@ -42,6 +42,16 @@
 
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
     <div id="app-root"></div>
+    <div id="app-session-loading"
+        class="hidden fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-6"
+        aria-hidden="true">
+        <div class="bg-white rounded-2xl shadow-xl px-8 py-7 w-full max-w-sm text-center">
+            <div class="mx-auto mb-4 h-10 w-10 rounded-full border-2 border-slate-200 border-t-amber-600 animate-spin"
+                aria-hidden="true"></div>
+            <p id="app-session-loading-msg" class="text-sm font-semibold text-slate-800">Entrando no FGP...</p>
+            <p id="app-session-loading-detail" class="text-xs text-slate-400 mt-1">Abrindo sua última tela</p>
+        </div>
+    </div>
     <script src="js/bootstrap.js?v=1.0.4"></script>
 </body>
 

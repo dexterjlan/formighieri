@@ -1150,7 +1150,7 @@ async function saveCurrentUserCalendarColor() {
     }
 }
 
-function showCalendar() {
+async function showCalendar() {
     if (!canAccessCalendar()) return;
 
     hideCalendarFloatingTooltip();
@@ -1162,7 +1162,7 @@ function showCalendar() {
         updateCalendarGoogleSyncControls();
     }
     if (typeof saveAppNavState === 'function') saveAppNavState({ view: 'calendar' });
-    refreshCalendarView();
+    await refreshCalendarView();
 }
 
 window.showCalendar = showCalendar;
