@@ -553,6 +553,12 @@ function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel)
                 <div class="flex flex-wrap items-center gap-2 shrink-0">
                     ${monthGroup.projectCount ? `<span class="text-xs font-bold text-indigo-700">${escapeHtml(pendingTotalLabel)}</span>` : ''}
                     ${fechamento?.projectCount ? `<span class="text-xs font-bold text-emerald-700">${escapeHtml(fechamentoTotalLabel)}</span>` : ''}
+                    <button type="button"
+                        class="programacao-producao-month-export text-[10px] bg-white border border-indigo-200 text-indigo-800 px-2 py-1 rounded-lg font-medium hover:bg-indigo-50"
+                        data-month-key="${escapeHtml(monthGroup.monthKey || '')}"
+                        aria-label="Exportar Excel deste mês">
+                        Excel
+                    </button>
                 </div>
             </div>
             <div class="collapsible-list-body hidden p-2 space-y-2">
@@ -575,15 +581,14 @@ function renderProgramacaoProducaoSummaryMonthGroups(groups, emptyMonthLabel) {
     return rendered.join('');
 }
 
-function renderProgramacaoProducaoSummary(projects) {
+function getProgramacaoProducaoVisibleSummaryMonthGroups(projects) {
     const filteredProjects = projects || getProgramacaoProducaoFilteredProjects();
     const context = getProgramacaoProducaoContext();
 
     if (typeof groupGestaoRelatorioPedidosPendentesByMonthAndClient !== 'function') {
-        return '<p class="text-xs text-slate-400 text-center py-4">Resumo indisponível.</p>';
+        return [];
     }
 
-    const emptyMonthLabel = 'Sem mês de produção';
     const pendingGroups = groupGestaoRelatorioPedidosPendentesByMonthAndClient(filteredProjects, context, {
         getProjectReferenceDate: getProgramacaoProducaoProjectReferenceDate,
         getOrderDisplayDeliveryDate: (project, groupContext) =>
@@ -596,9 +601,17 @@ function renderProgramacaoProducaoSummary(projects) {
         pendingGroups,
         programacaoProducaoCache.fechamentoMonthGroups || []
     );
-    const visibleGroups = filterProgramacaoProducaoSummaryMonthGroups(mergedGroups);
 
-    return renderProgramacaoProducaoSummaryMonthGroups(visibleGroups, emptyMonthLabel);
+    return filterProgramacaoProducaoSummaryMonthGroups(mergedGroups);
+}
+
+function renderProgramacaoProducaoSummary(projects) {
+    if (typeof groupGestaoRelatorioPedidosPendentesByMonthAndClient !== 'function') {
+        return '<p class="text-xs text-slate-400 text-center py-4">Resumo indisponível.</p>';
+    }
+
+    const visibleGroups = getProgramacaoProducaoVisibleSummaryMonthGroups(projects);
+    return renderProgramacaoProducaoSummaryMonthGroups(visibleGroups, 'Sem mês de produção');
 }
 
 function renderProgramacaoProducaoOrdersList(orders, options = {}) {
@@ -765,12 +778,343 @@ function showGestaoProgramacaoProducaoPanel() {
     loadProgramacaoProducao();
 }
 
+const PROGRAMACAO_PRODUCAO_AWAITING_CLIENT_APPROVAL_STATUS = 'Aguardando Aprovação';
+const PROGRAMACAO_PRODUCAO_EXPORT_ID_CHUNK_SIZE = 200;
+const PROGRAMACAO_PRODUCAO_EXPORT_HEADERS = [
+    'Pedido',
+    'Cliente',
+    'Projeto',
+    'Código',
+    'Status',
+    'Situação',
+    'Mês produção',
+    'Valor',
+    'Data entrega',
+    'Data medição',
+    'Data aprovação conferência',
+    'Data aprovação cliente'
+];
+
+function collectProgramacaoProducaoMonthGroupExportProjects(monthGroup) {
+    const rows = [];
+    const seenIds = new Set();
+
+    const addProject = (project, situation) => {
+        const projectId = Number(project?.id);
+        if (!projectId || seenIds.has(projectId)) return;
+        seenIds.add(projectId);
+        rows.push({ project, situation });
+    };
+
+    (monthGroup?.clients || []).forEach(clientGroup => {
+        (clientGroup.orders || []).forEach(orderGroup => {
+            (orderGroup.projectTree || []).forEach(({ project, children, parentPending }) => {
+                if (parentPending) addProject(project, 'Programado');
+                (children || []).forEach(child => addProject(child, 'Programado'));
+            });
+            (orderGroup.projects || []).forEach(project => addProject(project, 'Programado'));
+            (orderGroup.complementarProjects || []).forEach(project => addProject(project, 'Programado'));
+        });
+    });
+
+    (monthGroup?.fechamento?.clients || []).forEach(clientGroup => {
+        (clientGroup.projects || []).forEach(project => addProject(project, 'Produzido'));
+    });
+
+    return rows;
+}
+
+async function fetchProgramacaoProducaoRowsByProjectIds(table, select, projectIds) {
+    const ids = [...new Set((projectIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!ids.length) return [];
+
+    const rows = [];
+    for (let index = 0; index < ids.length; index += PROGRAMACAO_PRODUCAO_EXPORT_ID_CHUNK_SIZE) {
+        const chunk = ids.slice(index, index + PROGRAMACAO_PRODUCAO_EXPORT_ID_CHUNK_SIZE);
+        const { data, error } = await supabaseClient
+            .from(table)
+            .select(select)
+            .in('orderProjectId', chunk);
+
+        if (error) throw error;
+        rows.push(...(data || []));
+    }
+
+    return rows;
+}
+
+async function fetchProgramacaoProducaoConferenceApprovalDates(projectIds) {
+    const latestByProjectId = {};
+
+    const rememberApproved = (projectId, dateValue) => {
+        if (!projectId || !dateValue) return;
+        const current = latestByProjectId[projectId];
+        if (!current || String(dateValue) > String(current)) {
+            latestByProjectId[projectId] = dateValue;
+        }
+    };
+
+    try {
+        let rows;
+        try {
+            rows = await fetchProgramacaoProducaoRowsByProjectIds(
+                'PreliminaryDesignConferenceProject',
+                'orderProjectId, conference:PreliminaryDesignConference(id, status, approvedAt, updatedAt)',
+                projectIds
+            );
+        } catch (error) {
+            if (!String(error?.message || '').includes('approvedAt')) throw error;
+            rows = await fetchProgramacaoProducaoRowsByProjectIds(
+                'PreliminaryDesignConferenceProject',
+                'orderProjectId, conference:PreliminaryDesignConference(id, status, updatedAt)',
+                projectIds
+            );
+        }
+
+        (rows || []).forEach(row => {
+            const conference = Array.isArray(row.conference) ? row.conference[0] : row.conference;
+            if (!conference || conference.status !== 'Aprovada') return;
+            rememberApproved(Number(row.orderProjectId), conference.approvedAt || conference.updatedAt);
+        });
+    } catch (error) {
+        console.error('fetchProgramacaoProducaoConferenceApprovalDates:', error);
+    }
+
+    return latestByProjectId;
+}
+
+function getProgramacaoProducaoStatusHistoryName(entry, field) {
+    const embedded = entry?.[field];
+    const fromEmbed = Array.isArray(embedded) ? embedded[0]?.name : embedded?.name;
+    if (fromEmbed) return fromEmbed;
+
+    const idField = field === 'previousStatus' ? 'previousStatusId' : 'newStatusId';
+    const statusId = Number(entry?.[idField]);
+    if (!statusId) return '';
+
+    const fromCache = (programacaoProducaoCache.statuses || []).find(status => Number(status.id) === statusId);
+    return fromCache?.name || '';
+}
+
+async function fetchProgramacaoProducaoClientApprovalDates(projectIds) {
+    const firstLeaveByProjectId = {};
+
+    try {
+        let rows;
+        try {
+            rows = await fetchProgramacaoProducaoRowsByProjectIds(
+                'OrderProjectStatusHistory',
+                'orderProjectId, previousStatusId, newStatusId, changedAt, previousStatus:OrderProjectStatus!previousStatusId(id, name)',
+                projectIds
+            );
+        } catch (error) {
+            if (!String(error?.message || '').includes('previousStatus')) throw error;
+            rows = await fetchProgramacaoProducaoRowsByProjectIds(
+                'OrderProjectStatusHistory',
+                'orderProjectId, previousStatusId, newStatusId, changedAt',
+                projectIds
+            );
+        }
+
+        (rows || [])
+            .slice()
+            .sort((a, b) => String(a.changedAt || '').localeCompare(String(b.changedAt || '')))
+            .forEach(entry => {
+                const projectId = Number(entry.orderProjectId);
+                if (!projectId || firstLeaveByProjectId[projectId]) return;
+                if (getProgramacaoProducaoStatusHistoryName(entry, 'previousStatus') !== PROGRAMACAO_PRODUCAO_AWAITING_CLIENT_APPROVAL_STATUS) {
+                    return;
+                }
+                firstLeaveByProjectId[projectId] = entry.changedAt || null;
+            });
+    } catch (error) {
+        console.error('fetchProgramacaoProducaoClientApprovalDates:', error);
+    }
+
+    return firstLeaveByProjectId;
+}
+
+function parseProgramacaoProducaoExportExcelDate(dateStr) {
+    if (typeof parseGestaoKanbanExportExcelDate === 'function') {
+        return parseGestaoKanbanExportExcelDate(dateStr);
+    }
+    if (!dateStr) return null;
+    const part = String(dateStr).split('T')[0];
+    const [year, month, day] = part.split('-').map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day);
+}
+
+function toProgramacaoProducaoExportExcelSerial(date) {
+    if (typeof toGestaoKanbanExportExcelSerial === 'function') {
+        return toGestaoKanbanExportExcelSerial(date);
+    }
+    const epoch = Date.UTC(1899, 11, 30);
+    return (Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - epoch) / 86400000;
+}
+
+function applyProgramacaoProducaoExportSheetFormats(sheet, dataRowCount, XLSX) {
+    const dateColumns = [8, 9, 10, 11];
+    const valueColumn = 7;
+
+    for (let row = 1; row <= dataRowCount; row++) {
+        dateColumns.forEach(col => {
+            const ref = XLSX.utils.encode_cell({ r: row, c: col });
+            const cell = sheet[ref];
+            if (!cell?.v || !(cell.v instanceof Date)) return;
+            cell.t = 'n';
+            cell.v = toProgramacaoProducaoExportExcelSerial(cell.v);
+            cell.z = 'dd/mm/yyyy';
+        });
+
+        const valueRef = XLSX.utils.encode_cell({ r: row, c: valueColumn });
+        const valueCell = sheet[valueRef];
+        if (valueCell && typeof valueCell.v === 'number' && Number.isFinite(valueCell.v)) {
+            valueCell.t = 'n';
+            valueCell.z = '#,##0.00';
+        }
+    }
+}
+
+function getProgramacaoProducaoExportSheetName(monthKey) {
+    const label = typeof formatGestaoRelatorioMonthLabel === 'function'
+        ? formatGestaoRelatorioMonthLabel(monthKey, 'Sem mes')
+        : (monthKey || 'Mes');
+    return String(label)
+        .replace(/[:\\/?*\[\]]/g, ' ')
+        .trim()
+        .slice(0, 31) || 'Mes';
+}
+
+function getProgramacaoProducaoExportFilename(monthKey) {
+    const suffix = !monthKey || monthKey === 'sem-data' ? 'sem-mes' : monthKey;
+    return `fgp-programacao-producao-${suffix}.xlsx`;
+}
+
+function buildProgramacaoProducaoExportRow(entry, monthKey, extraDates) {
+    const { project, situation } = entry;
+    const context = getProgramacaoProducaoContext();
+    const projectId = Number(project.id);
+    const statusName = typeof getGestaoRelatorioStatusName === 'function'
+        ? getGestaoRelatorioStatusName(project)
+        : (project?.projectStatus?.name || '');
+    const projectLabel = typeof getGestaoRelatorioProjectLabel === 'function'
+        ? getGestaoRelatorioProjectLabel(project, { includeProjectCode: false })
+        : (project?.name || '');
+    const saleValue = typeof getProjectEffectiveSaleValue === 'function'
+        ? getProjectEffectiveSaleValue(project)
+        : Number(project?.saleValue);
+    const deliveryDate = typeof getGestaoRelatorioPedidosPendentesProjectDeliveryDate === 'function'
+        ? getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, context)
+        : (project?.order?.clientDeliveryDate || project?.deliveryDate || null);
+    const monthLabel = typeof formatGestaoRelatorioMonthLabel === 'function'
+        ? formatGestaoRelatorioMonthLabel(monthKey, 'Sem mês de produção')
+        : monthKey;
+
+    return [
+        project.order?.orderCode || '',
+        typeof getOrderClientName === 'function' ? (getOrderClientName(project.order) || '') : '',
+        projectLabel,
+        project.projectCode || '',
+        statusName,
+        situation,
+        monthLabel,
+        Number.isFinite(saleValue) ? saleValue : 0,
+        parseProgramacaoProducaoExportExcelDate(deliveryDate),
+        parseProgramacaoProducaoExportExcelDate(extraDates.measurementByProjectId[projectId]),
+        parseProgramacaoProducaoExportExcelDate(extraDates.conferenceByProjectId[projectId]),
+        parseProgramacaoProducaoExportExcelDate(extraDates.clientApprovalByProjectId[projectId])
+    ];
+}
+
+async function exportProgramacaoProducaoMonthToExcel(monthKey, button) {
+    if (!canAccessGestao()) return;
+
+    const originalLabel = button?.textContent || 'Excel';
+    if (button) {
+        button.disabled = true;
+        button.textContent = '...';
+    }
+
+    try {
+        if (typeof loadSheetJsLibrary !== 'function') {
+            throw new Error('Módulo de Excel não carregado.');
+        }
+
+        const monthGroup = getProgramacaoProducaoVisibleSummaryMonthGroups()
+            .find(group => String(group.monthKey) === String(monthKey));
+
+        if (!monthGroup) {
+            alertAppDialog('Mês não encontrado na visão atual.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
+
+        const exportProjects = collectProgramacaoProducaoMonthGroupExportProjects(monthGroup);
+        if (!exportProjects.length) {
+            alertAppDialog('Nenhum projeto neste mês para exportar.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
+
+        const projectIds = exportProjects.map(entry => Number(entry.project.id)).filter(Boolean);
+        const [measurementByProjectId, conferenceByProjectId, clientApprovalByProjectId] = await Promise.all([
+            typeof fetchGestaoRelatorioMeasurementDates === 'function'
+                ? fetchGestaoRelatorioMeasurementDates(projectIds)
+                : {},
+            fetchProgramacaoProducaoConferenceApprovalDates(projectIds),
+            fetchProgramacaoProducaoClientApprovalDates(projectIds)
+        ]);
+
+        const extraDates = { measurementByProjectId, conferenceByProjectId, clientApprovalByProjectId };
+        const dataRows = exportProjects.map(entry =>
+            buildProgramacaoProducaoExportRow(entry, monthGroup.monthKey, extraDates)
+        );
+
+        const XLSX = await loadSheetJsLibrary();
+        const sheet = XLSX.utils.aoa_to_sheet([PROGRAMACAO_PRODUCAO_EXPORT_HEADERS, ...dataRows]);
+        applyProgramacaoProducaoExportSheetFormats(sheet, dataRows.length, XLSX);
+        sheet['!cols'] = [
+            { wch: 12 },
+            { wch: 28 },
+            { wch: 28 },
+            { wch: 14 },
+            { wch: 24 },
+            { wch: 12 },
+            { wch: 18 },
+            { wch: 14 },
+            { wch: 14 },
+            { wch: 14 },
+            { wch: 24 },
+            { wch: 22 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, getProgramacaoProducaoExportSheetName(monthGroup.monthKey));
+        XLSX.writeFile(workbook, getProgramacaoProducaoExportFilename(monthGroup.monthKey));
+    } catch (error) {
+        console.error('exportProgramacaoProducaoMonthToExcel:', error);
+        alertAppDialog(`Erro ao exportar Excel: ${error.message}`);
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = originalLabel;
+        }
+    }
+}
+
 function bindProgramacaoProducaoEvents() {
     document.getElementById('gestao-nav-programacao-producao')?.addEventListener('click', () => {
         showGestaoProgramacaoProducaoPanel();
     });
 
     document.getElementById('btn-programacao-producao-refresh')?.addEventListener('click', loadProgramacaoProducao);
+
+    document.getElementById('gestao-programacao-producao-panel')?.addEventListener('click', async (event) => {
+        const button = event.target.closest('.programacao-producao-month-export');
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        await exportProgramacaoProducaoMonthToExcel(button.dataset.monthKey, button);
+    });
 
     document.getElementById('programacao-producao-filter-client')?.addEventListener('input', scheduleProgramacaoProducaoFilterRender);
     document.getElementById('programacao-producao-filter-hide-with-month')?.addEventListener('change', renderProgramacaoProducaoPanel);
