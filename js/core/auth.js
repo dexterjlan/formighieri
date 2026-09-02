@@ -47,6 +47,9 @@ async function enterApp(authUserId, authUser = null) {
                 ? loadSystemSettings()
                 : Promise.resolve()
         ]);
+        if (typeof restoreUserImpersonationIfNeeded === 'function') {
+            await restoreUserImpersonationIfNeeded();
+        }
         showAppSessionLoading('Abrindo sua última tela...', 'Quase lá');
         await showMainPanel();
     })();
@@ -219,10 +222,11 @@ async function refreshCurrentUserProfile() {
 
     currentUser = normalizeAppUserProfile({ ...currentUser, ...data });
 
-    const roleLabel = currentUser.role || 'Sem perfil';
     const display = document.getElementById('user-display');
     if (display) {
-        display.innerText = `Logado como: ${currentUser.name} (${roleLabel})`;
+        display.innerText = typeof getLoggedInUserDisplayText === 'function'
+            ? getLoggedInUserDisplayText()
+            : `Logado como: ${currentUser.name} (${currentUser.role || 'Sem perfil'})`;
     }
 
     if (typeof updateAdminNav === 'function') updateAdminNav();
@@ -595,6 +599,7 @@ function bindAuthEvents() {
     });
 
     document.getElementById("btn-logout").addEventListener("click", async function () {
+        if (typeof clearUserImpersonationState === 'function') clearUserImpersonationState();
         if (typeof clearAppNavState === 'function') clearAppNavState();
         await supabaseClient.auth.signOut();
         location.reload();
@@ -605,6 +610,7 @@ function bindAuthEvents() {
             currentUser = null;
             appShellReady = false;
             passwordRecoveryPending = false;
+            if (typeof clearUserImpersonationState === 'function') clearUserImpersonationState();
             if (typeof clearAppNavState === 'function') clearAppNavState();
             return;
         }

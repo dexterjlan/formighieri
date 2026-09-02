@@ -83,8 +83,9 @@ function revealAuthenticatedShell() {
     document.getElementById('main-panel').classList.remove('hidden');
 
     const roleLabel = currentUser.role || 'Sem perfil';
-    document.getElementById('user-display').innerText =
-        `Logado como: ${currentUser.name} (${roleLabel})`;
+    document.getElementById('user-display').innerText = typeof getLoggedInUserDisplayText === 'function'
+        ? getLoggedInUserDisplayText()
+        : `Logado como: ${currentUser.name} (${roleLabel})`;
 
     updateAdminNav();
     if (typeof updateCommercialApprovalButtonVisibility === 'function') {
@@ -121,6 +122,9 @@ async function restoreGestaoView(state) {
         },
         'alterar-status-projeto': () => {
             if (typeof showGestaoAlterarStatusProjetoPanel === 'function') showGestaoAlterarStatusProjetoPanel();
+        },
+        'create-detailing': () => {
+            if (typeof showGestaoCreateDetailingPanel === 'function') showGestaoCreateDetailingPanel();
         },
         clientes: () => {
             if (typeof showGestaoClientesPanel === 'function') showGestaoClientesPanel();
@@ -316,10 +320,14 @@ async function restoreAppNavState() {
 
 async function showMainPanel() {
     revealAuthenticatedShell();
+    if (typeof updateUserImpersonationBanner === 'function') {
+        updateUserImpersonationBanner();
+    }
 
     if (appShellReady) return;
 
-    const restored = await restoreAppNavState();
+    const skipRestore = typeof isImpersonating === 'function' && isImpersonating();
+    const restored = skipRestore ? false : await restoreAppNavState();
     if (!restored) {
         if (typeof isThirdParty === 'function' && isThirdParty()
             && typeof canAccessPendencias === 'function' && canAccessPendencias()

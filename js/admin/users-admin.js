@@ -249,6 +249,10 @@ function renderUsersAdminCards(users) {
             : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200';
         const disableToggle = isSelf ? 'disabled title="Você não pode desativar a si mesmo"' : '';
         const disableEdit = !isActive ? 'disabled title="Reative o usuário para editar"' : '';
+        const canImpersonate = typeof canStartUserImpersonation === 'function'
+            && canStartUserImpersonation()
+            && isActive
+            && !isSelf;
         const initialRole = u.role || '';
         const cardStyle = getUserCardStyle(initialRole);
 
@@ -288,6 +292,12 @@ function renderUsersAdminCards(users) {
                     </div>
 
                     <div class="flex gap-1.5 shrink-0">
+                        ${canImpersonate ? `
+                            <button type="button" onclick="startUserImpersonation(${u.id})"
+                                class="text-[10px] px-2.5 py-1 rounded-md font-medium whitespace-nowrap bg-white border border-slate-300 text-slate-700 hover:bg-slate-50">
+                                Ver como
+                            </button>
+                        ` : ''}
                         <button type="button" onclick="saveUserRole(${u.id})" ${isActive ? '' : 'disabled'}
                             class="bg-amber-600 text-white text-[10px] px-2.5 py-1 rounded-md font-medium hover:bg-amber-700 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">
                             Salvar
@@ -400,10 +410,11 @@ function bindUsersAdminEvents() {
 function refreshLoggedInUserDisplay() {
     if (!currentUser) return;
 
-    const roleLabel = currentUser.role || 'Sem perfil';
     const display = document.getElementById('user-display');
     if (display) {
-        display.innerText = `Logado como: ${currentUser.name} (${roleLabel})`;
+        display.innerText = typeof getLoggedInUserDisplayText === 'function'
+            ? getLoggedInUserDisplayText()
+            : `Logado como: ${currentUser.name} (${currentUser.role || 'Sem perfil'})`;
     }
 
     if (typeof updateAdminNav === 'function') updateAdminNav();

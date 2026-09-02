@@ -103,4 +103,7 @@ function initAppEvents() {
     bindPendenciasEvents();
     bindPesquisasEvents();
     bindUsersAdminEvents();
+    if (typeof bindUserImpersonationEvents === 'function') {
+        bindUserImpersonationEvents();
+    }
 }

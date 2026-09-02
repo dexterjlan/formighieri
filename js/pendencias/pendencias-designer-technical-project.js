@@ -449,7 +449,79 @@ function getPendenciasProjectLabel(project) {
     return getPendenciasProjectDetailLabel(project);
 }
 
-function buildPendenciasProjetistaWorkloadRows(projetistas, projects) {
+function getPendenciasWorkloadAssigneeId(project, implementationDesignerByProjectId = {}) {
+    const statusName = normalizePendenciasWorkloadStatusName(
+        getPendenciasProjectStatusName(project)
+    );
+    if (statusName === PENDENCIAS_STATUS_IMPLANTACAO) {
+        return Number(implementationDesignerByProjectId[Number(project.id)]?.designerId) || null;
+    }
+    return Number(project.designerId) || null;
+}
+
+function getPendenciasWorkloadAssigneeName(project, designerId, implementationDesignerByProjectId = {}) {
+    const statusName = normalizePendenciasWorkloadStatusName(
+        getPendenciasProjectStatusName(project)
+    );
+    if (statusName === PENDENCIAS_STATUS_IMPLANTACAO) {
+        return implementationDesignerByProjectId[Number(project.id)]?.name || null;
+    }
+    if (Number(project.designerId) === Number(designerId)) {
+        return project.designer?.name || null;
+    }
+    return null;
+}
+
+async function fetchPendenciasImplementationDesignerByProjectIds(projectIds) {
+    const ids = [...new Set((projectIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!ids.length) return {};
+
+    let result = await supabaseClient
+        .from('Implementation')
+        .select('orderProjectId, designerId, createdById, designer:appUsers!Implementation_designerId_fkey(id, name), createdBy:appUsers!createdById(id, name)')
+        .in('orderProjectId', ids);
+
+    if (result.error?.message?.includes('designerId')) {
+        result = await supabaseClient
+            .from('Implementation')
+            .select('orderProjectId, createdById, createdBy:appUsers!createdById(id, name)')
+            .in('orderProjectId', ids);
+    } else if (result.error?.message?.includes('designer') || result.error?.message?.includes('createdBy')) {
+        result = await supabaseClient
+            .from('Implementation')
+            .select('orderProjectId, designerId, createdById')
+            .in('orderProjectId', ids);
+    }
+
+    if (result.error) {
+        console.warn('fetchPendenciasImplementationDesignerByProjectIds:', result.error);
+        return {};
+    }
+
+    const byProjectId = {};
+    (result.data || []).forEach(row => {
+        const projectId = Number(row.orderProjectId);
+        if (!projectId) return;
+
+        const explicitDesignerId = Number(row.designerId) || null;
+        const fallbackId = Number(row.createdById) || null;
+        const designerId = explicitDesignerId || fallbackId;
+        if (!designerId) return;
+
+        if (byProjectId[projectId] && !explicitDesignerId) return;
+
+        const designerEmbed = Array.isArray(row.designer) ? row.designer[0] : row.designer;
+        const createdByEmbed = Array.isArray(row.createdBy) ? row.createdBy[0] : row.createdBy;
+        byProjectId[projectId] = {
+            designerId,
+            name: (explicitDesignerId ? designerEmbed?.name : null) || createdByEmbed?.name || null
+        };
+    });
+
+    return byProjectId;
+}
+
+function buildPendenciasProjetistaWorkloadRows(projetistas, projects, implementationDesignerByProjectId = {}) {
     const workloadByDesigner = Object.fromEntries(
         projetistas.map(projetista => [
             projetista.id,
@@ -462,22 +534,27 @@ function buildPendenciasProjetistaWorkloadRows(projetistas, projects) {
     );
 
     (projects || []).forEach(project => {
-        if (!project.designerId) return;
-
         const statusName = normalizePendenciasWorkloadStatusName(
             getPendenciasProjectStatusName(project)
         );
         if (!PENDENCIAS_GESTOR_WORKLOAD_COLUMNS.includes(statusName)) return;
 
-        if (!workloadByDesigner[project.designerId]) {
-            workloadByDesigner[project.designerId] = {
-                designerId: project.designerId,
-                name: project.designer?.name || 'Projetista',
+        const designerId = getPendenciasWorkloadAssigneeId(project, implementationDesignerByProjectId);
+        if (!designerId) return;
+
+        if (!workloadByDesigner[designerId]) {
+            workloadByDesigner[designerId] = {
+                designerId,
+                name: getPendenciasWorkloadAssigneeName(project, designerId, implementationDesignerByProjectId)
+                    || 'Projetista',
                 projects: []
             };
         }
 
-        workloadByDesigner[project.designerId].projects.push(project);
+        workloadByDesigner[designerId].projects.push({
+            ...project,
+            workloadAssigneeId: designerId
+        });
     });
 
     return Object.values(workloadByDesigner)
@@ -505,10 +582,25 @@ async function fetchPendenciasProjetistaWorkload() {
         return { error: result.error, projetistas, workload: [] };
     }
 
+    const projects = result.data || [];
+    const implantacaoProjectIds = projects
+        .filter(project => normalizePendenciasWorkloadStatusName(
+            getPendenciasProjectStatusName(project)
+        ) === PENDENCIAS_STATUS_IMPLANTACAO)
+        .map(project => Number(project.id))
+        .filter(Boolean);
+    const implementationDesignerByProjectId = await fetchPendenciasImplementationDesignerByProjectIds(
+        implantacaoProjectIds
+    );
+
     return {
         error: null,
         projetistas,
-        workload: buildPendenciasProjetistaWorkloadRows(projetistas, result.data || [])
+        workload: buildPendenciasProjetistaWorkloadRows(
+            projetistas,
+            projects,
+            implementationDesignerByProjectId
+        )
     };
 }
 
@@ -733,6 +825,7 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                 const clientName = getOrderClientName(project.order) || '—';
                 const projectName = project.name || 'Projeto';
                 const itemTitle = `${clientName} · ${projectName}`;
+                const assigneeId = Number(project.workloadAssigneeId || project.designerId) || '';
 
                 return `
                     <li class="collapsible-list-card border-b border-slate-100 last:border-0" data-project-id="${project.id}">
@@ -758,14 +851,15 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                             <div class="flex items-center gap-1.5 mt-1">
                                 <select class="pendencias-workload-designer-select flex-1 min-w-0 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
                                     data-project-id="${project.id}"
-                                    data-current-designer-id="${project.designerId || ''}">
+                                    data-current-designer-id="${assigneeId}">
                                     <option value="">Selecione...</option>
-                                    ${getPendenciasWorkloadProjetistaOptionsHtml(project.designerId)}
+                                    ${getPendenciasWorkloadProjetistaOptionsHtml(assigneeId)}
                                 </select>
                                 <button type="button"
                                     class="pendencias-workload-atualizar-btn shrink-0 text-[10px] bg-violet-700 text-white hover:bg-violet-800 px-2 py-1 rounded-lg font-medium whitespace-nowrap"
                                     data-project-id="${project.id}"
-                                    data-current-designer-id="${project.designerId || ''}"
+                                    data-current-designer-id="${assigneeId}"
+                                    data-status-name="${escapeHtml(statusName)}"
                                     data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
                                     Atualizar
                                 </button>
@@ -836,7 +930,7 @@ function renderPendenciasProjetosSemProjetistas(
                 <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                     <div>
                         <h3 class="font-bold text-sm text-slate-900">Carga por projetista</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial Cons., Em Revisão Comercial Proj., Aguardando Aprovação, Aguardando PPCP, Implantação e Detalhamento.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial Cons., Em Revisão Comercial Proj., Aguardando Aprovação, Aguardando PPCP, Implantação e Detalhamento. Implantação conta para quem iniciou a implantação.</p>
                     </div>
                     <button type="button" id="btn-pendencias-refresh-sem-projetistas"
                         class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
@@ -886,7 +980,8 @@ function renderPendenciasProjetosSemProjetistas(
                     Number(button.dataset.currentDesignerId) || null,
                     inicioDate,
                     previsaoDate,
-                    button.dataset.deliveryDate || ''
+                    button.dataset.deliveryDate || '',
+                    button.dataset.statusName || ''
                 );
             });
         });
@@ -959,7 +1054,7 @@ async function loadPendenciasProjetosSemProjetistas() {
     );
 }
 
-async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, currentDesignerId, inicioDate, previsaoDate, deliveryDate = '') {
+async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, currentDesignerId, inicioDate, previsaoDate, deliveryDate = '', statusName = '') {
     if (!canSeePendenciasGestorProjetosMenu()) {
         alertAppDialog('Somente Gestor de Projetos pode atualizar projetos.', { variant: 'warning', title: 'Aviso' });
         return;
@@ -971,6 +1066,7 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
         return;
     }
 
+    const isImplantacao = normalizePendenciasWorkloadStatusName(statusName) === PENDENCIAS_STATUS_IMPLANTACAO;
     const shouldChangeDesigner = Boolean(newDesignerId) && Number(newDesignerId) !== Number(currentDesignerId);
     let projetista = null;
 
@@ -981,7 +1077,10 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
             return;
         }
 
-        if (!(await confirmAppDialog(`Transferir este projeto para ${projetista.name}?`))) return;
+        const confirmMessage = isImplantacao
+            ? `Transferir esta implantação para ${projetista.name}?`
+            : `Transferir este projeto para ${projetista.name}?`;
+        if (!(await confirmAppDialog(confirmMessage))) return;
     }
 
     const now = new Date().toISOString();
@@ -991,38 +1090,62 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
         setPendenciasActionLoading(true, loadingMessage);
 
         if (shouldChangeDesigner) {
-            const { error } = await supabaseClient
-                .from('OrderProject')
-                .update({
-                    designerId: newDesignerId,
-                    updatedById: currentUser.id,
-                    updatedAt: now
-                })
-                .eq('id', projectId);
+            if (isImplantacao) {
+                const { error } = await supabaseClient
+                    .from('Implementation')
+                    .update({
+                        designerId: newDesignerId,
+                        updatedById: currentUser.id,
+                        updatedAt: now
+                    })
+                    .eq('orderProjectId', projectId);
 
-            if (error) {
-                alertAppDialog('Erro ao atualizar projeto: ' + error.message);
-                return;
-            }
-
-            if (typeof notifyDesignerAssignedToProjectEmail === 'function') {
-                const { data: projectMeta } = await supabaseClient
-                    .from('OrderProject')
-                    .select('orderId')
-                    .eq('id', projectId)
-                    .maybeSingle();
-
-                if (projectMeta?.orderId) {
-                    await notifyDesignerAssignedToProjectEmail({
-                        orderId: projectMeta.orderId,
-                        orderProjectIds: [projectId],
-                        designerId: newDesignerId
+                if (error?.message?.includes('designerId')) {
+                    alertAppDialog('Execute supabase/feats/add-implementation-designer.sql no Supabase SQL Editor.', {
+                        variant: 'warning',
+                        title: 'Aviso'
                     });
+                    return;
+                }
+
+                if (error) {
+                    alertAppDialog('Erro ao atualizar implantação: ' + error.message);
+                    return;
+                }
+            } else {
+                const { error } = await supabaseClient
+                    .from('OrderProject')
+                    .update({
+                        designerId: newDesignerId,
+                        updatedById: currentUser.id,
+                        updatedAt: now
+                    })
+                    .eq('id', projectId);
+
+                if (error) {
+                    alertAppDialog('Erro ao atualizar projeto: ' + error.message);
+                    return;
+                }
+
+                if (typeof notifyDesignerAssignedToProjectEmail === 'function') {
+                    const { data: projectMeta } = await supabaseClient
+                        .from('OrderProject')
+                        .select('orderId')
+                        .eq('id', projectId)
+                        .maybeSingle();
+
+                    if (projectMeta?.orderId) {
+                        await notifyDesignerAssignedToProjectEmail({
+                            orderId: projectMeta.orderId,
+                            orderProjectIds: [projectId],
+                            designerId: newDesignerId
+                        });
+                    }
                 }
             }
         }
 
-        const forecastUserId = shouldChangeDesigner ? newDesignerId : undefined;
+        const forecastUserId = shouldChangeDesigner && !isImplantacao ? newDesignerId : undefined;
         const { error: forecastError } = await savePendenciasTechnicalProjectForecast(
             projectId,
             inicioDate,
