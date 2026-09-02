@@ -466,6 +466,62 @@ function getPendenciasRequestProjectLabel(request) {
     return `${name}${env}`;
 }
 
+function canCreatePendenciasRequisicao() {
+    return typeof canActOrderDetailTab === 'function' && canActOrderDetailTab('requests');
+}
+
+function getPendenciasRequestOrderLabel(order) {
+    const code = order?.orderCode || '';
+    const clientName = typeof getOrderClientName === 'function' ? getOrderClientName(order) : '';
+    return [code, clientName].filter(Boolean).join(' · ');
+}
+
+async function openCreateRequestFromPendencias() {
+    if (!canCreatePendenciasRequisicao()) {
+        alertAppDialog('Sem permissão para criar requisição.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+    if (typeof openOrderCodePicker !== 'function') {
+        alertAppDialog('Busca de pedido indisponível.');
+        return;
+    }
+
+    const pickerConfig = {
+        onSelect: async (order) => {
+            if (!order?.id) {
+                alertAppDialog('Pedido inválido.');
+                return;
+            }
+            if (typeof openConvModal !== 'function') {
+                alertAppDialog('Tela de requisição indisponível.');
+                return;
+            }
+
+            await openConvModal({
+                orderId: order.id,
+                source: 'pendencias',
+                orderLabel: getPendenciasRequestOrderLabel(order)
+            });
+        }
+    };
+
+    if (currentUser?.role === 'Projetista'
+        && typeof fetchEligibleOrdersForCurrentDesignerRequest === 'function') {
+        pickerConfig.filterLocally = true;
+        pickerConfig.hideSearchButton = true;
+        pickerConfig.loadOrders = fetchEligibleOrdersForCurrentDesignerRequest;
+        pickerConfig.title = 'Selecionar pedido';
+        pickerConfig.description = 'Pedidos com projetos associados a você, elegíveis para requisição. Filtre pelo cliente se quiser.';
+        pickerConfig.searchLabel = 'Filtrar pelo cliente';
+        pickerConfig.searchPlaceholder = 'Nome do cliente';
+        pickerConfig.emptySourceMessage = 'Nenhum pedido com projeto associado a você elegível para requisição.';
+    }
+
+    openOrderCodePicker(pickerConfig);
+}
+
+window.openCreateRequestFromPendencias = openCreateRequestFromPendencias;
+
 async function enrichPendenciasRequestsWithDesigner(requests) {
     if (!requests.length) return requests;
     if (requests.every(request => request.designerName || !request.designerId)) return requests;
@@ -578,6 +634,14 @@ function renderPendenciasRequisicaoList(requests, overviewMode) {
         ? 'Nenhuma requisição aguardando projetista.'
         : 'Nenhuma requisição aguardando sua resposta.';
 
+    const createButtonHtml = canCreatePendenciasRequisicao()
+        ? `<button type="button" id="btn-pendencias-create-requisicao"
+            class="order-tab-action-btn text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">
+            <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5a.5.5 0 0 1 .5.5v4.5H13a.5.5 0 0 1 0 1H8.5V13a.5.5 0 0 1-1 0V8.5H3a.5.5 0 0 1 0-1h4.5V3a.5.5 0 0 1 .5-.5z"/></svg>
+            <span>Criar Requisição</span>
+        </button>`
+        : '';
+
     content.innerHTML = `
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
@@ -585,10 +649,13 @@ function renderPendenciasRequisicaoList(requests, overviewMode) {
                     <h3 class="font-bold text-sm text-slate-900">Requisição</h3>
                     <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
                 </div>
-                <button type="button" id="btn-pendencias-refresh-requisicao"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
+                <div class="flex flex-wrap items-center gap-2">
+                    ${createButtonHtml}
+                    <button type="button" id="btn-pendencias-refresh-requisicao"
+                        class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                        ${renderRefreshButtonInnerHtml()}
+                    </button>
+                </div>
             </div>
             ${requests.length
                 ? `<div class="overflow-x-auto">
@@ -610,6 +677,8 @@ function renderPendenciasRequisicaoList(requests, overviewMode) {
         </div>
     `;
 
+    content.querySelector('#btn-pendencias-create-requisicao')
+        ?.addEventListener('click', () => openCreateRequestFromPendencias());
     content.querySelector('#btn-pendencias-refresh-requisicao')
         ?.addEventListener('click', () => loadPendenciasRequisicao());
 }

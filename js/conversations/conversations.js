@@ -9,8 +9,17 @@ function getDefaultConvModalContext() {
         lockOrderProjectId: null,
         lockOrderProjectLabel: null,
         lockDesignerId: null,
-        source: 'order'
+        source: 'order',
+        orderLabel: null
     };
+}
+
+function setConvModalSubtitle(label) {
+    const el = document.getElementById('conv-modal-subtitle');
+    if (!el) return;
+    const text = String(label || '').trim();
+    el.textContent = text;
+    el.classList.toggle('hidden', !text);
 }
 
 function isConvModalDetailingContext() {
@@ -61,13 +70,28 @@ async function refreshRequestRelatedViews() {
         await loadConversations(activeOrderId);
     }
 
-    if (typeof loadPendenciasConsultorRequisicoes === 'function'
-        && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
-        await loadPendenciasConsultorRequisicoes();
-    }
+    await refreshPendenciasRequestListsIfVisible();
 
     if (typeof refreshDetalhamentoRequestsIfModalOpen === 'function') {
         await refreshDetalhamentoRequestsIfModalOpen();
+    }
+}
+
+async function refreshPendenciasRequestListsIfVisible() {
+    const pendenciasView = document.getElementById('pendencias-view');
+    if (!pendenciasView || pendenciasView.classList.contains('hidden')) return;
+
+    if (pendenciasActiveSection === 'consultor'
+        && pendenciasActiveItem === 'requisicoes'
+        && typeof loadPendenciasConsultorRequisicoes === 'function') {
+        await loadPendenciasConsultorRequisicoes();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'projetista'
+        && pendenciasActiveItem === 'requisicao'
+        && typeof loadPendenciasRequisicao === 'function') {
+        await loadPendenciasRequisicao();
     }
 }
 
@@ -110,11 +134,22 @@ function getConvProjectStatusSortOrder(project, statuses = []) {
     return byName?.sortOrder != null ? Number(byName.sortOrder) : null;
 }
 
+function shouldFilterConvProjectsByCurrentDesigner() {
+    return currentUser?.role === 'Projetista';
+}
+
+function isProjectAssignedToCurrentDesigner(project) {
+    return Number(project?.designerId) === Number(currentUser?.id);
+}
+
 function isProjectEligibleForConvPicker(project, statuses, maxSortOrder) {
     if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
         return false;
     }
     if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+        return false;
+    }
+    if (shouldFilterConvProjectsByCurrentDesigner() && !isProjectAssignedToCurrentDesigner(project)) {
         return false;
     }
     if (maxSortOrder == null) return true;
@@ -129,6 +164,142 @@ function filterProjectsForConvPicker(projects, selectedId, statuses, maxSortOrde
         isProjectEligibleForConvPicker(project, statuses, maxSortOrder)
         || (selectedNum && Number(project.id) === selectedNum)
     );
+}
+
+function shouldRetryDesignerRequestOrderSelect(error) {
+    const message = error?.message || '';
+    return message.includes('isComplementary')
+        || message.includes('isReplaced')
+        || message.includes('projectStatus')
+        || message.includes('OrderProjectStatus')
+        || message.includes('sortOrder')
+        || message.includes('salesOrders')
+        || message.includes('consultor')
+        || message.includes('Client');
+}
+
+async function fetchOrderProjectsPagesForDesigner(designerId, selectColumns) {
+    const pageSize = 1000;
+    const projects = [];
+    let from = 0;
+
+    while (true) {
+        let query = supabaseClient
+            .from('OrderProject')
+            .select(selectColumns)
+            .eq('designerId', designerId);
+
+        if (selectColumns.includes('isComplementary')) {
+            query = query.eq('isComplementary', false);
+        }
+        if (selectColumns.includes('isReplaced')) {
+            query = query.eq('isReplaced', false);
+        }
+
+        const { data, error } = await query
+            .order('id', { ascending: true })
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            return { error, projects };
+        }
+
+        projects.push(...(data || []));
+        if (!data || data.length < pageSize) {
+            return { error: null, projects };
+        }
+        from += pageSize;
+    }
+}
+
+async function fetchEligibleOrdersForCurrentDesignerRequest() {
+    const designerId = Number(currentUser?.id);
+    if (currentUser?.role !== 'Projetista' || !designerId) {
+        return { error: null, orders: [] };
+    }
+
+    const statuses = await loadConvProjectStatusesForFilter();
+    const endStatus = statuses.find(status => status.name === CONV_PROJECT_STATUS_END);
+    const maxSortOrder = endStatus?.sortOrder != null ? Number(endStatus.sortOrder) : null;
+    const orderEmbed = typeof getOrderSalesOrderEmbed === 'function'
+        ? getOrderSalesOrderEmbed()
+        : 'order:salesOrders(id, orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))';
+
+    const selects = [
+        `id, orderId, designerId, statusId, isComplementary, isReplaced, projectStatus:OrderProjectStatus(id, name, sortOrder), ${orderEmbed}`,
+        `id, orderId, designerId, statusId, isComplementary, isReplaced, projectStatus:OrderProjectStatus(id, name), ${orderEmbed}`,
+        `id, orderId, designerId, statusId, projectStatus:OrderProjectStatus(id, name, sortOrder), ${orderEmbed}`,
+        `id, orderId, designerId, statusId, ${orderEmbed}`,
+        'id, orderId, designerId, statusId'
+    ];
+
+    let projects = [];
+    let lastError = null;
+
+    for (const selectColumns of selects) {
+        const result = await fetchOrderProjectsPagesForDesigner(designerId, selectColumns);
+        if (!result.error) {
+            projects = result.projects;
+            lastError = null;
+            break;
+        }
+
+        lastError = result.error;
+        if (!shouldRetryDesignerRequestOrderSelect(result.error)) {
+            return { error: result.error, orders: [] };
+        }
+    }
+
+    if (lastError) {
+        return { error: lastError, orders: [] };
+    }
+
+    const eligible = projects.filter(project =>
+        isProjectEligibleForConvPicker(project, statuses, maxSortOrder)
+    );
+
+    const ordersById = new Map();
+    eligible.forEach(project => {
+        const nestedOrder = project.order;
+        const orderId = Number(nestedOrder?.id || project.orderId);
+        if (!orderId || ordersById.has(orderId)) return;
+        ordersById.set(orderId, nestedOrder?.id ? nestedOrder : { id: orderId });
+    });
+
+    const missingIds = [...ordersById.entries()]
+        .filter(([, order]) => !order.orderCode)
+        .map(([orderId]) => orderId);
+
+    if (missingIds.length) {
+        const orderSelect = typeof getSalesOrderMinimalEmbedSelect === 'function'
+            ? getSalesOrderMinimalEmbedSelect()
+            : 'id, orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name)';
+        const chunkSize = 100;
+
+        for (let index = 0; index < missingIds.length; index += chunkSize) {
+            const chunk = missingIds.slice(index, index + chunkSize);
+            const { data: orders, error } = await supabaseClient
+                .from('salesOrders')
+                .select(orderSelect)
+                .in('id', chunk);
+
+            if (error) {
+                return { error, orders: [] };
+            }
+
+            (orders || []).forEach(order => ordersById.set(Number(order.id), order));
+        }
+    }
+
+    const orders = [...ordersById.values()]
+        .filter(order => order?.id)
+        .sort((a, b) => String(b.orderCode || '').localeCompare(
+            String(a.orderCode || ''),
+            'pt-BR',
+            { numeric: true }
+        ));
+
+    return { error: null, orders };
 }
 
 async function loadProjetistas() {
@@ -223,9 +394,14 @@ async function loadConvOrderProjects(selectedId) {
     select.innerHTML = '<option value="">Selecione...</option>';
 
     if (!filteredProjects.length) {
-        const emptyLabel = projects.length
-            ? 'Nenhum projeto elegível (status até Projeto Técnico)'
-            : 'Nenhum projeto cadastrado no pedido';
+        const assignedCount = shouldFilterConvProjectsByCurrentDesigner()
+            ? projects.filter(isProjectAssignedToCurrentDesigner).length
+            : projects.length;
+        const emptyLabel = !projects.length
+            ? 'Nenhum projeto cadastrado no pedido'
+            : !assignedCount
+                ? 'Nenhum projeto associado a você neste pedido'
+                : 'Nenhum projeto elegível (status até Projeto Técnico)';
         select.innerHTML += `<option value="" disabled>${emptyLabel}</option>`;
         return;
     }
@@ -343,6 +519,7 @@ async function openConvModal(options = {}) {
 
     editingConversationId = null;
     document.getElementById("conv-modal-title").textContent = getConvModalTitle(null, 'create');
+    setConvModalSubtitle(convModalContext.orderLabel);
     document.getElementById("conv-form-submit").textContent = "Criar Requisição";
     document.getElementById("conv-form-submit")?.classList.remove('hidden');
     document.getElementById("conv-form").reset();
@@ -359,6 +536,7 @@ async function openConvModal(options = {}) {
     ]);
     await applyConvModalDetailingLocks();
     setupConvModalFieldLocks(null);
+    syncConvDesignerFieldVisibility(true);
     toggleModal('conv-modal', true);
 }
 
@@ -366,6 +544,8 @@ function closeConvModal() {
     setConvFormLoading(false);
     editingConversationId = null;
     convModalContext = getDefaultConvModalContext();
+    setConvModalSubtitle('');
+    syncConvDesignerFieldVisibility(false);
     document.getElementById("conv-form-submit")?.classList.remove('hidden');
     toggleModal('conv-modal', false);
 }
@@ -425,6 +605,16 @@ function setConvFieldDisabled(el, disabled) {
     el.classList.toggle('cursor-not-allowed', disabled);
 }
 
+function syncConvDesignerFieldVisibility(isCreate) {
+    const wrap = document.getElementById('conv-designer-wrap');
+    const select = document.getElementById('conv-designer');
+    if (!wrap || !select) return;
+
+    const hide = Boolean(isCreate) && currentUser?.role === 'Projetista';
+    wrap.classList.toggle('hidden', hide);
+    select.required = !hide;
+}
+
 function setupConvModalFieldLocks(conv) {
     const isEdit = Boolean(conv);
     const respondOnly = isConvRespondOnlyMode(conv);
@@ -466,6 +656,7 @@ async function editConversation(id) {
         conv,
         respondOnly ? 'respond' : 'edit'
     );
+    setConvModalSubtitle('');
     document.getElementById("conv-form-submit").textContent = respondOnly
         ? 'Salvar'
         : 'Salvar Alterações';
@@ -484,6 +675,7 @@ async function editConversation(id) {
     updateConvAttachmentModalControls(conv);
     updateConvModalActivitiesHint();
     setupConvModalFieldLocks(conv);
+    syncConvDesignerFieldVisibility(false);
     if (typeof updateConvModalEncerrarButton === 'function') {
         updateConvModalEncerrarButton();
     }
@@ -497,6 +689,7 @@ async function viewConversationDetails(id) {
     applyConvModalContextFromRequest(conv);
     editingConversationId = id;
     document.getElementById("conv-modal-title").textContent = getConvModalTitle(conv, 'view');
+    setConvModalSubtitle('');
     document.getElementById("conv-form-submit")?.classList.add('hidden');
     setupConvProfileFields(true, conv);
     setupConvResponseFields(conv);
@@ -527,6 +720,7 @@ async function viewConversationDetails(id) {
     if (typeof updateConvModalEncerrarButton === 'function') {
         updateConvModalEncerrarButton();
     }
+    syncConvDesignerFieldVisibility(false);
     toggleModal('conv-modal', true);
 }
 
@@ -623,6 +817,7 @@ window.isConvModalDetailingContext = isConvModalDetailingContext;
 window.upsertConversationIntoCache = upsertConversationIntoCache;
 window.editConversation = editConversation;
 window.viewConversationDetails = viewConversationDetails;
+window.fetchEligibleOrdersForCurrentDesignerRequest = fetchEligibleOrdersForCurrentDesignerRequest;
 
 async function loadConversations(orderId) {
     await ensureSystemSettingsLoaded();
