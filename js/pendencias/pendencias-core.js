@@ -300,6 +300,7 @@ function getPendenciasSidebarSections() {
             label: 'Gestor Comercial',
             visible: canSeePendenciasGestorComercialMenu(),
             items: [
+                { id: 'pendencia-por-consultor', label: 'Pendência por Consultor' },
                 { id: 'aguardando-medicao', label: 'Aguardando Medição' },
                 { id: 'aprovar-conferencia', label: 'Aprovar Conferência' },
                 { id: 'aguardando-entrega-tecnica', label: 'Aguardando Entrega Técnica' }
@@ -750,6 +751,11 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'montagem-externa') {
         loadPendenciasMontagemExterna();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-comercial' && pendenciasActiveItem === 'pendencia-por-consultor') {
+        loadPendenciasConsultantPending();
         return;
     }
 

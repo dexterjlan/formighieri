@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '1.0.7';
+const APP_CACHE_VERSION = '1.0.8';
 
 const PARTIALS = [
     'partials/login.html',
@@ -80,6 +80,7 @@ const SCRIPTS = [
     'js/pendencias/pendencias-gestor-expedicao.js',
     'js/pendencias/pendencias-gestor-montagem-externa.js',
     'js/pendencias/pendencias-comercial.js',
+    'js/pendencias/pendencias-gestor-comercial-consultor.js',
     'js/pendencias/pendencias-gestor-entrega-tecnica.js',
     'js/pendencias/pendencias-purchases.js',
     'js/pendencias/pendencias-overview.js',

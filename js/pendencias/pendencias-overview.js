@@ -22,6 +22,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         conferencias: 'Pedidos com projetos em planta levantada aguardando conferência.'
     },
     'gestor-comercial': {
+        'pendencia-por-consultor': 'Pendências de cada consultor ativo, agrupadas por tipo, pedido e projeto.',
         'aguardando-medicao': 'Projetos vendidos ou aguardando obra.',
         'aprovar-conferencia': 'Conferências confirmadas aguardando aprovação comercial.',
         'aguardando-entrega-tecnica': 'Projetos aguardando confirmação de entrega pelo gestor comercial.'
@@ -134,6 +135,12 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             case 'projetista:conferencias': {
                 const { error, orders } = await fetchPendenciasProjetistaConferenciasOrders();
                 return error ? null : orders.length;
+            }
+            case 'gestor-comercial:pendencia-por-consultor': {
+                if (typeof fetchPendenciasConsultantPendingBoard !== 'function') return null;
+                const { error, consultants } = await fetchPendenciasConsultantPendingBoard();
+                if (error && !consultants?.length) return null;
+                return (consultants || []).reduce((sum, row) => sum + (row.total || 0), 0);
             }
             case 'gestor-comercial:aguardando-medicao': {
                 const { error, projects } = await fetchPendenciasAguardandoMeasurementProjects();
