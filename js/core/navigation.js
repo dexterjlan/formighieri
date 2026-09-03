@@ -50,7 +50,7 @@ function hideAuthScreens() {
     reset?.classList.remove('flex');
 }
 
-function setAppSessionLoading(active, message = 'Entrando no FGP...', detail = 'Abrindo sua última tela') {
+function setAppSessionLoading(active, message = 'Carregando...', detail = 'Aguarde um instante') {
     const overlay = document.getElementById('app-session-loading');
     if (!overlay) return;
 
@@ -63,13 +63,26 @@ function setAppSessionLoading(active, message = 'Entrando no FGP...', detail = '
         const detailEl = document.getElementById('app-session-loading-detail');
         if (msgEl && message) msgEl.textContent = message;
         if (detailEl && detail) detailEl.textContent = detail;
+        // Força reflow para o overlay entrar no layout antes do próximo await.
+        void overlay.offsetWidth;
     }
 
     document.body.classList.toggle('overflow-hidden', Boolean(active));
 }
 
-function showAppSessionLoading(message, detail) {
+function yieldForAppPaint() {
+    return new Promise((resolve) => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                setTimeout(resolve, 0);
+            });
+        });
+    });
+}
+
+async function showAppSessionLoading(message, detail) {
     setAppSessionLoading(true, message, detail);
+    await yieldForAppPaint();
 }
 
 function hideAppSessionLoading() {

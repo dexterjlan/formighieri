@@ -40,7 +40,7 @@ async function enterApp(authUserId, authUser = null) {
     }
 
     enterAppInProgress = (async () => {
-        showAppSessionLoading('Entrando no FGP...', 'Carregando seu perfil');
+        await showAppSessionLoading('Carregando...', 'Carregando seu perfil');
         await Promise.all([
             loadUserProfile(authUserId, authUser),
             typeof loadSystemSettings === 'function'
@@ -50,7 +50,7 @@ async function enterApp(authUserId, authUser = null) {
         if (typeof restoreUserImpersonationIfNeeded === 'function') {
             await restoreUserImpersonationIfNeeded();
         }
-        showAppSessionLoading('Abrindo sua última tela...', 'Quase lá');
+        await showAppSessionLoading('Carregando...', 'Abrindo sua última tela');
         await showMainPanel();
     })();
 
@@ -329,10 +329,13 @@ function bindAuthEvents() {
     document.getElementById("login-form").addEventListener("submit", async function (e) {
         e.preventDefault();
         const btn = document.getElementById("btn-login-submit");
-        const originalText = btn.textContent;
+        const originalHtml = btn.innerHTML;
         btn.disabled = true;
-        btn.textContent = "Entrando...";
-        showAppSessionLoading('Entrando no FGP...', 'Validando acesso');
+        btn.setAttribute('aria-busy', 'true');
+        btn.innerHTML = '<span class="inline-flex items-center justify-center gap-2">'
+            + '<span class="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" aria-hidden="true"></span>'
+            + 'Carregando...</span>';
+        await showAppSessionLoading('Carregando...', 'Validando acesso');
 
         try {
             const email = document.getElementById("login-email").value.trim().toLowerCase();
@@ -356,7 +359,8 @@ function bindAuthEvents() {
             alertAppDialog(err.message || "Erro ao entrar no sistema.");
         } finally {
             btn.disabled = false;
-            btn.textContent = originalText;
+            btn.removeAttribute('aria-busy');
+            btn.innerHTML = originalHtml;
         }
     });
 
@@ -633,7 +637,7 @@ function bindAuthEvents() {
                 }
             }
             if (appShellReady) return;
-            showAppSessionLoading('Entrando no FGP...', 'Restaurando sua sessão');
+            await showAppSessionLoading('Carregando...', 'Restaurando sua sessão');
             await enterApp(session.user.id, session.user);
         }
     });

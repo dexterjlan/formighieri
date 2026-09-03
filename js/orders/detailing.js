@@ -430,10 +430,6 @@ async function handleDetalhamentoEncerrar() {
     }
 
     const serverFolderPath = document.getElementById('detalhamento-server-folder-path')?.value?.trim() || '';
-    if (!serverFolderPath) {
-        alertAppDialog('Informe a pasta no servidor do projeto para encerrar o detalhamento.');
-        return;
-    }
 
     try {
         const requests = await fetchDetalhamentoRequests(activeDetalhamentoOrderProjectId);
