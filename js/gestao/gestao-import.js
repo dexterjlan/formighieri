@@ -5,6 +5,7 @@ const gestaoImportClienteIdByName = new Map();
 
 const GESTAO_IMPORT_COLUMNS = [
     { key: 'orderCode', header: 'codigo_pedido', label: 'Código do pedido', required: true },
+    { key: 'saleDate', header: 'data_venda', label: 'Data de venda', required: true },
     { key: 'clientName', header: 'cliente', label: 'Cliente', required: true },
     { key: 'consultantName', header: 'consultor', label: 'Consultor (WPS)', required: true },
     { key: 'clientDeliveryDate', header: 'entrega_cliente', label: 'Entrega no cliente', required: false },
@@ -21,6 +22,9 @@ const GESTAO_IMPORT_HEADER_ALIASES = {
     codigo_pedido: 'orderCode',
     pedido: 'orderCode',
     order_code: 'orderCode',
+    data_venda: 'saleDate',
+    dt_venda: 'saleDate',
+    sale_date: 'saleDate',
     cliente: 'clientName',
     client_name: 'clientName',
     consultor: 'consultantName',
@@ -428,6 +432,7 @@ function getGestaoImportExampleRow(consultantName = '') {
 
     return {
         orderCode: '123456',
+        saleDate: '2026-01-10',
         clientName: 'Cliente Exemplo Ltda',
         consultantName: consultant,
         clientDeliveryDate: '2026-08-15',
@@ -578,6 +583,7 @@ function mapGestaoImportRow(rawRow, rowNumber) {
     mapped.environmentName = String(mapped.environmentName || '').trim();
     mapped.statusName = String(mapped.statusName || '').trim();
     mapped.designerName = String(mapped.designerName || '').trim();
+    mapped.saleDate = parseGestaoImportDate(mapped.saleDate);
     mapped.clientDeliveryDate = parseGestaoImportDate(mapped.clientDeliveryDate);
     mapped.deliveryDate = parseGestaoImportDate(mapped.deliveryDate);
     mapped.measurementDate = parseGestaoImportDate(mapped.measurementDate);
@@ -600,12 +606,14 @@ function mapGestaoImportRow(rawRow, rowNumber) {
         mapped.errors.push('Valor de venda inválido.');
     }
 
-    ['measurementDate', 'floorPlanRaisedDate', 'internalAssemblyStartDate', 'internalAssemblyEndDate'].forEach(field => {
+    ['saleDate', 'clientDeliveryDate', 'measurementDate', 'floorPlanRaisedDate', 'internalAssemblyStartDate', 'internalAssemblyEndDate'].forEach(field => {
         if (mapped[field] === null && rawRow && Object.keys(rawRow).some(key => {
             const alias = GESTAO_IMPORT_HEADER_ALIASES[normalizeGestaoImportHeader(key)];
             return alias === field && rawRow[key] !== null && rawRow[key] !== undefined && rawRow[key] !== '';
         })) {
-            mapped.errors.push(`Data inválida em "${field}".`);
+            const fieldHeader = [...GESTAO_IMPORT_COLUMNS, ...GESTAO_IMPORT_PROJECT_DATE_COLUMNS]
+                .find(column => column.key === field)?.header || field;
+            mapped.errors.push(`Data inválida em "${fieldHeader}".`);
         }
     });
 
@@ -662,6 +670,8 @@ function groupGestaoImportRowsByOrder(rows) {
                 orderCode: row.orderCode,
                 clientName: row.clientName,
                 consultantName: row.consultantName,
+                saleDate: row.saleDate || null,
+                saleDatesSeen: row.saleDate ? new Set([row.saleDate]) : new Set(),
                 clientDeliveryDate: row.clientDeliveryDate || null,
                 clientDeliveryDatesSeen: row.clientDeliveryDate ? new Set([row.clientDeliveryDate]) : new Set(),
                 projects: [],
@@ -678,6 +688,10 @@ function groupGestaoImportRowsByOrder(rows) {
         if (order.consultantName !== row.consultantName) {
             row.errors.push(`Consultor diverge do pedido ${key} (linha ${order.rowNumbers[0]}).`);
             return;
+        }
+        if (row.saleDate) {
+            order.saleDatesSeen.add(row.saleDate);
+            order.saleDate = pickLatestIsoDate(order.saleDate, row.saleDate);
         }
         if (row.clientDeliveryDate) {
             order.clientDeliveryDatesSeen.add(row.clientDeliveryDate);
@@ -1019,6 +1033,10 @@ async function createGestaoImportOrder(order, lookups, now) {
             return { ok: false, message: consultantResult.error };
         }
 
+        if (!order.saleDate) {
+            return { ok: false, message: `Pedido ${order.orderCode}: informe a data de venda (coluna data_venda).` };
+        }
+
         const clientResult = await resolveGestaoImportClienteIdForOrder(order, lookups);
         if (clientResult.error) {
             return { ok: false, message: clientResult.error };
@@ -1028,6 +1046,7 @@ async function createGestaoImportOrder(order, lookups, now) {
             orderCode: order.orderCode,
             clientId: clientResult.clientId,
             consultantUserId: consultantResult.consultantUserId,
+            saleDate: order.saleDate || undefined,
             clientDeliveryDate: order.clientDeliveryDate || undefined,
             createdById: currentUser.id,
             updatedById: currentUser.id,
@@ -1040,8 +1059,10 @@ async function createGestaoImportOrder(order, lookups, now) {
             .select('id')
             .single();
 
-        if (error?.message?.includes('clientDeliveryDate') || error?.message?.includes('updatedAt')) {
-            const { clientDeliveryDate: _d, updatedAt: _u, ...fallback } = orderPayload;
+        if (error?.message?.includes('saleDate')
+            || error?.message?.includes('clientDeliveryDate')
+            || error?.message?.includes('updatedAt')) {
+            const { saleDate: _s, clientDeliveryDate: _d, updatedAt: _u, ...fallback } = orderPayload;
             ({ data: created, error } = await supabaseClient
                 .from('salesOrders')
                 .insert(fallback)
@@ -1070,6 +1091,18 @@ async function createGestaoImportOrder(order, lookups, now) {
 
     const importedProjects = [];
     const projectErrors = [];
+
+    if (order.saleDate && typeof persistSalesOrderSaleDate === 'function') {
+        try {
+            await persistSalesOrderSaleDate(orderId, order.saleDate, { orderCode: order.orderCode });
+        } catch (saleDateError) {
+            if (createdNewOrder) {
+                await supabaseClient.from('salesOrders').delete().eq('id', orderId);
+                return { ok: false, message: `Pedido ${order.orderCode}: ${saleDateError.message}` };
+            }
+            projectErrors.push(`Pedido ${order.orderCode}: data de venda não gravada — ${saleDateError.message}`);
+        }
+    }
 
     for (const project of projects) {
         if (existingProjectCodes.has(project.projectCode)) {
@@ -1199,6 +1232,12 @@ function validateGestaoImportOrder(order, lookups, context) {
 
     const existingOrder = context.existingOrdersByCode.get(order.orderCode) || null;
 
+    if (order.saleDatesSeen?.size > 1) {
+        notes.push(
+            `Pedido ${order.orderCode}: múltiplas datas de venda na planilha — será usada a maior (${formatGestaoDate(order.saleDate)}).`
+        );
+    }
+
     if (order.clientDeliveryDatesSeen?.size > 1) {
         notes.push(
             `Pedido ${order.orderCode}: múltiplas datas de entrega na planilha — será usada a maior (${formatGestaoDate(order.clientDeliveryDate)}).`
@@ -1207,7 +1246,13 @@ function validateGestaoImportOrder(order, lookups, context) {
 
     if (existingOrder) {
         notes.push(`Pedido ${order.orderCode}: já cadastrado — serão adicionados apenas projetos novos.`);
+        if (order.saleDate) {
+            notes.push(`Pedido ${order.orderCode}: data de venda será atualizada para ${formatGestaoDate(order.saleDate)}.`);
+        }
     } else {
+        if (!order.saleDate) {
+            errors.push(`Pedido ${order.orderCode}: informe a data de venda (coluna data_venda).`);
+        }
         const consultantResult = resolveGestaoImportConsultantUserId(
             order.consultantName,
             order.orderCode,

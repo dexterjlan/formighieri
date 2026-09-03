@@ -858,6 +858,7 @@
                                 <p class="text-xs font-semibold text-slate-700">Como importar</p>
                                 <ol class="text-xs text-slate-600 space-y-1.5 list-decimal list-inside">
                                     <li>Baixe o template Excel e preencha uma linha por projeto (repita os dados do pedido em cada linha).</li>
+                                    <li>A coluna <span class="font-mono text-[10px]">data_venda</span> é obrigatória para pedidos novos. Se o mesmo pedido tiver datas diferentes em várias linhas, será usada a <strong>maior data</strong>.</li>
                                     <li>Se o mesmo pedido tiver <span class="font-mono text-[10px]">entrega_cliente</span> diferente em várias linhas, será usada a <strong>maior data</strong>.</li>
                                     <li>Se o pedido já existir, apenas os projetos novos serão criados; projeto duplicado gera erro.</li>
                                     <li>Opcional: <span class="font-mono text-[10px]">data_medicao</span> cria a entidade de medição do pedido; <span class="font-mono text-[10px]">data_planta_levantada</span> vincula planta levantada.</li>
