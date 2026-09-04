@@ -2,18 +2,57 @@ async function lookupMontagemProgOrderByCode(orderCode) {
     const trimmed = String(orderCode || '').trim();
     if (!trimmed) return null;
 
-    const { data, error } = await supabaseClient
+    let result = await supabaseClient
         .from('salesOrders')
-        .select(getSalesOrderMinimalEmbedSelect())
+        .select(getSalesOrderMinimalEmbedSelect('addrId'))
         .eq('orderCode', trimmed)
         .maybeSingle();
 
-    if (error) {
-        console.error('lookupMontagemProgOrderByCode:', error);
+    if (result.error && /addrId/i.test(result.error.message || '')) {
+        result = await supabaseClient
+            .from('salesOrders')
+            .select(getSalesOrderMinimalEmbedSelect())
+            .eq('orderCode', trimmed)
+            .maybeSingle();
+    }
+
+    if (result.error) {
+        console.error('lookupMontagemProgOrderByCode:', result.error);
         return null;
     }
 
-    return data;
+    return result.data;
+}
+
+async function persistMontagemProgAddrId(scheduleId, addrId) {
+    const normalizedScheduleId = Number(scheduleId);
+    if (!normalizedScheduleId) return;
+
+    const normalizedAddrId = Number(addrId) || null;
+    const missingHint = 'Execute supabase/feats/add-assembly-schedule-addr.sql no Supabase SQL Editor (cria AssemblySchedule.addrId).';
+
+    const { data: rpcUpdated, error: rpcError } = await supabaseClient.rpc(
+        'set_assembly_schedule_addr_id',
+        {
+            p_schedule_id: normalizedScheduleId,
+            p_addr_id: normalizedAddrId
+        }
+    );
+
+    if (!rpcError && rpcUpdated === true) return;
+
+    const { error } = await supabaseClient
+        .from('AssemblySchedule')
+        .update({ addrId: normalizedAddrId })
+        .eq('id', normalizedScheduleId);
+
+    if (!error) return;
+
+    if (/addrId/i.test(String(error.message || ''))
+        || /set_assembly_schedule_addr_id|could not find the function/i.test(String(rpcError?.message || ''))) {
+        throw new Error(missingHint);
+    }
+    throw error;
 }
 
 async function loadMontagemProgramacoesForWeek(weekStartKey = getMontagemProgWeekStartKey(), updateCache = true) {

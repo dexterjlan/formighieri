@@ -111,13 +111,30 @@ function bindMontagemProgramacaoEvents() {
             openClientePickerModal(cliente => {
                 const input = document.getElementById('montagem-prog-client-name');
                 const idInput = document.getElementById('montagem-prog-client-id');
+                const previousClientId = Number(idInput?.value) || null;
                 if (input) input.value = cliente.name;
                 if (idInput) idInput.value = cliente.id;
+                if (previousClientId !== Number(cliente.id) && typeof setMontagemProgSelectedAddr === 'function') {
+                    setMontagemProgSelectedAddr(null);
+                }
+                if (typeof syncMontagemProgClientRequired === 'function') {
+                    syncMontagemProgClientRequired();
+                }
             });
         }
     };
     document.getElementById('btn-montagem-prog-client-picker')?.addEventListener('click', triggerMontagemProgClientPicker);
     document.getElementById('montagem-prog-client-name')?.addEventListener('click', triggerMontagemProgClientPicker);
+
+    const triggerMontagemProgAddrPicker = () => {
+        const btn = document.getElementById('btn-montagem-prog-addr-picker');
+        if (btn?.disabled) return;
+        if (typeof openMontagemProgAddrPicker === 'function') {
+            openMontagemProgAddrPicker();
+        }
+    };
+    document.getElementById('btn-montagem-prog-addr-picker')?.addEventListener('click', triggerMontagemProgAddrPicker);
+    document.getElementById('montagem-prog-addr')?.addEventListener('click', triggerMontagemProgAddrPicker);
 
     document.getElementById('montagem-prog-order-code')?.addEventListener('input', async function () {
         syncMontagemProgClientRequired();
@@ -132,7 +149,15 @@ function bindMontagemProgramacaoEvents() {
             if (clientIdInput) {
                 clientIdInput.value = order?.clientId ? String(order.clientId) : '';
             }
+            if (typeof applyMontagemProgOrderAddress === 'function') {
+                await applyMontagemProgOrderAddress(order);
+            }
+            return;
         }
+        if (typeof setMontagemProgSelectedAddr === 'function') {
+            setMontagemProgSelectedAddr(null);
+        }
+        syncMontagemProgClientRequired();
     });
     document.getElementById('montagem-prog-order-code')?.addEventListener('blur', async () => {
         const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
@@ -146,9 +171,19 @@ function bindMontagemProgramacaoEvents() {
             if (clientIdInput) {
                 clientIdInput.value = order?.clientId ? String(order.clientId) : '';
             }
+            if (typeof applyMontagemProgOrderAddress === 'function') {
+                await applyMontagemProgOrderAddress(order);
+            }
+        } else if (typeof setMontagemProgSelectedAddr === 'function') {
+            setMontagemProgSelectedAddr(null);
         }
         syncMontagemProgClientRequired();
     });
 }
 
 window.openMontagemProgModal = openMontagemProgModal;
+window.getMontagemProgFormClient = getMontagemProgFormClient;
+window.setMontagemProgSelectedAddr = setMontagemProgSelectedAddr;
+window.getMontagemProgSelectedAddrId = getMontagemProgSelectedAddrId;
+window.syncMontagemProgClientRequired = syncMontagemProgClientRequired;
+window.applyMontagemProgOrderAddress = applyMontagemProgOrderAddress;

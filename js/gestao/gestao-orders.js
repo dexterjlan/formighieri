@@ -5,6 +5,7 @@ async function openGestaoCreateOrderForm() {
     setGestaoOrderFormOrderId(null);
     document.getElementById('gestao-order-form')?.reset();
     if (document.getElementById('gestao-ord-client-id')) document.getElementById('gestao-ord-client-id').value = '';
+    if (typeof setGestaoOrderSelectedAddr === 'function') setGestaoOrderSelectedAddr(null);
     document.getElementById('gestao-order-form-title').textContent = 'Criar Pedido';
     document.getElementById('gestao-order-form-submit').textContent = 'Salvar Pedido';
     document.getElementById('gestao-ord-code').disabled = false;
@@ -38,6 +39,9 @@ async function openGestaoEditOrderForm(orderId) {
     document.getElementById('gestao-ord-client').value = getOrderClientName(order);
     if (document.getElementById('gestao-ord-client-id')) {
         document.getElementById('gestao-ord-client-id').value = order.clientId || order.client?.id || '';
+    }
+    if (typeof loadGestaoOrderAddrField === 'function') {
+        await loadGestaoOrderAddrField(order);
     }
     document.getElementById('gestao-ord-client-delivery').value = toGestaoInputDate(order.clientDeliveryDate);
     const saleDateInput = document.getElementById('gestao-ord-sale-date');
@@ -1028,6 +1032,9 @@ async function saveGestaoOrder(event) {
     const consultantUserId = Number(document.getElementById('gestao-ord-consultant')?.value) || null;
     const consultantName = document.getElementById('gestao-ord-consultant')?.selectedOptions?.[0]?.textContent?.trim()
         || await resolveConsultantNameById(consultantUserId);
+    const addrId = typeof getGestaoOrderSelectedAddrId === 'function'
+        ? getGestaoOrderSelectedAddrId()
+        : (Number(document.getElementById('gestao-ord-addr-id')?.value) || null);
 
     if (!orderCode) {
         alertAppDialog('Informe o código do pedido.');
@@ -1135,12 +1142,22 @@ async function saveGestaoOrder(event) {
                 updatedById: currentUser.id,
                 updatedAt: now
             };
+            if (addrId) orderPayload.addrId = addrId;
 
             let { data: created, error } = await supabaseClient
                 .from('salesOrders')
                 .insert(orderPayload)
                 .select('id')
                 .single();
+
+            if (error?.message?.includes('addrId')) {
+                delete orderPayload.addrId;
+                ({ data: created, error } = await supabaseClient
+                    .from('salesOrders')
+                    .insert(orderPayload)
+                    .select('id')
+                    .single());
+            }
 
             if (error?.message?.includes('updatedAt')) {
                 const { updatedAt: _u, ...fallback } = orderPayload;
@@ -1176,7 +1193,9 @@ async function saveGestaoOrder(event) {
 
         if (!isEditingOrder) {
             let projectsToPersist = typeof mapGestaoProjectPhaseIds === 'function'
-                ? mapGestaoProjectPhaseIds(projects, persistedPhases, previousPhasesForProjects)
+                ? mapGestaoProjectPhaseIds(projects, persistedPhases, previousPhasesForProjects, {
+                    assignMissingToFirst: true
+                })
                 : projects;
 
             if (!hasGestaoOrderMultiplePhases(persistedPhases)) {
@@ -1209,6 +1228,11 @@ async function saveGestaoOrder(event) {
             updatedById: currentUser?.id || null,
             updatedAt: now
         });
+
+        if (typeof persistSalesOrderAddrId !== 'function') {
+            throw new Error('Não foi possível gravar o endereço do pedido.');
+        }
+        await persistSalesOrderAddrId(orderId, addrId, { orderCode });
 
         if (typeof persistSalesOrderSaleDate === 'function') {
             await persistSalesOrderSaleDate(orderId, saleDate, { orderCode });
@@ -1245,7 +1269,9 @@ async function saveGestaoOrder(event) {
             || error.message?.includes('parentProjectId')
             || error.message?.includes('OrderDeliveryPhase')
             || error.message?.includes('deliveryPhaseId')
-            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql, supabase/create-order-project-status.sql, supabase/create-order-project-complementar.sql, supabase/create-order-project-substituido.sql e supabase/create-order-delivery-phases.sql no Supabase.'
+            || error.message?.includes('addrId')
+            || error.message?.includes('create-addr.sql')
+            ? '\n\nExecute os SQL supabase/create-gestao-order-fields.sql, supabase/create-order-project-status.sql, supabase/create-order-project-complementar.sql, supabase/create-order-project-substituido.sql, supabase/create-order-delivery-phases.sql e supabase/feats/create-addr.sql no Supabase.'
             : '';
         alertAppDialog('Erro ao salvar pedido: ' + error.message + sqlHint);
     }

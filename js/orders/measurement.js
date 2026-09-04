@@ -1001,7 +1001,8 @@ async function saveMedicao() {
                 setMedicaoModalLoading(true, 'Enviando e-mail de notificação...');
                 await notifyMedicaoRealizadaEmail({
                     orderId: activeOrderId,
-                    projects
+                    projects,
+                    observation
                 });
             }
         } else {

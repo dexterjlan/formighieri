@@ -171,16 +171,27 @@ function clearGestaoPhaseFromAllProjects() {
     renderGestaoProjectsSummaryList();
 }
 
-function mapGestaoProjectPhaseIds(projects, phases, previousPhases = []) {
+function isPersistedGestaoPhaseId(id) {
+    const numeric = Number(id);
+    return Number.isFinite(numeric) && numeric > 0;
+}
+
+function mapGestaoProjectPhaseIds(projects, phases, previousPhases = [], options = {}) {
     if (!hasGestaoOrderMultiplePhases(phases)) {
         return (projects || []).map(project => ({ ...project, deliveryPhaseId: null }));
     }
 
+    const assignMissingToFirst = Boolean(options.assignMissingToFirst);
     const idMap = {};
-    phases.forEach((phase, index) => {
-        const previousId = previousPhases[index]?.id;
-        if (previousId != null && phase.id != null) {
-            idMap[String(previousId)] = phase.id;
+    (previousPhases || []).forEach((prev, index) => {
+        if (prev?.id == null) return;
+        const sameId = (phases || []).find(item => String(item.id) === String(prev.id));
+        if (sameId) {
+            idMap[String(prev.id)] = sameId.id;
+            return;
+        }
+        if (phases[index]?.id != null) {
+            idMap[String(prev.id)] = phases[index].id;
         }
     });
 
@@ -191,7 +202,7 @@ function mapGestaoProjectPhaseIds(projects, phases, previousPhases = []) {
         const mappedId = deliveryPhaseId != null ? idMap[String(deliveryPhaseId)] : null;
         if (mappedId != null) {
             deliveryPhaseId = mappedId;
-        } else if (deliveryPhaseId == null && firstPhaseId != null) {
+        } else if (deliveryPhaseId == null && firstPhaseId != null && assignMissingToFirst) {
             deliveryPhaseId = firstPhaseId;
         }
         return {
@@ -199,6 +210,34 @@ function mapGestaoProjectPhaseIds(projects, phases, previousPhases = []) {
             deliveryPhaseId: resolveGestaoDeliveryPhaseIdForPersist(deliveryPhaseId, phases)
         };
     });
+}
+
+async function persistGestaoProjectsFirstPhase(orderId, firstPhaseId) {
+    const normalizedOrderId = Number(orderId);
+    const resolvedPhaseId = resolveGestaoDeliveryPhaseIdForPersist(firstPhaseId);
+    if (!normalizedOrderId || !resolvedPhaseId) return;
+
+    const payload = {
+        deliveryPhaseId: resolvedPhaseId,
+        updatedAt: new Date().toISOString()
+    };
+    if (typeof currentUser !== 'undefined' && currentUser?.id) {
+        payload.updatedById = currentUser.id;
+    }
+
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update(payload)
+        .eq('orderId', normalizedOrderId);
+
+    if (error?.message?.includes('deliveryPhaseId')
+        && (error.message?.includes('column') || error.message?.includes('schema cache'))) {
+        return;
+    }
+
+    if (error) {
+        throw new Error(`Não foi possível vincular os projetos à primeira fase: ${error.message}`);
+    }
 }
 
 async function fetchGestaoOrderPhases(orderId) {
@@ -260,42 +299,103 @@ async function persistGestaoOrderPhases(orderId, orderCode, phases = gestaoOrder
         return previousPhases;
     }
 
-    const { error: deleteExistingError } = await supabaseClient
-        .from('OrderDeliveryPhase')
-        .delete()
-        .eq('orderId', normalizedOrderId);
-
-    if (deleteExistingError) {
-        if (deleteExistingError.message?.includes('OrderDeliveryPhase')) {
-            throw new Error('Execute supabase/create-order-delivery-phases.sql no Supabase.');
-        }
-        throw deleteExistingError;
-    }
-
     const now = new Date().toISOString();
-    const rows = normalizedPhases.map(phase => ({
-        orderId: normalizedOrderId,
-        orderCode: String(orderCode || '').trim(),
-        name: phase.name,
-        deliveryDate: phase.deliveryDate,
-        sortOrder: phase.sortOrder,
-        updatedAt: now
-    }));
+    const trimmedOrderCode = String(orderCode || '').trim();
+    const previousIds = new Set((previousPhases || []).map(phase => Number(phase.id)).filter(Boolean));
+    const prepared = (phases || [])
+        .map((phase, index) => ({
+            id: phase.id,
+            name: String(phase.name || '').trim(),
+            deliveryDate: phase.deliveryDate || null,
+            sortOrder: index + 1
+        }))
+        .filter(phase => phase.name && phase.deliveryDate);
 
-    const { data: inserted, error: insertError } = await supabaseClient
-        .from('OrderDeliveryPhase')
-        .insert(rows)
-        .select('id, orderId, orderCode, name, deliveryDate, sortOrder');
+    const keptIds = new Set(
+        prepared
+            .filter(phase => isPersistedGestaoPhaseId(phase.id) && previousIds.has(Number(phase.id)))
+            .map(phase => Number(phase.id))
+    );
+    const idsToDelete = previousPhases
+        .map(phase => Number(phase.id))
+        .filter(id => id && !keptIds.has(id));
 
-    if (insertError) {
-        if (insertError.message?.includes('OrderDeliveryPhase')) {
-            throw new Error('Execute supabase/create-order-delivery-phases.sql no Supabase.');
+    if (idsToDelete.length) {
+        const { error: deleteRemovedError } = await supabaseClient
+            .from('OrderDeliveryPhase')
+            .delete()
+            .in('id', idsToDelete);
+
+        if (deleteRemovedError && !deleteRemovedError.message?.includes('OrderDeliveryPhase')) {
+            throw deleteRemovedError;
         }
-        throw insertError;
     }
 
-    setGestaoOrderPhasesDraft(inserted || []);
-    return inserted || [];
+    const upserted = [];
+    const toInsert = [];
+
+    for (const phase of prepared) {
+        const numericId = Number(phase.id);
+        if (isPersistedGestaoPhaseId(phase.id) && previousIds.has(numericId)) {
+            const { error: updateError } = await supabaseClient
+                .from('OrderDeliveryPhase')
+                .update({
+                    name: phase.name,
+                    deliveryDate: phase.deliveryDate,
+                    sortOrder: phase.sortOrder,
+                    orderCode: trimmedOrderCode,
+                    updatedAt: now
+                })
+                .eq('id', numericId);
+
+            if (updateError) {
+                if (updateError.message?.includes('OrderDeliveryPhase')) {
+                    throw new Error('Execute supabase/create-order-delivery-phases.sql no Supabase.');
+                }
+                throw updateError;
+            }
+
+            const previous = previousPhases.find(item => Number(item.id) === numericId);
+            upserted.push({
+                ...(previous || {}),
+                id: numericId,
+                orderId: normalizedOrderId,
+                orderCode: trimmedOrderCode,
+                name: phase.name,
+                deliveryDate: phase.deliveryDate,
+                sortOrder: phase.sortOrder
+            });
+        } else {
+            toInsert.push(phase);
+        }
+    }
+
+    if (toInsert.length) {
+        const { data: inserted, error: insertError } = await supabaseClient
+            .from('OrderDeliveryPhase')
+            .insert(toInsert.map(phase => ({
+                orderId: normalizedOrderId,
+                orderCode: trimmedOrderCode,
+                name: phase.name,
+                deliveryDate: phase.deliveryDate,
+                sortOrder: phase.sortOrder,
+                updatedAt: now
+            })))
+            .select('id, orderId, orderCode, name, deliveryDate, sortOrder');
+
+        if (insertError) {
+            if (insertError.message?.includes('OrderDeliveryPhase')) {
+                throw new Error('Execute supabase/create-order-delivery-phases.sql no Supabase.');
+            }
+            throw insertError;
+        }
+
+        upserted.push(...(inserted || []));
+    }
+
+    upserted.sort((left, right) => Number(left.sortOrder) - Number(right.sortOrder));
+    setGestaoOrderPhasesDraft(upserted);
+    return upserted;
 }
 
 function syncGestaoOrderClientDeliveryField() {
@@ -489,10 +589,16 @@ async function saveGestaoOrderPhasesFromModal() {
     }
 
     const orderCode = document.getElementById('gestao-ord-code')?.value?.trim() || '';
-    setGestaoOrderPhasesDraft(validRows.map(row => ({
+    const previousPhases = editingGestaoOrderId
+        ? await fetchGestaoOrderPhases(editingGestaoOrderId)
+        : [...gestaoOrderPhasesDraft];
+    const isCreatingPhases = !hasGestaoOrderMultiplePhases(previousPhases);
+    const draftBeforePersist = validRows.map(row => ({
         ...row,
         orderCode
-    })));
+    }));
+
+    setGestaoOrderPhasesDraft(draftBeforePersist);
 
     const maxDeliveryDate = pickLatestIsoDate(...validRows.map(row => row.deliveryDate));
     const deliveryInput = document.getElementById('gestao-ord-client-delivery');
@@ -500,22 +606,28 @@ async function saveGestaoOrderPhasesFromModal() {
         deliveryInput.value = maxDeliveryDate;
     }
 
-    assignGestaoFirstPhaseToAllProjects();
+    if (isCreatingPhases) {
+        assignGestaoFirstPhaseToAllProjects();
+    }
 
     if (editingGestaoOrderId) {
         try {
-            const previousPhases = await fetchGestaoOrderPhases(editingGestaoOrderId);
             const persisted = await persistGestaoOrderPhases(
                 editingGestaoOrderId,
                 orderCode,
                 gestaoOrderPhasesDraft
             );
-            gestaoOrderProjectsDraft = mapGestaoProjectPhaseIds(
-                gestaoOrderProjectsDraft,
-                persisted,
-                previousPhases
-            );
-            ensureGestaoProjectsHavePhaseDefaults();
+
+            if (isCreatingPhases) {
+                gestaoOrderProjectsDraft = mapGestaoProjectPhaseIds(
+                    gestaoOrderProjectsDraft,
+                    persisted,
+                    draftBeforePersist,
+                    { assignMissingToFirst: true }
+                );
+                await persistGestaoProjectsFirstPhase(editingGestaoOrderId, persisted[0]?.id);
+            }
+
             renderGestaoProjectsSummaryList();
 
             if (maxDeliveryDate && typeof persistSalesOrderClientDeliveryDate === 'function') {

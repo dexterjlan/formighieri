@@ -514,6 +514,9 @@ async function loadGestaoClientesList() {
             </td>
             <td class="p-3">
                 <div class="flex flex-wrap gap-1.5">
+                    <button type="button" class="gestao-cliente-addrs text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium">
+                        Endereços
+                    </button>
                     <button type="button" class="gestao-save-cliente text-xs bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1 rounded-lg font-medium">
                         Salvar
                     </button>

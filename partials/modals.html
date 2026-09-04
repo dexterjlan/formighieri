@@ -1660,6 +1660,19 @@
                         </button>
                     </div>
                 </div>
+                <div id="cal-event-addr-wrap">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Endereço</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="cal-event-addr" readonly
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600 bg-slate-50 cursor-not-allowed"
+                            placeholder="Selecione o cliente (sem pedido) para buscar o endereço">
+                        <input type="hidden" id="cal-event-addr-id">
+                        <button type="button" id="btn-cal-event-addr-picker" title="Buscar endereço do cliente" disabled
+                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                            ...
+                        </button>
+                    </div>
+                </div>
                 <div class="flex gap-2 pt-2">
                     <button type="button" id="btn-cal-event-delete"
                         class="hidden text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 px-3 py-2 rounded-lg font-medium">
@@ -1776,6 +1789,19 @@
                             placeholder="Obrigatório se não informar o pedido">
                         <input type="hidden" id="montagem-prog-client-id">
                         <button type="button" id="btn-montagem-prog-client-picker" title="Buscar cliente no cadastro"
+                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed">
+                            ...
+                        </button>
+                    </div>
+                </div>
+                <div id="montagem-prog-addr-wrap">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Endereço</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="montagem-prog-addr" readonly
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 bg-slate-50 cursor-not-allowed"
+                            placeholder="Selecione o cliente (sem pedido) para buscar o endereço">
+                        <input type="hidden" id="montagem-prog-addr-id">
+                        <button type="button" id="btn-montagem-prog-addr-picker" title="Buscar endereço do cliente" disabled
                             class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed">
                             ...
                         </button>
@@ -2013,6 +2039,236 @@
             <div class="flex justify-end pt-1">
                 <button type="button" onclick="toggleModal('cliente-picker-modal', false)"
                     class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-200">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: SELEÇÃO DE ENDEREÇO DO CLIENTE -->
+    <div id="addr-picker-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[95]">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900">Selecionar Endereço</h3>
+                    <p class="text-xs text-slate-400 mt-0.5" id="addr-picker-client-title">Endereços ativos do cliente</p>
+                </div>
+                <button type="button" id="btn-addr-picker-close-x"
+                    class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+
+            <div>
+                <input type="text" id="addr-picker-search"
+                    placeholder="Filtrar por label, apelido, CEP ou cidade..."
+                    class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+            </div>
+
+            <div class="max-h-80 overflow-y-auto border border-slate-200 rounded-xl">
+                <table class="w-full text-xs">
+                    <thead class="bg-slate-50 text-slate-500 uppercase sticky top-0">
+                        <tr>
+                            <th class="text-left p-2.5 font-semibold">Endereço</th>
+                            <th class="text-center p-2.5 font-semibold w-24">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody id="addr-picker-list" class="divide-y divide-slate-100 text-slate-700">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex justify-between items-center pt-1 gap-2">
+                <button type="button" id="addr-picker-create"
+                    class="px-4 py-2 bg-white border border-indigo-200 text-indigo-800 rounded-lg text-xs font-medium hover:bg-indigo-50">
+                    Cadastrar endereço
+                </button>
+                <button type="button" id="btn-addr-picker-close"
+                    class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-200">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: CRIAR ENDEREÇO DO CLIENTE (CALENDÁRIO) -->
+    <div id="addr-create-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[96]">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto relative space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900">Cadastrar endereço</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">O endereço será vinculado a este cliente.</p>
+                </div>
+                <button type="button" id="btn-addr-create-close-x"
+                    class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+            <form id="addr-create-form" class="space-y-3">
+                <input type="hidden" id="addr-create-client-id">
+                <input type="hidden" id="addr-create-country" value="BR">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Cliente</label>
+                    <input type="text" id="addr-create-client" readonly tabindex="-1"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-100 text-slate-700">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Label <span class="text-red-500">*</span></label>
+                        <select id="addr-create-label" required
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
+                            <option value="">Selecione o label...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Apelido</label>
+                        <input type="text" id="addr-create-nickname"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                            placeholder="Ex.: Obra Centro">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">CEP <span class="text-red-500">*</span></label>
+                        <input type="text" id="addr-create-postal-code" required inputmode="numeric" maxlength="9"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                            placeholder="00000-000">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Logradouro <span class="text-red-500">*</span></label>
+                        <input type="text" id="addr-create-street" required readonly tabindex="-1"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Número</label>
+                        <input type="text" id="addr-create-number"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Complemento</label>
+                        <input type="text" id="addr-create-complement"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Bairro</label>
+                        <input type="text" id="addr-create-neighborhood" readonly tabindex="-1"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Cidade <span class="text-red-500">*</span></label>
+                        <input type="text" id="addr-create-city" required readonly tabindex="-1"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">UF <span class="text-red-500">*</span></label>
+                        <input type="text" id="addr-create-state" required readonly maxlength="2" tabindex="-1"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Observação</label>
+                    <input type="text" id="addr-create-notes"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                </div>
+                <label class="flex items-center gap-1.5 text-xs text-slate-600">
+                    <input type="checkbox" id="addr-create-primary"
+                        class="h-4 w-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                    Principal
+                </label>
+                <div class="flex justify-end gap-2 pt-1">
+                    <button type="button" id="btn-addr-create-cancel"
+                        class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-200">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="btn-addr-create-save"
+                        class="px-4 py-2 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700">
+                        Salvar endereço
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ENDEREÇO DO PEDIDO (SOMENTE LEITURA) -->
+    <div id="order-addr-modal"
+        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[95]">
+        <div class="project-view-modal bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="fm-project-view-hero project-view-modal__hero px-5 md:px-6 py-4 md:py-5 border-b border-slate-100 bg-white flex justify-between items-start gap-4">
+                <div class="min-w-0 flex-1 space-y-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span id="order-addr-view-label" class="project-view-modal__code">—</span>
+                        <span id="order-addr-view-primary" class="project-view-modal__status hidden">Principal</span>
+                    </div>
+                    <h3 id="order-addr-modal-title" class="text-xl md:text-2xl font-semibold text-slate-900 leading-tight break-words">Endereço do pedido</h3>
+                    <p class="text-xs text-slate-400" id="order-addr-modal-subtitle">Dados cadastrados no pedido</p>
+                </div>
+                <button type="button" id="btn-order-addr-modal-close-x"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1 shrink-0" aria-label="Fechar">×</button>
+            </div>
+            <div class="project-view-modal__body p-5 md:p-6 overflow-y-auto space-y-6">
+                <p id="order-addr-modal-empty" class="hidden text-sm text-slate-500 text-center py-8">
+                    Nenhum endereço vinculado a este pedido.
+                </p>
+                <div id="order-addr-modal-body" class="hidden space-y-6">
+                    <section class="project-view-section">
+                        <h4 class="project-view-section__title">Identificação</h4>
+                        <dl class="project-view-fields">
+                            <div class="project-view-field">
+                                <dt>Apelido</dt>
+                                <dd id="order-addr-view-nickname">—</dd>
+                            </div>
+                            <div class="project-view-field">
+                                <dt>CEP</dt>
+                                <dd id="order-addr-view-postal-code" class="font-mono">—</dd>
+                            </div>
+                        </dl>
+                    </section>
+                    <section class="project-view-section">
+                        <h4 class="project-view-section__title">Endereço</h4>
+                        <dl class="project-view-fields project-view-fields--stack">
+                            <div class="project-view-field">
+                                <dt>Logradouro</dt>
+                                <dd id="order-addr-view-street">—</dd>
+                            </div>
+                        </dl>
+                        <dl class="project-view-fields mt-3">
+                            <div class="project-view-field">
+                                <dt>Número</dt>
+                                <dd id="order-addr-view-number">—</dd>
+                            </div>
+                            <div class="project-view-field">
+                                <dt>Complemento</dt>
+                                <dd id="order-addr-view-complement">—</dd>
+                            </div>
+                            <div class="project-view-field">
+                                <dt>Bairro</dt>
+                                <dd id="order-addr-view-neighborhood">—</dd>
+                            </div>
+                            <div class="project-view-field">
+                                <dt>Cidade</dt>
+                                <dd id="order-addr-view-city">—</dd>
+                            </div>
+                            <div class="project-view-field">
+                                <dt>UF</dt>
+                                <dd id="order-addr-view-state">—</dd>
+                            </div>
+                        </dl>
+                    </section>
+                    <section class="project-view-section project-view-section--boxed">
+                        <h4 class="project-view-section__title">Observação</h4>
+                        <p id="order-addr-view-notes" class="project-view-path whitespace-pre-wrap">—</p>
+                    </section>
+                </div>
+            </div>
+            <div class="project-view-modal__footer p-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row gap-2">
+                <button type="button" id="btn-order-addr-open-maps"
+                    class="hidden flex-1 bg-white border border-indigo-200 text-indigo-800 py-2.5 rounded-lg text-xs font-semibold hover:bg-indigo-50">
+                    Abrir no Google Maps
+                </button>
+                <button type="button" id="btn-order-addr-modal-close"
+                    class="flex-1 bg-slate-100 text-slate-700 py-2.5 rounded-lg text-xs font-semibold hover:bg-slate-200">
                     Fechar
                 </button>
             </div>

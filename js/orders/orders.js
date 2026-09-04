@@ -1,6 +1,7 @@
 let ordersCache = [];
 let orderSummaryCounts = {};
 let orderPhasesByOrderId = {};
+let activeOrderAddrId = null;
 
 function getOrderPhasesForOrder(orderId) {
     return orderPhasesByOrderId[Number(orderId)] || [];
@@ -725,6 +726,7 @@ async function selectOrder(id) {
         saleDateEl.innerText = `Data de venda: ${saleDateLabel}`;
     }
     document.getElementById("det-delivery").innerText = formatOrderDeliverySummary(order.id, order.clientDeliveryDate);
+    activeOrderAddrId = Number(order.addrId) || null;
 
     await loadOrderPhasesForOrders(ordersCache.length ? ordersCache : [order]);
     loadOrders();
@@ -756,7 +758,144 @@ async function selectOrder(id) {
     }
 }
 
+function setOrderAddrViewText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value || '—';
+}
+
+function buildOrderAddrGoogleMapsUrl(record) {
+    if (!record) return '';
+    const postal = typeof formatPostalCodeDisplay === 'function'
+        ? formatPostalCodeDisplay(record.postalCode)
+        : record.postalCode;
+    const country = String(record.country || '').trim().toUpperCase() === 'BR'
+        ? 'Brasil'
+        : (record.country || 'Brasil');
+    const parts = [
+        record.street,
+        record.number,
+        record.neighborhood,
+        record.city,
+        record.state,
+        postal,
+        country
+    ].map(part => String(part || '').trim()).filter(part => part && part !== '—');
+    if (!parts.length) return '';
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts.join(', '))}`;
+}
+
+function syncOrderAddrMapsButton(record) {
+    const button = document.getElementById('btn-order-addr-open-maps');
+    if (!button) return;
+    const url = buildOrderAddrGoogleMapsUrl(record);
+    button.dataset.mapsUrl = url;
+    button.classList.toggle('hidden', !url);
+}
+
+function openOrderAddrInGoogleMaps() {
+    const url = document.getElementById('btn-order-addr-open-maps')?.dataset.mapsUrl || '';
+    if (!url) {
+        alertAppDialog('Endereço insuficiente para abrir o Google Maps.');
+        return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function fillOrderAddrModal(record) {
+    const emptyEl = document.getElementById('order-addr-modal-empty');
+    const bodyEl = document.getElementById('order-addr-modal-body');
+    const titleEl = document.getElementById('order-addr-modal-title');
+    const primaryEl = document.getElementById('order-addr-view-primary');
+
+    if (!record) {
+        emptyEl?.classList.remove('hidden');
+        bodyEl?.classList.add('hidden');
+        if (titleEl) titleEl.textContent = 'Endereço do pedido';
+        setOrderAddrViewText('order-addr-view-label', '');
+        primaryEl?.classList.add('hidden');
+        syncOrderAddrMapsButton(null);
+        return;
+    }
+
+    emptyEl?.classList.add('hidden');
+    bodyEl?.classList.remove('hidden');
+
+    const postal = typeof formatPostalCodeDisplay === 'function'
+        ? formatPostalCodeDisplay(record.postalCode)
+        : record.postalCode;
+    if (titleEl) titleEl.textContent = record.nickname || 'Endereço do pedido';
+    setOrderAddrViewText('order-addr-view-label', record.labelName);
+    setOrderAddrViewText('order-addr-view-nickname', record.nickname);
+    setOrderAddrViewText('order-addr-view-postal-code', postal);
+    if (primaryEl) {
+        const isPrimary = Boolean(record.isPrimary);
+        primaryEl.classList.toggle('hidden', !isPrimary);
+        primaryEl.textContent = isPrimary ? 'Principal' : '';
+    }
+    setOrderAddrViewText('order-addr-view-street', record.street);
+    setOrderAddrViewText('order-addr-view-number', record.number);
+    setOrderAddrViewText('order-addr-view-complement', record.complement);
+    setOrderAddrViewText('order-addr-view-neighborhood', record.neighborhood);
+    setOrderAddrViewText('order-addr-view-city', record.city);
+    setOrderAddrViewText('order-addr-view-state', record.state);
+    setOrderAddrViewText('order-addr-view-notes', record.notes);
+    syncOrderAddrMapsButton(record);
+}
+
+async function openOrderAddrModal() {
+    if (!activeOrderId) {
+        alertAppDialog('Selecione um pedido.');
+        return;
+    }
+
+    const emptyEl = document.getElementById('order-addr-modal-empty');
+    const bodyEl = document.getElementById('order-addr-modal-body');
+    emptyEl?.classList.add('hidden');
+    bodyEl?.classList.add('hidden');
+    syncOrderAddrMapsButton(null);
+    toggleModal('order-addr-modal', true);
+
+    let addrId = activeOrderAddrId;
+    if (!addrId) {
+        const { data, error } = await supabaseClient
+            .from('salesOrders')
+            .select('addrId')
+            .eq('id', activeOrderId)
+            .maybeSingle();
+        if (error?.message?.includes('addrId') || /schema cache/i.test(error?.message || '')) {
+            toggleModal('order-addr-modal', false);
+            alertAppDialog('Execute supabase/feats/create-addr.sql no Supabase SQL Editor (cria salesOrders.addrId e recarrega o schema).');
+            return;
+        }
+        addrId = Number(data?.addrId) || null;
+        activeOrderAddrId = addrId;
+    }
+
+    if (!addrId) {
+        fillOrderAddrModal(null);
+        return;
+    }
+
+    let record = null;
+    if (typeof fetchGestaoClientAddrs === 'function') {
+        record = await fetchGestaoClientAddrs(null, { addrId });
+    } else {
+        const { data } = await supabaseClient
+            .from('addr')
+            .select('id, nickname, postalCode, street, number, complement, neighborhood, city, state, notes, isPrimary, labelId')
+            .eq('id', addrId)
+            .maybeSingle();
+        record = data;
+    }
+
+    fillOrderAddrModal(record);
+}
+
 function bindOrderEvents() {
+    document.getElementById('btn-order-addr')?.addEventListener('click', openOrderAddrModal);
+    document.getElementById('btn-order-addr-open-maps')?.addEventListener('click', openOrderAddrInGoogleMaps);
+    document.getElementById('btn-order-addr-modal-close')?.addEventListener('click', () => toggleModal('order-addr-modal', false));
+    document.getElementById('btn-order-addr-modal-close-x')?.addEventListener('click', () => toggleModal('order-addr-modal', false));
     document.getElementById('order-tab-medicao').addEventListener('click', async function () {
         switchOrderDetailTab('medicao');
     });

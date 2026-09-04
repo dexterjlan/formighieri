@@ -82,6 +82,97 @@ function syncMontagemProgClientRequired() {
     if (clientBtn) {
         clientBtn.disabled = hasOrder;
     }
+    syncMontagemProgAddrField();
+}
+
+let montagemProgSelectedAddrId = null;
+
+function getMontagemProgFormClient() {
+    return {
+        id: Number(document.getElementById('montagem-prog-client-id')?.value) || null,
+        name: document.getElementById('montagem-prog-client-name')?.value.trim() || ''
+    };
+}
+
+function formatMontagemProgAddrLabel(record) {
+    if (!record) return '';
+    if (typeof formatGestaoAddrPickerLabel === 'function') {
+        return formatGestaoAddrPickerLabel(record);
+    }
+    return [record.labelName, record.nickname, record.street, record.city].filter(Boolean).join(' · ');
+}
+
+function setMontagemProgSelectedAddr(record) {
+    montagemProgSelectedAddrId = record?.id ? Number(record.id) : null;
+    const nameInput = document.getElementById('montagem-prog-addr');
+    const idInput = document.getElementById('montagem-prog-addr-id');
+    if (idInput) idInput.value = montagemProgSelectedAddrId ? String(montagemProgSelectedAddrId) : '';
+    if (nameInput) {
+        nameInput.value = formatMontagemProgAddrLabel(record);
+        if (typeof applyAddrFieldHoverTitle === 'function') {
+            applyAddrFieldHoverTitle(nameInput, record);
+        } else {
+            nameInput.title = nameInput.value || '';
+        }
+    }
+    syncMontagemProgAddrField();
+}
+
+function getMontagemProgSelectedAddrId() {
+    return Number(montagemProgSelectedAddrId)
+        || Number(document.getElementById('montagem-prog-addr-id')?.value)
+        || null;
+}
+
+function syncMontagemProgAddrField() {
+    const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
+    const clientId = Number(document.getElementById('montagem-prog-client-id')?.value) || null;
+    const hasOrder = Boolean(orderCode);
+    const canPick = !hasOrder && Boolean(clientId);
+    const btn = document.getElementById('btn-montagem-prog-addr-picker');
+    const input = document.getElementById('montagem-prog-addr');
+
+    if (btn) btn.disabled = !canPick;
+    if (!input) return;
+
+    input.classList.toggle('cursor-pointer', canPick);
+    input.classList.toggle('cursor-not-allowed', !canPick);
+    if (hasOrder) {
+        input.placeholder = 'Endereço do pedido';
+    } else if (!clientId) {
+        input.placeholder = 'Selecione o cliente (sem pedido) para buscar o endereço';
+    } else {
+        input.placeholder = 'Clique em ... para buscar o endereço do cliente';
+    }
+}
+
+async function applyMontagemProgOrderAddress(order) {
+    const addrId = Number(order?.addrId) || null;
+    if (!addrId || typeof fetchGestaoClientAddrs !== 'function') {
+        setMontagemProgSelectedAddr(null);
+        return;
+    }
+    const record = await fetchGestaoClientAddrs(null, { addrId });
+    setMontagemProgSelectedAddr(record);
+}
+
+async function applyMontagemProgAddressFromContext(prog) {
+    const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
+    if (orderCode) {
+        const order = await lookupMontagemProgOrderByCode(orderCode);
+        if (order) {
+            await applyMontagemProgOrderAddress(order);
+            return;
+        }
+    }
+
+    const addrId = Number(prog?.addrId) || null;
+    if (!addrId || typeof fetchGestaoClientAddrs !== 'function') {
+        setMontagemProgSelectedAddr(null);
+        return;
+    }
+    const record = await fetchGestaoClientAddrs(null, { addrId });
+    setMontagemProgSelectedAddr(record);
 }
 
 function syncMontagemProgCrewExclusivity() {
@@ -171,6 +262,7 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetWorke
     document.getElementById('montagem-prog-observation').value = prog?.observation || '';
 
     syncMontagemProgClientRequired();
+    await applyMontagemProgAddressFromContext(prog);
     toggleModal('montagem-prog-modal', true);
 }
 
@@ -223,8 +315,9 @@ async function saveMontagemProg(event) {
 
     let orderId = null;
     let resolvedClientId = clientId;
+    let order = null;
     if (orderCode) {
-        const order = await lookupMontagemProgOrderByCode(orderCode);
+        order = await lookupMontagemProgOrderByCode(orderCode);
         if (!order) {
             alertAppDialog('Pedido não encontrado para o código informado.');
             return;
@@ -234,6 +327,17 @@ async function saveMontagemProg(event) {
     } else if (!resolvedClientId) {
         alertAppDialog('Selecione o cliente no cadastro quando não houver código de pedido.');
         return;
+    }
+
+    let addrId = getMontagemProgSelectedAddrId() || null;
+    if (order) {
+        addrId = Number(order.addrId) || null;
+    } else if (addrId && resolvedClientId && typeof fetchGestaoClientAddrs === 'function') {
+        const addrRecord = await fetchGestaoClientAddrs(null, { addrId });
+        if (addrRecord && Number(addrRecord.ownerId) !== Number(resolvedClientId)) {
+            alertAppDialog('O endereço selecionado não pertence a este cliente.');
+            return;
+        }
     }
 
     const now = new Date().toISOString();
@@ -270,6 +374,12 @@ async function saveMontagemProg(event) {
         }
 
         await persistMontagemProgCrew(assemblyScheduleId, montadorIds, cabinetMakerIds);
+        try {
+            await persistMontagemProgAddrId(assemblyScheduleId, addrId);
+        } catch (addrError) {
+            console.warn('persistMontagemProgAddrId:', addrError);
+            alertAppDialog(addrError.message || 'Montagem salva, mas o endereço não pôde ser gravado.');
+        }
         editingMontagemProgId = null;
         toggleModal('montagem-prog-modal', false);
         await loadMontagemProgramacaoView();
@@ -352,6 +462,15 @@ async function copyMontagemProgPreviousWeek() {
                 .single();
 
             if (error) throw error;
+
+            const copiedAddrId = Number(prog.addrId) || Number(prog.order?.addrId) || null;
+            if (copiedAddrId) {
+                try {
+                    await persistMontagemProgAddrId(created.id, copiedAddrId);
+                } catch (addrError) {
+                    console.warn('copyMontagemProgPreviousWeek addr:', addrError);
+                }
+            }
 
             const montadorIds = getMontagemProgMontadorIds(prog);
             const cabinetMakerIds = getMontagemProgMarceneiroIds(prog);

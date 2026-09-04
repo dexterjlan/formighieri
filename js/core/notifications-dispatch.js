@@ -538,13 +538,18 @@ async function notifyTechnicalReviewerRevisionStartedEmail(options = {}) {
 window.notifyTechnicalReviewerRevisionStartedEmail = notifyTechnicalReviewerRevisionStartedEmail;
 
 async function notifyMedicaoRealizadaEmail(options = {}) {
-    const { orderId, projects = [] } = options;
+    const { orderId, projects = [], observation = null } = options;
     if (!orderId || !projects.length) return;
 
     try {
         const measurementDates = Object.fromEntries(
             projects.map(project => [Number(project.orderProjectId), project.measurementDate])
         );
+        const extraFields = [];
+        const observationText = String(observation || '').trim();
+        if (observationText) {
+            extraFields.push({ label: 'Observação', value: observationText });
+        }
 
         await notifyOrderProjectStatusChangeEmail({
             statusName: 'Medição Realizada',
@@ -552,6 +557,7 @@ async function notifyMedicaoRealizadaEmail(options = {}) {
             orderProjectIds: projects.map(project => project.orderProjectId),
             projectSectionTitle: 'Projetos medidos',
             accentColor: '#14b8a6',
+            extraFields,
             buildProjectDetails: (orderProjectId) => {
                 const date = measurementDates[Number(orderProjectId)];
                 return date ? [`Data da medição: ${formatNotificationDate(date)}`] : [];

@@ -446,6 +446,153 @@ async function updateSalesOrderRecord(orderId, payload = {}, options = {}) {
     throw lastError || new Error('Não foi possível atualizar o pedido.');
 }
 
+function isSalesOrderAddrIdSchemaError(error) {
+    const message = String(error?.message || error || '');
+    return /addrid|schema cache/i.test(message)
+        && /could not find|column|schema cache/i.test(message);
+}
+
+function syncSalesOrderAddrIdCaches(orderId, addrId) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return;
+    const normalizedAddrId = Number(addrId) || null;
+
+    if (typeof ordersCache !== 'undefined' && Array.isArray(ordersCache)) {
+        const cacheIndex = ordersCache.findIndex(order => Number(order.id) === normalizedOrderId);
+        if (cacheIndex >= 0) {
+            ordersCache[cacheIndex] = {
+                ...ordersCache[cacheIndex],
+                addrId: normalizedAddrId
+            };
+        }
+    }
+
+    if (typeof gestaoOrdersCache !== 'undefined' && Array.isArray(gestaoOrdersCache)) {
+        const cacheIndex = gestaoOrdersCache.findIndex(order => Number(order.id) === normalizedOrderId);
+        if (cacheIndex >= 0) {
+            gestaoOrdersCache[cacheIndex] = {
+                ...gestaoOrdersCache[cacheIndex],
+                addrId: normalizedAddrId
+            };
+        }
+    }
+
+    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === normalizedOrderId
+        && typeof activeOrderAddrId !== 'undefined') {
+        activeOrderAddrId = normalizedAddrId;
+    }
+}
+
+async function readSalesOrderAddrId(orderId, orderCode = '') {
+    const normalizedOrderId = Number(orderId);
+    const normalizedCode = String(orderCode || '').trim();
+    const filters = [];
+    if (normalizedOrderId) filters.push({ column: 'id', value: normalizedOrderId });
+    if (normalizedCode) filters.push({ column: 'orderCode', value: normalizedCode });
+
+    let lastError = null;
+    for (const filter of filters) {
+        const { data, error } = await supabaseClient
+            .from('salesOrders')
+            .select('id, addrId')
+            .eq(filter.column, filter.value)
+            .limit(1);
+
+        if (error) {
+            lastError = error;
+            if (isSalesOrderAddrIdSchemaError(error)) return { error };
+            continue;
+        }
+
+        const row = Array.isArray(data) ? data[0] : data;
+        if (row) {
+            return {
+                id: Number(row.id) || normalizedOrderId,
+                addrId: Number(row.addrId) || null
+            };
+        }
+    }
+
+    if (lastError) return { error: lastError };
+    return null;
+}
+
+async function persistSalesOrderAddrId(orderId, addrId, contextOverride = null) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) {
+        throw new Error('Pedido inválido.');
+    }
+
+    const normalizedAddrId = Number(addrId) || null;
+    const context = {
+        ...(await resolveSalesOrderUpdateContext(normalizedOrderId)),
+        ...(contextOverride || {})
+    };
+    const orderCode = String(context.orderCode || '').trim();
+    const missingFnHint = 'Execute supabase/feats/create-addr.sql no Supabase SQL Editor (cria salesOrders.addrId e a função set_sales_order_addr_id).';
+
+    const { data: rpcUpdated, error: rpcError } = await supabaseClient.rpc(
+        'set_sales_order_addr_id',
+        {
+            p_order_id: normalizedOrderId,
+            p_addr_id: normalizedAddrId
+        }
+    );
+
+    if (!rpcError && rpcUpdated === true) {
+        const saved = await readSalesOrderAddrId(normalizedOrderId, orderCode);
+        if (!saved?.error && (Number(saved?.addrId) || null) === normalizedAddrId) {
+            syncSalesOrderAddrIdCaches(saved?.id || normalizedOrderId, normalizedAddrId);
+            return normalizedAddrId;
+        }
+        if (!saved || saved.error) {
+            syncSalesOrderAddrIdCaches(normalizedOrderId, normalizedAddrId);
+            return normalizedAddrId;
+        }
+    }
+
+    const payload = { addrId: normalizedAddrId };
+    const attempts = [];
+    if (orderCode) attempts.push({ type: 'eq', column: 'orderCode', value: orderCode });
+    attempts.push({ type: 'eq', column: 'id', value: normalizedOrderId });
+
+    let lastError = rpcError || null;
+
+    for (const attempt of attempts) {
+        const { error } = await supabaseClient
+            .from('salesOrders')
+            .update(payload)
+            .eq(attempt.column, attempt.value);
+
+        if (error) {
+            lastError = error;
+            if (isSalesOrderAddrIdSchemaError(error)) {
+                throw new Error(missingFnHint);
+            }
+            continue;
+        }
+
+        const saved = await readSalesOrderAddrId(normalizedOrderId, orderCode);
+        if (saved?.error) {
+            if (isSalesOrderAddrIdSchemaError(saved.error)) {
+                throw new Error(missingFnHint);
+            }
+            lastError = saved.error;
+            continue;
+        }
+        if (saved && (Number(saved.addrId) || null) === normalizedAddrId) {
+            syncSalesOrderAddrIdCaches(saved.id || normalizedOrderId, normalizedAddrId);
+            return normalizedAddrId;
+        }
+    }
+
+    if (/set_sales_order_addr_id|could not find the function/i.test(String(rpcError?.message || ''))) {
+        throw new Error(missingFnHint);
+    }
+
+    throw lastError || new Error(missingFnHint);
+}
+
 function isProjectTechnicalDeliveryBeforeOrderDelivery(projectDeliveryDate, orderDeliveryDate) {
     if (!projectDeliveryDate || !orderDeliveryDate) return true;
     return String(projectDeliveryDate) < String(orderDeliveryDate);

@@ -82,6 +82,8 @@ Não compartilhe o calendário de testes com a equipe, a menos que queira que ve
 | Editar evento | Atualiza o mesmo evento |
 | Excluir evento | Remove do Google |
 
+O campo **Local** recebe o endereço do evento (ou o do pedido, se o evento estiver vinculado a um pedido). Sem endereço, o Local fica vazio. Depois de atualizar `scripts/FormighieriGoogleCalendar.gs`, republicar o Web App.
+
 A sincronização é **unidirecional** (FGP → Google). Não crie eventos diretamente no Google.
 
 ## Solução de problemas

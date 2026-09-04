@@ -5,20 +5,64 @@ function getGoogleCalendarSyncCalendarName() {
         || DEFAULT_GOOGLE_CALENDAR_SYNC_CALENDAR_NAME;
 }
 
-const CALENDAR_GOOGLE_SYNC_SELECT = `
-    id,
-    eventDate,
-    eventTime,
-    description,
-    orderId,
-    clientId,
-    responsibleId,
-    googleCalendarEventId,
-    eventType:CalendarEventType(id, name),
-    client:Client(id, name),
-    order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name)),
-    responsible:appUsers!responsibleId(id, name)
-`;
+function getCalendarGoogleSyncSelect(options = {}) {
+    const {
+        includeGoogleId = true,
+        includeAddrId = true,
+        includeResponsibleEmbed = true
+    } = options;
+
+    const orderSelect = includeAddrId
+        ? 'order:salesOrders(orderCode, clientId, consultantUserId, addrId, client:Client(name), consultor:appUsers!consultantUserId(name))'
+        : 'order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))';
+
+    return [
+        'id',
+        'eventDate',
+        'eventTime',
+        'description',
+        'orderId',
+        'clientId',
+        'responsibleId',
+        includeGoogleId ? 'googleCalendarEventId' : null,
+        includeAddrId ? 'addrId' : null,
+        'eventType:CalendarEventType(id, name)',
+        'client:Client(id, name)',
+        orderSelect,
+        includeResponsibleEmbed ? 'responsible:appUsers!responsibleId(id, name)' : null
+    ].filter(Boolean).join(',\n    ');
+}
+
+function formatCalendarAddrGoogleLocation(record) {
+    if (!record) return '';
+
+    const postal = typeof formatPostalCodeDisplay === 'function'
+        ? formatPostalCodeDisplay(record.postalCode)
+        : record.postalCode;
+    const streetLine = [record.street, record.number].filter(Boolean).join(', ');
+    const cityLine = [record.city, record.state].filter(Boolean).join(' - ');
+    const country = String(record.country || '').trim().toUpperCase() === 'BR'
+        ? 'Brasil'
+        : (record.country || 'Brasil');
+
+    return [streetLine, record.complement, record.neighborhood, cityLine, postal, country]
+        .map(part => String(part || '').trim())
+        .filter(part => part && part !== '—')
+        .join(', ');
+}
+
+async function attachCalendarEventGoogleLocation(event) {
+    if (!event) return event;
+
+    const addrId = Number(event.addrId) || Number(event.order?.addrId) || null;
+    event.googleLocation = '';
+    if (!addrId || typeof fetchGestaoClientAddrs !== 'function') return event;
+
+    const record = await fetchGestaoClientAddrs(null, { addrId });
+    event.addr = record || null;
+    event.googleLocation = formatCalendarAddrGoogleLocation(record);
+    return event;
+}
 
 function isGoogleCalendarSyncEnabled() {
     return Boolean(GOOGLE_APPS_SCRIPT_URL && NOTIFICATION_SCRIPT_SECRET)
@@ -54,6 +98,7 @@ function buildCalendarGoogleSyncPayload(event) {
         eventTime: String(event.eventTime || '09:00:00').slice(0, 8),
         summary: summaryParts.join(' - '),
         description: descriptionLines.join('\n'),
+        location: event.googleLocation || '',
         durationMinutes: 60,
         colorHex: getCalendarResponsibleColorHex(event),
         googleEventColor: getGoogleCalendarEventColorId(event)
@@ -68,49 +113,33 @@ async function fetchCalendarEventForGoogleSync(eventId) {
         await loadCalendarUsers();
     }
 
-    let result = await supabaseClient
+    let includeGoogleId = true;
+    let includeAddrId = true;
+    let includeResponsibleEmbed = true;
+
+    const runQuery = () => supabaseClient
         .from('CalendarEvent')
-        .select(CALENDAR_GOOGLE_SYNC_SELECT)
+        .select(getCalendarGoogleSyncSelect({
+            includeGoogleId,
+            includeAddrId,
+            includeResponsibleEmbed
+        }))
         .eq('id', normalizedId)
         .maybeSingle();
 
-    if (result.error?.message?.includes('googleCalendarEventId')) {
-        result = await supabaseClient
-            .from('CalendarEvent')
-            .select(`
-                id,
-                eventDate,
-                eventTime,
-                description,
-                orderId,
-                clientId,
-                responsibleId,
-                eventType:CalendarEventType(id, name),
-                client:Client(id, name),
-                order:salesOrders(orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))
-            `)
-            .eq('id', normalizedId)
-            .maybeSingle();
-    }
+    let result = await runQuery();
 
+    if (result.error?.message?.includes('googleCalendarEventId')) {
+        includeGoogleId = false;
+        result = await runQuery();
+    }
+    if (result.error?.message?.includes('addrId')) {
+        includeAddrId = false;
+        result = await runQuery();
+    }
     if (result.error?.message?.includes('responsibleId') || result.error?.message?.includes('appUsers')) {
-        result = await supabaseClient
-            .from('CalendarEvent')
-            .select(`
-                id,
-                eventDate,
-                eventTime,
-                description,
-                orderId,
-                clientId,
-                responsibleId,
-                googleCalendarEventId,
-                eventType:CalendarEventType(id, name),
-                client:Client(id, name),
-                order:salesOrders(orderCode, client:Client(name))
-            `)
-            .eq('id', normalizedId)
-            .maybeSingle();
+        includeResponsibleEmbed = false;
+        result = await runQuery();
     }
 
     if (result.error || !result.data) {
@@ -126,6 +155,7 @@ async function fetchCalendarEventForGoogleSync(eventId) {
         }
     }
 
+    await attachCalendarEventGoogleLocation(event);
     return event;
 }
 

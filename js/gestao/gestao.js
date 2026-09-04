@@ -13,6 +13,26 @@ const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 roun
 const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
 const GESTAO_NAV_SUB_ACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
 const GESTAO_NAV_SUB_INACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
+
+const GESTAO_PROJECT_FORM_OVERLAY = typeof createModalOverlayConfig === 'function'
+    ? createModalOverlayConfig('gestao-project-form', {
+        disableElementIds: [
+            'gestao-project-form-submit',
+            'btn-gestao-cancel-project',
+            'btn-gestao-remove-project',
+            'btn-gestao-back-order-form'
+        ]
+    })
+    : null;
+
+function setGestaoProjectFormLoading(active, message = 'Processando...', status = 'loading') {
+    if (typeof setModalOverlayLoading !== 'function' || !GESTAO_PROJECT_FORM_OVERLAY) return;
+    setModalOverlayLoading(GESTAO_PROJECT_FORM_OVERLAY, active, message, status);
+}
+
+function waitGestaoProjectFormStatus(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'create-detailing', 'clientes', 'addr', 'calendar-event-types', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'compra-status', 'usuarios'];
 const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
 const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
@@ -941,51 +961,56 @@ async function saveGestaoProjectDraftAsync() {
         return;
     }
 
-    if (project.isComplementary && project.parentProjectCode) {
-        const parents = await fetchGestaoParentProjectsByCodes([project.parentProjectCode]);
-        const parent = parents[project.parentProjectCode];
-        if (parent) {
-            project.parentProject = {
-                projectCode: parent.projectCode,
-                order: parent.order || null
-            };
-        }
-    }
-
-    if (project.isReplaced && project.replacedByProjectCode) {
-        const replacements = await fetchGestaoParentProjectsByCodes([project.replacedByProjectCode]);
-        const replacement = replacements[project.replacedByProjectCode];
-        if (replacement) {
-            project.replacedByProject = {
-                projectCode: replacement.projectCode,
-                order: replacement.order || null
-            };
-        }
-    }
-
-    if (project.isReplaced) {
-        const substituidoStatusId = getReplacedStatusId();
-        if (substituidoStatusId) {
-            project.statusId = substituidoStatusId;
-            project.projectStatus = gestaoProjectStatusesCache.find(status => status.id === substituidoStatusId) || {
-                id: substituidoStatusId,
-                name: SUBSTITUIDO_STATUS_NAME
-            };
-        }
-    }
-
-    const savedProjectCode = project.projectCode;
-
-    if (editingGestaoProjectDraftIndex != null) {
-        gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex] = {
-            ...gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex],
-            ...project
-        };
-    } else {
-        gestaoOrderProjectsDraft.push(project);
+    setGestaoProjectFormLoading(true, 'Salvando projeto...');
+    if (typeof yieldForAppPaint === 'function') {
+        await yieldForAppPaint();
     }
 
     try {
+        if (project.isComplementary && project.parentProjectCode) {
+            const parents = await fetchGestaoParentProjectsByCodes([project.parentProjectCode]);
+            const parent = parents[project.parentProjectCode];
+            if (parent) {
+                project.parentProject = {
+                    projectCode: parent.projectCode,
+                    order: parent.order || null
+                };
+            }
+        }
+
+        if (project.isReplaced && project.replacedByProjectCode) {
+            const replacements = await fetchGestaoParentProjectsByCodes([project.replacedByProjectCode]);
+            const replacement = replacements[project.replacedByProjectCode];
+            if (replacement) {
+                project.replacedByProject = {
+                    projectCode: replacement.projectCode,
+                    order: replacement.order || null
+                };
+            }
+        }
+
+        if (project.isReplaced) {
+            const substituidoStatusId = getReplacedStatusId();
+            if (substituidoStatusId) {
+                project.statusId = substituidoStatusId;
+                project.projectStatus = gestaoProjectStatusesCache.find(status => status.id === substituidoStatusId) || {
+                    id: substituidoStatusId,
+                    name: SUBSTITUIDO_STATUS_NAME
+                };
+            }
+        }
+
+        const savedProjectCode = project.projectCode;
+
+        if (editingGestaoProjectDraftIndex != null) {
+            gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex] = {
+                ...gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex],
+                ...project
+            };
+        } else {
+            gestaoOrderProjectsDraft.push(project);
+        }
+
         if (editingGestaoOrderId && typeof persistGestaoProjects === 'function') {
             await persistGestaoProjects(editingGestaoOrderId, gestaoOrderProjectsDraft);
             if (typeof fetchGestaoOrderProjects === 'function') {
@@ -995,12 +1020,10 @@ async function saveGestaoProjectDraftAsync() {
                     setGestaoOrderProjectsDraft(freshProjects);
                 }
             }
-        } else {
-            if (project.id
-                && Array.isArray(project.characteristicIds)
-                && typeof replaceOrderProjectCharacteristics === 'function') {
-                await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
-            }
+        } else if (project.id
+            && Array.isArray(project.characteristicIds)
+            && typeof replaceOrderProjectCharacteristics === 'function') {
+            await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
         }
 
         const savedProject = gestaoOrderProjectsDraft.find(item => item.projectCode === savedProjectCode);
@@ -1024,9 +1047,16 @@ async function saveGestaoProjectDraftAsync() {
                 characteristicIds: thirdPartyCharacteristicChanges.addedThirdPartyCharacteristicIds
             });
         }
+
+        setGestaoProjectFormLoading(true, 'Projeto salvo com sucesso!', 'success');
+        await waitGestaoProjectFormStatus(900);
     } catch (error) {
+        setGestaoProjectFormLoading(true, `Erro ao salvar projeto: ${error.message}`, 'error');
+        await waitGestaoProjectFormStatus(1800);
         alertAppDialog(`Erro ao salvar projeto no banco: ${error.message}`);
         return;
+    } finally {
+        setGestaoProjectFormLoading(false);
     }
 
     editingGestaoProjectDraftIndex = null;
@@ -1371,10 +1401,14 @@ function bindGestaoEvents() {
 
     const triggerGestaoOrdClientPicker = () => {
         openClientePickerModal(cliente => {
+            const previousId = document.getElementById('gestao-ord-client-id')?.value;
             const input = document.getElementById('gestao-ord-client');
             const idInput = document.getElementById('gestao-ord-client-id');
             if (input) input.value = cliente.name;
             if (idInput) idInput.value = cliente.id;
+            if (String(previousId) !== String(cliente.id) && typeof setGestaoOrderSelectedAddr === 'function') {
+                setGestaoOrderSelectedAddr(null);
+            }
         });
     };
     document.getElementById('gestao-ord-client-picker-btn')?.addEventListener('click', triggerGestaoOrdClientPicker);
@@ -1408,6 +1442,7 @@ function bindGestaoEvents() {
     });
     document.getElementById('gestao-nav-addr')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
+        if (typeof clearGestaoAddrOrderReturn === 'function') clearGestaoAddrOrderReturn();
         showGestaoAddrPanel();
         if (typeof loadGestaoAddrPanelData === 'function') {
             loadGestaoAddrPanelData();
@@ -1485,6 +1520,17 @@ function bindGestaoEvents() {
         }
     });
     document.getElementById('gestao-clientes-list')?.addEventListener('click', (event) => {
+        const addrBtn = event.target.closest('.gestao-cliente-addrs');
+        if (addrBtn && typeof openGestaoAddrCadastroFromClient === 'function') {
+            event.preventDefault();
+            const tr = addrBtn.closest('tr');
+            openGestaoAddrCadastroFromClient({
+                id: Number(tr?.dataset.clienteId),
+                name: tr?.querySelector('.gestao-cliente-nome')?.value.trim() || ''
+            });
+            return;
+        }
+
         const saveBtn = event.target.closest('.gestao-save-cliente');
         if (saveBtn && typeof saveGestaoClienteRow === 'function') {
             event.preventDefault();

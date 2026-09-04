@@ -240,6 +240,10 @@
                                 <p class="text-xs text-slate-400 mt-1" id="det-info">Consultor: - | Criado por: -</p>
                                 <p class="text-xs text-slate-500 mt-1" id="det-sale-date">Data de venda: —</p>
                                 <p class="text-xs text-slate-500 mt-1" id="det-delivery">Entrega pedido: —</p>
+                                <button type="button" id="btn-order-addr"
+                                    class="mt-2 text-xs bg-slate-900 text-white hover:bg-slate-800 px-3 py-1.5 rounded-lg font-semibold">
+                                    Endereço
+                                </button>
                             </div>
                         </div>
                         <div class="fm-order-projects-header px-5 py-2.5 border-b border-slate-100 bg-violet-50/50 text-xs font-semibold text-violet-800 uppercase">
@@ -975,6 +979,18 @@
                                         </button>
                                     </div>
                                 </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Endereço</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="gestao-ord-addr" readonly placeholder="Clique em ... para buscar o endereço do cliente"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 bg-slate-50 cursor-pointer">
+                                        <input type="hidden" id="gestao-ord-addr-id">
+                                        <button type="button" id="gestao-ord-addr-picker-btn" title="Buscar endereço do cliente"
+                                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">
+                                            ...
+                                        </button>
+                                    </div>
+                                </div>
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-500 mb-1">Consultor <span class="text-red-500">*</span></label>
                                     <select id="gestao-ord-consultant" required
@@ -1037,6 +1053,18 @@
                     </div>
 
                     <div id="gestao-project-form-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div id="gestao-project-form-loading"
+                            class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-6">
+                            <div class="bg-white rounded-2xl shadow-xl px-8 py-7 w-full max-w-sm flex flex-col items-center gap-3 text-center">
+                                <div id="gestao-project-form-loading-spinner"
+                                    class="h-10 w-10 rounded-full border-2 border-slate-200 border-t-indigo-700 animate-spin"></div>
+                                <div id="gestao-project-form-loading-success"
+                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                                <div id="gestao-project-form-loading-error"
+                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                                <p id="gestao-project-form-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                            </div>
+                        </div>
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
                             <div>
                                 <h3 id="gestao-project-form-title" class="font-bold text-sm text-slate-900">Novo Projeto</h3>
@@ -1372,7 +1400,7 @@
                                             <th class="text-left p-3 font-semibold w-20">ID</th>
                                             <th class="text-left p-3 font-semibold">Nome</th>
                                             <th class="text-center p-3 font-semibold w-24">Ativo</th>
-                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                            <th class="text-left p-3 font-semibold w-52">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody id="gestao-clientes-list" class="divide-y divide-slate-100"></tbody>
@@ -1385,6 +1413,10 @@
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h3 class="font-bold text-sm text-slate-900">Endereços</h3>
                             <p class="text-xs text-slate-400 mt-0.5">Cadastre os endereços do cliente (Obra, Cobrança, Entrega). O CEP é obrigatório. Endereços não são excluídos: use Desativar.</p>
+                            <p id="gestao-addr-return-hint" class="hidden text-xs text-indigo-700 mt-1">
+                                <span id="gestao-addr-return-hint-text">Cadastre o endereço deste cliente e salve para voltar ao pedido.</span>
+                                <button type="button" id="gestao-addr-return-order" class="underline font-semibold ml-1">Voltar ao pedido</button>
+                            </p>
                         </div>
                         <div class="p-4 md:p-5 space-y-4">
                             <form id="gestao-addr-form" class="border border-slate-200 rounded-xl p-3 bg-slate-50/40 space-y-3">

@@ -182,6 +182,7 @@ function upsertFgpCalendarEvent_(calendar) {
   var end = new Date(start.getTime() + durationMinutes * 60 * 1000);
   var summary = calendar.summary || 'Evento FGP';
   var description = calendar.description || '';
+  var location = calendar.location || '';
 
   if (calendar.googleCalendarEventId) {
     try {
@@ -190,13 +191,17 @@ function upsertFgpCalendarEvent_(calendar) {
         existing.setTitle(summary);
         existing.setTime(start, end);
         existing.setDescription(description);
+        existing.setLocation(location);
         applyFgpGoogleEventColor_(cal, existing, calendar);
         return { ok: true, googleCalendarEventId: existing.getId() };
       }
     } catch (ignored) {}
   }
 
-  var created = cal.createEvent(summary, start, end, { description: description });
+  var created = cal.createEvent(summary, start, end, {
+    description: description,
+    location: location
+  });
   applyFgpGoogleEventColor_(cal, created, calendar);
   return { ok: true, googleCalendarEventId: created.getId() };
 }
@@ -352,6 +357,7 @@ function testarSyncCalendarioDev() {
       eventTime: '14:00:00',
       summary: 'Teste Apps Script FGP',
       description: 'Executado manualmente no editor',
+      location: 'Rua Exemplo, 100, Centro, Curitiba - PR, 80010-000, Brasil',
       colorHex: '#d50000',
       googleEventColor: '11'
     }
