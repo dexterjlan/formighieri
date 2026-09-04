@@ -1066,7 +1066,15 @@ function renderCalendarColorsModalList() {
     const takenHexes = getTakenCalendarColorHexes(users, currentUser?.id);
 
     listEl.innerHTML = users.map(user => {
-        const color = resolveUserCalendarPaletteColor(user);
+        const assigned = typeof getAssignedCalendarPaletteColor === 'function'
+            ? getAssignedCalendarPaletteColor(user)
+            : null;
+        const color = assigned || (
+            user.isActive === false || (typeof isInactiveCalendarColorHex === 'function' && isInactiveCalendarColorHex(user?.calendarColor))
+                ? INACTIVE_USER_CALENDAR_COLOR
+                : { hex: '#ffffff', label: 'Sem cor' }
+        );
+        const isNone = !assigned && color.label === 'Sem cor';
         const isSelf = Number(user.id) === Number(currentUser?.id);
         const pickerHtml = isSelf
             ? renderUserCalendarColorPickerHtml(user, { takenHexes, caption: 'Escolher outra cor' })
@@ -1074,7 +1082,7 @@ function renderCalendarColorsModalList() {
 
         return `
             <article class="calendar-colors-user ${isSelf ? 'is-self' : ''}">
-                <span class="calendar-colors-user__swatch" style="background:${color.hex}" title="${escapeHtml(color.label)}"></span>
+                <span class="calendar-colors-user__swatch${isNone ? ' user-calendar-color-swatch--none' : ''}" style="background:${color.hex}" title="${escapeHtml(color.label)}"></span>
                 <div class="min-w-0 flex-1">
                     <p class="text-sm font-semibold text-slate-900">
                         ${escapeHtml(user.name || '—')}

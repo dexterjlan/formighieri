@@ -10,6 +10,18 @@ function isGestaoKanbanHiddenProject(project) {
     return isGestaoKanbanComplementarProject(project) || isReplacedOrderProject(project);
 }
 
+function getGestaoKanbanCardDeliveryDate(order, phase = null) {
+    if (phase?.deliveryDate) return phase.deliveryDate;
+    if (order?.clientDeliveryDate) return order.clientDeliveryDate;
+
+    const phases = order?.deliveryPhases || [];
+    if (phases.length === 1 && phases[0]?.deliveryDate) {
+        return phases[0].deliveryDate;
+    }
+
+    return '';
+}
+
 function projectBelongsToGestaoKanbanPhase(project, phase, phases = []) {
     if (!phase) return true;
 
@@ -133,13 +145,17 @@ function renderGestaoKanbanCard(order, projectTree, phase = null) {
     const orderCodeLabel = phase
         ? `${order.orderCode || '—'} - ${phase.name || 'Fase'}`
         : (order.orderCode || '—');
+    const deliveryDate = getGestaoKanbanCardDeliveryDate(order, phase);
+    const deliveryLabel = deliveryDate && typeof formatGestaoDate === 'function'
+        ? formatGestaoDate(deliveryDate)
+        : deliveryDate;
 
     card.innerHTML = `
         <div class="space-y-0.5">
             <div class="font-mono text-xs font-bold text-indigo-800">${escapeHtml(orderCodeLabel)}</div>
             <div class="text-xs font-semibold text-slate-800">${escapeHtml(getOrderClientName(order) || '—')}</div>
-            ${phase?.deliveryDate
-                ? `<div class="text-[10px] text-slate-500">Entrega: ${escapeHtml(formatGestaoDate(phase.deliveryDate))}</div>`
+            ${deliveryLabel && deliveryLabel !== '—'
+                ? `<div class="text-[10px] text-slate-500">Entrega: ${escapeHtml(deliveryLabel)}</div>`
                 : ''}
         </div>
         <ul class="space-y-2 m-0 p-0 list-none">${projectsHtml}</ul>
@@ -1031,7 +1047,7 @@ function getGestaoKanbanExportDesignerName(project) {
 }
 
 function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplementar = false) {
-    const orderDeliveryDate = phase?.deliveryDate || order.clientDeliveryDate || '';
+    const orderDeliveryDate = getGestaoKanbanCardDeliveryDate(order, phase);
     const projectDeliveryDate = project.deliveryDate || '';
     const designerName = getGestaoKanbanExportDesignerName(project);
     const saleValue = getGestaoKanbanExportProjectSaleValue(project);

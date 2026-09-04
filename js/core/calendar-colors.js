@@ -86,12 +86,17 @@ function getCalendarColorContrast(hex) {
     return { fg, border };
 }
 
+function getAssignedCalendarPaletteColor(user) {
+    if (user?.isActive === false) return null;
+    return getGoogleCalendarPaletteColor(user?.calendarColor) || null;
+}
+
 function resolveUserCalendarPaletteColor(user) {
     if (user?.isActive === false) {
         return INACTIVE_USER_CALENDAR_COLOR;
     }
 
-    const assigned = getGoogleCalendarPaletteColor(user?.calendarColor);
+    const assigned = getAssignedCalendarPaletteColor(user);
     if (assigned) return assigned;
 
     if (isInactiveCalendarColorHex(user?.calendarColor)) {
@@ -107,8 +112,8 @@ function getTakenCalendarColorHexes(users, exceptUserId) {
         if (Number(user.id) === Number(exceptUserId)) return;
         if (user.isActive === false) return;
 
-        const color = resolveUserCalendarPaletteColor(user);
-        if (!color?.hex || color.id === 'inactive' || isInactiveCalendarColorHex(color.hex)) return;
+        const color = getAssignedCalendarPaletteColor(user);
+        if (!color?.hex) return;
         if (!taken.has(color.hex)) {
             taken.set(color.hex, user.name || 'Outro usuário');
         }
@@ -140,8 +145,23 @@ function getGoogleCalendarEventColorId(event) {
 
 function renderUserCalendarColorPickerHtml(user, options = {}) {
     const disabled = Boolean(options.disabled);
-    const selectedHex = resolveUserCalendarPaletteColor(user).hex;
+    const allowNone = Boolean(options.allowNone);
+    const assigned = getAssignedCalendarPaletteColor(user);
+    const selectedHex = allowNone
+        ? (assigned?.hex || '')
+        : resolveUserCalendarPaletteColor(user).hex;
     const takenHexes = options.takenHexes instanceof Map ? options.takenHexes : new Map();
+    const noneSelected = allowNone && !selectedHex;
+
+    const noneSwatch = allowNone
+        ? `<button type="button"
+            class="user-calendar-color-swatch user-calendar-color-swatch--none${noneSelected ? ' is-selected' : ''}"
+            data-calendar-color=""
+            title="Nenhuma (não usa o calendário)"
+            aria-label="Nenhuma (não usa o calendário)"
+            aria-pressed="${noneSelected ? 'true' : 'false'}"
+            ${disabled ? 'disabled' : ''}></button>`
+        : '';
 
     const swatches = GOOGLE_CALENDAR_PALETTE.map(color => {
         const isSelected = color.hex === selectedHex;
@@ -168,7 +188,7 @@ function renderUserCalendarColorPickerHtml(user, options = {}) {
         <div class="user-calendar-color-field" data-user-id="${user.id}">
             <p class="text-[9px] font-semibold uppercase text-slate-400 mb-1">${escapeHtml(caption)}</p>
             <div class="user-calendar-color-picker" role="radiogroup" aria-label="${escapeHtml(caption)}">
-                ${swatches}
+                ${noneSwatch}${swatches}
             </div>
             <input type="hidden" data-calendar-color-input="${user.id}" value="${escapeHtml(selectedHex)}">
         </div>

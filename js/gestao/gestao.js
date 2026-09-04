@@ -13,7 +13,7 @@ const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 roun
 const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
 const GESTAO_NAV_SUB_ACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
 const GESTAO_NAV_SUB_INACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'create-detailing', 'clientes', 'calendar-event-types', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'compra-status', 'usuarios'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'create-detailing', 'clientes', 'addr', 'calendar-event-types', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'compra-status', 'usuarios'];
 const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
 const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
@@ -53,6 +53,7 @@ function setGestaoNavActive(navKey) {
         'alterar-status-projeto': document.getElementById('gestao-nav-alterar-status-projeto'),
         'create-detailing': document.getElementById('gestao-nav-create-detailing'),
         clientes: document.getElementById('gestao-nav-clientes'),
+        addr: document.getElementById('gestao-nav-addr'),
         'calendar-event-types': document.getElementById('gestao-nav-calendar-event-types'),
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
         montadores: document.getElementById('gestao-nav-montadores'),
@@ -213,6 +214,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-alterar-status-projeto-panel')?.classList.add('hidden');
     document.getElementById('gestao-create-detailing-panel')?.classList.add('hidden');
     document.getElementById('gestao-clientes-panel')?.classList.add('hidden');
+    document.getElementById('gestao-addr-panel')?.classList.add('hidden');
     document.getElementById('gestao-calendar-event-types-panel')?.classList.add('hidden');
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-montadores-panel')?.classList.add('hidden');
@@ -1186,6 +1188,12 @@ function showGestaoClientesPanel() {
     setGestaoNavActive('clientes');
 }
 
+function showGestaoAddrPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-addr-panel')?.classList.remove('hidden');
+    setGestaoNavActive('addr');
+}
+
 function showGestaoCalendarEventTypesPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-calendar-event-types-panel')?.classList.remove('hidden');
@@ -1398,6 +1406,13 @@ function bindGestaoEvents() {
             loadGestaoClientesList();
         }
     });
+    document.getElementById('gestao-nav-addr')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoAddrPanel();
+        if (typeof loadGestaoAddrPanelData === 'function') {
+            loadGestaoAddrPanelData();
+        }
+    });
     document.getElementById('gestao-nav-calendar-event-types')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoCalendarEventTypesPanel();
@@ -1538,6 +1553,9 @@ function bindGestaoEvents() {
             deleteGestaoMontadorRow(deleteButton.closest('tr'));
         }
     });
+    if (typeof bindGestaoAddrEvents === 'function') {
+        bindGestaoAddrEvents();
+    }
     if (typeof bindGestaoRelatoriosEvents === 'function') {
         bindGestaoRelatoriosEvents();
     }

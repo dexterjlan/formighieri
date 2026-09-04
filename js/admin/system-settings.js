@@ -218,4 +218,7 @@ function bindSystemSettingsEvents() {
     if (typeof bindImportPedidoSettingsEvents === 'function') {
         bindImportPedidoSettingsEvents();
     }
+    if (typeof bindAddrLabelSettingsEvents === 'function') {
+        bindAddrLabelSettingsEvents();
+    }
 }

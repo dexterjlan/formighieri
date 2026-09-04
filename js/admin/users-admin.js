@@ -312,6 +312,8 @@ function renderUsersAdminCards(users) {
                     ${typeof renderUserCalendarColorPickerHtml === 'function'
                         ? renderUserCalendarColorPickerHtml(u, {
                             disabled: !isActive,
+                            allowNone: true,
+                            caption: 'Cor do calendário',
                             takenHexes: typeof getTakenCalendarColorHexes === 'function'
                                 ? getTakenCalendarColorHexes(usersAdminCache, u.id)
                                 : undefined
@@ -436,11 +438,10 @@ async function saveUserRole(userId) {
     const detalhamentoCheck = document.getElementById(`detalhamento-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const terceiroCheck = document.getElementById(`terceiro-check-${userId}`);
-    const calendarColor = (typeof normalizeGoogleCalendarColorHex === 'function'
-        ? normalizeGoogleCalendarColorHex(getCalendarColorInput(userId)?.value)
-        : '') || (typeof resolveUserCalendarPaletteColor === 'function'
-            ? resolveUserCalendarPaletteColor({ id: userId }).hex
-            : '');
+    const rawCalendarColor = getCalendarColorInput(userId)?.value;
+    const calendarColor = typeof normalizeGoogleCalendarColorHex === 'function'
+        ? (normalizeGoogleCalendarColorHex(rawCalendarColor) || null)
+        : (String(rawCalendarColor || '').trim() || null);
     const name = nameInput?.value.trim() || '';
     const role = select?.value;
     const isConferenceReviewer = role === 'Projetista' && Boolean(conferenteCheck?.checked);

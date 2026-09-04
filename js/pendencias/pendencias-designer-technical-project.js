@@ -672,6 +672,48 @@ async function fetchRevisionInProgressByOrderProjectIds(projectIds) {
     return inProgressProjectIds;
 }
 
+async function fetchTechnicalReviewerRevisionInProgressByOrderProjectIds(projectIds) {
+    const uniqueIds = [...new Set((projectIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return new Set();
+    if (typeof fetchRevisionsByOrderProjectIds !== 'function') return new Set();
+
+    const revisionType = typeof REVISION_TYPE_TECHNICAL_REVISOR !== 'undefined'
+        ? REVISION_TYPE_TECHNICAL_REVISOR
+        : 'technical_reviewer';
+    const revisions = await fetchRevisionsByOrderProjectIds(uniqueIds, [revisionType]);
+    const latestByProject = {};
+
+    revisions.forEach(revision => {
+        const projectId = Number(revision.orderProjectId);
+        if (!projectId || latestByProject[projectId]) return;
+        latestByProject[projectId] = revision;
+    });
+
+    const inProgressProjectIds = new Set();
+    Object.values(latestByProject).forEach(revision => {
+        if (revision?.revisionStartedAt && !revision?.revisionCompletedAt) {
+            inProgressProjectIds.add(Number(revision.orderProjectId));
+        }
+    });
+
+    return inProgressProjectIds;
+}
+
+function collectPendenciasWorkloadProjectIdsByStatus(workload, statusName) {
+    return (workload || []).flatMap(row => (row.projects || [])
+        .filter(project => normalizePendenciasWorkloadStatusName(
+            getPendenciasProjectStatusName(project)
+        ) === statusName)
+        .map(project => Number(project.id))
+        .filter(Boolean)
+    );
+}
+
+function isPendenciasWorkloadRevisionProjStatus(statusName) {
+    return statusName === PENDENCIAS_STATUS_EM_REVISAO_TECNICA
+        || statusName === ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ;
+}
+
 async function fetchPendenciasWorkloadDetalhamentoByDesigner() {
     const { data, error } = await supabaseClient
         .from('Detailing')
@@ -817,7 +859,7 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
     return PENDENCIAS_GESTOR_WORKLOAD_COLUMNS.map(statusName => {
         const statusProjects = grouped[statusName] || [];
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
-        const revisionInProgressCount = statusName === PENDENCIAS_STATUS_EM_REVISAO_TECNICA
+        const revisionInProgressCount = isPendenciasWorkloadRevisionProjStatus(statusName)
             ? statusProjects.filter(project => revisionInProgressIds.has(Number(project.id))).length
             : 0;
         const projectsHtml = statusProjects.length
@@ -826,6 +868,7 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                 const projectName = project.name || 'Projeto';
                 const itemTitle = `${clientName} · ${projectName}`;
                 const assigneeId = Number(project.workloadAssigneeId || project.designerId) || '';
+                const isRevisionInProgress = revisionInProgressIds.has(Number(project.id));
 
                 return `
                     <li class="collapsible-list-card border-b border-slate-100 last:border-0" data-project-id="${project.id}">
@@ -834,13 +877,18 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                                 <button type="button"
                                     class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                                     aria-label="Expandir">▶</button>
-                                <div class="min-w-0">
+                                <div class="min-w-0 flex-1">
                                     <p class="text-[10px] text-slate-500 truncate" title="${escapeHtml(clientName)}">
                                         ${escapeHtml(clientName)}
                                     </p>
-                                    <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
-                                        ${escapeHtml(projectName)}
-                                    </p>
+                                    <div class="flex items-center gap-1.5 min-w-0">
+                                        <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
+                                            ${escapeHtml(projectName)}
+                                        </p>
+                                        ${isRevisionInProgress
+                                            ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0">Em andamento</span>'
+                                            : ''}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -895,10 +943,32 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
     }).join('');
 }
 
-function renderPendenciasProjetosSemProjetistas(
+function bindPendenciasCargaPorProjetistaEvents(root) {
+    if (!root) return;
+
+    bindCollapsibleListCardToggles(root, { defaultCollapsed: true });
+    root.querySelectorAll('.pendencias-workload-atualizar-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const projectId = Number(button.dataset.projectId);
+            const item = button.closest('li');
+            const select = item?.querySelector('.pendencias-workload-designer-select');
+            const inicioDate = item?.querySelector('.pendencias-workload-previsao-inicio-input')?.value || '';
+            const previsaoDate = item?.querySelector('.pendencias-workload-previsao-fim-input')?.value || '';
+            atualizarPendenciaProjetoWorkload(
+                projectId,
+                Number(select?.value) || null,
+                Number(button.dataset.currentDesignerId) || null,
+                inicioDate,
+                previsaoDate,
+                button.dataset.deliveryDate || '',
+                button.dataset.statusName || ''
+            );
+        });
+    });
+}
+
+function renderPendenciasCargaPorProjetista(
     workload,
-    projects,
-    characteristicsMap = new Map(),
     revisionInProgressIds = new Set(),
     detalhamentoByDesigner = {}
 ) {
@@ -918,6 +988,33 @@ function renderPendenciasProjetosSemProjetistas(
         </article>
     `).join('');
 
+    content.innerHTML = `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-900">Carga por projetista</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial Cons., Em Revisão Comercial Proj., Aguardando Aprovação, Aguardando PPCP, Implantação e Detalhamento. Implantação conta para quem iniciou a implantação.</p>
+                </div>
+                <button type="button" id="btn-pendencias-refresh-carga-projetista"
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
+                </button>
+            </div>
+            ${workload.length
+                ? `<div id="pendencias-workload-cards" class="p-4 flex flex-wrap gap-3 items-start">${workloadCards}</div>`
+                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projetista cadastrado.</p>'}
+        </div>
+    `;
+
+    content.querySelector('#btn-pendencias-refresh-carga-projetista')
+        ?.addEventListener('click', () => loadPendenciasCargaPorProjetista());
+    bindPendenciasCargaPorProjetistaEvents(content.querySelector('#pendencias-workload-cards'));
+}
+
+function renderPendenciasProjetosSemProjetistas(projects, characteristicsMap = new Map()) {
+    const content = document.getElementById('pendencias-content');
+    if (!content) return;
+
     const projectRows = projects.map(project => renderPendenciasSemResponsavelProjectRow(
         project,
         characteristicsMap,
@@ -925,67 +1022,32 @@ function renderPendenciasProjetosSemProjetistas(
     )).join('');
 
     content.innerHTML = `
-        <div class="space-y-4">
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                    <div>
-                        <h3 class="font-bold text-sm text-slate-900">Carga por projetista</h3>
-                        <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial Cons., Em Revisão Comercial Proj., Aguardando Aprovação, Aguardando PPCP, Implantação e Detalhamento. Implantação conta para quem iniciou a implantação.</p>
-                    </div>
-                    <button type="button" id="btn-pendencias-refresh-sem-projetistas"
-                        class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                        ${renderRefreshButtonInnerHtml()}
-                    </button>
-                </div>
-                ${workload.length
-                    ? `<div id="pendencias-workload-cards" class="p-4 flex flex-wrap gap-3 items-start">${workloadCards}</div>`
-                    : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projetista cadastrado.</p>'}
-            </div>
-
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                <div>
                     <h3 class="font-bold text-sm text-slate-900">Aguardando Projeto Técnico sem responsável</h3>
                     <p class="text-xs text-slate-400 mt-0.5">${projects.length} projeto${projects.length === 1 ? '' : 's'}</p>
                 </div>
-                ${projects.length
-                    ? `<div class="overflow-x-auto">
-                        <table class="pendencias-sem-projetista-table w-full text-sm min-w-[72rem]">
-                            <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                                ${renderPendenciasSemResponsavelTableHead(true)}
-                            </thead>
-                            <tbody>${projectRows}</tbody>
-                        </table>
-                    </div>`
-                    : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto aguardando projeto técnico sem responsável.</p>'}
+                <button type="button" id="btn-pendencias-refresh-sem-projetistas"
+                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
+                    ${renderRefreshButtonInnerHtml()}
+                </button>
             </div>
+            ${projects.length
+                ? `<div class="overflow-x-auto">
+                    <table class="pendencias-sem-projetista-table w-full text-sm min-w-[72rem]">
+                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                            ${renderPendenciasSemResponsavelTableHead(true)}
+                        </thead>
+                        <tbody>${projectRows}</tbody>
+                    </table>
+                </div>`
+                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto aguardando projeto técnico sem responsável.</p>'}
         </div>
     `;
 
     content.querySelector('#btn-pendencias-refresh-sem-projetistas')
         ?.addEventListener('click', () => loadPendenciasProjetosSemProjetistas());
-
-    const workloadCardsRoot = content.querySelector('#pendencias-workload-cards');
-    if (workloadCardsRoot) {
-        bindCollapsibleListCardToggles(workloadCardsRoot, { defaultCollapsed: true });
-        workloadCardsRoot.querySelectorAll('.pendencias-workload-atualizar-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                const projectId = Number(button.dataset.projectId);
-                const item = button.closest('li');
-                const select = item?.querySelector('.pendencias-workload-designer-select');
-                const inicioDate = item?.querySelector('.pendencias-workload-previsao-inicio-input')?.value || '';
-                const previsaoDate = item?.querySelector('.pendencias-workload-previsao-fim-input')?.value || '';
-                atualizarPendenciaProjetoWorkload(
-                    projectId,
-                    Number(select?.value) || null,
-                    Number(button.dataset.currentDesignerId) || null,
-                    inicioDate,
-                    previsaoDate,
-                    button.dataset.deliveryDate || '',
-                    button.dataset.statusName || ''
-                );
-            });
-        });
-    }
 
     content.querySelectorAll('.pendencias-gestor-associar-btn').forEach(button => {
         button.addEventListener('click', async () => {
@@ -1005,53 +1067,72 @@ function renderPendenciasProjetosSemProjetistas(
     });
 }
 
+async function loadPendenciasCargaPorProjetista() {
+    const content = document.getElementById('pendencias-content');
+    if (content) {
+        content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando carga por projetista...</p>';
+    }
+
+    const workloadResult = await fetchPendenciasProjetistaWorkload();
+    if (workloadResult.error) {
+        renderPendenciasPlaceholder(
+            'Carga por projetista',
+            `Erro ao carregar: ${workloadResult.error.message}`
+        );
+        return;
+    }
+
+    const workloadProjects = (workloadResult.workload || []).flatMap(row => row.projects || []);
+    await enrichPendenciasProjectsWithTechnicalForecast(workloadProjects);
+
+    const commercialReviewProjIds = collectPendenciasWorkloadProjectIdsByStatus(
+        workloadResult.workload,
+        PENDENCIAS_STATUS_EM_REVISAO_TECNICA
+    );
+    const technicalReviewProjIds = collectPendenciasWorkloadProjectIdsByStatus(
+        workloadResult.workload,
+        ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ
+    );
+    const [commercialInProgressIds, technicalInProgressIds] = await Promise.all([
+        fetchRevisionInProgressByOrderProjectIds(commercialReviewProjIds),
+        fetchTechnicalReviewerRevisionInProgressByOrderProjectIds(technicalReviewProjIds)
+    ]);
+    const revisionInProgressIds = new Set([
+        ...commercialInProgressIds,
+        ...technicalInProgressIds
+    ]);
+    const detalhamentoByDesigner = await fetchPendenciasWorkloadDetalhamentoByDesigner();
+
+    renderPendenciasCargaPorProjetista(
+        workloadResult.workload,
+        revisionInProgressIds,
+        detalhamentoByDesigner
+    );
+}
+
 async function loadPendenciasProjetosSemProjetistas() {
     const content = document.getElementById('pendencias-content');
     if (content) {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando projetos...</p>';
     }
 
-    const [workloadResult, projectsResult] = await Promise.all([
-        fetchPendenciasProjetistaWorkload(),
-        fetchPendenciasAguardandoPtSemProjetista()
-    ]);
-
-    const error = workloadResult.error || projectsResult.error;
-    if (error) {
+    const projectsResult = await fetchPendenciasAguardandoPtSemProjetista();
+    if (projectsResult.error) {
         renderPendenciasPlaceholder(
             'Projetos Sem Projetistas',
-            `Erro ao carregar: ${error.message}`
+            `Erro ao carregar: ${projectsResult.error.message}`
         );
         return;
     }
 
     const projectIds = (projectsResult.projects || []).map(project => Number(project.id)).filter(Boolean);
-    const workloadProjects = (workloadResult.workload || []).flatMap(row => row.projects || []);
-    await enrichPendenciasProjectsWithTechnicalForecast([
-        ...(projectsResult.projects || []),
-        ...workloadProjects
-    ]);
+    await enrichPendenciasProjectsWithTechnicalForecast(projectsResult.projects || []);
 
     const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
         ? await fetchOrderProjectCharacteristicsMap(projectIds)
         : new Map();
 
-    const emRevisaoTecnicaProjectIds = (workloadResult.workload || []).flatMap(row => row.projects
-        .filter(project => normalizePendenciasWorkloadStatusName(
-            getPendenciasProjectStatusName(project)
-        ) === PENDENCIAS_STATUS_EM_REVISAO_TECNICA)
-        .map(project => Number(project.id))
-    );
-    const revisionInProgressIds = await fetchRevisionInProgressByOrderProjectIds(emRevisaoTecnicaProjectIds);
-    const detalhamentoByDesigner = await fetchPendenciasWorkloadDetalhamentoByDesigner();
-
-    renderPendenciasProjetosSemProjetistas(
-        workloadResult.workload,
-        projectsResult.projects,
-        characteristicsMap,
-        revisionInProgressIds,
-        detalhamentoByDesigner
-    );
+    renderPendenciasProjetosSemProjetistas(projectsResult.projects, characteristicsMap);
 }
 
 async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, currentDesignerId, inicioDate, previsaoDate, deliveryDate = '', statusName = '') {
@@ -1161,7 +1242,7 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
             return;
         }
 
-        await loadPendenciasProjetosSemProjetistas();
+        await loadPendenciasCargaPorProjetista();
     } finally {
         setPendenciasActionLoading(false);
     }

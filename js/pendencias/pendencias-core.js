@@ -311,6 +311,7 @@ function getPendenciasSidebarSections() {
             label: 'Gestor de Projetos',
             visible: canSeePendenciasGestorProjetosMenu() && !hideGestorAndConferente,
             items: [
+                { id: 'carga-por-projetista', label: 'Carga por projetista' },
                 { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
                 { id: 'terceiros-sem-projetistas', label: 'Terceiros Sem Projetistas' },
                 { id: 'aguardando-detalhamento', label: 'Aguardando Detalhamento' },
@@ -724,6 +725,11 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'projetista' && pendenciasActiveItem === 'conferencias') {
         loadPendenciasProjetistaConferencias();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'carga-por-projetista') {
+        loadPendenciasCargaPorProjetista();
         return;
     }
 

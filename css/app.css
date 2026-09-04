@@ -4310,6 +4310,23 @@ body.montagem-prog-resizing {
     opacity: 0.38;
 }
 
+.user-calendar-color-swatch--none {
+    background-color: #fff;
+    position: relative;
+}
+
+.user-calendar-color-swatch--none::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    top: 50%;
+    height: 2px;
+    background: #94a3b8;
+    transform: rotate(-45deg);
+    border-radius: 1px;
+}
+
 .calendar-colors-user {
     display: flex;
     align-items: flex-start;

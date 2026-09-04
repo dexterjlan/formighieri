@@ -6,7 +6,8 @@ let importConsultorFgpUsersCache = [];
 function setSettingsNavActive(panelKey) {
     const buttons = {
         geral: document.getElementById('settings-nav-geral'),
-        'import-pedido': document.getElementById('settings-nav-import-pedido')
+        'import-pedido': document.getElementById('settings-nav-import-pedido'),
+        'addr-label': document.getElementById('settings-nav-addr-label')
     };
 
     Object.entries(buttons).forEach(([key, button]) => {
@@ -16,6 +17,7 @@ function setSettingsNavActive(panelKey) {
 
     document.getElementById('settings-general-panel')?.classList.toggle('hidden', panelKey !== 'geral');
     document.getElementById('settings-import-pedido-panel')?.classList.toggle('hidden', panelKey !== 'import-pedido');
+    document.getElementById('settings-addr-label-panel')?.classList.toggle('hidden', panelKey !== 'addr-label');
 }
 
 function renderImportStatusWpsList(rows) {
