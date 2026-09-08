@@ -224,6 +224,7 @@ function updateDetalhamentoActionButtons(record = activeDetalhamentoRecord) {
     if (btnAssociar) {
         btnAssociar.classList.toggle('hidden', !canGestor);
         btnAssociar.disabled = !canGestor;
+        btnAssociar.textContent = record?.designerId ? 'Trocar projetista' : 'Associar projetista';
     }
     if (btnIniciar) {
         btnIniciar.classList.toggle('hidden', !(canProjetista && isAguardando));
@@ -335,8 +336,15 @@ async function handleDetalhamentoAssociar() {
         return;
     }
 
+    const isTransfer = Boolean(activeDetalhamentoRecord.designerId)
+        && Number(activeDetalhamentoRecord.designerId) !== designerId;
+    if (activeDetalhamentoRecord.designerId && !isTransfer) {
+        alertAppDialog('Selecione outro projetista para transferir.');
+        return;
+    }
+
     try {
-        setDetalhamentoModalLoading(true, 'Associando projetista...');
+        setDetalhamentoModalLoading(true, isTransfer ? 'Transferindo projetista...' : 'Associando projetista...');
         const now = new Date().toISOString();
         const { data, error } = await supabaseClient
             .from('Detailing')
@@ -361,7 +369,7 @@ async function handleDetalhamentoAssociar() {
 
         activeDetalhamentoRecord = data;
         populateDetalhamentoForm(data);
-        setDetalhamentoModalLoading(true, 'Projetista associado!', 'success');
+        setDetalhamentoModalLoading(true, isTransfer ? 'Projetista atualizado!' : 'Projetista associado!', 'success');
         await waitDetalhamentoStatus(1200);
         setDetalhamentoModalLoading(false);
         await refreshDetalhamentoRelatedViews(activeDetalhamentoOrderProjectId);

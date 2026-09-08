@@ -521,7 +521,82 @@ async function fetchPendenciasImplementationDesignerByProjectIds(projectIds) {
     return byProjectId;
 }
 
+const PENDENCIAS_WORKLOAD_OUTROS_DESIGNER_ID = 0;
+
+function isPendenciasWorkloadOutrosDesignerId(designerId) {
+    return Number(designerId) === PENDENCIAS_WORKLOAD_OUTROS_DESIGNER_ID;
+}
+
+function getPendenciasWorkloadActiveDesignerIds(projetistas = []) {
+    return new Set((projetistas || []).map(projetista => Number(projetista.id)).filter(Boolean));
+}
+
+function resolvePendenciasWorkloadBucketId(designerId, activeIds) {
+    const id = Number(designerId);
+    if (!id) return null;
+    if (activeIds.has(id)) return id;
+    return PENDENCIAS_WORKLOAD_OUTROS_DESIGNER_ID;
+}
+
+function sortPendenciasWorkloadRows(rows = []) {
+    return [...rows].sort((a, b) => {
+        if (isPendenciasWorkloadOutrosDesignerId(a.designerId)) return 1;
+        if (isPendenciasWorkloadOutrosDesignerId(b.designerId)) return -1;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base' });
+    });
+}
+
+function redistributePendenciasWorkloadInactiveGroups(byDesigner, activeIds) {
+    const result = {};
+    const outrosRecords = [];
+    let outrosInProgress = 0;
+
+    Object.entries(byDesigner || {}).forEach(([id, entry]) => {
+        if (activeIds.has(Number(id))) {
+            result[id] = entry;
+            return;
+        }
+        outrosRecords.push(...(entry.records || []));
+        outrosInProgress += Number(entry.inProgressCount) || 0;
+    });
+
+    if (outrosRecords.length) {
+        result[PENDENCIAS_WORKLOAD_OUTROS_DESIGNER_ID] = {
+            records: outrosRecords,
+            inProgressCount: outrosInProgress
+        };
+    }
+
+    return result;
+}
+
+function ensurePendenciasWorkloadOutrosRow(workload, ...groupMaps) {
+    const rows = [...(workload || [])];
+    const hasExtras = groupMaps.some(map => (
+        map?.[PENDENCIAS_WORKLOAD_OUTROS_DESIGNER_ID]?.records || []
+    ).length);
+    const hasRow = rows.some(row => isPendenciasWorkloadOutrosDesignerId(row.designerId));
+
+    if (hasExtras && !hasRow) {
+        rows.push({
+            designerId: PENDENCIAS_WORKLOAD_OUTROS_DESIGNER_ID,
+            name: 'Outros',
+            projects: []
+        });
+    }
+
+    return sortPendenciasWorkloadRows(rows);
+}
+
+function getPendenciasWorkloadRowItemCount(row, detalhamentoByDesigner = {}, thirdPartyByDesigner = {}) {
+    const designerId = Number(row?.designerId);
+    return (row?.projects || []).length
+        + (detalhamentoByDesigner[designerId]?.records || []).length
+        + (thirdPartyByDesigner[designerId]?.records || []).length;
+}
+
 function buildPendenciasProjetistaWorkloadRows(projetistas, projects, implementationDesignerByProjectId = {}) {
+    const activeIds = getPendenciasWorkloadActiveDesignerIds(projetistas);
     const workloadByDesigner = Object.fromEntries(
         projetistas.map(projetista => [
             projetista.id,
@@ -542,27 +617,31 @@ function buildPendenciasProjetistaWorkloadRows(projetistas, projects, implementa
         const designerId = getPendenciasWorkloadAssigneeId(project, implementationDesignerByProjectId);
         if (!designerId) return;
 
-        if (!workloadByDesigner[designerId]) {
-            workloadByDesigner[designerId] = {
-                designerId,
-                name: getPendenciasWorkloadAssigneeName(project, designerId, implementationDesignerByProjectId)
-                    || 'Projetista',
+        const bucketId = resolvePendenciasWorkloadBucketId(designerId, activeIds);
+        if (bucketId == null) return;
+
+        if (!workloadByDesigner[bucketId]) {
+            workloadByDesigner[bucketId] = {
+                designerId: bucketId,
+                name: 'Outros',
                 projects: []
             };
         }
 
-        workloadByDesigner[designerId].projects.push({
+        workloadByDesigner[bucketId].projects.push({
             ...project,
             workloadAssigneeId: designerId
         });
     });
 
-    return Object.values(workloadByDesigner)
-        .map(row => ({
-            ...row,
-            projects: sortPendenciasByDeliveryDate(row.projects)
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+    return sortPendenciasWorkloadRows(
+        Object.values(workloadByDesigner)
+            .filter(row => !isPendenciasWorkloadOutrosDesignerId(row.designerId) || row.projects.length)
+            .map(row => ({
+                ...row,
+                projects: sortPendenciasByDeliveryDate(row.projects)
+            }))
+    );
 }
 
 async function fetchPendenciasProjetistaWorkload() {
@@ -637,6 +716,16 @@ function getPendenciasProjetistaOptionsHtml(selectedId = null) {
 
 function getPendenciasWorkloadProjetistaOptionsHtml(currentDesignerId = null) {
     return pendenciasProjetistasCache
+        .filter(projetista => Number(projetista.id) !== Number(currentDesignerId))
+        .map(projetista => `<option value="${projetista.id}">${escapeHtml(projetista.name)}</option>`)
+        .join('');
+}
+
+function getPendenciasWorkloadDetalhamentoProjetistaOptionsHtml(currentDesignerId = null) {
+    const source = (typeof detalhamentoProjetistasCache !== 'undefined' && detalhamentoProjetistasCache.length)
+        ? detalhamentoProjetistasCache
+        : pendenciasProjetistasCache;
+    return source
         .filter(projetista => Number(projetista.id) !== Number(currentDesignerId))
         .map(projetista => `<option value="${projetista.id}">${escapeHtml(projetista.name)}</option>`)
         .join('');
@@ -772,6 +861,138 @@ async function fetchPendenciasWorkloadDetalhamentoByDesigner() {
     return byDesigner;
 }
 
+async function fetchPendenciasWorkloadThirdPartyByDesigner() {
+    if (typeof fetchThirdPartyProjectsForProjetista !== 'function') return {};
+
+    let projects = [];
+    try {
+        projects = await fetchThirdPartyProjectsForProjetista(null, { includeAll: true });
+    } catch (error) {
+        console.warn('fetchPendenciasWorkloadThirdPartyByDesigner:', error);
+        return {};
+    }
+
+    const byDesigner = {};
+    (projects || []).forEach(record => {
+        const designerId = Number(record.designerId);
+        if (!designerId) return;
+
+        if (!byDesigner[designerId]) {
+            byDesigner[designerId] = { records: [], inProgressCount: 0 };
+        }
+
+        byDesigner[designerId].records.push(record);
+        if (record.status === (typeof THIRD_PARTY_PROJECT_STATUS_IN_REVIEW !== 'undefined'
+            ? THIRD_PARTY_PROJECT_STATUS_IN_REVIEW
+            : 'InReview')) {
+            byDesigner[designerId].inProgressCount += 1;
+        }
+    });
+
+    Object.values(byDesigner).forEach(entry => {
+        entry.records.sort((a, b) => {
+            const nameA = a.orderProject?.name || a.thirdPartySubtype?.name || '';
+            const nameB = b.orderProject?.name || b.thirdPartySubtype?.name || '';
+            return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+        });
+    });
+
+    return byDesigner;
+}
+
+function renderPendenciasWorkloadThirdPartySection(thirdPartyEntry = null) {
+    const records = thirdPartyEntry?.records || [];
+    const inProgressCount = thirdPartyEntry?.inProgressCount || 0;
+    const statusClass = getPendenciasProjectStatusBadgeClass('Em Revisão');
+
+    const projectsHtml = records.length
+        ? records.map(record => {
+            const project = record.orderProject || {};
+            const clientName = getOrderClientName(record.order)
+                || getOrderClientName(project.order)
+                || '—';
+            const projectName = project.name || 'Projeto';
+            const subtypeName = record.thirdPartySubtype?.name
+                || record.projectCharacteristic?.name
+                || 'Projeto de terceiros';
+            const itemTitle = `${clientName} · ${projectName} · ${subtypeName}`;
+            const statusLabel = typeof getThirdPartyProjectStatusLabel === 'function'
+                ? getThirdPartyProjectStatusLabel(record.status)
+                : (record.status || '—');
+            const isInProgress = record.status === (typeof THIRD_PARTY_PROJECT_STATUS_IN_REVIEW !== 'undefined'
+                ? THIRD_PARTY_PROJECT_STATUS_IN_REVIEW
+                : 'InReview');
+
+            const assigneeId = Number(record.designerId) || '';
+
+            return `
+                <li class="collapsible-list-card border-b border-slate-100 last:border-0" data-third-party-project-id="${record.id}">
+                    <div class="collapsible-list-header py-1.5 cursor-pointer">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <button type="button"
+                                class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
+                                aria-label="Expandir">▶</button>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[10px] text-slate-500 truncate" title="${escapeHtml(clientName)}">
+                                    ${escapeHtml(clientName)}
+                                </p>
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
+                                        ${escapeHtml(projectName)} · ${escapeHtml(subtypeName)}
+                                    </p>
+                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${isInProgress
+                                        ? 'bg-amber-100 text-amber-800'
+                                        : 'bg-slate-100 text-slate-600'}">${escapeHtml(statusLabel)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="collapsible-list-body hidden pl-6 pr-1 pb-2">
+                        <label class="block text-[10px] text-slate-500 mt-0.5">Projetista</label>
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <select class="pendencias-workload-third-party-designer-select flex-1 min-w-0 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                                data-third-party-project-id="${record.id}"
+                                data-current-designer-id="${assigneeId}">
+                                <option value="">Selecione...</option>
+                                ${getPendenciasWorkloadProjetistaOptionsHtml(assigneeId)}
+                            </select>
+                            <button type="button"
+                                class="pendencias-workload-third-party-atualizar-btn shrink-0 text-[10px] bg-violet-700 text-white hover:bg-violet-800 px-2 py-1 rounded-lg font-medium whitespace-nowrap"
+                                data-third-party-project-id="${record.id}"
+                                data-current-designer-id="${assigneeId}">
+                                Atualizar
+                            </button>
+                        </div>
+                    </div>
+                </li>
+            `;
+        }).join('')
+        : '<li class="text-xs text-slate-400 py-2">Nenhum projeto de terceiros associado.</li>';
+
+    return `
+        <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
+            <div class="collapsible-list-header px-2 py-1.5 bg-slate-50/80 border-b border-slate-100 cursor-pointer">
+                <div class="flex items-center gap-2 min-w-0">
+                    <button type="button"
+                        class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
+                        aria-label="Expandir">▶</button>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase truncate ${statusClass}">
+                        Projetos de terceiros
+                    </span>
+                    <span class="text-[10px] text-slate-500 shrink-0">${records.length}</span>
+                    ${inProgressCount > 0
+                        ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0"
+                            title="Projeto de terceiros em revisão">${inProgressCount} em revisão</span>`
+                        : ''}
+                </div>
+            </div>
+            <div class="collapsible-list-body hidden">
+                <ul class="px-2 py-1">${projectsHtml}</ul>
+            </div>
+        </div>
+    `;
+}
+
 function renderPendenciasWorkloadDetalhamentoSection(detalhamentoEntry = null) {
     const records = detalhamentoEntry?.records || [];
     const inProgressCount = detalhamentoEntry?.inProgressCount || 0;
@@ -788,21 +1009,47 @@ function renderPendenciasWorkloadDetalhamentoSection(detalhamentoEntry = null) {
                     ? DETALHAMENTO_STATUS_EM_ANDAMENTO
                     : 'Detalhamento'
             );
+            const assigneeId = Number(record.designerId) || '';
 
             return `
-                <li class="border-b border-slate-100 last:border-0 py-1.5" data-detalhamento-id="${record.id}">
-                    <div class="flex items-start gap-1.5 min-w-0">
-                        <div class="min-w-0 flex-1">
-                            <p class="text-[10px] text-slate-500 truncate" title="${escapeHtml(clientName)}">
-                                ${escapeHtml(clientName)}
-                            </p>
-                            <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
-                                ${escapeHtml(projectName)}
-                            </p>
+                <li class="collapsible-list-card border-b border-slate-100 last:border-0" data-detalhamento-id="${record.id}">
+                    <div class="collapsible-list-header py-1.5 cursor-pointer">
+                        <div class="flex items-center gap-1.5 min-w-0">
+                            <button type="button"
+                                class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
+                                aria-label="Expandir">▶</button>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[10px] text-slate-500 truncate" title="${escapeHtml(clientName)}">
+                                    ${escapeHtml(clientName)}
+                                </p>
+                                <div class="flex items-center gap-1.5 min-w-0">
+                                    <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
+                                        ${escapeHtml(projectName)}
+                                    </p>
+                                    ${isInProgress
+                                        ? '<span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0">Em andamento</span>'
+                                        : '<span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 shrink-0">Aguardando</span>'}
+                                </div>
+                            </div>
                         </div>
-                        ${isInProgress
-                            ? '<span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0">Em andamento</span>'
-                            : '<span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 shrink-0">Aguardando</span>'}
+                    </div>
+                    <div class="collapsible-list-body hidden pl-6 pr-1 pb-2">
+                        <label class="block text-[10px] text-slate-500 mt-0.5">Projetista</label>
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <select class="pendencias-workload-detalhamento-designer-select flex-1 min-w-0 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                                data-detalhamento-id="${record.id}"
+                                data-current-designer-id="${assigneeId}">
+                                <option value="">Selecione...</option>
+                                ${getPendenciasWorkloadDetalhamentoProjetistaOptionsHtml(assigneeId)}
+                            </select>
+                            <button type="button"
+                                class="pendencias-workload-detalhamento-atualizar-btn shrink-0 text-[10px] bg-violet-700 text-white hover:bg-violet-800 px-2 py-1 rounded-lg font-medium whitespace-nowrap"
+                                data-detalhamento-id="${record.id}"
+                                data-order-project-id="${Number(record.orderProjectId) || ''}"
+                                data-current-designer-id="${assigneeId}">
+                                Atualizar
+                            </button>
+                        </div>
                     </div>
                 </li>
             `;
@@ -893,9 +1140,11 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                             </div>
                         </div>
                         <div class="collapsible-list-body hidden pl-6 pr-1 pb-2">
-                            <label class="block text-[10px] text-slate-500 mt-0.5">Previsão</label>
-                            ${renderPendenciasWorkloadPrevisaoInputs(project)}
-                            <label class="block text-[10px] text-slate-500 mt-2">Projetista</label>
+                            ${statusName === PENDENCIAS_STATUS_AGUARDANDO_PT
+                                ? `<label class="block text-[10px] text-slate-500 mt-0.5">Previsão</label>
+                            ${renderPendenciasWorkloadPrevisaoInputs(project)}`
+                                : ''}
+                            <label class="block text-[10px] text-slate-500 ${statusName === PENDENCIAS_STATUS_AGUARDANDO_PT ? 'mt-2' : 'mt-0.5'}">Projetista</label>
                             <div class="flex items-center gap-1.5 mt-1">
                                 <select class="pendencias-workload-designer-select flex-1 min-w-0 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
                                     data-project-id="${project.id}"
@@ -965,35 +1214,63 @@ function bindPendenciasCargaPorProjetistaEvents(root) {
             );
         });
     });
+    root.querySelectorAll('.pendencias-workload-third-party-atualizar-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const item = button.closest('li');
+            const select = item?.querySelector('.pendencias-workload-third-party-designer-select');
+            atualizarPendenciaThirdPartyWorkload(
+                Number(button.dataset.thirdPartyProjectId),
+                Number(select?.value) || null,
+                Number(button.dataset.currentDesignerId) || null
+            );
+        });
+    });
+    root.querySelectorAll('.pendencias-workload-detalhamento-atualizar-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const item = button.closest('li');
+            const select = item?.querySelector('.pendencias-workload-detalhamento-designer-select');
+            atualizarPendenciaDetalhamentoWorkload(
+                Number(button.dataset.detalhamentoId),
+                Number(select?.value) || null,
+                Number(button.dataset.currentDesignerId) || null,
+                Number(button.dataset.orderProjectId) || null
+            );
+        });
+    });
 }
 
 function renderPendenciasCargaPorProjetista(
     workload,
     revisionInProgressIds = new Set(),
-    detalhamentoByDesigner = {}
+    detalhamentoByDesigner = {},
+    thirdPartyByDesigner = {}
 ) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const workloadCards = workload.map(row => `
+    const workloadCards = workload.map(row => {
+        const itemCount = getPendenciasWorkloadRowItemCount(row, detalhamentoByDesigner, thirdPartyByDesigner);
+        return `
         <article class="flex-[1_1_16rem] min-w-[16rem] max-w-full border border-violet-200 rounded-xl bg-violet-50/20 shadow-sm overflow-hidden">
             <div class="px-3 py-2.5 border-b border-violet-100 bg-violet-50/70">
                 <h4 class="font-bold text-sm text-slate-900">${escapeHtml(row.name)}</h4>
-                <p class="text-[10px] text-slate-500 mt-0.5">${row.projects.length} projeto${row.projects.length === 1 ? '' : 's'}</p>
+                <p class="text-[10px] text-slate-500 mt-0.5">${itemCount} item${itemCount === 1 ? '' : 's'}</p>
             </div>
             <div class="p-2 space-y-2">
                 ${renderPendenciasWorkloadStatusSections(row.projects, revisionInProgressIds)}
+                ${renderPendenciasWorkloadThirdPartySection(thirdPartyByDesigner[Number(row.designerId)] || null)}
                 ${renderPendenciasWorkloadDetalhamentoSection(detalhamentoByDesigner[Number(row.designerId)] || null)}
             </div>
         </article>
-    `).join('');
+    `;
+    }).join('');
 
     content.innerHTML = `
         <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                 <div>
                     <h3 class="font-bold text-sm text-slate-900">Carga por projetista</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial Cons., Em Revisão Comercial Proj., Aguardando Aprovação, Nomear, Aguardando PPCP, Implantação e Detalhamento. Implantação conta para quem iniciou a implantação.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, revisões, Aguardando Aprovação, Nomear, Aguardando PPCP, Implantação, Projetos de terceiros e Detalhamento. Projetista inativo aparece em Outros. Implantação conta para quem iniciou.</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-carga-projetista"
                     class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
@@ -1101,12 +1378,27 @@ async function loadPendenciasCargaPorProjetista() {
         ...commercialInProgressIds,
         ...technicalInProgressIds
     ]);
-    const detalhamentoByDesigner = await fetchPendenciasWorkloadDetalhamentoByDesigner();
+    const activeIds = getPendenciasWorkloadActiveDesignerIds(workloadResult.projetistas);
+    const [detalhamentoRaw, thirdPartyRaw] = await Promise.all([
+        fetchPendenciasWorkloadDetalhamentoByDesigner(),
+        fetchPendenciasWorkloadThirdPartyByDesigner(),
+        typeof fetchDetalhamentoProjetistas === 'function'
+            ? fetchDetalhamentoProjetistas(true)
+            : Promise.resolve([])
+    ]);
+    const detalhamentoByDesigner = redistributePendenciasWorkloadInactiveGroups(detalhamentoRaw, activeIds);
+    const thirdPartyByDesigner = redistributePendenciasWorkloadInactiveGroups(thirdPartyRaw, activeIds);
+    const workload = ensurePendenciasWorkloadOutrosRow(
+        workloadResult.workload,
+        detalhamentoByDesigner,
+        thirdPartyByDesigner
+    );
 
     renderPendenciasCargaPorProjetista(
-        workloadResult.workload,
+        workload,
         revisionInProgressIds,
-        detalhamentoByDesigner
+        detalhamentoByDesigner,
+        thirdPartyByDesigner
     );
 }
 
@@ -1143,12 +1435,18 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
 
     if (!projectId) return;
 
-    if (!validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
+    const isImplantacao = normalizePendenciasWorkloadStatusName(statusName) === PENDENCIAS_STATUS_IMPLANTACAO;
+    const isAguardandoPt = normalizePendenciasWorkloadStatusName(statusName) === PENDENCIAS_STATUS_AGUARDANDO_PT;
+    const shouldChangeDesigner = Boolean(newDesignerId) && Number(newDesignerId) !== Number(currentDesignerId);
+
+    if (isAguardandoPt && !validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
         return;
     }
 
-    const isImplantacao = normalizePendenciasWorkloadStatusName(statusName) === PENDENCIAS_STATUS_IMPLANTACAO;
-    const shouldChangeDesigner = Boolean(newDesignerId) && Number(newDesignerId) !== Number(currentDesignerId);
+    if (!isAguardandoPt && !shouldChangeDesigner) {
+        alertAppDialog('Selecione um projetista para transferir.');
+        return;
+    }
     let projetista = null;
 
     if (shouldChangeDesigner) {
@@ -1226,23 +1524,121 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
             }
         }
 
-        const forecastUserId = shouldChangeDesigner && !isImplantacao ? newDesignerId : undefined;
-        const { error: forecastError } = await savePendenciasTechnicalProjectForecast(
-            projectId,
-            inicioDate,
-            previsaoDate,
-            forecastUserId
-        );
-        if (forecastError) {
-            if (isOrderProjectStatusForecastTableError(forecastError.message)) {
-                alertAppDialog('Execute supabase/feats/add-order-project-status-forecast.sql no Supabase para habilitar previsões por status.', { variant: 'warning', title: 'Aviso' });
-            } else {
-                alertAppDialog('Erro ao salvar previsão: ' + forecastError.message);
+        if (isAguardandoPt) {
+            const forecastUserId = shouldChangeDesigner && !isImplantacao ? newDesignerId : undefined;
+            const { error: forecastError } = await savePendenciasTechnicalProjectForecast(
+                projectId,
+                inicioDate,
+                previsaoDate,
+                forecastUserId
+            );
+            if (forecastError) {
+                if (isOrderProjectStatusForecastTableError(forecastError.message)) {
+                    alertAppDialog('Execute supabase/feats/add-order-project-status-forecast.sql no Supabase para habilitar previsões por status.', { variant: 'warning', title: 'Aviso' });
+                } else {
+                    alertAppDialog('Erro ao salvar previsão: ' + forecastError.message);
+                }
+                return;
             }
-            return;
         }
 
         await loadPendenciasCargaPorProjetista();
+    } finally {
+        setPendenciasActionLoading(false);
+    }
+}
+
+async function atualizarPendenciaThirdPartyWorkload(thirdPartyProjectId, newDesignerId, currentDesignerId) {
+    if (typeof canAssignThirdPartyProjectDesigner === 'function'
+        ? !canAssignThirdPartyProjectDesigner()
+        : !canSeePendenciasGestorProjetosMenu()) {
+        alertAppDialog('Somente Gestor de Projetos pode atualizar projetos de terceiros.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (!thirdPartyProjectId) return;
+
+    if (!newDesignerId || Number(newDesignerId) === Number(currentDesignerId)) {
+        alertAppDialog('Selecione um projetista para transferir.');
+        return;
+    }
+
+    const projetista = pendenciasProjetistasCache.find(item => Number(item.id) === Number(newDesignerId));
+    if (!projetista) {
+        alertAppDialog('Projetista inválido.');
+        return;
+    }
+
+    if (!(await confirmAppDialog(`Transferir este projeto de terceiros para ${projetista.name}?`))) return;
+
+    try {
+        setPendenciasActionLoading(true, 'Atualizando projetista...');
+        if (typeof assignThirdPartyProjectDesigner !== 'function') {
+            throw new Error('Função de associação de projetista indisponível.');
+        }
+        await assignThirdPartyProjectDesigner(thirdPartyProjectId, newDesignerId);
+        await loadPendenciasCargaPorProjetista();
+    } catch (error) {
+        alertAppDialog('Erro ao atualizar projetista: ' + error.message);
+    } finally {
+        setPendenciasActionLoading(false);
+    }
+}
+
+async function atualizarPendenciaDetalhamentoWorkload(detalhamentoId, newDesignerId, currentDesignerId, orderProjectId = null) {
+    if (typeof canActDetalhamentoGestor === 'function'
+        ? !canActDetalhamentoGestor()
+        : !canSeePendenciasGestorProjetosMenu()) {
+        alertAppDialog('Somente Gestor de Projetos pode atualizar detalhamento.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (!detalhamentoId) return;
+
+    if (!newDesignerId || Number(newDesignerId) === Number(currentDesignerId)) {
+        alertAppDialog('Selecione um projetista para transferir.');
+        return;
+    }
+
+    const detalhamentoDesigners = (typeof detalhamentoProjetistasCache !== 'undefined' && detalhamentoProjetistasCache.length)
+        ? detalhamentoProjetistasCache
+        : pendenciasProjetistasCache;
+    const projetista = detalhamentoDesigners.find(item => Number(item.id) === Number(newDesignerId));
+    if (!projetista) {
+        alertAppDialog('Projetista inválido ou sem permissão de detalhamento.');
+        return;
+    }
+
+    if (!(await confirmAppDialog(`Transferir este detalhamento para ${projetista.name}?`))) return;
+
+    try {
+        setPendenciasActionLoading(true, 'Atualizando projetista...');
+        const now = new Date().toISOString();
+        const { data, error } = await supabaseClient
+            .from('Detailing')
+            .update({
+                designerId: newDesignerId,
+                updatedById: currentUser?.id || null,
+                updatedAt: now
+            })
+            .eq('id', detalhamentoId)
+            .select('orderProjectId, projectFilePath')
+            .maybeSingle();
+
+        if (error) throw error;
+
+        const resolvedOrderProjectId = orderProjectId || data?.orderProjectId;
+        if (typeof notifyDetalhamentoProjetistaAssociadoEmail === 'function' && resolvedOrderProjectId) {
+            await notifyDetalhamentoProjetistaAssociadoEmail({
+                orderProjectId: resolvedOrderProjectId,
+                designerId: newDesignerId,
+                projectFilePath: data?.projectFilePath || ''
+            });
+        }
+
+        await loadPendenciasCargaPorProjetista();
+    } catch (error) {
+        alertAppDialog('Erro ao atualizar projetista: ' + error.message);
     } finally {
         setPendenciasActionLoading(false);
     }

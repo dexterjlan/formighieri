@@ -28,7 +28,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'aguardando-entrega-tecnica': 'Projetos aguardando confirmação de entrega pelo gestor comercial.'
     },
     'gestor-projetos': {
-        'carga-por-projetista': 'Carga atual de cada projetista: Aguardando Projeto Técnico até Detalhamento. Implantação conta para quem iniciou.',
+        'carga-por-projetista': 'Carga atual de cada projetista: Aguardando Projeto Técnico até Detalhamento, mais projetos de terceiros. Projetista inativo aparece em Outros. Implantação conta para quem iniciou.',
         'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.',
         'terceiros-sem-projetistas': 'Projetos de terceiros sem projetista responsável.',
         'aguardando-detalhamento': 'Projetos em produção aguardando associação de projetista de detalhamento.',

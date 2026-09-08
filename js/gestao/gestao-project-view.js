@@ -328,6 +328,35 @@ function getProjectDesignerHistoryName(user) {
     return user?.name || 'Sem projetista';
 }
 
+function getProjectDesignerHistorySourceLabel(entry = {}) {
+    const sourceType = entry.sourceType || 'project';
+    const labels = {
+        project: 'Projeto',
+        thirdParty: 'Terceiros',
+        detailing: 'Detalhamento',
+        implementation: 'Implantação'
+    };
+    const base = labels[sourceType] || 'Projeto';
+    const extra = String(entry.sourceLabel || '').trim();
+    if (sourceType === 'thirdParty' && extra) {
+        return `${base} · ${extra}`;
+    }
+    return base;
+}
+
+function getProjectDesignerHistorySourceBadgeClass(sourceType) {
+    switch (sourceType) {
+        case 'thirdParty':
+            return 'bg-sky-100 text-sky-800';
+        case 'detailing':
+            return 'bg-amber-100 text-amber-800';
+        case 'implementation':
+            return 'bg-teal-100 text-teal-800';
+        default:
+            return 'bg-violet-100 text-violet-800';
+    }
+}
+
 async function enrichProjectDesignerHistoryEntries(entries) {
     if (!entries.length) return entries;
 
@@ -368,6 +397,9 @@ async function fetchOrderProjectDesignerHistory(orderProjectId) {
         .select(`
             id,
             orderProjectId,
+            sourceType,
+            sourceId,
+            sourceLabel,
             previousDesignerId,
             newDesignerId,
             changedAt,
@@ -381,7 +413,7 @@ async function fetchOrderProjectDesignerHistory(orderProjectId) {
         .order('changedAt', { ascending: true });
 
     if (result.error?.message?.includes('OrderProjectDesignerHistory')) {
-        throw new Error('Execute supabase/feats/create-order-project-designer-history.sql no Supabase.');
+        throw new Error('Execute supabase/feats/extend-order-project-designer-history-sources.sql no Supabase (o histórico base já precisa existir).');
     }
 
     if (result.error) {
@@ -404,8 +436,8 @@ function renderProjectDesignerHistoryList(entries) {
 
     return `
         <ol class="space-y-3">
-            ${entries.map((entry, index) => {
-                const isInitial = !entry.previousDesignerId && index === 0;
+            ${entries.map((entry) => {
+                const isInitial = !entry.previousDesignerId;
                 const previousName = getProjectDesignerHistoryName(entry.previousDesigner);
                 const newName = getProjectDesignerHistoryName(entry.newDesigner);
                 const changedAt = typeof formatGestaoDateTime === 'function'
@@ -418,10 +450,15 @@ function renderProjectDesignerHistoryList(entries) {
                 const changeLabel = isInitial
                     ? `Projetista inicial: ${newName}`
                     : `${previousName} → ${newName}`;
+                const sourceType = entry.sourceType || 'project';
+                const sourceLabel = getProjectDesignerHistorySourceLabel(entry);
 
                 return `
                     <li class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                        <div class="text-sm font-semibold text-slate-800">${escapeHtml(changeLabel)}</div>
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="text-sm font-semibold text-slate-800 min-w-0">${escapeHtml(changeLabel)}</div>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold shrink-0 ${getProjectDesignerHistorySourceBadgeClass(sourceType)}">${escapeHtml(sourceLabel)}</span>
+                        </div>
                         <div class="text-[11px] text-slate-500 mt-1">${escapeHtml(changedAt)} · ${escapeHtml(changedBy)}</div>
                         ${durationLabel
                             ? `<div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(durationLabel)} no projetista anterior</div>`
