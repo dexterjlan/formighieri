@@ -2,6 +2,7 @@ let orderProjectViewContext = null;
 let orderProjectViewImplantacaoContext = null;
 let orderProjectViewDetalhamentoContext = null;
 let orderProjectViewRevisionsContext = null;
+let orderProjectViewDesignerHistoryContext = null;
 
 function formatProjectViewMontagemDate(dateStr) {
     if (typeof formatDisplayDate === 'function') {
@@ -146,6 +147,8 @@ function fillProjectViewModal(project = {}, complementarChildren = []) {
         : (project.technicalProjectCompletedDate || '—'));
     setText('project-view-status', statusName);
     setText('project-view-designer', project.designer?.name || '—');
+    document.getElementById('btn-project-view-designer-history')
+        ?.classList.toggle('hidden', !Number(project.id));
     setText('project-view-marceneiro', getMarceneiroNameFromProject(project));
     setText('project-view-montagem-inicio', formatProjectViewMontagemDate(project.internalAssemblyStartDate));
     setText('project-view-montagem-fim', formatProjectViewMontagemDate(project.internalAssemblyEndDate));
@@ -303,6 +306,12 @@ async function openProjectViewModal(projectOrId) {
     orderProjectViewRevisionsContext = typeof fetchOrderProjectRevisionsHistoryContext === 'function'
         ? await fetchOrderProjectRevisionsHistoryContext(project, project.orderId)
         : null;
+    orderProjectViewDesignerHistoryContext = Number(project.id)
+        ? {
+            orderProjectId: Number(project.id),
+            projectLabel: `${project.projectCode ? `${project.projectCode} — ` : ''}${project.name || 'Projeto'}`
+        }
+        : null;
     document.getElementById('btn-project-view-implantacao')
         ?.classList.toggle('hidden', !orderProjectViewImplantacaoContext);
     if (typeof renderProjectViewDetailingSection === 'function') {
@@ -315,6 +324,144 @@ async function openProjectViewModal(projectOrId) {
     toggleModal('order-project-view-modal', true);
 }
 
+function getProjectDesignerHistoryName(user) {
+    return user?.name || 'Sem projetista';
+}
+
+async function enrichProjectDesignerHistoryEntries(entries) {
+    if (!entries.length) return entries;
+
+    const needsEnrich = entries.some(entry =>
+        (entry.previousDesignerId && !entry.previousDesigner?.name)
+        || (entry.newDesignerId && !entry.newDesigner?.name)
+        || (entry.changedById && !entry.changedBy?.name)
+    );
+
+    if (!needsEnrich) return entries;
+
+    const userIds = [...new Set(entries.flatMap(entry => [
+        entry.previousDesignerId,
+        entry.newDesignerId,
+        entry.changedById
+    ].filter(Boolean)))];
+
+    const { data: users } = userIds.length
+        ? await supabaseClient.from('appUsers').select('id, name').in('id', userIds)
+        : { data: [] };
+
+    const userById = Object.fromEntries((users || []).map(user => [user.id, user]));
+
+    return entries.map(entry => ({
+        ...entry,
+        previousDesigner: entry.previousDesigner || userById[entry.previousDesignerId] || null,
+        newDesigner: entry.newDesigner || userById[entry.newDesignerId] || null,
+        changedBy: entry.changedBy || userById[entry.changedById] || null
+    }));
+}
+
+async function fetchOrderProjectDesignerHistory(orderProjectId) {
+    const normalizedId = Number(orderProjectId);
+    if (!normalizedId) return [];
+
+    let result = await supabaseClient
+        .from('OrderProjectDesignerHistory')
+        .select(`
+            id,
+            orderProjectId,
+            previousDesignerId,
+            newDesignerId,
+            changedAt,
+            changedById,
+            previousDesignerDurationSeconds,
+            previousDesigner:appUsers!OrderProjectDesignerHistory_previousDesignerId_fkey(id, name),
+            newDesigner:appUsers!OrderProjectDesignerHistory_newDesignerId_fkey(id, name),
+            changedBy:appUsers!OrderProjectDesignerHistory_changedById_fkey(id, name)
+        `)
+        .eq('orderProjectId', normalizedId)
+        .order('changedAt', { ascending: true });
+
+    if (result.error?.message?.includes('OrderProjectDesignerHistory')) {
+        throw new Error('Execute supabase/feats/create-order-project-designer-history.sql no Supabase.');
+    }
+
+    if (result.error) {
+        result = await supabaseClient
+            .from('OrderProjectDesignerHistory')
+            .select('*')
+            .eq('orderProjectId', normalizedId)
+            .order('changedAt', { ascending: true });
+
+        if (result.error) throw result.error;
+    }
+
+    return enrichProjectDesignerHistoryEntries(result.data || []);
+}
+
+function renderProjectDesignerHistoryList(entries) {
+    if (!entries.length) {
+        return '<p class="text-xs text-slate-400 text-center py-12">Nenhuma alteração de projetista registrada.</p>';
+    }
+
+    return `
+        <ol class="space-y-3">
+            ${entries.map((entry, index) => {
+                const isInitial = !entry.previousDesignerId && index === 0;
+                const previousName = getProjectDesignerHistoryName(entry.previousDesigner);
+                const newName = getProjectDesignerHistoryName(entry.newDesigner);
+                const changedAt = typeof formatGestaoDateTime === 'function'
+                    ? formatGestaoDateTime(entry.changedAt)
+                    : (entry.changedAt || '—');
+                const changedBy = entry.changedBy?.name || '—';
+                const durationLabel = typeof formatStatusDurationSeconds === 'function'
+                    ? formatStatusDurationSeconds(entry.previousDesignerDurationSeconds)
+                    : null;
+                const changeLabel = isInitial
+                    ? `Projetista inicial: ${newName}`
+                    : `${previousName} → ${newName}`;
+
+                return `
+                    <li class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                        <div class="text-sm font-semibold text-slate-800">${escapeHtml(changeLabel)}</div>
+                        <div class="text-[11px] text-slate-500 mt-1">${escapeHtml(changedAt)} · ${escapeHtml(changedBy)}</div>
+                        ${durationLabel
+                            ? `<div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(durationLabel)} no projetista anterior</div>`
+                            : ''}
+                    </li>
+                `;
+            }).join('')}
+        </ol>
+    `;
+}
+
+async function openProjectDesignerHistoryModal(context = {}) {
+    const orderProjectId = Number(context.orderProjectId);
+    if (!orderProjectId) return;
+
+    const subtitle = document.getElementById('project-designer-history-subtitle');
+    const list = document.getElementById('project-designer-history-list');
+
+    if (subtitle) {
+        subtitle.textContent = context.projectLabel || 'Projeto';
+    }
+
+    if (list) {
+        list.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando histórico...</p>';
+    }
+
+    toggleModal('order-project-designer-history-modal', true);
+
+    try {
+        const entries = await fetchOrderProjectDesignerHistory(orderProjectId);
+        if (list) {
+            list.innerHTML = renderProjectDesignerHistoryList(entries);
+        }
+    } catch (error) {
+        if (list) {
+            list.innerHTML = `<p class="text-xs text-red-500 text-center py-8">Erro ao carregar histórico: ${escapeHtml(error.message)}</p>`;
+        }
+    }
+}
+
 function bindGestaoProjectViewEvents() {
     document.getElementById('btn-close-order-project-view')?.addEventListener('click', () => {
         toggleModal('order-project-view-modal', false);
@@ -322,6 +469,7 @@ function bindGestaoProjectViewEvents() {
         orderProjectViewImplantacaoContext = null;
         orderProjectViewDetalhamentoContext = null;
         orderProjectViewRevisionsContext = null;
+        orderProjectViewDesignerHistoryContext = null;
     });
     document.getElementById('btn-close-order-project-view-footer')?.addEventListener('click', () => {
         toggleModal('order-project-view-modal', false);
@@ -329,6 +477,7 @@ function bindGestaoProjectViewEvents() {
         orderProjectViewImplantacaoContext = null;
         orderProjectViewDetalhamentoContext = null;
         orderProjectViewRevisionsContext = null;
+        orderProjectViewDesignerHistoryContext = null;
     });
     document.getElementById('btn-project-view-implantacao')?.addEventListener('click', async () => {
         if (!orderProjectViewImplantacaoContext) return;
@@ -362,12 +511,23 @@ function bindGestaoProjectViewEvents() {
             openProjectStatusHistoryModal(orderProjectViewContext);
         }
     });
+    document.getElementById('btn-project-view-designer-history')?.addEventListener('click', () => {
+        if (!orderProjectViewDesignerHistoryContext) return;
+        openProjectDesignerHistoryModal(orderProjectViewDesignerHistoryContext);
+    });
     document.getElementById('btn-close-project-status-history')?.addEventListener('click', () => {
         toggleModal('order-project-status-history-modal', false);
     });
     document.getElementById('btn-close-project-status-history-footer')?.addEventListener('click', () => {
         toggleModal('order-project-status-history-modal', false);
     });
+    document.getElementById('btn-close-project-designer-history')?.addEventListener('click', () => {
+        toggleModal('order-project-designer-history-modal', false);
+    });
+    document.getElementById('btn-close-project-designer-history-footer')?.addEventListener('click', () => {
+        toggleModal('order-project-designer-history-modal', false);
+    });
 }
 
 window.openProjectViewModal = openProjectViewModal;
+window.openProjectDesignerHistoryModal = openProjectDesignerHistoryModal;
