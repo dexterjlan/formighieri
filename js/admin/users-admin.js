@@ -38,7 +38,7 @@ const USER_FLAG_CONFIG = [
     {
         id: 'gestor-fabrica',
         label: 'Gestor de Fábrica',
-        hint: 'Aba Fábrica e Gestão',
+        hint: 'Aba Fábrica, Gestão e programação de montagem',
         appliesTo: role => role === 'Marceneiro'
     },
     {

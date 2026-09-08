@@ -461,37 +461,27 @@ async function addGestaoProjectCharacteristic(event) {
 
 let gestaoClientesCache = [];
 
-async function loadGestaoClientesList() {
+function getGestaoClientesNameFilter() {
+    return (document.getElementById('gestao-clientes-filter-name')?.value || '').trim().toLowerCase();
+}
+
+function renderGestaoClientesList() {
     const tbody = document.getElementById('gestao-clientes-list');
     if (!tbody) return;
 
-    let { data: clientes, error } = await supabaseClient
-        .from('Client')
-        .select('id, name, isActive')
-        .order('name', { ascending: true });
-
-    if (error && error.message?.includes('Client')) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="4" class="p-6 text-center text-xs text-amber-700">
-                    Tabela Client não encontrada. Consulte <code>PENDING-PROD-SQL.md</code> ou <code>supabase/schema/</code>.
-                </td>
-            </tr>
-        `;
-        return;
-    }
-
-    if (error || !clientes) {
-        clientes = [];
-    }
-
-    gestaoClientesCache = clientes;
+    const filter = getGestaoClientesNameFilter();
+    const clientes = (gestaoClientesCache || []).filter(cliente => {
+        if (!filter) return true;
+        return String(cliente.name || '').toLowerCase().includes(filter);
+    });
 
     if (!clientes.length) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="4" class="p-6 text-center text-xs text-slate-400">
-                    Nenhum cliente cadastrado.
+                    ${gestaoClientesCache.length
+                        ? 'Nenhum cliente encontrado com o filtro informado.'
+                        : 'Nenhum cliente cadastrado.'}
                 </td>
             </tr>
         `;
@@ -514,6 +504,9 @@ async function loadGestaoClientesList() {
             </td>
             <td class="p-3">
                 <div class="flex flex-wrap gap-1.5">
+                    <button type="button" class="gestao-cliente-contacts text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium">
+                        Contatos
+                    </button>
                     <button type="button" class="gestao-cliente-addrs text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium">
                         Endereços
                     </button>
@@ -530,32 +523,29 @@ async function loadGestaoClientesList() {
     });
 }
 
-async function addGestaoCliente(event) {
-    event.preventDefault();
-    if (!canAccessGestao()) return;
+async function loadGestaoClientesList() {
+    const tbody = document.getElementById('gestao-clientes-list');
+    if (!tbody) return;
 
-    const nome = document.getElementById('gestao-new-cliente-nome')?.value.trim();
-    if (!nome) {
-        alertAppDialog('Informe o nome do cliente.');
-        return;
-    }
-
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient
+    let { data: clientes, error } = await supabaseClient
         .from('Client')
-        .insert({
-            name: nome,
-            isActive: true,
-            updatedAt: now
-        });
+        .select('id, name, isActive')
+        .order('name', { ascending: true });
 
-    if (error) {
-        alertAppDialog('Erro ao adicionar cliente: ' + error.message);
+    if (error && error.message?.includes('Client')) {
+        gestaoClientesCache = [];
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="p-6 text-center text-xs text-amber-700">
+                    Tabela Client não encontrada. Consulte <code>PENDING-PROD-SQL.md</code> ou <code>supabase/schema/</code>.
+                </td>
+            </tr>
+        `;
         return;
     }
 
-    document.getElementById('gestao-new-cliente-form')?.reset();
-    await loadGestaoClientesList();
+    gestaoClientesCache = error || !clientes ? [] : clientes;
+    renderGestaoClientesList();
 }
 
 async function saveGestaoClienteRow(tr, button) {
@@ -575,14 +565,12 @@ async function saveGestaoClienteRow(tr, button) {
     }
 
     const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('Client')
-        .update({
-            name: nome,
-            isActive: ativo,
-            updatedAt: now
-        })
-        .eq('id', clienteId);
+    const payload = {
+        name: nome,
+        isActive: ativo,
+        updatedAt: now
+    };
+    const { error } = await supabaseClient.from('Client').update(payload).eq('id', clienteId);
 
     if (error) {
         alertAppDialog('Erro ao salvar cliente: ' + error.message);

@@ -4,7 +4,7 @@ function getGestaoAllProjectStatusOptionsHtml(selectedId = '') {
     const statuses = gestaoProjectStatusesCache || [];
 
     if (!statuses.length) {
-        return '<option value="">Cadastre status em Gestão → Status de Projeto</option>';
+        return '<option value="">Cadastre status em Configurações → Status de Projeto</option>';
     }
 
     return statuses.map(status => {

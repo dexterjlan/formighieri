@@ -281,6 +281,39 @@ function syncSalesOrderSaleDateCaches(orderId, saleDate) {
     }
 }
 
+function syncSalesOrderArchitectCaches(orderId, architectId, architect = null) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return;
+    const normalizedArchitectId = Number(architectId) || null;
+    const patch = {
+        architectId: normalizedArchitectId,
+        architect: architect || (normalizedArchitectId ? undefined : null)
+    };
+
+    [typeof ordersCache !== 'undefined' ? ordersCache : null, typeof gestaoOrdersCache !== 'undefined' ? gestaoOrdersCache : null]
+        .filter(Boolean)
+        .forEach(cache => {
+            const cacheIndex = cache.findIndex(order => Number(order.id) === normalizedOrderId);
+            if (cacheIndex < 0) return;
+            cache[cacheIndex] = {
+                ...cache[cacheIndex],
+                ...patch,
+                architect: patch.architect !== undefined ? patch.architect : cache[cacheIndex].architect
+            };
+        });
+}
+
+async function readSalesOrderSaleDate(orderId, orderCode = '') {
+    const normalizedOrderId = Number(orderId);
+    let query = supabaseClient.from('salesOrders').select('saleDate');
+    if (normalizedOrderId) query = query.eq('id', normalizedOrderId);
+    else if (orderCode) query = query.eq('orderCode', String(orderCode).trim());
+    else return null;
+    const { data, error } = await query.maybeSingle();
+    if (error || !data) return null;
+    return normalizeIsoDateValue(data.saleDate) || null;
+}
+
 async function persistSalesOrderSaleDate(orderId, saleDate, contextOverride = null) {
     const normalizedOrderId = Number(orderId);
     const normalizedDate = normalizeIsoDateValue(saleDate);
@@ -295,14 +328,34 @@ async function persistSalesOrderSaleDate(orderId, saleDate, contextOverride = nu
     const orderCode = context.orderCode || '';
     const now = new Date().toISOString();
     const userId = currentUser?.id || null;
+    const missingHint = 'Execute supabase/feats/add-sales-order-sale-date-architect-rpc.sql no Supabase SQL Editor.';
+
+    const { data: rpcUpdated, error: rpcError } = await supabaseClient.rpc(
+        'set_sales_order_sale_date',
+        {
+            p_order_id: normalizedOrderId,
+            p_sale_date: normalizedDate
+        }
+    );
+
+    if (!rpcError && rpcUpdated === true) {
+        const verified = await readSalesOrderSaleDate(normalizedOrderId, orderCode);
+        if (!verified || verified === normalizedDate) {
+            syncSalesOrderSaleDateCaches(normalizedOrderId, normalizedDate);
+            return normalizedDate;
+        }
+    }
 
     const attempts = [
         { saleDate: normalizedDate, updatedAt: now, updatedById: userId },
         { saleDate: normalizedDate, updatedAt: now },
         { saleDate: normalizedDate }
     ];
+    const filters = [];
+    filters.push({ column: 'id', value: normalizedOrderId });
+    if (orderCode) filters.push({ column: 'orderCode', value: String(orderCode).trim() });
 
-    let lastError = null;
+    let lastError = rpcError || null;
 
     for (const attempt of attempts) {
         const cleanPayload = Object.fromEntries(
@@ -310,25 +363,39 @@ async function persistSalesOrderSaleDate(orderId, saleDate, contextOverride = nu
         );
         if (!cleanPayload.saleDate) continue;
 
-        let query = supabaseClient.from('salesOrders').update(cleanPayload);
-        query = orderCode
-            ? query.eq('orderCode', String(orderCode).trim())
-            : query.eq('id', normalizedOrderId);
-
-        const { error } = await query;
-        if (error) {
-            lastError = error;
-            if (error.message?.includes('saleDate')) {
-                throw new Error('Execute supabase/feats/add-sales-order-sale-date.sql no Supabase.');
+        for (const filter of filters) {
+            const { error } = await supabaseClient
+                .from('salesOrders')
+                .update(cleanPayload)
+                .eq(filter.column, filter.value);
+            if (error) {
+                lastError = error;
+                if (error.message?.includes('saleDate') && Object.keys(cleanPayload).length === 1) {
+                    break;
+                }
+                continue;
             }
-            continue;
+            const verified = await readSalesOrderSaleDate(normalizedOrderId, orderCode);
+            if (verified === normalizedDate) {
+                syncSalesOrderSaleDateCaches(normalizedOrderId, normalizedDate);
+                return normalizedDate;
+            }
         }
+    }
 
+    const verified = await readSalesOrderSaleDate(normalizedOrderId, orderCode);
+    if (verified === normalizedDate) {
         syncSalesOrderSaleDateCaches(normalizedOrderId, normalizedDate);
         return normalizedDate;
     }
 
-    throw lastError || new Error('Não foi possível salvar a data de venda do pedido.');
+    if (/set_sales_order_sale_date|could not find the function/i.test(String(rpcError?.message || ''))) {
+        throw new Error(missingHint);
+    }
+    if (lastError?.message?.includes('saleDate')) {
+        throw new Error(missingHint);
+    }
+    throw lastError || new Error(missingHint);
 }
 
 async function persistSalesOrderActualDeliveryDate(orderId, actualDeliveryDate, options = {}) {
@@ -387,60 +454,69 @@ async function updateSalesOrderRecord(orderId, payload = {}, options = {}) {
         throw new Error('Pedido inválido.');
     }
 
-    const basePayload = Object.fromEntries(
+    let workingPayload = Object.fromEntries(
         Object.entries(payload).filter(([, value]) => value !== undefined && value !== null)
     );
-    if (!Object.keys(basePayload).length) return;
-
-        const attemptPayloads = [
-        basePayload,
-        (() => {
-            const next = { ...basePayload };
-            delete next.updatedById;
-            delete next.updatedAt;
-            return next;
-        })(),
-        (() => {
-            const next = { ...basePayload };
-            delete next.clientName;
-            delete next.consultantName;
-            delete next.updatedById;
-            delete next.updatedAt;
-            return next;
-        })()
-    ];
+    if (!Object.keys(workingPayload).length) return;
 
     const seen = new Set();
     let lastError = null;
+    const optionalColumns = ['saleDate', 'architectId', 'addrId'];
 
-    for (const attempt of attemptPayloads) {
-        const cleanPayload = Object.fromEntries(
-            Object.entries(attempt).filter(([, value]) => value !== undefined)
-        );
-        if (!Object.keys(cleanPayload).length) continue;
+    while (Object.keys(workingPayload).length) {
+        const attemptPayloads = [
+            { ...workingPayload },
+            (() => {
+                const next = { ...workingPayload };
+                delete next.updatedById;
+                delete next.updatedAt;
+                return next;
+            })(),
+            (() => {
+                const next = { ...workingPayload };
+                delete next.clientName;
+                delete next.consultantName;
+                delete next.updatedById;
+                delete next.updatedAt;
+                return next;
+            })()
+        ];
 
-        if (options.requireClientDeliveryDate && !cleanPayload.clientDeliveryDate) {
-            continue;
-        }
-        if (basePayload.clientDeliveryDate && !cleanPayload.clientDeliveryDate) {
-            continue;
-        }
+        let strippedOptional = null;
 
-        const key = JSON.stringify(cleanPayload);
-        if (seen.has(key)) continue;
-        seen.add(key);
+        for (const attempt of attemptPayloads) {
+            const cleanPayload = Object.fromEntries(
+                Object.entries(attempt).filter(([, value]) => value !== undefined)
+            );
+            if (!Object.keys(cleanPayload).length) continue;
 
-        const { error } = await supabaseClient
-            .from('salesOrders')
-            .update(cleanPayload)
-            .eq('id', normalizedOrderId);
+            if (options.requireClientDeliveryDate && !cleanPayload.clientDeliveryDate) {
+                continue;
+            }
+            if (workingPayload.clientDeliveryDate && !cleanPayload.clientDeliveryDate) {
+                continue;
+            }
 
-        if (error) {
+            const key = JSON.stringify(cleanPayload);
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            const { error } = await supabaseClient
+                .from('salesOrders')
+                .update(cleanPayload)
+                .eq('id', normalizedOrderId);
+
+            if (!error) return;
+
             lastError = error;
-            continue;
+            strippedOptional = optionalColumns.find(column =>
+                cleanPayload[column] !== undefined && new RegExp(column, 'i').test(error.message || '')
+            );
+            if (strippedOptional) break;
         }
 
-        return;
+        if (!strippedOptional) break;
+        delete workingPayload[strippedOptional];
     }
 
     throw lastError || new Error('Não foi possível atualizar o pedido.');

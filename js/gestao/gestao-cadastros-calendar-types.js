@@ -1,17 +1,23 @@
 let gestaoCalendarEventTypesCache = [];
 
 async function loadGestaoCalendarEventTypes(activeOnly = false) {
-    let query = supabaseClient
-        .from('CalendarEventType')
-        .select('id, name, isActive, clientRequired, orderRequired, sortOrder')
-        .order('sortOrder', { ascending: true })
-        .order('name', { ascending: true });
+    const columnsWithFlag = 'id, name, isActive, clientRequired, orderRequired, sortOrder, selectableFromCalendar';
+    const columnsBasic = 'id, name, isActive, clientRequired, orderRequired, sortOrder';
 
-    if (activeOnly) {
-        query = query.eq('isActive', true);
+    function runQuery(columns) {
+        let query = supabaseClient
+            .from('CalendarEventType')
+            .select(columns)
+            .order('sortOrder', { ascending: true })
+            .order('name', { ascending: true });
+        if (activeOnly) query = query.eq('isActive', true);
+        return query;
     }
 
-    const { data, error } = await query;
+    let { data, error } = await runQuery(columnsWithFlag);
+    if (error && /selectableFromCalendar/i.test(error.message || '')) {
+        ({ data, error } = await runQuery(columnsBasic));
+    }
 
     if (error) {
         console.error('loadGestaoCalendarEventTypes:', error);
@@ -21,6 +27,13 @@ async function loadGestaoCalendarEventTypes(activeOnly = false) {
 
     gestaoCalendarEventTypesCache = data || [];
     return gestaoCalendarEventTypesCache;
+}
+
+function isGestaoCalendarEventTypeLocked(eventType) {
+    if (typeof isCalendarEventTypeSelectableInForm === 'function') {
+        return !isCalendarEventTypeSelectableInForm(eventType);
+    }
+    return String(eventType?.name || '').trim().toLowerCase() === 'venda';
 }
 
 async function loadGestaoCalendarEventTypesList() {
@@ -43,6 +56,7 @@ async function loadGestaoCalendarEventTypesList() {
     tbody.innerHTML = '';
     types.forEach(eventType => {
         const tr = document.createElement('tr');
+        const locked = isGestaoCalendarEventTypeLocked(eventType);
         tr.dataset.eventTypeId = String(eventType.id);
         tr.innerHTML = `
             <td class="p-3">
@@ -50,8 +64,9 @@ async function loadGestaoCalendarEventTypesList() {
                     value="${Number(eventType.sortOrder) || 0}" min="0" step="1">
             </td>
             <td class="p-3">
-                <input type="text" class="gestao-calendar-event-type-name w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                    value="${escapeHtml(eventType.name)}" required>
+                <input type="text" class="gestao-calendar-event-type-name w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg ${locked ? 'bg-slate-50' : ''}"
+                    value="${escapeHtml(eventType.name)}" required ${locked ? 'disabled' : ''}>
+                ${locked ? '<p class="text-[10px] text-slate-400 mt-1">Usado pelo funil comercial. Não pode ser criado no calendário.</p>' : ''}
             </td>
             <td class="p-3 text-center">
                 <input type="checkbox" class="gestao-calendar-event-type-client-required h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
@@ -70,9 +85,10 @@ async function loadGestaoCalendarEventTypesList() {
                     <button type="button" class="gestao-save-calendar-event-type text-xs bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1 rounded-lg font-medium">
                         Salvar
                     </button>
+                    ${locked ? '' : `
                     <button type="button" class="gestao-delete-calendar-event-type text-xs bg-white border border-red-200 text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg font-medium">
                         Excluir
-                    </button>
+                    </button>`}
                 </div>
             </td>
         `;
@@ -91,6 +107,10 @@ async function addGestaoCalendarEventType(event) {
 
     if (!name) {
         alertAppDialog('Informe o nome do tipo de evento.');
+        return;
+    }
+    if (isGestaoCalendarEventTypeLocked({ name })) {
+        alertAppDialog('O tipo Venda é usado pelo funil comercial e não pode ser cadastrado por aqui.');
         return;
     }
 
@@ -180,6 +200,11 @@ async function deleteGestaoCalendarEventTypeRow(tr) {
     if (!tr || !canAccessGestao()) return;
 
     const eventTypeId = Number(tr.dataset.eventTypeId);
+    const cachedType = gestaoCalendarEventTypesCache.find(item => Number(item.id) === eventTypeId);
+    if (isGestaoCalendarEventTypeLocked(cachedType || { name: tr.querySelector('.gestao-calendar-event-type-name')?.value })) {
+        alertAppDialog('O tipo Venda é usado pelo funil comercial. Desative-o em vez de excluir.');
+        return;
+    }
     const name = tr.querySelector('.gestao-calendar-event-type-name')?.value.trim() || 'o tipo';
 
     const { count, error: countError } = await supabaseClient

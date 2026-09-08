@@ -8,6 +8,9 @@ const GESTAO_IMPORT_COLUMNS = [
     { key: 'saleDate', header: 'data_venda', label: 'Data de venda', required: true },
     { key: 'clientName', header: 'cliente', label: 'Cliente', required: true },
     { key: 'consultantName', header: 'consultor', label: 'Consultor (WPS)', required: true },
+    { key: 'architectName', header: 'arquiteto', label: 'Arquiteto', required: false },
+    { key: 'architectPhone', header: 'arquiteto_telefone', label: 'Telefone do arquiteto', required: false },
+    { key: 'architectEmail', header: 'arquiteto_email', label: 'E-mail do arquiteto', required: false },
     { key: 'clientDeliveryDate', header: 'entrega_cliente', label: 'Entrega no cliente', required: false },
     { key: 'projectCode', header: 'codigo_projeto', label: 'Código do projeto', required: true },
     { key: 'projectName', header: 'nome_projeto', label: 'Nome do projeto', required: true },
@@ -29,6 +32,15 @@ const GESTAO_IMPORT_HEADER_ALIASES = {
     client_name: 'clientName',
     consultor: 'consultantName',
     consultant: 'consultantName',
+    arquiteto: 'architectName',
+    architect: 'architectName',
+    architect_name: 'architectName',
+    arquiteto_telefone: 'architectPhone',
+    architect_phone: 'architectPhone',
+    telefone_arquiteto: 'architectPhone',
+    arquiteto_email: 'architectEmail',
+    architect_email: 'architectEmail',
+    email_arquiteto: 'architectEmail',
     entrega_cliente: 'clientDeliveryDate',
     data_entrega_cliente: 'clientDeliveryDate',
     codigo_projeto: 'projectCode',
@@ -435,6 +447,9 @@ function getGestaoImportExampleRow(consultantName = '') {
         saleDate: '2026-01-10',
         clientName: 'Cliente Exemplo Ltda',
         consultantName: consultant,
+        architectName: 'Arquiteto Exemplo',
+        architectPhone: '11999999999',
+        architectEmail: 'arquiteto@exemplo.com',
         clientDeliveryDate: '2026-08-15',
         projectCode: '101',
         projectName: 'Cozinha Principal',
@@ -579,6 +594,9 @@ function mapGestaoImportRow(rawRow, rowNumber) {
     mapped.projectCode = normalizeProjectCodeInput(mapped.projectCode || '');
     mapped.clientName = String(mapped.clientName || '').trim();
     mapped.consultantName = String(mapped.consultantName || '').trim();
+    mapped.architectName = String(mapped.architectName || '').trim();
+    mapped.architectPhone = String(mapped.architectPhone || '').trim();
+    mapped.architectEmail = String(mapped.architectEmail || '').trim();
     mapped.projectName = String(mapped.projectName || '').trim();
     mapped.environmentName = String(mapped.environmentName || '').trim();
     mapped.statusName = String(mapped.statusName || '').trim();
@@ -670,6 +688,9 @@ function groupGestaoImportRowsByOrder(rows) {
                 orderCode: row.orderCode,
                 clientName: row.clientName,
                 consultantName: row.consultantName,
+                architectName: row.architectName || '',
+                architectPhone: row.architectPhone || '',
+                architectEmail: row.architectEmail || '',
                 saleDate: row.saleDate || null,
                 saleDatesSeen: row.saleDate ? new Set([row.saleDate]) : new Set(),
                 clientDeliveryDate: row.clientDeliveryDate || null,
@@ -688,6 +709,16 @@ function groupGestaoImportRowsByOrder(rows) {
         if (order.consultantName !== row.consultantName) {
             row.errors.push(`Consultor diverge do pedido ${key} (linha ${order.rowNumbers[0]}).`);
             return;
+        }
+        if (row.architectName) {
+            if (order.architectName
+                && String(order.architectName).trim().toLowerCase() !== String(row.architectName).trim().toLowerCase()) {
+                row.errors.push(`Arquiteto diverge do pedido ${key} (linha ${order.rowNumbers[0]}).`);
+                return;
+            }
+            order.architectName = order.architectName || row.architectName;
+            if (row.architectPhone && !order.architectPhone) order.architectPhone = row.architectPhone;
+            if (row.architectEmail && !order.architectEmail) order.architectEmail = row.architectEmail;
         }
         if (row.saleDate) {
             order.saleDatesSeen.add(row.saleDate);
@@ -1014,12 +1045,13 @@ async function createGestaoImportOrder(order, lookups, now) {
 
     const { data: existingOrder } = await supabaseClient
         .from('salesOrders')
-        .select('id')
+        .select('id, clientId')
         .eq('orderCode', order.orderCode)
         .maybeSingle();
 
     let orderId;
     let createdNewOrder = false;
+    let orderClientId = existingOrder?.clientId || null;
 
     if (existingOrder) {
         orderId = existingOrder.id;
@@ -1076,6 +1108,17 @@ async function createGestaoImportOrder(order, lookups, now) {
 
         orderId = created.id;
         createdNewOrder = true;
+        orderClientId = clientResult.clientId;
+    }
+
+    if (order.architectName && typeof resolveOrCreateArchitectId === 'function') {
+        const architectId = await resolveOrCreateArchitectId(order.architectName, {
+            phone: order.architectPhone,
+            email: order.architectEmail
+        });
+        if (architectId && typeof persistSalesOrderArchitectId === 'function') {
+            await persistSalesOrderArchitectId(orderId, architectId);
+        }
     }
 
     const { data: existingProjects } = await supabaseClient
@@ -1161,6 +1204,9 @@ async function createGestaoImportOrder(order, lookups, now) {
     let successMessage = `Pedido ${order.orderCode}: ${importedProjects.length} projeto(s) ${actionLabel}.`;
     if (medicaoCount > 0) {
         successMessage += ` ${medicaoCount} medição(ões) registrada(s).`;
+    }
+    if (typeof tryLinkUniqueWonDealForClient === 'function' && orderClientId) {
+        await tryLinkUniqueWonDealForClient(orderId, orderClientId);
     }
     const message = projectErrors.length
         ? `${successMessage} ${projectErrors.join(' ')}`
@@ -1267,6 +1313,10 @@ function validateGestaoImportOrder(order, lookups, context) {
                 notes.push(`Pedido ${order.orderCode}: cliente "${order.clientName}" será cadastrado automaticamente.`);
             }
         }
+    }
+
+    if (order.architectName) {
+        notes.push(`Pedido ${order.orderCode}: arquiteto "${order.architectName}" será cadastrado (se novo) e vinculado ao pedido.`);
     }
 
     const existingProjectCodes = existingOrder

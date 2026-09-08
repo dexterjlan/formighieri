@@ -70,6 +70,7 @@ function initAppEvents() {
     bindResponsiveLayout();
     bindCalendarEvents();
     bindWelcomeEvents();
+    if (typeof bindComercialEvents === 'function') bindComercialEvents();
     bindGestaoEvents();
     bindSystemSettingsEvents();
     bindConversationsQueryEvents();

@@ -96,16 +96,84 @@ function fillSystemSettingsForm(settings = systemSettingsCache) {
     }
 }
 
-async function showSystemSettings() {
+const SETTINGS_CADASTRO_PANELS = {
+    'calendar-event-types': 'gestao-calendar-event-types-panel',
+    'deal-stages': 'gestao-deal-stages-panel',
+    'lost-reasons': 'gestao-lost-reasons-panel',
+    'project-status': 'gestao-project-status-panel',
+    'create-detailing': 'gestao-create-detailing-panel',
+    'compra-status': 'gestao-compra-status-panel',
+    usuarios: 'gestao-usuarios-panel'
+};
+
+let settingsCadastroPanelsRelocated = false;
+
+function relocateSettingsCadastroPanels() {
+    if (settingsCadastroPanelsRelocated) return;
+    const host = document.querySelector('#system-settings-view .settings-content');
+    if (!host) return;
+
+    Object.values(SETTINGS_CADASTRO_PANELS).forEach((panelId) => {
+        const panel = document.getElementById(panelId);
+        if (panel && panel.parentElement !== host) {
+            host.appendChild(panel);
+        }
+    });
+    settingsCadastroPanelsRelocated = true;
+}
+
+async function loadSettingsCadastroPanel(panelKey) {
+    if (panelKey === 'calendar-event-types' && typeof loadGestaoCalendarEventTypesList === 'function') {
+        await loadGestaoCalendarEventTypesList();
+        return;
+    }
+    if (panelKey === 'deal-stages' && typeof loadGestaoDealStagesList === 'function') {
+        await loadGestaoDealStagesList();
+        return;
+    }
+    if (panelKey === 'lost-reasons' && typeof loadGestaoLostReasonsList === 'function') {
+        await loadGestaoLostReasonsList();
+        return;
+    }
+    if (panelKey === 'project-status' && typeof loadGestaoProjectStatusList === 'function') {
+        await loadGestaoProjectStatusList();
+        return;
+    }
+    if (panelKey === 'compra-status' && typeof loadGestaoCompraStatusList === 'function') {
+        await loadGestaoCompraStatusList();
+        return;
+    }
+    if (panelKey === 'usuarios' && typeof loadUsersAdminList === 'function') {
+        await loadUsersAdminList();
+    }
+}
+
+async function showSystemSettings(panelKey = 'geral') {
     if (!isAdmin() || isThirdParty()) return;
+    relocateSettingsCadastroPanels();
     hideSubViews();
     document.getElementById('system-settings-view').classList.remove('hidden');
     updateMainNavActive('settings');
     updateAdminNav();
-    if (typeof saveAppNavState === 'function') saveAppNavState({ view: 'settings' });
-    setSettingsNavActive('geral');
-    await loadSystemSettings();
-    fillSystemSettingsForm(systemSettingsCache);
+    if (typeof hideAllGestaoPanels === 'function') hideAllGestaoPanels();
+    setSettingsNavActive(panelKey);
+
+    if (panelKey === 'geral') {
+        await loadSystemSettings();
+        fillSystemSettingsForm(systemSettingsCache);
+        return;
+    }
+    if (panelKey === 'import-pedido' && typeof loadImportPedidoSettings === 'function') {
+        await loadImportPedidoSettings();
+        return;
+    }
+    if (panelKey === 'addr-label' && typeof loadAddrLabelSettings === 'function') {
+        await loadAddrLabelSettings();
+        return;
+    }
+    if (SETTINGS_CADASTRO_PANELS[panelKey]) {
+        await loadSettingsCadastroPanel(panelKey);
+    }
 }
 
 function validateSystemSettingsInput(payload) {
@@ -209,12 +277,31 @@ async function saveSystemSettings() {
     }
 }
 
+function bindSettingsCadastroNavEvents() {
+    const navLoaders = {
+        'calendar-event-types': () => showSystemSettings('calendar-event-types'),
+        'deal-stages': () => showSystemSettings('deal-stages'),
+        'lost-reasons': () => showSystemSettings('lost-reasons'),
+        'project-status': () => showSystemSettings('project-status'),
+        'compra-status': () => showSystemSettings('compra-status'),
+        usuarios: () => showSystemSettings('usuarios')
+    };
+
+    Object.entries(navLoaders).forEach(([key, handler]) => {
+        document.getElementById(`settings-nav-${key}`)?.addEventListener('click', () => {
+            if (typeof editingGestaoOrderId !== 'undefined') editingGestaoOrderId = null;
+            handler();
+        });
+    });
+}
+
 function bindSystemSettingsEvents() {
-    document.getElementById('btn-system-settings')?.addEventListener('click', showSystemSettings);
+    document.getElementById('btn-system-settings')?.addEventListener('click', () => showSystemSettings());
     document.getElementById('system-settings-form')?.addEventListener('submit', async function (e) {
         e.preventDefault();
         saveSystemSettings();
     });
+    bindSettingsCadastroNavEvents();
     if (typeof bindImportPedidoSettingsEvents === 'function') {
         bindImportPedidoSettingsEvents();
     }

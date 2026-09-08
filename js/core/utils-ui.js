@@ -1,5 +1,5 @@
 function toggleModal(id, show) {
-    document.getElementById(id).classList.toggle('hidden', !show);
+    document.getElementById(id)?.classList.toggle('hidden', !show);
 }
 window.toggleModal = toggleModal;
 function setActionOverlayLoading(config, active, message = 'Processando...', status = 'loading') {
@@ -111,6 +111,139 @@ function renderRefreshButtonInnerHtml() {
 function truncateText(text, max = 60) {
     if (!text) return '-';
     return text.length > max ? text.slice(0, max) + '…' : text;
+}
+
+function formatContactPhoneDisplay(value) {
+    if (typeof formatArchitectPhone === 'function') return formatArchitectPhone(value);
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 11);
+    if (!digits) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 7) return `(${digits.slice(0, 2)})${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)})${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+function showEntityDetailsModal(title, subtitle, rows) {
+    const titleEl = document.getElementById('entity-details-title');
+    const subtitleEl = document.getElementById('entity-details-subtitle');
+    const body = document.getElementById('entity-details-body');
+    if (!body) return;
+    if (titleEl) titleEl.textContent = title;
+    if (subtitleEl) subtitleEl.textContent = subtitle;
+    body.innerHTML = (rows || []).map(row => `
+        <div>
+            <dt class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">${escapeHtml(row.label)}</dt>
+            <dd class="text-sm text-slate-800 mt-0.5 break-words whitespace-pre-line">${escapeHtml(row.value || '—')}</dd>
+        </div>
+    `).join('');
+    toggleModal('entity-details-modal', true);
+}
+
+async function fetchCadastroRecord(table, id, columns, fallbackColumns) {
+    let { data, error } = await supabaseClient.from(table).select(columns).eq('id', id).maybeSingle();
+    if (error && fallbackColumns) {
+        ({ data, error } = await supabaseClient.from(table).select(fallbackColumns).eq('id', id).maybeSingle());
+    }
+    return { data, error };
+}
+
+function buildContactDetailRows(contacts) {
+    if (!contacts?.length) {
+        return [{ label: 'Contatos', value: 'Nenhum contato cadastrado' }];
+    }
+    return contacts.map((item, index) => {
+        const title = item.isPrimary ? 'Contato principal' : `Contato ${index + 1}`;
+        const parts = [item.name, formatContactPhoneDisplay(item.phone), item.email].filter(Boolean);
+        return { label: title, value: parts.join('\n') || '—' };
+    });
+}
+
+function buildCadastroDetailsRows(record, contacts) {
+    return [
+        { label: 'Nome', value: record?.name },
+        { label: 'Situação', value: record?.isActive === false ? 'Inativo' : 'Ativo' },
+        ...buildContactDetailRows(contacts)
+    ];
+}
+
+function formatClientAddressDetailValue(record) {
+    if (typeof formatAddrFullDisplay === 'function') {
+        return formatAddrFullDisplay(record);
+    }
+    if (typeof formatGestaoAddrSummary === 'function') {
+        return formatGestaoAddrSummary(record);
+    }
+    return [record?.street, record?.number, record?.neighborhood, record?.city, record?.state]
+        .filter(Boolean)
+        .join(', ');
+}
+
+async function buildClientAddressDetailRows(clientId, preferredAddrId = null) {
+    if (typeof fetchGestaoClientAddrs !== 'function') {
+        return [{ label: 'Endereço', value: 'Cadastro de endereço indisponível' }];
+    }
+
+    const rows = [];
+    const preferredId = Number(preferredAddrId) || null;
+    if (preferredId) {
+        const preferred = await fetchGestaoClientAddrs(null, { addrId: preferredId });
+        if (preferred) {
+            const title = preferred.isPrimary ? 'Endereço do pedido (principal)' : 'Endereço do pedido';
+            rows.push({ label: title, value: formatClientAddressDetailValue(preferred) || '—' });
+        }
+    }
+
+    const list = await fetchGestaoClientAddrs(clientId, { includeInactive: false });
+    (Array.isArray(list) ? list : []).forEach(addr => {
+        if (preferredId && Number(addr.id) === preferredId) return;
+        const extra = [addr.labelName, addr.nickname].filter(value => value && value !== '—').join(' · ');
+        const title = addr.isPrimary
+            ? 'Endereço principal'
+            : (extra ? `Endereço · ${extra}` : 'Endereço');
+        rows.push({ label: title, value: formatClientAddressDetailValue(addr) || '—' });
+    });
+
+    if (!rows.length) {
+        return [{ label: 'Endereço', value: 'Nenhum endereço cadastrado' }];
+    }
+    return rows;
+}
+
+async function openClientDetailsModal(clientId, options = {}) {
+    if (!clientId) {
+        alertAppDialog('Selecione um cliente para ver os dados.');
+        return;
+    }
+    const { data, error } = await fetchCadastroRecord('Client', clientId, 'id, name, isActive');
+    if (error || !data) {
+        alertAppDialog('Não foi possível carregar os dados do cliente.');
+        return;
+    }
+    const ownerType = typeof CONTACT_OWNER_TYPE_CLIENT === 'string' ? CONTACT_OWNER_TYPE_CLIENT : 'client';
+    const contacts = typeof fetchContacts === 'function'
+        ? await fetchContacts(ownerType, clientId)
+        : [];
+    const addrRows = await buildClientAddressDetailRows(clientId, options.addrId);
+    showEntityDetailsModal('Cliente', data.name || 'Cadastro', [
+        ...buildCadastroDetailsRows(data, contacts),
+        ...addrRows
+    ]);
+}
+
+async function openArchitectDetailsModal(architectId) {
+    if (!architectId) {
+        alertAppDialog('Selecione um arquiteto para ver os dados.');
+        return;
+    }
+    const { data, error } = await fetchCadastroRecord('Architect', architectId, 'id, name, isActive');
+    if (error || !data) {
+        alertAppDialog('Não foi possível carregar os dados do arquiteto.');
+        return;
+    }
+    const ownerType = typeof CONTACT_OWNER_TYPE_ARCHITECT === 'string' ? CONTACT_OWNER_TYPE_ARCHITECT : 'architect';
+    const contacts = typeof fetchContacts === 'function'
+        ? await fetchContacts(ownerType, architectId)
+        : [];
+    showEntityDetailsModal('Arquiteto', data.name || 'Cadastro', buildCadastroDetailsRows(data, contacts));
 }
 
 function bindCollapsibleListCardToggles(root, options = {}) {

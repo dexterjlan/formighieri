@@ -307,13 +307,13 @@ function showGestaoCreateDetailingPanel() {
         return;
     }
 
-    hideAllGestaoPanels();
-    document.getElementById('gestao-create-detailing-panel')?.classList.remove('hidden');
-    setGestaoNavActive('create-detailing');
+    if (typeof showSystemSettings === 'function') {
+        void showSystemSettings('create-detailing');
+    }
 }
 
 function bindGestaoCreateDetailingEvents() {
-    document.getElementById('gestao-nav-create-detailing')?.addEventListener('click', () => {
+    document.getElementById('settings-nav-create-detailing')?.addEventListener('click', () => {
         if (typeof editingGestaoOrderId !== 'undefined') editingGestaoOrderId = null;
         showGestaoCreateDetailingPanel();
     });

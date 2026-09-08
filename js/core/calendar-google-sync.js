@@ -69,6 +69,39 @@ function isGoogleCalendarSyncEnabled() {
         && FORMIGHIERI_ENV_CONFIG?.GOOGLE_CALENDAR_SYNC_ENABLED === true;
 }
 
+function getCalendarGoogleSyncClientId(event) {
+    return Number(event?.clientId || event?.client?.id || event?.order?.clientId || event?.order?.client?.id) || null;
+}
+
+function formatCalendarGoogleContactPhone(value) {
+    if (typeof formatContactPhoneDisplay === 'function') return formatContactPhoneDisplay(value);
+    if (typeof formatArchitectPhone === 'function') return formatArchitectPhone(value);
+    return String(value || '').trim();
+}
+
+function buildCalendarGoogleContactLines(contacts) {
+    if (!contacts?.length) return [];
+    const lines = [];
+    contacts.forEach((item, index) => {
+        const label = item.isPrimary || contacts.length === 1 ? 'Contato' : `Contato ${index + 1}`;
+        if (item.name) lines.push(`${label}: ${item.name}`);
+        const phone = formatCalendarGoogleContactPhone(item.phone);
+        if (phone) lines.push(`Telefone: ${phone}`);
+        if (item.email) lines.push(`E-mail: ${item.email}`);
+    });
+    return lines;
+}
+
+async function attachCalendarEventGoogleContacts(event) {
+    if (!event) return event;
+    event.contacts = [];
+    const clientId = getCalendarGoogleSyncClientId(event);
+    if (!clientId || typeof fetchContacts !== 'function') return event;
+    const ownerType = typeof CONTACT_OWNER_TYPE_CLIENT === 'string' ? CONTACT_OWNER_TYPE_CLIENT : 'client';
+    event.contacts = await fetchContacts(ownerType, clientId);
+    return event;
+}
+
 function buildCalendarGoogleSyncPayload(event) {
     if (!event?.id) return null;
 
@@ -86,9 +119,9 @@ function buildCalendarGoogleSyncPayload(event) {
         `Responsável: ${responsibleName}`
     ];
     if (clientLabel) descriptionLines.push(`Cliente: ${clientLabel}`);
+    descriptionLines.push(...buildCalendarGoogleContactLines(event.contacts));
     if (orderLabel) descriptionLines.push(`Pedido: ${orderLabel}`);
     if (event.description) descriptionLines.push(`Observação: ${event.description}`);
-    descriptionLines.push(`FGP ID: ${event.id}`);
 
     return {
         calendarName: getGoogleCalendarSyncCalendarName(),
@@ -156,6 +189,7 @@ async function fetchCalendarEventForGoogleSync(eventId) {
     }
 
     await attachCalendarEventGoogleLocation(event);
+    await attachCalendarEventGoogleContacts(event);
     return event;
 }
 

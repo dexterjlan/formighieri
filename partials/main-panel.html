@@ -28,6 +28,8 @@
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Aprovações</button>
                 <button type="button" id="btn-calendario"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Calendário</button>
+                <button type="button" id="btn-comercial"
+                    class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Comercial</button>
                 <button type="button" id="btn-kanban"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Kanban</button>
                 <button type="button" id="btn-project-scheduling"
@@ -237,7 +239,8 @@
                                         Exportar PDF
                                     </button>
                                 </div>
-                                <p class="text-xs text-slate-400 mt-1" id="det-info">Consultor: - | Criado por: -</p>
+                                <p class="text-xs text-slate-400 mt-1" id="det-info">📋 Consultor: - | Criado por: -</p>
+                                <p class="text-xs text-slate-400 mt-1" id="det-architect">🏛️ Arquiteto: —</p>
                                 <p class="text-xs text-slate-500 mt-1" id="det-sale-date">Data de venda: —</p>
                                 <p class="text-xs text-slate-500 mt-1" id="det-delivery">Entrega pedido: —</p>
                                 <button type="button" id="btn-order-addr"
@@ -362,6 +365,35 @@
                         <button type="button" id="settings-nav-addr-label"
                             class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                             Labels de endereço
+                        </button>
+                        <p class="px-2 pt-3 pb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Cadastros</p>
+                        <button type="button" id="settings-nav-calendar-event-types"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Tipos de Evento
+                        </button>
+                        <button type="button" id="settings-nav-deal-stages"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Estágios do funil
+                        </button>
+                        <button type="button" id="settings-nav-lost-reasons"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Motivos de perda
+                        </button>
+                        <button type="button" id="settings-nav-project-status"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Status de Projeto
+                        </button>
+                        <button type="button" id="settings-nav-create-detailing"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Criar Detalhamento
+                        </button>
+                        <button type="button" id="settings-nav-compra-status"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Status Compras
+                        </button>
+                        <button type="button" id="settings-nav-usuarios"
+                            class="settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                            Usuários
                         </button>
                     </div>
                 </aside>
@@ -750,29 +782,21 @@
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Clientes
                                 </button>
+                                <button type="button" id="gestao-nav-architects"
+                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
+                                    Arquitetos
+                                </button>
                                 <button type="button" id="gestao-nav-addr"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Endereços
-                                </button>
-                                <button type="button" id="gestao-nav-calendar-event-types"
-                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
-                                    Tipos de Evento
                                 </button>
                                 <button type="button" id="gestao-nav-marceneiros"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Marceneiros
                                 </button>
-                                <button type="button" id="gestao-nav-project-status"
-                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
-                                    Status de Projeto
-                                </button>
                                 <button type="button" id="gestao-nav-alterar-status-projeto"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Alterar Status Projeto
-                                </button>
-                                <button type="button" id="gestao-nav-create-detailing"
-                                    class="hidden gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
-                                    Criar Detalhamento
                                 </button>
                                 <button type="button" id="gestao-nav-montadores"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
@@ -785,14 +809,6 @@
                                 <button type="button" id="gestao-nav-third-party-subtypes"
                                     class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
                                     Subtipos Terceiros
-                                </button>
-                                <button type="button" id="gestao-nav-compra-status"
-                                    class="gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
-                                    Status Compras
-                                </button>
-                                <button type="button" id="gestao-nav-usuarios"
-                                    class="hidden gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
-                                    Usuários
                                 </button>
                             </div>
                         </div>
@@ -913,6 +929,7 @@
                                     <li>Se o mesmo pedido tiver <span class="font-mono text-[10px]">entrega_cliente</span> diferente em várias linhas, será usada a <strong>maior data</strong>.</li>
                                     <li>Se o pedido já existir, apenas os projetos novos serão criados; projeto duplicado gera erro.</li>
                                     <li>Opcional: <span class="font-mono text-[10px]">data_medicao</span> cria a entidade de medição do pedido; <span class="font-mono text-[10px]">data_planta_levantada</span> vincula planta levantada.</li>
+                                    <li>Opcional: <span class="font-mono text-[10px]">arquiteto</span>, <span class="font-mono text-[10px]">arquiteto_telefone</span> e <span class="font-mono text-[10px]">arquiteto_email</span> cadastram o arquiteto (se novo) e vinculam ao pedido — inclusive em pedidos já existentes.</li>
                                     <li>Opcional: <span class="font-mono text-[10px]">data_inicio_montagem_interna</span>, <span class="font-mono text-[10px]">data_fim_montagem_interna</span> e <span class="font-mono text-[10px]">marceneiro</span> (nome WPS).</li>
                                     <li><span class="font-mono text-[10px]">consultor</span>, <span class="font-mono text-[10px]">status_projeto</span> e <span class="font-mono text-[10px]">marceneiro</span> usam nomes WPS; o sistema converte via tabelas <span class="font-mono text-[10px]">importConsultorWPS</span>, <span class="font-mono text-[10px]">importStatusWPS</span> e <span class="font-mono text-[10px]">importMarceneiroWPS</span>.</li>
                                     <li>Use os nomes cadastrados no sistema para ambiente e projetista.</li>
@@ -977,6 +994,10 @@
                                             class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">
                                             ...
                                         </button>
+                                        <button type="button" id="gestao-ord-client-view-btn" title="Ver dados do cliente"
+                                            class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">
+                                            Ver
+                                        </button>
                                     </div>
                                 </div>
                                 <div class="md:col-span-2">
@@ -999,9 +1020,34 @@
                                     </select>
                                 </div>
                                 <div>
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Arquiteto</label>
+                                    <div class="flex gap-2">
+                                        <input type="text" id="gestao-ord-architect" readonly placeholder="Clique em ... para buscar"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600 bg-slate-50 cursor-pointer">
+                                        <input type="hidden" id="gestao-ord-architect-id">
+                                        <button type="button" id="gestao-ord-architect-picker-btn" title="Buscar arquiteto no cadastro"
+                                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">
+                                            ...
+                                        </button>
+                                        <button type="button" id="gestao-ord-architect-view-btn" title="Ver dados do arquiteto"
+                                            class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">
+                                            Ver
+                                        </button>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400 mt-1">Opcional. Quem indicou o cliente.</p>
+                                </div>
+                                <div>
                                     <label class="block text-xs font-semibold text-slate-500 mb-1">Data de venda <span class="text-red-500">*</span></label>
                                     <input type="date" id="gestao-ord-sale-date" required
                                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="block text-xs font-semibold text-slate-500 mb-1">Negócio ganho (funil)</label>
+                                    <select id="gestao-ord-deal"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                        <option value="">Sem vínculo</option>
+                                    </select>
+                                    <p class="text-[10px] text-slate-400 mt-1">Opcional. Lista negócios ganhos do mesmo cliente ainda sem pedido.</p>
                                 </div>
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-500 mb-1">Data de entrega no cliente</label>
@@ -1378,32 +1424,65 @@
                     <div id="gestao-clientes-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h3 class="font-bold text-sm text-slate-900">Clientes</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Cadastre e edite os clientes para os pedidos de venda. Desative em vez de excluir se houver pedidos vinculados.</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastre e edite os clientes para os pedidos de venda. Telefone e e-mail ficam em Contatos (pode haver mais de um). Desative em vez de excluir se houver pedidos vinculados.</p>
                         </div>
                         <div class="p-4 md:p-5 space-y-4">
-                            <form id="gestao-new-cliente-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
-                                <div class="flex-1 min-w-[200px]">
-                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo cliente</label>
-                                    <input type="text" id="gestao-new-cliente-nome" required
+                            <div class="flex flex-wrap gap-2 items-end">
+                                <div class="flex-1 min-w-[220px]">
+                                    <label for="gestao-clientes-filter-name" class="block text-[10px] font-semibold text-slate-500 mb-1">Filtrar por nome</label>
+                                    <input type="text" id="gestao-clientes-filter-name"
                                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
                                         placeholder="Nome do cliente">
                                 </div>
-                                <button type="submit"
+                                <button type="button" id="gestao-clientes-add"
                                     class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
                                     + Adicionar
                                 </button>
-                            </form>
+                            </div>
                             <div class="overflow-x-auto border border-slate-200 rounded-xl">
                                 <table class="w-full text-sm">
                                     <thead class="bg-slate-50 text-xs uppercase text-slate-500">
                                         <tr>
-                                            <th class="text-left p-3 font-semibold w-20">ID</th>
+                                            <th class="text-left p-3 font-semibold w-16">ID</th>
                                             <th class="text-left p-3 font-semibold">Nome</th>
-                                            <th class="text-center p-3 font-semibold w-24">Ativo</th>
-                                            <th class="text-left p-3 font-semibold w-52">Ações</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-56">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody id="gestao-clientes-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-architects-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Arquitetos</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os arquitetos que indicam clientes. Telefone e e-mail ficam em Contatos (pode haver mais de um). O vínculo no pedido e no negócio do funil é opcional. Desative em vez de excluir se houver pedidos ou negócios vinculados.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <div class="flex flex-wrap gap-2 items-end">
+                                <div class="flex-1 min-w-[220px]">
+                                    <label for="gestao-architects-filter-name" class="block text-[10px] font-semibold text-slate-500 mb-1">Filtrar por nome</label>
+                                    <input type="text" id="gestao-architects-filter-name"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Nome do arquiteto">
+                                </div>
+                                <button type="button" id="gestao-architects-add"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-56">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-architects-list" class="divide-y divide-slate-100"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -1607,6 +1686,84 @@
                                         </tr>
                                     </thead>
                                     <tbody id="gestao-calendar-event-types-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-deal-stages-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Estágios do funil</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Colunas do Comercial. Ganho e perdido são status do negócio, não estágio de trabalho.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-deal-stage-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[160px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo estágio</label>
+                                    <input type="text" id="gestao-new-deal-stage-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Ex.: Proposta">
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ordem</label>
+                                    <input type="number" id="gestao-new-deal-stage-sort" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-deal-stages-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-lost-reasons-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Motivos de perda</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Usados ao marcar um negócio como perdido. Desative em vez de excluir se já houver negócios com esse motivo.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-lost-reason-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[160px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo motivo</label>
+                                    <input type="text" id="gestao-new-lost-reason-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Ex.: Projeto cancelado">
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ordem</label>
+                                    <input type="number" id="gestao-new-lost-reason-sort" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-lost-reasons-list" class="divide-y divide-slate-100"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -2196,6 +2353,281 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </main>
+
+        <!-- TELA: COMERCIAL (FUNIL) -->
+        <main id="comercial-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6 flex flex-col min-h-0 relative">
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-[calc(100vh-140px)]">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
+                    <div>
+                        <h2 class="font-bold text-sm text-slate-900">Comercial</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Funil de vendas. Comece o dia em Hoje — negócio aberto precisa de próxima ação.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="calendar-zoom-toggle" role="tablist" aria-label="Visão comercial">
+                            <button type="button" id="comercial-tab-panel" class="calendar-zoom-btn">Meu painel</button>
+                            <button type="button" id="comercial-tab-board" class="calendar-zoom-btn is-active">Funil</button>
+                            <button type="button" id="comercial-tab-today" class="calendar-zoom-btn">Hoje</button>
+                            <button type="button" id="comercial-tab-won" class="calendar-zoom-btn">Ganhos</button>
+                            <button type="button" id="comercial-tab-lost" class="calendar-zoom-btn">Perdidos</button>
+                        </div>
+                        <button type="button" id="btn-comercial-new-deal"
+                            class="text-xs bg-amber-600 text-white hover:bg-amber-700 px-3 py-1.5 rounded-lg font-medium">Novo negócio</button>
+                    </div>
+                </div>
+                <div id="comercial-filters" class="px-4 py-2.5 border-b border-slate-100 bg-white flex flex-wrap items-center gap-2">
+                    <label id="comercial-filter-owner-wrap" class="hidden flex items-center gap-2 text-xs text-slate-600">
+                        <span class="font-semibold text-slate-500">Visão</span>
+                        <select id="comercial-filter-owner"
+                            class="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600 min-w-[8rem]">
+                            <option value="mine">Meus</option>
+                            <option value="all">Todos</option>
+                        </select>
+                    </label>
+                    <label class="comercial-filter-board-only flex items-center gap-2 text-xs text-slate-600">
+                        <span class="font-semibold text-slate-500">Temperatura</span>
+                        <select id="comercial-filter-temperature"
+                            class="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
+                            <option value="">Todas</option>
+                            <option value="hot">Quente</option>
+                            <option value="warm">Moderado</option>
+                            <option value="cold">Frio</option>
+                        </select>
+                    </label>
+                    <label class="comercial-filter-board-only flex items-center gap-2 text-xs text-slate-600">
+                        <input type="checkbox" id="comercial-filter-no-next"
+                            class="h-3.5 w-3.5 rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                        Sem próxima atividade
+                    </label>
+                </div>
+                <div id="comercial-panel-wrap" class="hidden flex-1 min-h-0 overflow-auto p-3 md:p-4 bg-slate-50/40">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <p class="text-xs text-slate-500">Indicadores do funil no período. Consultor vê só os próprios negócios; gestor e admin podem ver todos.</p>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <label class="flex items-center gap-2 text-xs text-slate-600">
+                                <span class="font-semibold text-slate-500">Período</span>
+                                <select id="comercial-panel-period"
+                                    class="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
+                                    <option value="this_year">Este ano</option>
+                                    <option value="this_month">Este mês</option>
+                                    <option value="last_30">Últimos 30 dias</option>
+                                    <option value="last_90">Últimos 90 dias</option>
+                                    <option value="last_year">Ano passado</option>
+                                </select>
+                            </label>
+                            <label id="comercial-panel-user-wrap" class="hidden flex items-center gap-2 text-xs text-slate-600">
+                                <span class="font-semibold text-slate-500">Consultor</span>
+                                <select id="comercial-panel-user"
+                                    class="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600 min-w-[9rem]">
+                                    <option value="">Todos</option>
+                                </select>
+                            </label>
+                            <button type="button" id="comercial-panel-refresh"
+                                class="text-xs bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg font-medium">Atualizar</button>
+                        </div>
+                    </div>
+                    <div id="comercial-panel-grid" class="comercial-panel-grid">
+                        <section class="comercial-panel-card comercial-panel-card--wide">
+                            <header class="comercial-panel-card__head">
+                                <h3>Negócios em aberto por consultor</h3>
+                                <p id="comercial-panel-open-period" class="comercial-panel-card__period">Agora · Aberto</p>
+                            </header>
+                            <div id="comercial-panel-open" class="comercial-panel-card__body"></div>
+                        </section>
+                        <section class="comercial-panel-card">
+                            <header class="comercial-panel-card__head">
+                                <h3>Negócios iniciados</h3>
+                                <p id="comercial-panel-started-period" class="comercial-panel-card__period">Este ano</p>
+                            </header>
+                            <div id="comercial-panel-started" class="comercial-panel-card__body"></div>
+                        </section>
+                        <section class="comercial-panel-card">
+                            <header class="comercial-panel-card__head">
+                                <h3>Negócios perdidos por motivo</h3>
+                                <p id="comercial-panel-lost-period" class="comercial-panel-card__period">Perdido · Este ano</p>
+                            </header>
+                            <div id="comercial-panel-lost" class="comercial-panel-card__body"></div>
+                        </section>
+                        <section class="comercial-panel-card comercial-panel-card--wide">
+                            <header class="comercial-panel-card__head">
+                                <h3>Negócios ganhos ao longo do tempo</h3>
+                                <p id="comercial-panel-won-period" class="comercial-panel-card__period">Este ano · Ganho</p>
+                            </header>
+                            <div id="comercial-panel-won" class="comercial-panel-card__body"></div>
+                        </section>
+                        <div class="comercial-panel-bottom">
+                        <section class="comercial-panel-card">
+                            <header class="comercial-panel-card__head">
+                                <h3>Conversão de negócios</h3>
+                                <p id="comercial-panel-funnel-period" class="comercial-panel-card__period">Funil · Ganho, perdido</p>
+                            </header>
+                            <div id="comercial-panel-funnel" class="comercial-panel-card__body"></div>
+                        </section>
+                        <section class="comercial-panel-card comercial-panel-card--kpi">
+                            <header class="comercial-panel-card__head">
+                                <h3>Valor médio de negócios ganhos</h3>
+                                <p id="comercial-panel-avg-period" class="comercial-panel-card__period">Este ano · Ganho</p>
+                            </header>
+                            <div id="comercial-panel-avg" class="comercial-panel-card__body"></div>
+                        </section>
+                        <section class="comercial-panel-card comercial-panel-card--kpi">
+                            <header class="comercial-panel-card__head">
+                                <h3>Duração do negócio</h3>
+                                <p id="comercial-panel-duration-period" class="comercial-panel-card__period">Ganho, perdido</p>
+                            </header>
+                            <div id="comercial-panel-duration" class="comercial-panel-card__body"></div>
+                        </section>
+                        </div>
+                    </div>
+                </div>
+                <div id="comercial-board-wrap" class="flex-1 min-h-0 overflow-auto p-3 md:p-4">
+                    <div id="comercial-board" class="comercial-board"></div>
+                </div>
+                <div id="comercial-today-wrap" class="hidden flex-1 min-h-0 overflow-auto p-4">
+                    <div id="comercial-today-list" class="space-y-2"></div>
+                </div>
+                <div id="comercial-status-wrap" class="hidden flex-1 min-h-0 overflow-auto p-4">
+                    <div id="comercial-status-list" class="space-y-2"></div>
+                </div>
+            </div>
+            <div id="comercial-deal-overlay" class="comercial-deal-overlay hidden" aria-hidden="true">
+                <aside class="comercial-deal-panel p-4 md:p-5 space-y-4" id="comercial-deal-panel">
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <h3 id="comercial-deal-title-label" class="font-bold text-sm text-slate-900">Negócio</h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Cliente, temperatura e próxima ação ficam neste painel.</p>
+                        </div>
+                        <button type="button" id="btn-comercial-deal-close"
+                            class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-2.5 py-1.5 rounded-lg font-medium">Fechar</button>
+                    </div>
+                    <form id="comercial-deal-form" class="space-y-3">
+                        <input type="hidden" id="comercial-deal-id" value="">
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 mb-1">Título <span class="text-red-500">*</span></label>
+                            <input type="text" id="comercial-deal-title" required
+                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                placeholder="Ex.: Cozinha — Família Silva">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 mb-1">Cliente</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="comercial-deal-client" readonly
+                                    placeholder="Clique para buscar ou cadastrar"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+                                <input type="hidden" id="comercial-deal-client-id">
+                                <button type="button" id="comercial-deal-client-picker"
+                                    class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">...</button>
+                                <button type="button" id="comercial-deal-client-view"
+                                    class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">Ver</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-semibold text-slate-500 mb-1">Arquiteto</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="comercial-deal-architect" readonly
+                                    placeholder="Clique em ... para buscar ou cadastrar"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 cursor-pointer">
+                                <input type="hidden" id="comercial-deal-architect-id">
+                                <button type="button" id="comercial-deal-architect-picker"
+                                    class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">...</button>
+                                <button type="button" id="comercial-deal-architect-view"
+                                    class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">Ver</button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Estágio</label>
+                                <select id="comercial-deal-stage"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Temperatura</label>
+                                <select id="comercial-deal-temperature"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
+                                    <option value="">—</option>
+                                    <option value="hot">Quente</option>
+                                    <option value="warm">Moderado</option>
+                                    <option value="cold">Frio</option>
+                                </select>
+                            </div>
+                            <div id="comercial-deal-owner-wrap">
+                                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Dono</label>
+                                <select id="comercial-deal-owner"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"></select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Valor</label>
+                                <input type="text" id="comercial-deal-value" inputmode="decimal"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                    placeholder="0,00">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Previsão de fechamento</label>
+                                <input type="date" id="comercial-deal-expected-close"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-semibold text-slate-500 mb-1">Código do orçamento no WPS</label>
+                                <input type="text" id="comercial-deal-wps-quote-code"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                    placeholder="Ex.: 10832">
+                            </div>
+                        </div>
+                        <div id="comercial-deal-lost-banner"
+                            class="hidden text-xs text-red-800 bg-red-50 border border-red-100 rounded-lg px-3 py-2"></div>
+                        <div class="flex flex-wrap gap-2">
+                            <button type="submit" id="comercial-deal-save"
+                                class="text-xs bg-amber-600 text-white hover:bg-amber-700 px-3 py-2 rounded-lg font-medium">Salvar</button>
+                            <button type="button" id="comercial-deal-win"
+                                class="text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-2 rounded-lg font-medium">Ganhar</button>
+                            <button type="button" id="comercial-deal-lose"
+                                class="text-xs bg-white border border-red-200 text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg font-medium">Perder</button>
+                        </div>
+                    </form>
+                    <div id="comercial-deal-extras" class="hidden space-y-4 border-t border-slate-100 pt-4">
+                        <div>
+                            <div class="flex items-center justify-between gap-2 mb-2">
+                                <h4 class="text-xs font-semibold uppercase text-slate-500">Atividades</h4>
+                                <button type="button" id="btn-comercial-activity-add"
+                                    class="text-[11px] text-amber-800 hover:underline font-medium">+ Atividade</button>
+                            </div>
+                            <div id="comercial-deal-activities" class="space-y-2"></div>
+                            <form id="comercial-activity-form" class="hidden mt-2 border border-slate-200 rounded-xl p-3 bg-slate-50/60 space-y-2">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <select id="comercial-activity-type"
+                                        class="px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white">
+                                        <option value="call">Ligação</option>
+                                        <option value="meeting">Reunião</option>
+                                        <option value="task">Tarefa</option>
+                                        <option value="deadline">Prazo</option>
+                                    </select>
+                                    <input type="text" id="comercial-activity-subject" placeholder="Assunto"
+                                        class="px-2 py-1.5 text-xs border border-slate-200 rounded-lg">
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="date" id="comercial-activity-due-date"
+                                        class="px-2 py-1.5 text-xs border border-slate-200 rounded-lg">
+                                    <input type="time" id="comercial-activity-due-time"
+                                        class="px-2 py-1.5 text-xs border border-slate-200 rounded-lg">
+                                </div>
+                                <div class="flex gap-2">
+                                    <button type="submit" class="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg">Salvar atividade</button>
+                                    <button type="button" id="btn-comercial-activity-cancel" class="text-xs text-slate-500">Cancelar</button>
+                                </div>
+                            </form>
+                        </div>
+                        <div>
+                            <h4 class="text-xs font-semibold uppercase text-slate-500 mb-2">Notas</h4>
+                            <div id="comercial-deal-notes" class="space-y-2 mb-2"></div>
+                            <form id="comercial-note-form" class="flex gap-2">
+                                <input type="text" id="comercial-note-body" placeholder="Escrever nota..."
+                                    class="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                                <button type="submit" class="text-xs bg-slate-800 text-white px-3 py-2 rounded-lg">Enviar</button>
+                            </form>
+                        </div>
+                    </div>
+                </aside>
             </div>
         </main>
 

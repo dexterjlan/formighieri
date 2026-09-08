@@ -28,6 +28,15 @@ function getOrderConsultantNameFromRecord(order) {
     return '';
 }
 
+function getOrderArchitectName(order) {
+    if (order?.architect?.name) return order.architect.name;
+    if (order?.id && typeof ordersCache !== 'undefined') {
+        const cached = ordersCache.find(item => Number(item.id) === Number(order.id));
+        if (cached?.architect?.name) return cached.architect.name;
+    }
+    return '';
+}
+
 function getOrderConsultantName(orderId) {
     if (!orderId || typeof ordersCache === 'undefined') return null;
     const order = ordersCache.find(o => o.id === orderId);

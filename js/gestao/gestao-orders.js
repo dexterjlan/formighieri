@@ -21,6 +21,12 @@ async function openGestaoCreateOrderForm() {
             : new Date().toISOString().slice(0, 10);
     }
     syncGestaoOrderClientDeliveryField();
+    if (typeof loadWonDealsForOrderForm === 'function') {
+        await loadWonDealsForOrderForm(null, null);
+    }
+    if (typeof fillArchitectPickerField === 'function') {
+        await fillArchitectPickerField('gestao-ord-architect', null);
+    }
     showGestaoPedidoFormPanel();
 }
 
@@ -70,6 +76,16 @@ async function openGestaoEditOrderForm(orderId) {
     }
     syncGestaoOrderClientDeliveryField();
     renderGestaoProjectsSummaryList();
+    if (typeof loadWonDealsForOrderForm === 'function') {
+        await loadWonDealsForOrderForm(order.clientId || order.client?.id, orderId);
+    }
+    if (typeof fillArchitectPickerField === 'function') {
+        await fillArchitectPickerField(
+            'gestao-ord-architect',
+            order.architectId || order.architect?.id || null,
+            order.architect?.name || ''
+        );
+    }
     showGestaoPedidoFormPanel();
 }
 
@@ -499,7 +515,9 @@ async function fetchGestaoOrders(filters = {}) {
     const orderCode = String(filters.orderCode || '').trim();
     const clientName = String(filters.clientName || '').trim();
     const orderRelations = `client:Client(id, name, isActive), consultor:appUsers!consultantUserId(id, name)`;
+    const orderRelationsWithArchitect = `${orderRelations}, architect:Architect(id, name)`;
     const orderSelectVariants = [
+        `*, ${orderRelationsWithArchitect}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, cabinetMakerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, cabinetMakerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, cabinetMakerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
@@ -1225,6 +1243,8 @@ async function saveGestaoOrder(event) {
         await updateSalesOrderRecord(orderId, {
             clientId,
             consultantUserId,
+            saleDate,
+            architectId: Number(document.getElementById('gestao-ord-architect-id')?.value) || undefined,
             updatedById: currentUser?.id || null,
             updatedAt: now
         });
@@ -1236,6 +1256,16 @@ async function saveGestaoOrder(event) {
 
         if (typeof persistSalesOrderSaleDate === 'function') {
             await persistSalesOrderSaleDate(orderId, saleDate, { orderCode });
+        }
+
+        if (typeof persistSalesOrderArchitectId === 'function') {
+            const architectId = Number(document.getElementById('gestao-ord-architect-id')?.value) || null;
+            await persistSalesOrderArchitectId(orderId, architectId);
+        }
+
+        if (typeof persistDealOrderLink === 'function') {
+            const dealId = Number(document.getElementById('gestao-ord-deal')?.value) || null;
+            await persistDealOrderLink(orderId, dealId, { fillOrder: false });
         }
 
         if (typeof syncSalesOrdersConsultantName === 'function') {

@@ -258,7 +258,7 @@ async function applyConferenciaEnviadaStatusToProjects(orderProjectIds) {
 
     const statusId = await getConferenciaEnviadaStatusId();
     if (!statusId) {
-        throw new Error('Status "Conferência Enviada" não encontrado. Cadastre em Gestão → Status de Projeto.');
+        throw new Error('Status "Conferência Enviada" não encontrado. Cadastre em Configurações → Status de Projeto.');
     }
 
     const now = new Date().toISOString();
@@ -307,7 +307,7 @@ async function applyConferenciaRealizadaStatusToProjects(orderProjectIds, option
 
     const statusId = await getConferenciaRealizadaStatusId();
     if (!statusId) {
-        throw new Error('Status "Conferência Realizada" não encontrado. Cadastre em Gestão → Status de Projeto.');
+        throw new Error('Status "Conferência Realizada" não encontrado. Cadastre em Configurações → Status de Projeto.');
     }
 
     const now = new Date().toISOString();
@@ -362,7 +362,7 @@ async function applyAguardandoProjetoTecnicoStatusToProjects(orderProjectIds) {
 
     const statusId = await getAguardandoProjetoTecnicoStatusId();
     if (!statusId) {
-        throw new Error('Status "Aguardando Projeto Técnico" não encontrado. Cadastre em Gestão → Status de Projeto.');
+        throw new Error('Status "Aguardando Projeto Técnico" não encontrado. Cadastre em Configurações → Status de Projeto.');
     }
 
     const now = new Date().toISOString();

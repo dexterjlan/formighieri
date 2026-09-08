@@ -159,7 +159,7 @@ async function applyMedicaoRealizadaStatusToProjects(orderProjectIds) {
 
     const statusId = await getMedicaoRealizadaStatusId();
     if (!statusId) {
-        throw new Error('Status "Medição Realizada" não encontrado. Cadastre em Gestão → Status de Projeto.');
+        throw new Error('Status "Medição Realizada" não encontrado. Cadastre em Configurações → Status de Projeto.');
     }
 
     const now = new Date().toISOString();
@@ -194,7 +194,7 @@ async function applyPlantaLevantadaStatusToProjects(orderProjectIds) {
 
     const statusId = await getPlantaLevantadaStatusId();
     if (!statusId) {
-        throw new Error('Status "Planta Levantada" não encontrado. Cadastre em Gestão → Status de Projeto.');
+        throw new Error('Status "Planta Levantada" não encontrado. Cadastre em Configurações → Status de Projeto.');
     }
 
     const now = new Date().toISOString();

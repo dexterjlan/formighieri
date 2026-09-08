@@ -674,6 +674,27 @@ async function openOrderModal() {
 }
 window.openOrderModal = openOrderModal;
 
+async function fillOrderDetailArchitect(order) {
+    const el = document.getElementById('det-architect');
+    if (!el) return;
+
+    let name = typeof getOrderArchitectName === 'function'
+        ? getOrderArchitectName(order)
+        : (order?.architect?.name || '');
+    const architectId = Number(order?.architectId || order?.architect?.id);
+
+    if (!name && architectId) {
+        const { data, error } = await supabaseClient
+            .from('Architect')
+            .select('id, name')
+            .eq('id', architectId)
+            .maybeSingle();
+        if (!error && data?.name) name = data.name;
+    }
+
+    el.textContent = `🏛️ Arquiteto: ${name || '—'}`;
+}
+
 async function selectOrder(id) {
     if (typeof refreshCurrentUserProfile === 'function') {
         await refreshCurrentUserProfile();
@@ -686,11 +707,22 @@ async function selectOrder(id) {
     let order = null;
     let fetchError = null;
 
-    const primary = await supabaseClient
+    const selectWithArchitect = `*, creator:appUsers!salesOrders_createdById_fkey(name), ${SALES_ORDER_RELATIONS_SELECT}, architect:Architect(id, name)`;
+    const selectBase = `*, creator:appUsers!salesOrders_createdById_fkey(name), ${SALES_ORDER_RELATIONS_SELECT}`;
+
+    let primary = await supabaseClient
         .from('salesOrders')
-        .select(`*, creator:appUsers!salesOrders_createdById_fkey(name), ${SALES_ORDER_RELATIONS_SELECT}`)
+        .select(selectWithArchitect)
         .eq('id', id)
         .single();
+
+    if (primary.error && /architect|Architect/i.test(primary.error.message || '')) {
+        primary = await supabaseClient
+            .from('salesOrders')
+            .select(selectBase)
+            .eq('id', id)
+            .single();
+    }
 
     if (!primary.error && primary.data) {
         order = primary.data;
@@ -705,6 +737,7 @@ async function selectOrder(id) {
             const cached = ordersCache.find(item => Number(item.id) === Number(id));
             if (cached?.client) order.client = cached.client;
             if (cached?.consultor) order.consultor = cached.consultor;
+            if (cached?.architect) order.architect = cached.architect;
         } else {
             fetchError = fallback.error || primary.error;
         }
@@ -718,6 +751,7 @@ async function selectOrder(id) {
     document.getElementById("det-client").innerText = getOrderClientName(order);
     document.getElementById("det-info").innerText =
         `📋 Consultor: ${getOrderConsultantNameFromRecord(order)} | Criado por: ${order.creator?.name || 'Sistema'}`;
+    await fillOrderDetailArchitect(order);
     const saleDateEl = document.getElementById("det-sale-date");
     if (saleDateEl) {
         const saleDateLabel = typeof formatGestaoDate === 'function'

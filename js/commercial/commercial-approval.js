@@ -336,7 +336,7 @@ async function applyEmRevisaoStatusToProjects(orderProjectIds, options = {}) {
 
     const statusId = await getEmRevisaoProjectStatusId();
     if (!statusId) {
-        throw new Error(`Status "${COMMERCIAL_REVISION_PROJECT_STATUS}" não encontrado. Cadastre em Gestão → Status de Projeto.`);
+        throw new Error(`Status "${COMMERCIAL_REVISION_PROJECT_STATUS}" não encontrado. Cadastre em Configurações → Status de Projeto.`);
     }
 
     const now = new Date().toISOString();
@@ -410,7 +410,7 @@ async function applyNomearStatusToProjects(orderProjectIds) {
 
     const statusId = await getNomearProjectStatusId();
     if (!statusId) {
-        throw new Error(`Status "${COMMERCIAL_APPROVED_PROJECT_STATUS}" não encontrado. Cadastre em Gestão → Status de Projeto.`);
+        throw new Error(`Status "${COMMERCIAL_APPROVED_PROJECT_STATUS}" não encontrado. Cadastre em Configurações → Status de Projeto.`);
     }
 
     const now = new Date().toISOString();

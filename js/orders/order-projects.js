@@ -484,7 +484,7 @@ function bindOrderProjectEvents() {
 
         const statusId = await getVendidoProjectStatusId();
         if (!statusId) {
-            alertAppDialog('Status "Vendido" não encontrado. Cadastre em Gestão → Status de Projeto.');
+            alertAppDialog('Status "Vendido" não encontrado. Cadastre em Configurações → Status de Projeto.');
             return;
         }
 

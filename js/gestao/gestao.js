@@ -33,7 +33,7 @@ function setGestaoProjectFormLoading(active, message = 'Processando...', status 
 function waitGestaoProjectFormStatus(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'project-status', 'alterar-status-projeto', 'create-detailing', 'clientes', 'addr', 'calendar-event-types', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'compra-status', 'usuarios'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes'];
 const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
 const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
@@ -69,18 +69,14 @@ function setGestaoCadastrosNavExpanded(expanded) {
 function setGestaoNavActive(navKey) {
     const navMap = {
         pedido: document.getElementById('gestao-nav-pedido'),
-        'project-status': document.getElementById('gestao-nav-project-status'),
         'alterar-status-projeto': document.getElementById('gestao-nav-alterar-status-projeto'),
-        'create-detailing': document.getElementById('gestao-nav-create-detailing'),
         clientes: document.getElementById('gestao-nav-clientes'),
+        architects: document.getElementById('gestao-nav-architects'),
         addr: document.getElementById('gestao-nav-addr'),
-        'calendar-event-types': document.getElementById('gestao-nav-calendar-event-types'),
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
         montadores: document.getElementById('gestao-nav-montadores'),
         characteristics: document.getElementById('gestao-nav-characteristics'),
         'third-party-subtypes': document.getElementById('gestao-nav-third-party-subtypes'),
-        'compra-status': document.getElementById('gestao-nav-compra-status'),
-        usuarios: document.getElementById('gestao-nav-usuarios'),
         'montagem-programacao': document.getElementById('gestao-nav-montagem-programacao'),
         'programacao-producao': document.getElementById('gestao-nav-programacao-producao'),
         dashboard: document.getElementById('gestao-nav-dashboard'),
@@ -126,8 +122,6 @@ function updateGestaoCadastrosNavVisibility() {
         clientesBtn.classList.remove('hidden');
         clientesBtn.style.display = '';
     }
-    document.getElementById('gestao-nav-usuarios')?.classList.toggle('hidden', !isAdmin());
-    document.getElementById('gestao-nav-create-detailing')?.classList.toggle('hidden', !isAdmin());
     if (typeof updateMontagemProgramacaoNavVisibility === 'function') {
         updateMontagemProgramacaoNavVisibility();
     }
@@ -234,8 +228,11 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-alterar-status-projeto-panel')?.classList.add('hidden');
     document.getElementById('gestao-create-detailing-panel')?.classList.add('hidden');
     document.getElementById('gestao-clientes-panel')?.classList.add('hidden');
+    document.getElementById('gestao-architects-panel')?.classList.add('hidden');
     document.getElementById('gestao-addr-panel')?.classList.add('hidden');
     document.getElementById('gestao-calendar-event-types-panel')?.classList.add('hidden');
+    document.getElementById('gestao-deal-stages-panel')?.classList.add('hidden');
+    document.getElementById('gestao-lost-reasons-panel')?.classList.add('hidden');
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-montadores-panel')?.classList.add('hidden');
     document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
@@ -365,7 +362,7 @@ function getOrderProjectStatusOptionsHtml(selectedId = null) {
     const defaultId = selectedId ?? getDefaultProjectStatusId();
 
     if (!statuses.length) {
-        return '<option value="">Cadastre status em Gestão → Status de Projeto</option>';
+        return '<option value="">Cadastre status em Configurações → Status de Projeto</option>';
     }
 
     return statuses.map(status => `
@@ -1198,9 +1195,9 @@ function showGestaoPedidoFormPanel() {
 }
 
 function showGestaoProjectStatusPanel() {
-    hideAllGestaoPanels();
-    document.getElementById('gestao-project-status-panel')?.classList.remove('hidden');
-    setGestaoNavActive('project-status');
+    if (typeof showSystemSettings === 'function') {
+        void showSystemSettings('project-status');
+    }
 }
 
 function showGestaoAlterarStatusProjetoPanel() {
@@ -1218,6 +1215,12 @@ function showGestaoClientesPanel() {
     setGestaoNavActive('clientes');
 }
 
+function showGestaoArchitectsPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-architects-panel')?.classList.remove('hidden');
+    setGestaoNavActive('architects');
+}
+
 function showGestaoAddrPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-addr-panel')?.classList.remove('hidden');
@@ -1225,9 +1228,21 @@ function showGestaoAddrPanel() {
 }
 
 function showGestaoCalendarEventTypesPanel() {
-    hideAllGestaoPanels();
-    document.getElementById('gestao-calendar-event-types-panel')?.classList.remove('hidden');
-    setGestaoNavActive('calendar-event-types');
+    if (typeof showSystemSettings === 'function') {
+        void showSystemSettings('calendar-event-types');
+    }
+}
+
+function showGestaoDealStagesPanel() {
+    if (typeof showSystemSettings === 'function') {
+        void showSystemSettings('deal-stages');
+    }
+}
+
+function showGestaoLostReasonsPanel() {
+    if (typeof showSystemSettings === 'function') {
+        void showSystemSettings('lost-reasons');
+    }
 }
 
 function showGestaoMarceneirosPanel() {
@@ -1255,9 +1270,9 @@ function showGestaoThirdPartySubtypesPanel() {
 }
 
 function showGestaoCompraStatusPanel() {
-    hideAllGestaoPanels();
-    document.getElementById('gestao-compra-status-panel')?.classList.remove('hidden');
-    setGestaoNavActive('compra-status');
+    if (typeof showSystemSettings === 'function') {
+        void showSystemSettings('compra-status');
+    }
 }
 
 function showGestaoUsuariosPanel() {
@@ -1266,12 +1281,8 @@ function showGestaoUsuariosPanel() {
         return;
     }
 
-    hideAllGestaoPanels();
-    document.getElementById('gestao-usuarios-panel')?.classList.remove('hidden');
-    setGestaoNavActive('usuarios');
-
-    if (typeof loadUsersAdminList === 'function') {
-        loadUsersAdminList();
+    if (typeof showSystemSettings === 'function') {
+        void showSystemSettings('usuarios');
     }
 }
 
@@ -1409,10 +1420,18 @@ function bindGestaoEvents() {
             if (String(previousId) !== String(cliente.id) && typeof setGestaoOrderSelectedAddr === 'function') {
                 setGestaoOrderSelectedAddr(null);
             }
+            if (typeof loadWonDealsForOrderForm === 'function') {
+                const orderId = Number(document.getElementById('gestao-ord-id')?.value) || null;
+                loadWonDealsForOrderForm(cliente.id, orderId);
+            }
         });
     };
     document.getElementById('gestao-ord-client-picker-btn')?.addEventListener('click', triggerGestaoOrdClientPicker);
     document.getElementById('gestao-ord-client')?.addEventListener('click', triggerGestaoOrdClientPicker);
+    document.getElementById('gestao-ord-client-view-btn')?.addEventListener('click', () => {
+        if (typeof openClientDetailsModal !== 'function') return;
+        openClientDetailsModal(document.getElementById('gestao-ord-client-id')?.value);
+    });
     document.getElementById('cliente-create-form')?.addEventListener('submit', saveClienteCreateFromPicker);
     document.getElementById('gestao-nav-cadastros-toggle')?.addEventListener('click', async () => {
         const items = document.getElementById('gestao-nav-cadastros-items');
@@ -1423,11 +1442,6 @@ function bindGestaoEvents() {
         editingGestaoOrderId = null;
         showGestaoPedidoListPanel();
         loadGestaoOrdersList();
-    });
-    document.getElementById('gestao-nav-project-status')?.addEventListener('click', async () => {
-        editingGestaoOrderId = null;
-        showGestaoProjectStatusPanel();
-        loadGestaoProjectStatusList();
     });
     document.getElementById('gestao-nav-alterar-status-projeto')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
@@ -1440,19 +1454,19 @@ function bindGestaoEvents() {
             loadGestaoClientesList();
         }
     });
+    document.getElementById('gestao-nav-architects')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoArchitectsPanel();
+        if (typeof loadGestaoArchitectsList === 'function') {
+            loadGestaoArchitectsList();
+        }
+    });
     document.getElementById('gestao-nav-addr')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         if (typeof clearGestaoAddrOrderReturn === 'function') clearGestaoAddrOrderReturn();
         showGestaoAddrPanel();
         if (typeof loadGestaoAddrPanelData === 'function') {
             loadGestaoAddrPanelData();
-        }
-    });
-    document.getElementById('gestao-nav-calendar-event-types')?.addEventListener('click', async () => {
-        editingGestaoOrderId = null;
-        showGestaoCalendarEventTypesPanel();
-        if (typeof loadGestaoCalendarEventTypesList === 'function') {
-            loadGestaoCalendarEventTypesList();
         }
     });
     document.getElementById('gestao-nav-marceneiros')?.addEventListener('click', async () => {
@@ -1477,13 +1491,6 @@ function bindGestaoEvents() {
             loadGestaoThirdPartySubtypesList();
         }
     });
-    document.getElementById('gestao-nav-compra-status')?.addEventListener('click', async () => {
-        editingGestaoOrderId = null;
-        showGestaoCompraStatusPanel();
-        if (typeof loadGestaoCompraStatusList === 'function') {
-            loadGestaoCompraStatusList();
-        }
-    });
     document.getElementById('gestao-new-characteristic-form')?.addEventListener('submit', addGestaoProjectCharacteristic);
     document.getElementById('gestao-new-third-party-subtype-form')?.addEventListener('submit', addGestaoThirdPartySubtype);
     document.getElementById('gestao-new-compra-status-form')?.addEventListener('submit', addGestaoCompraStatus);
@@ -1499,8 +1506,13 @@ function bindGestaoEvents() {
             openProjectRelationPickerModal('substituido');
         }
     });
-    document.getElementById('gestao-new-cliente-form')?.addEventListener('submit', (e) => {
-        if (typeof addGestaoCliente === 'function') addGestaoCliente(e);
+    document.getElementById('gestao-clientes-add')?.addEventListener('click', () => {
+        if (typeof openClienteCreateModal === 'function') {
+            openClienteCreateModal({ source: 'cadastro' });
+        }
+    });
+    document.getElementById('gestao-clientes-filter-name')?.addEventListener('input', () => {
+        if (typeof renderGestaoClientesList === 'function') renderGestaoClientesList();
     });
     document.getElementById('gestao-new-calendar-event-type-form')?.addEventListener('submit', (e) => {
         if (typeof addGestaoCalendarEventType === 'function') addGestaoCalendarEventType(e);
@@ -1519,7 +1531,23 @@ function bindGestaoEvents() {
             deleteGestaoCalendarEventTypeRow(deleteBtn.closest('tr'));
         }
     });
+    if (typeof bindGestaoDealStagesEvents === 'function') bindGestaoDealStagesEvents();
+    if (typeof bindGestaoLostReasonsEvents === 'function') bindGestaoLostReasonsEvents();
+    if (typeof bindGestaoArchitectEvents === 'function') bindGestaoArchitectEvents();
+    if (typeof bindGestaoContactEvents === 'function') bindGestaoContactEvents();
     document.getElementById('gestao-clientes-list')?.addEventListener('click', (event) => {
+        const contactBtn = event.target.closest('.gestao-cliente-contacts');
+        if (contactBtn && typeof openContactManagerModal === 'function') {
+            event.preventDefault();
+            const tr = contactBtn.closest('tr');
+            openContactManagerModal({
+                ownerType: typeof CONTACT_OWNER_TYPE_CLIENT === 'string' ? CONTACT_OWNER_TYPE_CLIENT : 'client',
+                ownerId: Number(tr?.dataset.clienteId),
+                ownerName: tr?.querySelector('.gestao-cliente-nome')?.value.trim() || ''
+            });
+            return;
+        }
+
         const addrBtn = event.target.closest('.gestao-cliente-addrs');
         if (addrBtn && typeof openGestaoAddrCadastroFromClient === 'function') {
             event.preventDefault();
@@ -1543,10 +1571,6 @@ function bindGestaoEvents() {
             event.preventDefault();
             deleteGestaoClienteRow(deleteBtn.closest('tr'));
         }
-    });
-    document.getElementById('gestao-nav-usuarios')?.addEventListener('click', async () => {
-        editingGestaoOrderId = null;
-        showGestaoUsuariosPanel();
     });
     document.getElementById('gestao-nav-dashboard')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
@@ -1872,6 +1896,7 @@ async function openProjectRelationPickerModal(target = 'parent') {
 
 let clientePickerCache = [];
 let activeClientePickerCallback = null;
+let clienteCreateSource = 'picker';
 
 function selectClienteFromPicker(cliente) {
     if (typeof activeClientePickerCallback === 'function') {
@@ -1881,11 +1906,28 @@ function selectClienteFromPicker(cliente) {
     toggleModal('cliente-picker-modal', false);
 }
 
-function openClienteCreateModal() {
-    const searchInput = document.getElementById('cliente-picker-search');
+function configureClienteCreateModal(source = 'picker', name = '') {
+    clienteCreateSource = source === 'cadastro' ? 'cadastro' : 'picker';
+    const fromCadastro = clienteCreateSource === 'cadastro';
+    const hint = document.getElementById('cliente-create-hint');
+    const submit = document.getElementById('cliente-create-submit');
+    if (hint) {
+        hint.textContent = fromCadastro
+            ? 'O cliente será criado como ativo.'
+            : 'O cliente será criado como ativo e selecionado automaticamente';
+    }
+    if (submit) submit.textContent = fromCadastro ? 'Salvar' : 'Salvar e selecionar';
+    const nameInput = document.getElementById('cliente-create-nome');
+    if (nameInput) nameInput.value = name;
+}
+
+function openClienteCreateModal(options = {}) {
+    const fromCadastro = options.source === 'cadastro';
+    const searchInput = document.getElementById(fromCadastro ? 'gestao-clientes-filter-name' : 'cliente-picker-search');
     const nomeInput = document.getElementById('cliente-create-nome');
-    const filterText = (searchInput?.value || '').trim();
-    if (nomeInput) nomeInput.value = filterText;
+    const filterText = (options.name || searchInput?.value || '').trim();
+    document.getElementById('cliente-create-form')?.reset();
+    configureClienteCreateModal(fromCadastro ? 'cadastro' : 'picker', filterText);
     toggleModal('cliente-create-modal', true);
     nomeInput?.focus();
 }
@@ -1896,6 +1938,21 @@ async function saveClienteCreateFromPicker(event) {
     const nome = document.getElementById('cliente-create-nome')?.value.trim();
     if (!nome) {
         alertAppDialog('Informe o nome do cliente.');
+        return;
+    }
+
+    const contactName = document.getElementById('cliente-create-contact')?.value.trim() || '';
+    const contactFields = typeof validateContactPhoneEmail === 'function'
+        ? validateContactPhoneEmail(
+            document.getElementById('cliente-create-phone')?.value,
+            document.getElementById('cliente-create-email')?.value
+        )
+        : {
+            phone: document.getElementById('cliente-create-phone')?.value.trim() || null,
+            email: document.getElementById('cliente-create-email')?.value.trim() || null
+        };
+    if (contactFields.error) {
+        alertAppDialog(contactFields.error);
         return;
     }
 
@@ -1922,10 +1979,26 @@ async function saveClienteCreateFromPicker(event) {
         return;
     }
 
+    if (data?.id && typeof upsertOwnerContact === 'function') {
+        const ownerType = typeof CONTACT_OWNER_TYPE_CLIENT === 'string' ? CONTACT_OWNER_TYPE_CLIENT : 'client';
+        await upsertOwnerContact(ownerType, data.id, {
+            name: contactName,
+            phone: contactFields.phone,
+            email: contactFields.email
+        });
+    }
+
     clientePickerCache = [...(clientePickerCache || []), data]
         .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
 
     document.getElementById('cliente-create-form')?.reset();
+    if (clienteCreateSource === 'cadastro') {
+        toggleModal('cliente-create-modal', false);
+        const filterInput = document.getElementById('gestao-clientes-filter-name');
+        if (filterInput) filterInput.value = '';
+        if (typeof loadGestaoClientesList === 'function') await loadGestaoClientesList();
+        return;
+    }
     selectClienteFromPicker({ id: data.id, name: data.name });
 }
 

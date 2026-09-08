@@ -7,6 +7,8 @@ let activeDetalhamentoOrderProjectId = null;
 let activeDetalhamentoRecord = null;
 let activeDetalhamentoProjectName = '';
 let activeDetalhamentoOrderId = null;
+let activeDetalhamentoClientId = null;
+let activeDetalhamentoAddrId = null;
 let detalhamentoProjetistasCache = [];
 let detalhamentoRequestsCache = [];
 
@@ -290,6 +292,7 @@ async function openDetailingModal(orderProjectId, projectName = '') {
 
         document.getElementById('detalhamento-modal-project-name').textContent = activeDetalhamentoProjectName;
         populateDetalhamentoForm(activeDetalhamentoRecord);
+        await loadDetalhamentoHeaderContext();
         toggleModal('detalhamento-modal', true);
         await loadDetalhamentoRequestsList();
         if (typeof loadDetailingDriveFiles === 'function') {
@@ -309,6 +312,7 @@ function closeDetailingModal() {
     activeDetalhamentoRecord = null;
     activeDetalhamentoProjectName = '';
     activeDetalhamentoOrderId = null;
+    resetDetalhamentoHeaderContext();
     detalhamentoRequestsCache = [];
     if (typeof detailingDriveContext !== 'undefined') {
         detailingDriveContext = null;
@@ -578,6 +582,59 @@ function findLastEmProducaoHistoryIndex(entries = []) {
 
 window.findLastEmProducaoHistoryIndex = findLastEmProducaoHistoryIndex;
 
+function resetDetalhamentoHeaderContext() {
+    activeDetalhamentoClientId = null;
+    activeDetalhamentoAddrId = null;
+    const meta = document.getElementById('detalhamento-modal-order-client');
+    const viewBtn = document.getElementById('btn-detalhamento-client-view');
+    if (meta) meta.textContent = '—';
+    viewBtn?.setAttribute('disabled', 'disabled');
+}
+
+async function loadDetalhamentoHeaderContext() {
+    resetDetalhamentoHeaderContext();
+    const orderId = await resolveDetalhamentoOrderId();
+    if (!orderId) return;
+
+    const selects = [
+        typeof getSalesOrderMinimalEmbedSelect === 'function'
+            ? getSalesOrderMinimalEmbedSelect('addrId')
+            : 'addrId, id, orderCode, clientId, client:Client(name)',
+        'id, orderCode, clientId, addrId, client:Client(id, name)',
+        'id, orderCode, clientId, client:Client(id, name)',
+        'id, orderCode, clientId'
+    ];
+
+    let order = null;
+    for (const select of selects) {
+        const { data, error } = await supabaseClient
+            .from('salesOrders')
+            .select(select)
+            .eq('id', orderId)
+            .maybeSingle();
+        if (!error) {
+            order = data;
+            break;
+        }
+        if (!/addrId|relationship|embed|schema cache|column/i.test(error.message || '')) break;
+    }
+    if (!order) return;
+
+    activeDetalhamentoClientId = Number(order.clientId || order.client?.id) || null;
+    activeDetalhamentoAddrId = Number(order.addrId) || null;
+    const orderCode = order.orderCode || '—';
+    const clientName = (typeof getOrderClientName === 'function' && getOrderClientName(order))
+        || order.client?.name
+        || '—';
+
+    const meta = document.getElementById('detalhamento-modal-order-client');
+    if (meta) meta.textContent = `${orderCode} — ${clientName}`;
+    const viewBtn = document.getElementById('btn-detalhamento-client-view');
+    if (viewBtn && activeDetalhamentoClientId) {
+        viewBtn.removeAttribute('disabled');
+    }
+}
+
 async function resolveDetalhamentoOrderId() {
     if (activeDetalhamentoOrderId) return activeDetalhamentoOrderId;
     if (!activeDetalhamentoOrderProjectId) return null;
@@ -805,6 +862,10 @@ window.renderProjectViewDetailingSection = renderProjectViewDetailingSection;
 function bindDetailingEvents() {
     document.getElementById('btn-close-detalhamento-modal')?.addEventListener('click', closeDetailingModal);
     document.getElementById('btn-close-detalhamento-modal-footer')?.addEventListener('click', closeDetailingModal);
+    document.getElementById('btn-detalhamento-client-view')?.addEventListener('click', () => {
+        if (typeof openClientDetailsModal !== 'function') return;
+        openClientDetailsModal(activeDetalhamentoClientId, { addrId: activeDetalhamentoAddrId });
+    });
     document.getElementById('btn-detalhamento-associar')?.addEventListener('click', handleDetalhamentoAssociar);
     document.getElementById('btn-detalhamento-iniciar')?.addEventListener('click', handleDetalhamentoIniciar);
     document.getElementById('btn-detalhamento-encerrar')?.addEventListener('click', handleDetalhamentoEncerrar);

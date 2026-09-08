@@ -7,7 +7,14 @@ function setSettingsNavActive(panelKey) {
     const buttons = {
         geral: document.getElementById('settings-nav-geral'),
         'import-pedido': document.getElementById('settings-nav-import-pedido'),
-        'addr-label': document.getElementById('settings-nav-addr-label')
+        'addr-label': document.getElementById('settings-nav-addr-label'),
+        'calendar-event-types': document.getElementById('settings-nav-calendar-event-types'),
+        'deal-stages': document.getElementById('settings-nav-deal-stages'),
+        'lost-reasons': document.getElementById('settings-nav-lost-reasons'),
+        'project-status': document.getElementById('settings-nav-project-status'),
+        'create-detailing': document.getElementById('settings-nav-create-detailing'),
+        'compra-status': document.getElementById('settings-nav-compra-status'),
+        usuarios: document.getElementById('settings-nav-usuarios')
     };
 
     Object.entries(buttons).forEach(([key, button]) => {
@@ -18,6 +25,15 @@ function setSettingsNavActive(panelKey) {
     document.getElementById('settings-general-panel')?.classList.toggle('hidden', panelKey !== 'geral');
     document.getElementById('settings-import-pedido-panel')?.classList.toggle('hidden', panelKey !== 'import-pedido');
     document.getElementById('settings-addr-label-panel')?.classList.toggle('hidden', panelKey !== 'addr-label');
+
+    const cadastroPanels = typeof SETTINGS_CADASTRO_PANELS === 'object' ? SETTINGS_CADASTRO_PANELS : {};
+    Object.entries(cadastroPanels).forEach(([key, panelId]) => {
+        document.getElementById(panelId)?.classList.toggle('hidden', panelKey !== key);
+    });
+
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({ view: 'settings', settingsNav: panelKey });
+    }
 }
 
 function renderImportStatusWpsList(rows) {

@@ -144,7 +144,7 @@ function canAccessGestao(user = currentUser) {
 
 function canAccessMontagemProgramacao(user = currentUser) {
     if (isThirdParty(user)) return false;
-    return isAdmin(user) || isGestorProjetos(user);
+    return isAdmin(user) || isGestorProjetos(user) || isGestorFabrica(user);
 }
 
 function canViewKanban(user = currentUser) {
@@ -175,6 +175,18 @@ function canAccessCalendar(user = currentUser) {
         || isGestorComercial(user)
         || isGestorProjetos(user)
         || isGestorFabrica(user);
+}
+
+function canAccessComercial(user = currentUser) {
+    if (!user || isThirdParty(user)) return false;
+    return isAdmin(user)
+        || user.role === 'Consultor'
+        || isGestorComercial(user);
+}
+
+function canSeeAllDeals(user = currentUser) {
+    if (!canAccessComercial(user)) return false;
+    return isAdmin(user) || isGestorComercial(user);
 }
 
 function canAccessOrdersDashboard(user = currentUser) {

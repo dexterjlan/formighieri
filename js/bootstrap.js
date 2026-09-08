@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '1.0.13';
+const APP_CACHE_VERSION = '1.0.38';
 
 const PARTIALS = [
     'partials/login.html',
@@ -37,6 +37,12 @@ const SCRIPTS = [
     'js/core/calendar-google-sync.js',
     'js/core/drive-files.js',
     'js/core/welcome.js',
+    'js/comercial/comercial.js',
+    'js/comercial/comercial-funnel.js',
+    'js/comercial/comercial-deal-panel.js',
+    'js/comercial/comercial-activities.js',
+    'js/comercial/comercial-today.js',
+    'js/comercial/comercial-panel.js',
     'js/conversations/conversations-query.js',
     'js/admin/users-admin.js',
     'js/admin/user-impersonation.js',
@@ -53,6 +59,10 @@ const SCRIPTS = [
     'js/gestao/gestao-cadastros-purchase-types.js',
     'js/gestao/gestao-cadastros-calendar-types.js',
     'js/gestao/gestao-cadastros-addr.js',
+    'js/gestao/gestao-cadastros-deal-stages.js',
+    'js/gestao/gestao-cadastros-lost-reasons.js',
+    'js/gestao/gestao-cadastros-architects.js',
+    'js/gestao/gestao-cadastros-contacts.js',
     'js/gestao/gestao-alterar-status-projeto.js',
     'js/gestao/gestao-create-detailing.js',
     'js/gestao/gestao-dashboard.js',

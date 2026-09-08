@@ -107,6 +107,19 @@ function revealAuthenticatedShell() {
 }
 
 async function restoreGestaoView(state) {
+    const legacyGestaoNav = {
+        gantt: 'project-scheduling',
+        'programacao-projetos': 'project-scheduling'
+    };
+    const gestaoNav = legacyGestaoNav[state.gestaoNav] || state.gestaoNav || 'pedido';
+
+    if (typeof SETTINGS_CADASTRO_PANELS === 'object' && SETTINGS_CADASTRO_PANELS[gestaoNav]) {
+        if (typeof showSystemSettings === 'function' && isAdmin() && !(typeof isThirdParty === 'function' && isThirdParty())) {
+            await showSystemSettings(gestaoNav);
+            return;
+        }
+    }
+
     if (!canAccessGestao()) {
         showWelcome();
         return;
@@ -120,36 +133,25 @@ async function restoreGestaoView(state) {
         updateGestaoCadastrosNavVisibility();
     }
 
-    const legacyGestaoNav = {
-        gantt: 'project-scheduling',
-        'programacao-projetos': 'project-scheduling'
-    };
-    const gestaoNav = legacyGestaoNav[state.gestaoNav] || state.gestaoNav || 'pedido';
     const openGestaoPanel = {
         pedido: () => {
             if (typeof showGestaoPedidoListPanel === 'function') showGestaoPedidoListPanel();
             if (typeof loadGestaoOrdersList === 'function') loadGestaoOrdersList();
         },
-        'project-status': () => {
-            if (typeof showGestaoProjectStatusPanel === 'function') showGestaoProjectStatusPanel();
-        },
         'alterar-status-projeto': () => {
             if (typeof showGestaoAlterarStatusProjetoPanel === 'function') showGestaoAlterarStatusProjetoPanel();
-        },
-        'create-detailing': () => {
-            if (typeof showGestaoCreateDetailingPanel === 'function') showGestaoCreateDetailingPanel();
         },
         clientes: () => {
             if (typeof showGestaoClientesPanel === 'function') showGestaoClientesPanel();
             if (typeof loadGestaoClientesList === 'function') loadGestaoClientesList();
         },
+        architects: () => {
+            if (typeof showGestaoArchitectsPanel === 'function') showGestaoArchitectsPanel();
+            if (typeof loadGestaoArchitectsList === 'function') loadGestaoArchitectsList();
+        },
         addr: () => {
             if (typeof showGestaoAddrPanel === 'function') showGestaoAddrPanel();
             if (typeof loadGestaoAddrPanelData === 'function') loadGestaoAddrPanelData();
-        },
-        'calendar-event-types': () => {
-            if (typeof showGestaoCalendarEventTypesPanel === 'function') showGestaoCalendarEventTypesPanel();
-            if (typeof loadGestaoCalendarEventTypesList === 'function') loadGestaoCalendarEventTypesList();
         },
         marceneiros: () => {
             if (typeof showGestaoMarceneirosPanel === 'function') showGestaoMarceneirosPanel();
@@ -157,9 +159,6 @@ async function restoreGestaoView(state) {
         montadores: () => {
             if (typeof showGestaoMontadoresPanel === 'function') showGestaoMontadoresPanel();
             if (typeof loadGestaoMontadoresList === 'function') loadGestaoMontadoresList();
-        },
-        usuarios: () => {
-            if (typeof showGestaoUsuariosPanel === 'function') showGestaoUsuariosPanel();
         },
         dashboard: () => {
             if (typeof showGestaoDashboardPanel === 'function') showGestaoDashboardPanel();
@@ -300,6 +299,12 @@ async function restoreAppNavState() {
                     return true;
                 }
                 return false;
+            case 'comercial':
+                if (typeof showComercial === 'function') {
+                    await showComercial(state.comercialTab || 'board');
+                    return true;
+                }
+                return false;
             case 'project-scheduling':
                 if (typeof showProjectSchedulingView === 'function') {
                     await showProjectSchedulingView();
@@ -325,7 +330,7 @@ async function restoreAppNavState() {
                 showApprovalsQuery();
                 return true;
             case 'settings':
-                if (typeof showSystemSettings === 'function') await showSystemSettings();
+                if (typeof showSystemSettings === 'function') await showSystemSettings(state.settingsNav || 'geral');
                 return true;
             default:
                 return false;
@@ -368,6 +373,7 @@ function updateAdminNav() {
     document.getElementById("btn-conversations-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-approvals-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-calendario").classList.toggle("hidden", !canAccessCalendar());
+    document.getElementById("btn-comercial")?.classList.toggle("hidden", typeof canAccessComercial === 'function' ? !canAccessComercial() : true);
     document.getElementById("btn-kanban")?.classList.toggle("hidden", typeof canViewKanban === 'function' ? !canViewKanban() : true);
     document.getElementById("btn-project-scheduling")?.classList.toggle("hidden", !canViewProjectScheduling());
     document.getElementById("btn-programacao-montagem")?.classList.toggle("hidden", !canViewProgramacaoMontagem());
@@ -388,6 +394,7 @@ function updateMainNavActive(activeView) {
         requests: document.getElementById('btn-conversations-query'),
         approvals: document.getElementById('btn-approvals-query'),
         calendar: document.getElementById('btn-calendario'),
+        comercial: document.getElementById('btn-comercial'),
         kanban: document.getElementById('btn-kanban'),
         'project-scheduling': document.getElementById('btn-project-scheduling'),
         'programacao-montagem': document.getElementById('btn-programacao-montagem'),
@@ -417,6 +424,7 @@ function hideSubViews() {
     document.getElementById("conversations-query-view").classList.add("hidden");
     document.getElementById("approvals-query-view").classList.add("hidden");
     document.getElementById("calendar-view").classList.add("hidden");
+    document.getElementById("comercial-view")?.classList.add("hidden");
     document.getElementById("gestao-view").classList.add("hidden");
     document.getElementById("pendencias-view").classList.add("hidden");
     document.getElementById("pesquisas-view")?.classList.add("hidden");
@@ -445,8 +453,11 @@ function showDashboard() {
 
 function showUsersAdmin() {
     if (!isAdmin()) return;
-    if (typeof showGestao === 'function') {
-        showGestao();
+    if (typeof showSystemSettings === 'function') {
+        void showSystemSettings('usuarios');
+        return;
+    }
+    if (typeof showGestaoUsuariosPanel === 'function') {
         showGestaoUsuariosPanel();
     }
 }
@@ -486,5 +497,8 @@ function bindNavigationEvents() {
     });
     document.getElementById("btn-programacao-montagem")?.addEventListener("click", () => {
         if (typeof showProgramacaoMontagemView === 'function') showProgramacaoMontagemView();
+    });
+    document.getElementById("btn-comercial")?.addEventListener("click", () => {
+        if (typeof showComercial === 'function') showComercial();
     });
 }
