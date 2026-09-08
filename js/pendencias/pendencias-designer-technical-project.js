@@ -993,7 +993,7 @@ function renderPendenciasCargaPorProjetista(
             <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                 <div>
                     <h3 class="font-bold text-sm text-slate-900">Carga por projetista</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial Cons., Em Revisão Comercial Proj., Aguardando Aprovação, Aguardando PPCP, Implantação e Detalhamento. Implantação conta para quem iniciou a implantação.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Aguardando Projeto Técnico, Projeto Técnico, Em Revisão Comercial Cons., Em Revisão Comercial Proj., Aguardando Aprovação, Nomear, Aguardando PPCP, Implantação e Detalhamento. Implantação conta para quem iniciou a implantação.</p>
                 </div>
                 <button type="button" id="btn-pendencias-refresh-carga-projetista"
                     class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
