@@ -13,7 +13,7 @@
  *
  * Pasta prod: FGP / {pedido} / {projeto} / {detalhamento|revisao|requisicao}
  * Pasta dev:  FGP-DEV / {pedido} / {projeto} / ...
- * Detalhamento: PDF/ZIP. Requisição e revisão: uma imagem por atividade.
+ * Detalhamento: PDF/ZIP/RAR. Requisição e revisão: uma imagem por atividade.
  */
 
 var FGP_DRIVE_ROOT_FOLDER_NAME = 'FGP';
@@ -64,13 +64,14 @@ function isAllowedDriveUploadFileName_(fileName, folderKind) {
   if (isImageDriveFolderKind_(kind)) {
     return /\.(jpe?g|png|webp|gif|heic|heif)$/.test(lower);
   }
-  return /\.pdf$/.test(lower) || /\.zip$/.test(lower);
+  return /\.pdf$/.test(lower) || /\.zip$/.test(lower) || /\.rar$/.test(lower);
 }
 
 function mimeTypeForDriveUpload_(fileName, mimeType) {
   var lower = String(fileName || '').toLowerCase();
   if (/\.pdf$/.test(lower)) return 'application/pdf';
   if (/\.zip$/.test(lower)) return 'application/zip';
+  if (/\.rar$/.test(lower)) return 'application/vnd.rar';
   if (/\.png$/.test(lower)) return 'image/png';
   if (/\.webp$/.test(lower)) return 'image/webp';
   if (/\.gif$/.test(lower)) return 'image/gif';
@@ -341,7 +342,7 @@ function resolveDriveUploadContext_(body) {
   if (!fileName || !isAllowedDriveUploadFileName_(fileName, folderKind)) {
     throw new Error(isImageDriveFolderKind_(folderKind)
       ? 'Envie apenas uma imagem (JPEG, PNG, WebP, GIF ou HEIC)'
-      : 'Envie apenas PDF ou ZIP');
+      : 'Envie apenas PDF, ZIP ou RAR');
   }
   var maxBytes = folderKind === 'request'
     ? (10 * 1024 * 1024)

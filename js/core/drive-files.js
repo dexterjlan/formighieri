@@ -21,10 +21,10 @@ const DRIVE_FILE_FOLDER_NAMES = {
 };
 
 const DRIVE_FILE_MAX_BYTES = 100 * 1024 * 1024;
-const DRIVE_FILE_DOCUMENT_EXTENSIONS = ['pdf', 'zip'];
+const DRIVE_FILE_DOCUMENT_EXTENSIONS = ['pdf', 'zip', 'rar'];
 const DRIVE_FILE_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif'];
 const DRIVE_FILE_ALLOWED_EXTENSIONS = DRIVE_FILE_DOCUMENT_EXTENSIONS;
-const DRIVE_FILE_INPUT_ACCEPT = '.pdf,.zip,application/pdf,application/zip';
+const DRIVE_FILE_INPUT_ACCEPT = '.pdf,.zip,.rar,application/pdf,application/zip,application/vnd.rar,application/x-rar-compressed';
 const DRIVE_FILE_IMAGE_INPUT_ACCEPT = 'image/*';
 const DRIVE_FILE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const DRIVE_FILE_REVISION_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
@@ -93,6 +93,7 @@ function mimeTypeForDriveUpload(fileName, mimeType) {
     const ext = getDriveFileExtension(fileName);
     if (ext === 'pdf') return 'application/pdf';
     if (ext === 'zip') return 'application/zip';
+    if (ext === 'rar') return 'application/vnd.rar';
     if (ext === 'png') return 'image/png';
     if (ext === 'webp') return 'image/webp';
     if (ext === 'gif') return 'image/gif';
@@ -123,7 +124,7 @@ function validateDriveUploadFiles(files, folderKind = DRIVE_FILE_FOLDER_KIND.DET
         if (isImageDriveFolderKind(folderKind)) {
             return `O arquivo "${invalidType.name}" não é permitido. Use uma imagem (JPEG, PNG, WebP, GIF ou HEIC).`;
         }
-        return `O arquivo "${invalidType.name}" não é permitido. Envie apenas PDF ou ZIP.`;
+        return `O arquivo "${invalidType.name}" não é permitido. Envie apenas PDF, ZIP ou RAR.`;
     }
     const tooLarge = list.find(file => Number(file?.size) > maxBytes);
     if (tooLarge) {
