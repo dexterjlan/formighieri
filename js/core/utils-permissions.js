@@ -155,6 +155,22 @@ function canViewProjectScheduling(user = currentUser) {
     return Boolean(user) && !isThirdParty(user);
 }
 
+function canViewProjectSchedulingOld(user = currentUser) {
+    return isAdmin(user);
+}
+
+function canAccessProgramacoes(user = currentUser) {
+    return Boolean(user) && !isThirdParty(user);
+}
+
+function canReorderProgramacoesProjects(user = currentUser) {
+    if (!user || isThirdParty(user)) return false;
+    return isAdmin(user)
+        || isGestorProjetos(user)
+        || isGestorComercial(user)
+        || isGestorFabrica(user);
+}
+
 function canEditProjectScheduling(user = currentUser) {
     return canAccessGestao(user);
 }

@@ -498,6 +498,7 @@ function getPendenciasInteractiveStatusColumn(options = {}) {
     return {
         key: options.key || 'statusName',
         label: options.label || 'Status',
+        thClass: options.thClass || '',
         cellClass: options.cellClass || 'p-3',
         render: options.render || (row => {
             const statusName = row.statusName || '—';
@@ -548,6 +549,7 @@ function renderPendenciasInteractiveTableScreen(content, config = {}) {
         emptyMessage = 'Nenhum registro.',
         filteredEmptyMessage = 'Nenhum registro encontrado com os filtros aplicados.',
         minWidth = '760px',
+        disableSort = false,
         onBind
     } = config;
 
@@ -592,6 +594,7 @@ function renderPendenciasInteractiveTableScreen(content, config = {}) {
         emptyMessage,
         filteredEmptyMessage,
         minWidth,
+        disableSort,
         onBind,
         getRowClass: config.getRowClass,
         getRowAttrs: config.getRowAttrs

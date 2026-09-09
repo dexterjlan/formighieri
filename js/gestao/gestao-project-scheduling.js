@@ -90,7 +90,10 @@ function applyProjectSchedulingReadOnlyUi() {
 function updateProjectSchedulingNavVisibility() {
     const button = document.getElementById('gestao-nav-project-scheduling');
     if (button) {
-        button.classList.toggle('hidden', !canViewProjectScheduling());
+        const visible = typeof canViewProjectSchedulingOld === 'function'
+            ? canViewProjectSchedulingOld()
+            : (typeof isAdmin === 'function' && isAdmin());
+        button.classList.toggle('hidden', !visible);
     }
 }
 

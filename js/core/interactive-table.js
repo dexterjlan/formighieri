@@ -29,8 +29,10 @@ function normalizeInteractiveTableSorts(defaultSort = null) {
         .filter(Boolean);
 }
 
-function getInteractiveTableState(tableId, defaultSort = null, columns = []) {
-    const resolvedDefault = resolveInteractiveTableDefaultSort(defaultSort, columns);
+function getInteractiveTableState(tableId, defaultSort = null, columns = [], options = {}) {
+    const resolvedDefault = options.disableSort
+        ? []
+        : resolveInteractiveTableDefaultSort(defaultSort, columns);
 
     if (!interactiveTableStates[tableId]) {
         interactiveTableStates[tableId] = {
@@ -52,6 +54,10 @@ function getInteractiveTableState(tableId, defaultSort = null, columns = []) {
     if (state.defaultSortVersion !== INTERACTIVE_TABLE_DEFAULT_SORT_VERSION) {
         state.sorts = resolvedDefault;
         state.defaultSortVersion = INTERACTIVE_TABLE_DEFAULT_SORT_VERSION;
+    }
+
+    if (options.disableSort) {
+        state.sorts = [];
     }
 
     return state;
@@ -288,14 +294,16 @@ function renderInteractiveTableBody(rows, columns, options = {}) {
     }).join('');
 }
 
-function renderInteractiveTableHead(columns, state) {
+function renderInteractiveTableHead(columns, state, options = {}) {
+    const disableSort = Boolean(options.disableSort);
     const sortRow = columns.map(column => {
         const alignClass = column.align === 'right' ? 'text-right' : 'text-left';
         const thClass = column.thClass || '';
         const label = escapeHtml(column.label || '');
 
-        if (!isInteractiveTableColumnSortable(column)) {
-            return `<th class="${alignClass} p-3 font-semibold ${thClass}" scope="col">${label}</th>`;
+        if (disableSort || !isInteractiveTableColumnSortable(column)) {
+            const title = escapeHtml(column.title || column.label || '');
+            return `<th class="${alignClass} p-3 font-semibold ${thClass}" scope="col"${title ? ` title="${title}"` : ''}>${label}</th>`;
         }
 
         return `<th class="${alignClass} p-3 font-semibold ${thClass}" scope="col" aria-sort="${getInteractiveTableAriaSort(column, state)}">
@@ -311,14 +319,18 @@ function renderInteractiveTableHead(columns, state) {
 
     const filterRow = columns.map(column => {
         const alignClass = column.align === 'right' ? 'text-right' : 'text-left';
+        const thClass = column.thClass || '';
         if (!isInteractiveTableColumnFilterable(column)) {
-            return `<th class="${alignClass}"></th>`;
+            return `<th class="${alignClass} ${thClass}"></th>`;
         }
         const value = escapeHtml(state.filters[column.key] || '');
         const label = escapeHtml(column.label || '');
-        return `<th class="${alignClass}">
+        const inputClass = column.filterInputClass
+            ? `interactive-table-filter-input ${column.filterInputClass}`
+            : 'interactive-table-filter-input';
+        return `<th class="${alignClass} ${thClass}">
             <input type="search"
-                class="interactive-table-filter-input"
+                class="${escapeHtml(inputClass)}"
                 data-filter-key="${escapeHtml(column.key)}"
                 value="${value}"
                 placeholder="Filtrar"
@@ -339,7 +351,8 @@ function mountInteractiveTable(container, config = {}) {
     const tableId = config.tableId || 'interactive-table';
     const columns = config.columns || [];
     const rows = config.rows || [];
-    const state = getInteractiveTableState(tableId, config.defaultSort, columns);
+    const disableSort = Boolean(config.disableSort);
+    const state = getInteractiveTableState(tableId, config.defaultSort, columns, { disableSort });
     const minWidth = config.minWidth || '760px';
 
     if (!rows.length) {
@@ -351,13 +364,13 @@ function mountInteractiveTable(container, config = {}) {
         <div class="interactive-table-toolbar">
             <span class="interactive-table-count" data-role="count"></span>
             <div class="interactive-table-toolbar-actions">
-                <button type="button" class="interactive-table-clear hidden" data-role="clear-sorts">Limpar ordenação</button>
+                ${disableSort ? '' : '<button type="button" class="interactive-table-clear hidden" data-role="clear-sorts">Limpar ordenação</button>'}
                 <button type="button" class="interactive-table-clear hidden" data-role="clear-filters">Limpar filtros</button>
             </div>
         </div>
         <div class="overflow-x-auto">
             <table class="interactive-table w-full text-sm" style="min-width: ${escapeHtml(minWidth)};" data-table-id="${escapeHtml(tableId)}">
-                <thead class="bg-slate-50 text-xs uppercase text-slate-500">${renderInteractiveTableHead(columns, state)}</thead>
+                <thead class="bg-slate-50 text-xs uppercase text-slate-500">${renderInteractiveTableHead(columns, state, { disableSort })}</thead>
                 <tbody data-role="body"></tbody>
             </table>
         </div>

@@ -171,6 +171,13 @@ async function restoreGestaoView(state) {
             if (typeof showGestaoCronogramaPedidoPanel === 'function') showGestaoCronogramaPedidoPanel();
         },
         'project-scheduling': () => {
+            const canOpenOld = typeof canViewProjectSchedulingOld === 'function'
+                ? canViewProjectSchedulingOld()
+                : (typeof isAdmin === 'function' && isAdmin());
+            if (!canOpenOld) {
+                if (typeof showGestaoPedidoListPanel === 'function') showGestaoPedidoListPanel();
+                return;
+            }
             if (typeof showProjectSchedulingView === 'function') showProjectSchedulingView({ fromGestao: true });
             else if (typeof showGestaoProjectSchedulingPanel === 'function') showGestaoProjectSchedulingPanel();
         },
@@ -305,9 +312,20 @@ async function restoreAppNavState() {
                     return true;
                 }
                 return false;
+            case 'programacoes':
+                if (typeof restoreProgramacoesView === 'function') {
+                    await restoreProgramacoesView(state);
+                    return true;
+                }
+                return false;
             case 'project-scheduling':
-                if (typeof showProjectSchedulingView === 'function') {
+                if (typeof canViewProjectSchedulingOld === 'function' && canViewProjectSchedulingOld()
+                    && typeof showProjectSchedulingView === 'function') {
                     await showProjectSchedulingView();
+                    return true;
+                }
+                if (typeof restoreProgramacoesView === 'function') {
+                    await restoreProgramacoesView({ view: 'programacoes', programacoesSection: 'projects' });
                     return true;
                 }
                 return false;
@@ -375,11 +393,13 @@ function updateAdminNav() {
     document.getElementById("btn-calendario").classList.toggle("hidden", !canAccessCalendar());
     document.getElementById("btn-comercial")?.classList.toggle("hidden", typeof canAccessComercial === 'function' ? !canAccessComercial() : true);
     document.getElementById("btn-kanban")?.classList.toggle("hidden", typeof canViewKanban === 'function' ? !canViewKanban() : true);
-    document.getElementById("btn-project-scheduling")?.classList.toggle("hidden", !canViewProjectScheduling());
+    document.getElementById("btn-programacoes")?.classList.toggle("hidden", typeof canAccessProgramacoes === 'function' ? !canAccessProgramacoes() : true);
+    document.getElementById("btn-project-scheduling")?.classList.toggle("hidden", typeof canViewProjectSchedulingOld === 'function' ? !canViewProjectSchedulingOld() : !isAdmin());
     document.getElementById("btn-programacao-montagem")?.classList.toggle("hidden", !canViewProgramacaoMontagem());
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
     if (typeof updatePesquisasNav === 'function') updatePesquisasNav();
+    if (typeof updateProgramacoesNav === 'function') updateProgramacoesNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
     if (typeof updateCalendarGoogleSyncControls === 'function') updateCalendarGoogleSyncControls();
 }
@@ -396,6 +416,7 @@ function updateMainNavActive(activeView) {
         calendar: document.getElementById('btn-calendario'),
         comercial: document.getElementById('btn-comercial'),
         kanban: document.getElementById('btn-kanban'),
+        programacoes: document.getElementById('btn-programacoes'),
         'project-scheduling': document.getElementById('btn-project-scheduling'),
         'programacao-montagem': document.getElementById('btn-programacao-montagem'),
         gestao: document.getElementById('btn-gestao'),
@@ -426,6 +447,7 @@ function hideSubViews() {
     document.getElementById("calendar-view").classList.add("hidden");
     document.getElementById("comercial-view")?.classList.add("hidden");
     document.getElementById("gestao-view").classList.add("hidden");
+    document.getElementById("programacoes-view")?.classList.add("hidden");
     document.getElementById("pendencias-view").classList.add("hidden");
     document.getElementById("pesquisas-view")?.classList.add("hidden");
 }

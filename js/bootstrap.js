@@ -96,6 +96,8 @@ const SCRIPTS = [
     'js/pendencias/pendencias-gestor-entrega-tecnica.js',
     'js/pendencias/pendencias-purchases.js',
     'js/pendencias/pendencias-overview.js',
+    'js/programacoes/programacoes-core.js',
+    'js/programacoes/programacoes-projects.js',
     'js/pesquisas/pesquisas-core.js',
     'js/pesquisas/pesquisas-revisions-query.js',
     'js/pesquisas/pesquisas-requests-query.js',

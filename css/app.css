@@ -2257,6 +2257,24 @@ body.gestao-kanban-fullscreen-active {
 .interactive-table-filter-input:focus {
     outline: none;
     border-color: rgb(124 58 237);
+    box-shadow: 0 0 0 3px rgb(124 58 237 / 0.12);
+}
+
+.interactive-table-filter-input--compact {
+    min-width: 0;
+    width: 100%;
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+}
+
+.programacoes-col-seq {
+    width: 2.75rem;
+    max-width: 3.25rem;
+}
+
+.programacoes-col-order {
+    width: 4.25rem;
+    max-width: 5rem;
 }
 
 .pendencias-sem-projetista-previsao {
@@ -2265,6 +2283,36 @@ body.gestao-kanban-fullscreen-active {
 
 .pendencias-sem-projetista-designer {
     min-width: 11rem;
+}
+
+.programacoes-priority-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.programacoes-move-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid rgb(199 210 254);
+    border-radius: 0.5rem;
+    background: rgb(238 242 255);
+    color: rgb(55 48 163);
+    font-size: 0.65rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.programacoes-move-btn:hover:not(:disabled) {
+    background: rgb(199 210 254);
+}
+
+.programacoes-move-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
 }
 
 .pendencias-project-characteristics-chips {

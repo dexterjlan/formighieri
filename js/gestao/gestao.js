@@ -170,7 +170,10 @@ async function showKanbanView(options = {}) {
 window.showKanbanView = showKanbanView;
 
 async function showProjectSchedulingView(options = {}) {
-    if (!canViewProjectScheduling()) return;
+    const canOpenOld = typeof canViewProjectSchedulingOld === 'function'
+        ? canViewProjectSchedulingOld()
+        : (typeof isAdmin === 'function' && isAdmin());
+    if (!canOpenOld) return;
 
     if (typeof hideSubViews === 'function') hideSubViews();
     document.getElementById('gestao-view')?.classList.remove('hidden');

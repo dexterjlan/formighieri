@@ -32,8 +32,10 @@
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Comercial</button>
                 <button type="button" id="btn-kanban"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Kanban</button>
-                <button type="button" id="btn-project-scheduling"
+                <button type="button" id="btn-programacoes"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Programações</button>
+                <button type="button" id="btn-project-scheduling"
+                    class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Programações_old</button>
                 <button type="button" id="btn-programacao-montagem"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Programação Montagem</button>
                 <button type="button" id="btn-pendencias"
@@ -826,7 +828,7 @@
                         </button>
                         <button type="button" id="gestao-nav-project-scheduling"
                             class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
-                            Programações
+                            Programações_old
                         </button>
                         <button type="button" id="gestao-nav-montagem-programacao"
                             class="gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent">
@@ -2125,7 +2127,7 @@
                         </p>
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
                             <div>
-                                <h3 class="font-bold text-sm text-slate-900">Programações</h3>
+                                <h3 class="font-bold text-sm text-slate-900">Programações_old</h3>
                                 <p class="text-xs text-slate-400 mt-0.5">Previsão opcional por status do projeto. Calendário acima e tabela de edição abaixo.</p>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
@@ -2704,6 +2706,36 @@
                             <p class="text-xs text-slate-400 text-center py-6">Nenhum dia selecionado.</p>
                         </div>
                     </aside>
+                </div>
+            </div>
+        </main>
+
+        <!-- TELA: PROGRAMAÇÕES -->
+        <main id="programacoes-view" class="fm-programacoes hidden flex-1 w-full mx-auto p-4 md:p-6">
+            <div class="flex flex-col lg:flex-row gap-4 min-h-[calc(100vh-140px)]">
+                <aside class="fm-programacoes-sidebar lg:w-56 shrink-0">
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden sticky top-4">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h2 class="font-bold text-sm text-slate-900">Programações</h2>
+                            <p class="text-xs text-slate-400 mt-1">Prioridade de entrega para produção.</p>
+                        </div>
+                        <nav id="programacoes-sidebar-nav" class="p-3 programacoes-sidebar-nav"></nav>
+                    </div>
+                </aside>
+                <div class="fm-programacoes-main flex-1 min-w-0 relative">
+                    <div id="programacoes-action-loading"
+                        class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                        <div id="programacoes-action-loading-spinner"
+                            class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
+                        <div id="programacoes-action-loading-success"
+                            class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                        <div id="programacoes-action-loading-error"
+                            class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                        <p id="programacoes-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                    </div>
+                    <div id="programacoes-content">
+                        <p class="text-xs text-slate-400 text-center py-10">Selecione um item no menu.</p>
+                    </div>
                 </div>
             </div>
         </main>

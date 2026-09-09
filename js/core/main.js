@@ -102,6 +102,7 @@ function initAppEvents() {
         bindTechnicalReviewerRevisionEvents();
     }
     bindPendenciasEvents();
+    if (typeof bindProgramacoesEvents === 'function') bindProgramacoesEvents();
     bindPesquisasEvents();
     bindUsersAdminEvents();
     if (typeof bindUserImpersonationEvents === 'function') {
