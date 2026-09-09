@@ -68,6 +68,65 @@ async function fetchProgramacoesProjectsQueue() {
     };
 }
 
+function renderProgramacoesSequenceCell(row, options = {}) {
+    const maxSequence = Number(options.maxSequence) || Number(row.sequence) || 1;
+    if (!options.canReorder) {
+        return escapeHtml(String(row.sequence || '—'));
+    }
+
+    return `<input type="number"
+        class="programacoes-seq-input"
+        min="1"
+        max="${maxSequence}"
+        step="1"
+        value="${Number(row.sequence) || 1}"
+        data-order-project-id="${Number(row.orderProjectId)}"
+        data-current-sequence="${Number(row.sequence) || 1}"
+        title="Posição na fila completa (não na lista filtrada). Enter confirma."
+        aria-label="Sequência na fila">`;
+}
+
+function bindProgramacoesSequenceInputs(tbody) {
+    tbody?.querySelectorAll('.programacoes-seq-input').forEach(input => {
+        const restore = () => {
+            input.value = input.dataset.currentSequence || '';
+        };
+
+        input.addEventListener('click', event => event.stopPropagation());
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                input.blur();
+                return;
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                restore();
+                input.blur();
+            }
+        });
+        input.addEventListener('blur', () => {
+            const orderProjectId = Number(input.dataset.orderProjectId);
+            const current = Number(input.dataset.currentSequence);
+            const raw = String(input.value || '').trim();
+            if (!raw) {
+                restore();
+                return;
+            }
+            const next = Math.round(Number(raw));
+            if (!orderProjectId || !Number.isFinite(next)) {
+                restore();
+                return;
+            }
+            if (next === current) return;
+            moveProgramacoesProjectToPosition(orderProjectId, next);
+        });
+        input.addEventListener('wheel', event => {
+            if (document.activeElement === input) event.preventDefault();
+        }, { passive: false });
+    });
+}
+
 function renderProgramacoesMoveButtons(row, options = {}) {
     const { isFirst, isLast } = options;
     return `
@@ -151,8 +210,10 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
             title: 'Sequência',
             type: 'number',
             thClass: 'programacoes-col-seq whitespace-nowrap',
-            cellClass: 'programacoes-col-seq px-2 py-2 text-xs font-semibold text-slate-700 tabular-nums text-center whitespace-nowrap',
-            filterInputClass: 'interactive-table-filter-input--compact'
+            cellClass: 'programacoes-col-seq px-1 py-2 text-xs font-semibold text-slate-700 tabular-nums text-center whitespace-nowrap',
+            filterInputClass: 'interactive-table-filter-input--compact',
+            getFilterValue: row => String(row.sequence || ''),
+            render: (row) => renderProgramacoesSequenceCell(row, { canReorder, maxSequence })
         },
         {
             key: 'orderCode',
@@ -230,6 +291,9 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         title: 'Projetos',
         subtitle: 'Prioridade do time de projetos para entregar à produção. Quanto mais acima, maior a prioridade.',
         refreshButtonId: 'btn-programacoes-refresh-projects',
+        headerActionsHtml: typeof PROGRAMACOES_FULLSCREEN_BUTTON_HTML === 'string'
+            ? PROGRAMACOES_FULLSCREEN_BUTTON_HTML
+            : '',
         onRefresh: loadProgramacoesProjects,
         tableId: 'programacoes-projects',
         rows,
@@ -238,7 +302,11 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         minWidth: '74rem',
         emptyMessage: 'Nenhum projeto na fila de programação.',
         onBind(tbody) {
+            if (typeof syncProgramacoesFullscreenButton === 'function') {
+                syncProgramacoesFullscreenButton();
+            }
             if (!canReorder) return;
+            bindProgramacoesSequenceInputs(tbody);
             tbody?.querySelectorAll('.programacoes-move-btn').forEach(button => {
                 button.addEventListener('click', () => {
                     const orderProjectId = Number(button.dataset.orderProjectId);
@@ -249,6 +317,9 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
             });
         }
     });
+    if (typeof syncProgramacoesFullscreenButton === 'function') {
+        syncProgramacoesFullscreenButton();
+    }
 }
 
 async function moveProgramacoesProject(orderProjectId, direction) {
@@ -271,9 +342,40 @@ async function moveProgramacoesProject(orderProjectId, direction) {
         console.error('moveProgramacoesProject:', error);
         const message = isMissingProjectProductionQueueError(error)
             || /could not find the function/i.test(String(error?.message || ''))
-            ? 'Execute supabase/feats/create-project-production-queue.sql no SQL Editor do DEV.'
+            ? 'Execute o SQL pendente da fila de programações no SQL Editor do DEV.'
             : (error?.message || 'Não foi possível reordenar o projeto.');
         alertAppDialog(message);
+    } finally {
+        if (typeof setProgramacoesActionLoading === 'function') {
+            setProgramacoesActionLoading(false);
+        }
+    }
+}
+
+async function moveProgramacoesProjectToPosition(orderProjectId, sequence) {
+    if (typeof canReorderProgramacoesProjects === 'function' && !canReorderProgramacoesProjects()) {
+        return;
+    }
+
+    if (typeof setProgramacoesActionLoading === 'function') {
+        setProgramacoesActionLoading(true, 'Atualizando prioridade...');
+    }
+
+    try {
+        const { error } = await supabaseClient.rpc('move_project_production_queue_to_position', {
+            p_order_project_id: Number(orderProjectId),
+            p_sequence: Number(sequence)
+        });
+        if (error) throw error;
+        await loadProgramacoesProjects({ silent: true });
+    } catch (error) {
+        console.error('moveProgramacoesProjectToPosition:', error);
+        const message = isMissingProjectProductionQueueError(error)
+            || /could not find the function/i.test(String(error?.message || ''))
+            ? 'Execute supabase/feats/move-project-production-queue-to-position.sql no SQL Editor do DEV.'
+            : (error?.message || 'Não foi possível alterar a sequência.');
+        alertAppDialog(message);
+        await loadProgramacoesProjects({ silent: true });
     } finally {
         if (typeof setProgramacoesActionLoading === 'function') {
             setProgramacoesActionLoading(false);

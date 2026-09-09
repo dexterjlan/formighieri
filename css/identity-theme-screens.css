@@ -183,8 +183,12 @@ html[data-theme="formighieri-sage"] #programacoes-action-loading-spinner {
 }
 
 /* ── Pendências ── */
-html[data-theme="formighieri-sage"] #pendencias-view {
+html[data-theme="formighieri-sage"] #programacoes-view {
     background: transparent;
+}
+
+html[data-theme="formighieri-sage"] #programacoes-view.programacoes-view--fullscreen {
+    background: var(--fm-canvas) !important;
 }
 
 html[data-theme="formighieri-sage"] .fm-pendencias-sidebar > div,

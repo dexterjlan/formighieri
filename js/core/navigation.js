@@ -438,6 +438,9 @@ function hideSubViews() {
     if (typeof hideCalendarFloatingTooltip === 'function') {
         hideCalendarFloatingTooltip();
     }
+    if (typeof setProgramacoesFullscreen === 'function') {
+        setProgramacoesFullscreen(false);
+    }
 
     document.getElementById("welcome-view").classList.add("hidden");
     document.getElementById("dashboard-view").classList.add("hidden");
