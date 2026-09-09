@@ -223,162 +223,128 @@ function renderPendenciasEmRevisaoTecnicaRevisorList(projects, statusChangedAtBy
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
-        const designerName = project.designer?.name || '—';
+    const rows = (projects || []).map(project => {
         const statusChangedAt = statusChangedAtByProject[project.id];
         const revision = revisionsByProject[project.id];
-        const revisionProgressLabel = getTechnicalReviewerRevisionProgressLabel(revision);
-        const revisionProgressClass = getTechnicalReviewerRevisionProgressClass(revision);
-        const canAct = canReviewerActOnProject(project);
+        return mapPendenciasInteractiveIdentity(project, {
+            revisionProgressLabel: getTechnicalReviewerRevisionProgressLabel(revision),
+            revisionProgressClass: getTechnicalReviewerRevisionProgressClass(revision),
+            statusChangedAtLabel: statusChangedAt ? formatDate(statusChangedAt) : '—',
+            statusChangedAt,
+            canAct: canReviewerActOnProject(project)
+        });
+    });
 
-        const actionCell = canAct
-            ? `<div class="flex flex-wrap justify-end gap-1.5">
-                <button type="button" onclick="approveTechnicalReviewerProjectToNomear(${project.id})"
-                    class="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium">Aprovar</button>
-                <button type="button" onclick="openTechnicalReviewerRevisionModal(${project.id})"
-                    class="text-xs bg-teal-100 text-teal-800 hover:bg-teal-200 px-2.5 py-1 rounded-lg font-medium">Revisão</button>
-            </div>`
-            : '<span class="text-xs text-slate-300">—</span>';
+    const columns = [
+        ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+        getPendenciasInteractiveStatusColumn({
+            key: 'revisionProgressLabel',
+            label: 'Revisão',
+            render: (row) => `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${row.revisionProgressClass}">${escapeHtml(row.revisionProgressLabel || '—')}</span>`
+        }),
+        getPendenciasInteractiveDateColumn({
+            key: 'statusChangedAtLabel',
+            label: 'Desde',
+            sortKey: 'statusChangedAt',
+            cellClass: 'p-3 text-xs text-slate-500 whitespace-nowrap'
+        })
+    ];
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${overviewMode ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3">
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${revisionProgressClass}">${escapeHtml(revisionProgressLabel)}</span>
-                </td>
-                <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${statusChangedAt ? formatDate(statusChangedAt) : '—'}</td>
-                ${overviewMode ? '' : `<td class="p-3 text-right whitespace-nowrap">${actionCell}</td>`}
-            </tr>
-        `;
-    }).join('');
+    if (!overviewMode) {
+        columns.push(
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-40',
+                render: (row) => row.canAct
+                    ? `<div class="flex flex-wrap justify-end gap-1.5">
+                        <button type="button" onclick="approveTechnicalReviewerProjectToNomear(${row.id})"
+                            class="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium">Aprovar</button>
+                        <button type="button" onclick="openTechnicalReviewerRevisionModal(${row.id})"
+                            class="text-xs bg-teal-100 text-teal-800 hover:bg-teal-200 px-2.5 py-1 rounded-lg font-medium">Revisão</button>
+                    </div>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        );
+    }
 
-    const subtitle = overviewMode
-        ? 'Todos os projetos aguardando revisão do revisor.'
-        : 'Projetos aguardando sua revisão técnica.';
-    const emptyMessage = overviewMode
-        ? 'Nenhum projeto em revisão técnica do revisor.'
-        : 'Nenhum projeto aguardando revisão do revisor.';
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Em Revisão Técnica Revisor</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-em-revisao-tecnica-revisor"
-                    class="order-tab-action-btn text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[${overviewMode ? '960' : '820'}px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Revisão</th>
-                                <th class="text-left p-3 font-semibold">Desde</th>
-                                ${overviewMode ? '' : '<th class="text-right p-3 font-semibold w-40">Ações</th>'}
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-em-revisao-tecnica-revisor')
-        ?.addEventListener('click', () => loadPendenciasEmRevisaoTecnicaRevisor());
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Em Revisão Técnica Revisor',
+        subtitle: overviewMode
+            ? 'Todos os projetos aguardando revisão do revisor.'
+            : 'Projetos aguardando sua revisão técnica.',
+        refreshButtonId: 'btn-pendencias-refresh-em-revisao-tecnica-revisor',
+        refreshButtonClass: 'order-tab-action-btn text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50',
+        onRefresh: loadPendenciasEmRevisaoTecnicaRevisor,
+        tableId: 'pendencias-em-revisao-tecnica-revisor',
+        rows,
+        columns,
+        emptyMessage: overviewMode
+            ? 'Nenhum projeto em revisão técnica do revisor.'
+            : 'Nenhum projeto aguardando revisão do revisor.',
+        minWidth: overviewMode ? '960px' : '820px'
+    });
 }
 
 function renderPendenciasEmRevisaoTecnicaProjList(projects, statusChangedAtByProject, revisionsByProject, overviewMode) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
-        const designerName = project.designer?.name || '—';
+    const rows = (projects || []).map(project => {
         const statusChangedAt = statusChangedAtByProject[project.id];
         const revision = revisionsByProject[project.id];
-        const revisionProgressLabel = getTechnicalReviewerRevisionProgressLabel(revision);
-        const revisionProgressClass = getTechnicalReviewerRevisionProgressClass(revision);
-        const canAct = canDesignerActOnTechnicalReviewerProject(project);
+        return mapPendenciasInteractiveIdentity(project, {
+            revisionProgressLabel: getTechnicalReviewerRevisionProgressLabel(revision),
+            revisionProgressClass: getTechnicalReviewerRevisionProgressClass(revision),
+            statusChangedAtLabel: statusChangedAt ? formatDate(statusChangedAt) : '—',
+            statusChangedAt,
+            canAct: canDesignerActOnTechnicalReviewerProject(project)
+        });
+    });
 
-        const actionCell = canAct
-            ? `<button type="button" onclick="openTechnicalReviewerRevisionModal(${project.id})"
-                class="text-xs bg-teal-100 text-teal-800 hover:bg-teal-200 px-2.5 py-1 rounded-lg font-medium">Executar Revisão</button>`
-            : '<span class="text-xs text-slate-300">—</span>';
+    const columns = [
+        ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+        getPendenciasInteractiveStatusColumn({
+            key: 'revisionProgressLabel',
+            label: 'Revisão',
+            render: (row) => `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${row.revisionProgressClass}">${escapeHtml(row.revisionProgressLabel || '—')}</span>`
+        }),
+        getPendenciasInteractiveDateColumn({
+            key: 'statusChangedAtLabel',
+            label: 'Desde',
+            sortKey: 'statusChangedAt',
+            cellClass: 'p-3 text-xs text-slate-500 whitespace-nowrap'
+        })
+    ];
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${overviewMode ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3">
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${revisionProgressClass}">${escapeHtml(revisionProgressLabel)}</span>
-                </td>
-                <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${statusChangedAt ? formatDate(statusChangedAt) : '—'}</td>
-                ${overviewMode ? '' : `<td class="p-3 text-right whitespace-nowrap">${actionCell}</td>`}
-            </tr>
-        `;
-    }).join('');
+    if (!overviewMode) {
+        columns.push(
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-36',
+                render: (row) => row.canAct
+                    ? `<button type="button" onclick="openTechnicalReviewerRevisionModal(${row.id})"
+                        class="text-xs bg-teal-100 text-teal-800 hover:bg-teal-200 px-2.5 py-1 rounded-lg font-medium">Executar Revisão</button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        );
+    }
 
-    const subtitle = overviewMode
-        ? 'Todos os projetos em revisão técnica do projetista.'
-        : 'Projetos em revisão técnica sob sua responsabilidade.';
-    const emptyMessage = overviewMode
-        ? 'Nenhum projeto em revisão técnica do projetista.'
-        : 'Nenhum projeto em revisão técnica associado a você.';
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Em Revisão Técnica Proj.</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-em-revisao-tecnica-proj"
-                    class="order-tab-action-btn text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[${overviewMode ? '960' : '820'}px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Revisão</th>
-                                <th class="text-left p-3 font-semibold">Desde</th>
-                                ${overviewMode ? '' : '<th class="text-right p-3 font-semibold w-36">Ações</th>'}
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-em-revisao-tecnica-proj')
-        ?.addEventListener('click', () => loadPendenciasEmRevisaoTecnicaProj());
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Em Revisão Técnica Proj.',
+        subtitle: overviewMode
+            ? 'Todos os projetos em revisão técnica do projetista.'
+            : 'Projetos em revisão técnica sob sua responsabilidade.',
+        refreshButtonId: 'btn-pendencias-refresh-em-revisao-tecnica-proj',
+        refreshButtonClass: 'order-tab-action-btn text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50',
+        onRefresh: loadPendenciasEmRevisaoTecnicaProj,
+        tableId: 'pendencias-em-revisao-tecnica-proj',
+        rows,
+        columns,
+        emptyMessage: overviewMode
+            ? 'Nenhum projeto em revisão técnica do projetista.'
+            : 'Nenhum projeto em revisão técnica associado a você.',
+        minWidth: overviewMode ? '960px' : '820px'
+    });
 }
 
 async function loadPendenciasEmRevisaoTecnicaRevisor() {

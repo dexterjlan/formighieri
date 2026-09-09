@@ -489,76 +489,54 @@ function renderPendenciasAguardandoMedicaoList(projects) {
 
     const groups = groupPendenciasAguardandoMeasurementProjects(projects);
     const rows = groups.map(group => {
-        const statusClass = getPendenciasProjectStatusBadgeClass(group.statusName);
         const projectNames = group.projects
             .map(project => getPendenciasAguardandoMeasurementProjectLabel(project))
             .join(' | ');
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(group.orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(group.clientName)}</td>
-                <td class="p-3">
-                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
-                        ${escapeHtml(group.statusName || '—')}
-                    </span>
-                </td>
-                <td class="p-3 text-xs text-slate-700">${escapeHtml(projectNames)}</td>
-                <td class="p-3 text-right whitespace-nowrap">
-                    ${canEdit
-                        ? `<button type="button"
-                            class="pendencias-am-edit-btn text-xs bg-violet-50 text-violet-800 border border-violet-200 px-2.5 py-1 rounded-lg font-medium hover:bg-violet-100"
-                            data-order-id="${group.orderId}"
-                            data-status-name="${escapeHtml(group.statusName)}">
-                            Editar
-                        </button>`
-                        : '<span class="text-xs text-slate-400">—</span>'}
-                </td>
-            </tr>
-        `;
-    }).join('');
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Aguardando Medição</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-aguardando-medicao"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${groups.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[820px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Status</th>
-                                <th class="text-left p-3 font-semibold">Projetos</th>
-                                <th class="text-right p-3 font-semibold w-28">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto vendido ou aguardando obra.</p>'}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-aguardando-medicao')
-        ?.addEventListener('click', () => loadPendenciasAguardandoMedicao());
-
-    content.querySelectorAll('.pendencias-am-edit-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            openPendenciasAguardandoMedicaoEditModal(
-                Number(button.dataset.orderId),
-                button.dataset.statusName
-            );
+        return mapPendenciasInteractiveIdentity(group, {
+            id: `${group.orderId}::${group.statusName}`,
+            projectName: projectNames,
+            statusName: group.statusName,
+            statusClass: getPendenciasProjectStatusBadgeClass(group.statusName),
+            orderId: group.orderId
         });
+    });
+
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Aguardando Medição',
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-aguardando-medicao',
+        onRefresh: loadPendenciasAguardandoMedicao,
+        tableId: 'pendencias-aguardando-medicao',
+        rows,
+        emptyMessage: 'Nenhum projeto vendido ou aguardando obra.',
+        minWidth: '820px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ projectLabel: 'Projetos' }),
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-28',
+                render: (row) => canEdit
+                    ? `<button type="button"
+                        class="pendencias-am-edit-btn text-xs bg-violet-50 text-violet-800 border border-violet-200 px-2.5 py-1 rounded-lg font-medium hover:bg-violet-100"
+                        data-order-id="${row.orderId}"
+                        data-status-name="${escapeHtml(row.statusName)}">
+                        Editar
+                    </button>`
+                    : '<span class="text-xs text-slate-400">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-am-edit-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openPendenciasAguardandoMedicaoEditModal(
+                        Number(button.dataset.orderId),
+                        button.dataset.statusName
+                    );
+                });
+            });
+        }
     });
 }
 
@@ -595,7 +573,8 @@ function renderPendenciasPpcpProjectList(config) {
         targetStatusName,
         actionLabel,
         actionButtonClass,
-        confirmMessage
+        confirmMessage,
+        tableId
     } = config;
 
     const content = document.getElementById('pendencias-content');
@@ -605,87 +584,52 @@ function renderPendenciasPpcpProjectList(config) {
     const showDesigner = typeof isPendenciasProjetistaOverviewMode === 'function'
         && isPendenciasProjetistaOverviewMode();
     const labelFn = config.projectLabelFn || getPendenciasProjectLabel;
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = labelFn(project);
-        const designerName = project.designer?.name || '—';
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const statusName = getPendenciasProjectStatusName(project);
-        const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
-        const actionCell = canAct
-            ? `<button type="button"
-                class="pendencias-ppcp-action-btn text-xs px-2.5 py-1 rounded-lg font-medium ${actionButtonClass}"
-                data-project-id="${project.id}"
-                data-expected-status="${escapeHtml(expectedStatusName)}"
-                data-target-status="${escapeHtml(targetStatusName)}"
-                data-confirm-message="${escapeHtml(confirmMessage)}">
-                ${escapeHtml(actionLabel)}
-            </button>`
-            : '<span class="text-xs text-slate-300">—</span>';
+    const rows = (projects || []).map(project => mapPendenciasInteractiveIdentity(project, {
+        projectName: labelFn(project),
+        statusName: getPendenciasProjectStatusName(project),
+        deliveryDate: formatPendenciasDeliveryDate(project.deliveryDate)
+    }));
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${showDesigner ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3">
-                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
-                        ${escapeHtml(statusName || '—')}
-                    </span>
-                </td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">${escapeHtml(title)}</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="${refreshButtonId}"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[920px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${showDesigner ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Status</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-44">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
-
-    content.querySelector(`#${refreshButtonId}`)
-        ?.addEventListener('click', refreshHandler);
-
-    content.querySelectorAll('.pendencias-ppcp-action-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            updatePendenciasPpcpProjectStatus(
-                Number(button.dataset.projectId),
-                button.dataset.expectedStatus,
-                button.dataset.targetStatus,
-                button.dataset.confirmMessage
-            );
-        });
+    renderPendenciasInteractiveTableScreen(content, {
+        title,
+        subtitle,
+        refreshButtonId,
+        onRefresh: refreshHandler,
+        tableId: tableId || 'pendencias-ppcp-project',
+        rows,
+        emptyMessage,
+        minWidth: '920px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ includeDesigner: showDesigner }),
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveDateColumn({ key: 'deliveryDate', label: 'Entrega' }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-44',
+                render: (row) => canAct
+                    ? `<button type="button"
+                        class="pendencias-ppcp-action-btn text-xs px-2.5 py-1 rounded-lg font-medium ${actionButtonClass}"
+                        data-project-id="${row.id}"
+                        data-expected-status="${escapeHtml(expectedStatusName)}"
+                        data-target-status="${escapeHtml(targetStatusName)}"
+                        data-confirm-message="${escapeHtml(confirmMessage)}">
+                        ${escapeHtml(actionLabel)}
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-ppcp-action-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    updatePendenciasPpcpProjectStatus(
+                        Number(button.dataset.projectId),
+                        button.dataset.expectedStatus,
+                        button.dataset.targetStatus,
+                        button.dataset.confirmMessage
+                    );
+                });
+            });
+        }
     });
 }
 
@@ -835,87 +779,53 @@ function renderPendenciasNomearList(projects, overviewMode = false) {
         ? getPendenciasProjectDetailLabel
         : (project => project?.name || 'Projeto');
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = labelFn(project);
-        const designerName = project.designer?.name || '—';
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const statusName = getPendenciasProjectStatusName(project);
-        const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
-        const canAct = canActPendenciasNomear(project);
-        const actionCell = canAct
-            ? `<button type="button"
-                class="pendencias-nomear-action-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-purple-100 text-purple-800 hover:bg-purple-200"
-                data-project-id="${project.id}">
-                Nomeado
-            </button>`
-            : '<span class="text-xs text-slate-300">—</span>';
+    const rows = (projects || []).map(project => mapPendenciasInteractiveIdentity(project, {
+        projectName: labelFn(project),
+        statusName: getPendenciasProjectStatusName(project),
+        deliveryDate: formatPendenciasDeliveryDate(project.deliveryDate),
+        canAct: canActPendenciasNomear(project)
+    }));
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${overviewMode ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3">
-                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
-                        ${escapeHtml(statusName || '—')}
-                    </span>
-                </td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Nomear',
+        subtitle: overviewMode
+            ? 'Todos os projetos aguardando nomeação pelo projetista responsável.'
+            : 'Projetos aguardando nomeação pelo projetista responsável.',
+        refreshButtonId: 'btn-pendencias-refresh-nomear',
+        refreshButtonClass: 'order-tab-action-btn text-xs bg-white border border-purple-200 text-purple-800 px-3 py-1.5 rounded-lg font-medium hover:bg-purple-50',
+        onRefresh: loadPendenciasNomear,
+        tableId: 'pendencias-nomear',
+        rows,
+        emptyMessage: 'Nenhum projeto aguardando nomeação.',
+        minWidth: '920px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveDateColumn({ key: 'deliveryDate', label: 'Entrega' }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-44',
+                render: (row) => row.canAct
+                    ? `<button type="button"
+                        class="pendencias-nomear-action-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-purple-100 text-purple-800 hover:bg-purple-200"
+                        data-project-id="${row.id}">
+                        Nomeado
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-nomear-action-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    const projectId = Number(button.dataset.projectId);
+                    if (!projectId) return;
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Nomear</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${overviewMode
-                        ? 'Todos os projetos aguardando nomeação pelo projetista responsável.'
-                        : 'Projetos aguardando nomeação pelo projetista responsável.'}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-nomear"
-                    class="order-tab-action-btn text-xs bg-white border border-purple-200 text-purple-800 px-3 py-1.5 rounded-lg font-medium hover:bg-purple-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[920px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Status</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-44">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto aguardando nomeação.</p>'}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-nomear')
-        ?.addEventListener('click', () => loadPendenciasNomear());
-
-    content.querySelectorAll('.pendencias-nomear-action-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const projectId = Number(button.dataset.projectId);
-            if (!projectId) return;
-
-            await markOrderProjectAsNomeado(projectId, {
-                onSuccess: () => loadPendenciasNomear()
+                    await markOrderProjectAsNomeado(projectId, {
+                        onSuccess: () => loadPendenciasNomear()
+                    });
+                });
             });
-        });
+        }
     });
 }
 
@@ -967,6 +877,7 @@ async function loadPendenciasAguardandoPpcp() {
         subtitle,
         projects,
         emptyMessage: 'Nenhum projeto aguardando PPCP.',
+        tableId: 'pendencias-aguardando-ppcp',
         refreshButtonId: 'btn-pendencias-refresh-aguardando-ppcp',
         refreshHandler: () => loadPendenciasAguardandoPpcp(),
         expectedStatusName: PENDENCIAS_STATUS_AGUARDANDO_PPCP,
@@ -1126,41 +1037,21 @@ function renderPendenciasImplantacaoList(projects, overviewMode = false) {
         ? getPendenciasProjectDetailLabel
         : (project => project?.name || 'Projeto');
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
+    const rows = (projects || []).map(project => {
         const projectLabel = labelFn(project);
-        const ppcpName = project.implementationDesignerName || '—';
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const statusLabel = project.implantacaoStatus || getPendenciasProjectStatusName(project);
+        const statusName = project.implantacaoStatus || getPendenciasProjectStatusName(project);
         const statusClass = typeof getImplantacaoStatusBadgeClass === 'function' && project.implantacaoStatus
             ? getImplantacaoStatusBadgeClass(project.implantacaoStatus)
             : getPendenciasProjectStatusBadgeClass(getPendenciasProjectStatusName(project));
-        const actionCell = canAct
-            ? `<button type="button"
-                class="pendencias-implantacao-open-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-teal-100 text-teal-800 hover:bg-teal-200"
-                data-project-id="${project.id}"
-                data-project-name="${escapeHtml(projectLabel)}">
-                Implantação
-            </button>`
-            : '<span class="text-xs text-slate-300">—</span>';
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${showPpcp ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(ppcpName)}</td>` : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3">
-                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
-                        ${escapeHtml(statusLabel || '—')}
-                    </span>
-                </td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
+        return mapPendenciasInteractiveIdentity(project, {
+            projectName: projectLabel,
+            designerName: project.implementationDesignerName || '—',
+            statusName,
+            statusClass,
+            deliveryDate: formatPendenciasDeliveryDate(project.deliveryDate)
+        });
+    });
 
     const subtitle = overviewMode
         ? 'Todas as implantações em aberto, com o PPCP responsável.'
@@ -1168,53 +1059,48 @@ function renderPendenciasImplantacaoList(projects, overviewMode = false) {
             ? 'Suas implantações em aberto. Abra o checklist para enviar à produção ou compras.'
             : 'Visualização das suas implantações em aberto.');
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Implantação</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-implantacao"
-                    class="order-tab-action-btn text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[920px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${showPpcp ? '<th class="text-left p-3 font-semibold">PPCP</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Status</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-44">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${
-                    overviewMode
-                        ? 'Nenhuma implantação em aberto.'
-                        : 'Nenhuma implantação associada a você.'
-                }</p>`}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-implantacao')
-        ?.addEventListener('click', () => loadPendenciasImplantacao());
-
-    content.querySelectorAll('.pendencias-implantacao-open-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const projectId = Number(button.dataset.projectId);
-            const projectName = button.dataset.projectName || '';
-            if (!projectId || typeof openImplantacaoModal !== 'function') return;
-            openImplantacaoModal(projectId, projectName, { requireExisting: true });
-        });
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Implantação',
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-implantacao',
+        refreshButtonClass: 'order-tab-action-btn text-xs bg-white border border-teal-200 text-teal-800 px-3 py-1.5 rounded-lg font-medium hover:bg-teal-50',
+        onRefresh: loadPendenciasImplantacao,
+        tableId: 'pendencias-implantacao',
+        rows,
+        emptyMessage: overviewMode
+            ? 'Nenhuma implantação em aberto.'
+            : 'Nenhuma implantação associada a você.',
+        minWidth: '920px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({
+                includeDesigner: showPpcp,
+                designerLabel: 'PPCP'
+            }),
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveDateColumn({ key: 'deliveryDate', label: 'Entrega' }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-44',
+                render: (row) => canAct
+                    ? `<button type="button"
+                        class="pendencias-implantacao-open-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-teal-100 text-teal-800 hover:bg-teal-200"
+                        data-project-id="${row.id}"
+                        data-project-name="${escapeHtml(row.projectName)}">
+                        Implantação
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-implantacao-open-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    const projectId = Number(button.dataset.projectId);
+                    const projectName = button.dataset.projectName || '';
+                    if (!projectId || typeof openImplantacaoModal !== 'function') return;
+                    openImplantacaoModal(projectId, projectName, { requireExisting: true });
+                });
+            });
+        }
     });
 }
 
@@ -1300,96 +1186,86 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
         ? 'Projetos em produção. Registre marceneiro e início da montagem interna.'
         : 'Visualização dos projetos aguardando início da montagem interna.';
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = getPendenciasFabricaProjectLabel(project);
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
+    const rows = (projects || []).map(project => {
         const inicioValue = project.internalAssemblyStartDate
             ? String(project.internalAssemblyStartDate).split('T')[0]
             : '';
-        const actionCell = canAct
-            ? `<button type="button"
-                class="pendencias-fabrica-inicio-btn text-xs bg-orange-100 text-orange-800 hover:bg-orange-200 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
-                data-project-id="${project.id}">
-                Iniciar montagem
-            </button>`
-            : '<span class="text-xs text-slate-300">—</span>';
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0" data-pendencias-fabrica-project-id="${project.id}">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3">
-                    <div class="flex items-center gap-1.5 min-w-[210px]">
-                        <select class="pendencias-fabrica-marceneiro flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-orange-600"
-                            data-project-id="${project.id}" ${canAct ? '' : 'disabled'}>
-                            ${getPendenciasFabricaMarceneiroOptionsHtml(project.cabinetMakerId)}
-                        </select>
-                        ${canAct ? `<button type="button"
-                            class="pendencias-trocar-marceneiro-btn text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-300 px-2 py-1.5 rounded-lg font-medium border border-slate-200 transition shrink-0"
-                            data-project-id="${project.id}">
-                            Trocar
-                        </button>` : ''}
-                    </div>
-                </td>
-                <td class="p-3">
-                    <input type="date" class="pendencias-fabrica-inicio w-full min-w-[130px] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-orange-600"
-                        max="${todayMax}" value="${escapeHtml(inicioValue)}" ${canAct ? '' : 'disabled'}>
-                </td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Aguar. Mont. Int.</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-aguardando-montagem-interna"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[980px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-left p-3 font-semibold">Marceneiro</th>
-                                <th class="text-left p-3 font-semibold">Início</th>
-                                <th class="text-right p-3 font-semibold w-40">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto em produção aguardando montagem interna.</p>'}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-aguardando-montagem-interna')
-        ?.addEventListener('click', () => loadPendenciasAguardandoMontagemInterna());
-
-    content.querySelectorAll('.pendencias-trocar-marceneiro-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            changePendenciasProjectMarceneiro(Number(button.dataset.projectId));
+        return mapPendenciasInteractiveIdentity(project, {
+            projectName: getPendenciasFabricaProjectLabel(project),
+            deliveryDate: formatPendenciasDeliveryDate(project.deliveryDate),
+            cabinetMakerName: getPendenciasFabricaMarceneiroName(project) || '—',
+            cabinetMakerId: project.cabinetMakerId,
+            internalAssemblyStartDate: inicioValue
         });
     });
 
-    content.querySelectorAll('.pendencias-fabrica-inicio-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            savePendenciasFabricaInicioMontagem(Number(button.dataset.projectId));
-        });
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Aguar. Mont. Int.',
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-aguardando-montagem-interna',
+        onRefresh: loadPendenciasAguardandoMontagemInterna,
+        tableId: 'pendencias-aguardando-montagem-interna',
+        rows,
+        emptyMessage: 'Nenhum projeto em produção aguardando montagem interna.',
+        minWidth: '980px',
+        getRowAttrs: (row) => `data-pendencias-fabrica-project-id="${row.id}"`,
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns(),
+            getPendenciasInteractiveDateColumn({ key: 'deliveryDate', label: 'Entrega' }),
+            {
+                key: 'cabinetMakerName',
+                label: 'Marceneiro',
+                cellClass: 'p-3',
+                render: (row) => `
+                    <div class="flex items-center gap-1.5 min-w-[210px]">
+                        <select class="pendencias-fabrica-marceneiro flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-orange-600"
+                            data-project-id="${row.id}" ${canAct ? '' : 'disabled'}>
+                            ${getPendenciasFabricaMarceneiroOptionsHtml(row.cabinetMakerId)}
+                        </select>
+                        ${canAct ? `<button type="button"
+                            class="pendencias-trocar-marceneiro-btn text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-300 px-2 py-1.5 rounded-lg font-medium border border-slate-200 transition shrink-0"
+                            data-project-id="${row.id}">
+                            Trocar
+                        </button>` : ''}
+                    </div>
+                `
+            },
+            {
+                key: 'internalAssemblyStartDate',
+                label: 'Início',
+                type: 'date',
+                cellClass: 'p-3',
+                render: (row) => `
+                    <input type="date" class="pendencias-fabrica-inicio w-full min-w-[130px] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-orange-600"
+                        max="${todayMax}" value="${escapeHtml(row.internalAssemblyStartDate)}" ${canAct ? '' : 'disabled'}>
+                `
+            },
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-40',
+                render: (row) => canAct
+                    ? `<button type="button"
+                        class="pendencias-fabrica-inicio-btn text-xs bg-orange-100 text-orange-800 hover:bg-orange-200 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
+                        data-project-id="${row.id}">
+                        Iniciar montagem
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-trocar-marceneiro-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    changePendenciasProjectMarceneiro(Number(button.dataset.projectId));
+                });
+            });
+
+            tbody?.querySelectorAll('.pendencias-fabrica-inicio-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    savePendenciasFabricaInicioMontagem(Number(button.dataset.projectId));
+                });
+            });
+        }
     });
 }
 
@@ -1403,96 +1279,91 @@ function renderPendenciasEmMontagemList(projects) {
         ? 'Projetos em montagem interna. Registre a data de fim para enviar à expedição.'
         : 'Visualização dos projetos em montagem interna.';
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = getPendenciasFabricaProjectLabel(project);
-        const inicioDisplay = formatPendenciasFabricaDisplayDate(project.internalAssemblyStartDate);
+    const rows = (projects || []).map(project => {
         const fimValue = project.internalAssemblyEndDate
             ? String(project.internalAssemblyEndDate).split('T')[0]
             : '';
-        const actionCell = canAct
-            ? `<button type="button"
-                class="pendencias-fabrica-fim-btn text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
-                data-project-id="${project.id}">
-                Finalizar montagem
-            </button>`
-            : '<span class="text-xs text-slate-300">—</span>';
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0" data-pendencias-fabrica-project-id="${project.id}">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3">
-                    <div class="flex items-center gap-1.5 min-w-[210px]">
-                        <select class="pendencias-fabrica-marceneiro flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
-                            data-project-id="${project.id}" ${canAct ? '' : 'disabled'}>
-                            ${getPendenciasFabricaMarceneiroOptionsHtml(project.cabinetMakerId)}
-                        </select>
-                        ${canAct ? `<button type="button"
-                            class="pendencias-trocar-marceneiro-btn text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-300 px-2 py-1.5 rounded-lg font-medium border border-slate-200 transition shrink-0"
-                            data-project-id="${project.id}">
-                            Trocar
-                        </button>` : ''}
-                    </div>
-                </td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(inicioDisplay)}</td>
-                <td class="p-3">
-                    <input type="date" class="pendencias-fabrica-fim w-full min-w-[130px] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
-                        max="${todayMax}" value="${escapeHtml(fimValue)}" ${canAct ? '' : 'disabled'}>
-                </td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Em Montagem</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-em-montagem"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[1020px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Marceneiro</th>
-                                <th class="text-left p-3 font-semibold">Início</th>
-                                <th class="text-left p-3 font-semibold">Fim</th>
-                                <th class="text-right p-3 font-semibold w-40">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto em montagem interna.</p>'}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-em-montagem')
-        ?.addEventListener('click', () => loadPendenciasEmMontagem());
-
-    content.querySelectorAll('.pendencias-trocar-marceneiro-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            changePendenciasProjectMarceneiro(Number(button.dataset.projectId));
+        return mapPendenciasInteractiveIdentity(project, {
+            projectName: getPendenciasFabricaProjectLabel(project),
+            cabinetMakerName: getPendenciasFabricaMarceneiroName(project) || '—',
+            cabinetMakerId: project.cabinetMakerId,
+            internalAssemblyStartLabel: formatPendenciasFabricaDisplayDate(project.internalAssemblyStartDate),
+            internalAssemblyStartDate: project.internalAssemblyStartDate,
+            internalAssemblyEndDate: fimValue
         });
     });
 
-    content.querySelectorAll('.pendencias-fabrica-fim-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            savePendenciasFabricaFimMontagem(Number(button.dataset.projectId));
-        });
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Em Montagem',
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-em-montagem',
+        onRefresh: loadPendenciasEmMontagem,
+        tableId: 'pendencias-em-montagem',
+        rows,
+        emptyMessage: 'Nenhum projeto em montagem interna.',
+        minWidth: '1020px',
+        getRowAttrs: (row) => `data-pendencias-fabrica-project-id="${row.id}"`,
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns(),
+            {
+                key: 'cabinetMakerName',
+                label: 'Marceneiro',
+                cellClass: 'p-3',
+                render: (row) => `
+                    <div class="flex items-center gap-1.5 min-w-[210px]">
+                        <select class="pendencias-fabrica-marceneiro flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
+                            data-project-id="${row.id}" ${canAct ? '' : 'disabled'}>
+                            ${getPendenciasFabricaMarceneiroOptionsHtml(row.cabinetMakerId)}
+                        </select>
+                        ${canAct ? `<button type="button"
+                            class="pendencias-trocar-marceneiro-btn text-[11px] bg-slate-100 text-slate-700 hover:bg-slate-200 hover:border-slate-300 px-2 py-1.5 rounded-lg font-medium border border-slate-200 transition shrink-0"
+                            data-project-id="${row.id}">
+                            Trocar
+                        </button>` : ''}
+                    </div>
+                `
+            },
+            getPendenciasInteractiveDateColumn({
+                key: 'internalAssemblyStartLabel',
+                label: 'Início',
+                sortKey: 'internalAssemblyStartDate'
+            }),
+            {
+                key: 'internalAssemblyEndDate',
+                label: 'Fim',
+                type: 'date',
+                cellClass: 'p-3',
+                render: (row) => `
+                    <input type="date" class="pendencias-fabrica-fim w-full min-w-[130px] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600"
+                        max="${todayMax}" value="${escapeHtml(row.internalAssemblyEndDate)}" ${canAct ? '' : 'disabled'}>
+                `
+            },
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-40',
+                render: (row) => canAct
+                    ? `<button type="button"
+                        class="pendencias-fabrica-fim-btn text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
+                        data-project-id="${row.id}">
+                        Finalizar montagem
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-trocar-marceneiro-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    changePendenciasProjectMarceneiro(Number(button.dataset.projectId));
+                });
+            });
+
+            tbody?.querySelectorAll('.pendencias-fabrica-fim-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    savePendenciasFabricaFimMontagem(Number(button.dataset.projectId));
+                });
+            });
+        }
     });
 }
 

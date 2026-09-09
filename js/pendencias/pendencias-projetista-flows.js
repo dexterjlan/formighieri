@@ -141,97 +141,90 @@ function renderPendenciasEmRevisaoList(projects, statusChangedAtByProject, appro
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
+    const rows = (projects || []).map(project => {
         const statusChangedAt = statusChangedAtByProject[project.id];
-        const designerName = project.designer?.name || '—';
         const approval = approvalsByProject[project.id];
         const revision = approval ? revisionsByApproval[approval.id] : null;
-        const revisionProgressLabel = typeof getTechnicalRevisionProgressLabel === 'function'
-            ? getTechnicalRevisionProgressLabel(revision)
-            : '—';
-        const revisionProgressClass = typeof getTechnicalRevisionProgressBadgeClass === 'function'
-            ? getTechnicalRevisionProgressBadgeClass(revision)
-            : 'bg-slate-100 text-slate-600';
-        const revisionStartedAt = revision?.revisionStartedAt
-            ? formatDate(revision.revisionStartedAt)
-            : '—';
         const canViewRevision = !overviewMode
             && approval
             && typeof canViewCommercialRevision === 'function'
             && canViewCommercialRevision(approval);
-        const actionCell = canViewRevision
-            ? `<button type="button" onclick="openCommercialRevisionsHistoryView(${approval.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Revisões</button>`
-            : '<span class="text-xs text-slate-300">—</span>';
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${overviewMode
-                    ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>`
-                    : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                ${overviewMode
-                    ? `<td class="p-3">
-                        <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${revisionProgressClass}">${escapeHtml(revisionProgressLabel)}</span>
-                    </td>
-                    <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${escapeHtml(revisionStartedAt)}</td>`
-                    : ''}
-                <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${statusChangedAt ? formatDate(statusChangedAt) : '—'}</td>
-                ${overviewMode ? '' : `<td class="p-3 text-right whitespace-nowrap">${actionCell}</td>`}
-            </tr>
-        `;
-    }).join('');
+        return mapPendenciasInteractiveIdentity(project, {
+            revisionProgressLabel: typeof getTechnicalRevisionProgressLabel === 'function'
+                ? getTechnicalRevisionProgressLabel(revision)
+                : '—',
+            revisionProgressClass: typeof getTechnicalRevisionProgressBadgeClass === 'function'
+                ? getTechnicalRevisionProgressBadgeClass(revision)
+                : 'bg-slate-100 text-slate-600',
+            revisionStartedAtLabel: revision?.revisionStartedAt
+                ? formatDate(revision.revisionStartedAt)
+                : '—',
+            revisionStartedAt: revision?.revisionStartedAt || null,
+            statusChangedAtLabel: statusChangedAt ? formatDate(statusChangedAt) : '—',
+            statusChangedAt,
+            canViewRevision,
+            approvalId: approval?.id
+        });
+    });
 
-    const subtitle = overviewMode
-        ? 'Todos os projetos em revisão.'
-        : 'Projetos associados a você neste status.';
-    const emptyMessage = overviewMode
-        ? 'Nenhum projeto em revisão.'
-        : 'Nenhum projeto em revisão associado a você.';
+    const columns = [
+        ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode })
+    ];
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Em Revisão</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-em-revisao"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[${overviewMode ? '1080' : '820'}px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                ${overviewMode
-                                    ? `<th class="text-left p-3 font-semibold">Revisão</th>
-                                       <th class="text-left p-3 font-semibold">Início revisão</th>`
-                                    : ''}
-                                <th class="text-left p-3 font-semibold">Data Em Revisão</th>
-                                ${overviewMode ? '' : '<th class="text-right p-3 font-semibold w-32">Ações</th>'}
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
+    if (overviewMode) {
+        columns.push(
+            getPendenciasInteractiveStatusColumn({
+                key: 'revisionProgressLabel',
+                label: 'Revisão',
+                render: (row) => `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${row.revisionProgressClass}">${escapeHtml(row.revisionProgressLabel || '—')}</span>`
+            }),
+            getPendenciasInteractiveDateColumn({
+                key: 'revisionStartedAtLabel',
+                label: 'Início revisão',
+                sortKey: 'revisionStartedAt',
+                cellClass: 'p-3 text-xs text-slate-500 whitespace-nowrap'
+            })
+        );
+    }
 
-    content.querySelector('#btn-pendencias-refresh-em-revisao')
-        ?.addEventListener('click', () => loadPendenciasEmRevisao());
+    columns.push(
+        getPendenciasInteractiveDateColumn({
+            key: 'statusChangedAtLabel',
+            label: 'Data Em Revisão',
+            sortKey: 'statusChangedAt',
+            cellClass: 'p-3 text-xs text-slate-500 whitespace-nowrap'
+        })
+    );
+
+    if (!overviewMode) {
+        columns.push(
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-32',
+                render: (row) => row.canViewRevision
+                    ? `<button type="button" onclick="openCommercialRevisionsHistoryView(${row.approvalId})"
+                        class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Revisões</button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        );
+    }
+
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Em Revisão',
+        subtitle: overviewMode
+            ? 'Todos os projetos em revisão.'
+            : 'Projetos associados a você neste status.',
+        refreshButtonId: 'btn-pendencias-refresh-em-revisao',
+        onRefresh: loadPendenciasEmRevisao,
+        tableId: 'pendencias-em-revisao',
+        rows,
+        columns,
+        emptyMessage: overviewMode
+            ? 'Nenhum projeto em revisão.'
+            : 'Nenhum projeto em revisão associado a você.',
+        minWidth: overviewMode ? '1080px' : '820px'
+    });
 }
 
 async function loadPendenciasEmRevisao() {
@@ -356,76 +349,48 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = getPendenciasProjectLabel(project);
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const designerName = project.designer?.name || '—';
+    const rows = (projects || []).map(project => {
         const approval = approvalsByProject[project.id];
-        const canSubmit = canSubmitCommercialApprovalFromPendencias(project, approval);
-        const actionCell = canSubmit
-            ? `<button type="button" onclick="submitCommercialApprovalFromPendencias(${project.id})"
-                class="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium">Enviar para Aprovação</button>`
-            : approval && !isCommercialApprovalApproved(approval)
-                ? `<span class="text-xs text-amber-700">Aprovação em aberto</span>`
-                : '<span class="text-xs text-slate-300">—</span>';
+        return mapPendenciasInteractiveIdentity(project, {
+            deliveryLabel: formatPendenciasDeliveryDate(project.deliveryDate),
+            deliveryDate: project.deliveryDate,
+            canSubmit: canSubmitCommercialApprovalFromPendencias(project, approval),
+            hasOpenApproval: Boolean(approval && !isCommercialApprovalApproved(approval))
+        });
+    });
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${overviewMode
-                    ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>`
-                    : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
-
-    const subtitle = overviewMode
-        ? 'Todos os projetos em projeto técnico.'
-        : 'Projetos associados a você neste status.';
-    const emptyMessage = overviewMode
-        ? 'Nenhum projeto em projeto técnico.'
-        : 'Nenhum projeto em projeto técnico associado a você.';
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Projeto Técnico</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-projeto-tecnico"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[${overviewMode ? '920' : '820'}px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-44">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-projeto-tecnico')
-        ?.addEventListener('click', () => loadPendenciasProjetoTecnico());
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Projeto Técnico',
+        subtitle: overviewMode
+            ? 'Todos os projetos em projeto técnico.'
+            : 'Projetos associados a você neste status.',
+        refreshButtonId: 'btn-pendencias-refresh-projeto-tecnico',
+        onRefresh: loadPendenciasProjetoTecnico,
+        tableId: 'pendencias-projeto-tecnico',
+        rows,
+        emptyMessage: overviewMode
+            ? 'Nenhum projeto em projeto técnico.'
+            : 'Nenhum projeto em projeto técnico associado a você.',
+        minWidth: overviewMode ? '920px' : '820px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+            getPendenciasInteractiveDateColumn({
+                key: 'deliveryLabel',
+                label: 'Entrega',
+                sortKey: 'deliveryDate'
+            }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-44',
+                render: (row) => row.canSubmit
+                    ? `<button type="button" onclick="submitCommercialApprovalFromPendencias(${row.id})"
+                        class="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium">Enviar para Aprovação</button>`
+                    : row.hasOpenApproval
+                        ? '<span class="text-xs text-amber-700">Aprovação em aberto</span>'
+                        : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ]
+    });
 }
 
 async function loadPendenciasProjetoTecnico() {
@@ -600,87 +565,64 @@ function renderPendenciasRequisicaoList(requests, overviewMode) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const rows = requests.map(request => {
-        const orderCode = request.order?.orderCode || '—';
-        const clientName = getOrderClientName(request.order) || '—';
-        const projectLabel = getPendenciasRequestProjectLabel(request);
-        const designerName = request.designerName || '—';
-        const canViewRequest = !overviewMode
+    const rows = (requests || []).map(request => mapPendenciasInteractiveIdentity(request, {
+        projectName: getPendenciasRequestProjectLabel(request),
+        designerName: request.designerName || '—',
+        createdAtLabel: request.createdAt ? formatDate(request.createdAt) : '—',
+        createdAt: request.createdAt,
+        canViewRequest: !overviewMode
             && isRequestWaitingProjetista(request)
-            && canEditProjetistaResponse(request);
-        const actionCell = canViewRequest
-            ? `<button type="button" onclick="openRequestFromPendencias(${request.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Requisição</button>`
-            : '<span class="text-xs text-slate-300">—</span>';
+            && canEditProjetistaResponse(request)
+    }));
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${overviewMode
-                    ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>`
-                    : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${request.createdAt ? formatDate(request.createdAt) : '—'}</td>
-                ${overviewMode ? '' : `<td class="p-3 text-right whitespace-nowrap">${actionCell}</td>`}
-            </tr>
-        `;
-    }).join('');
+    const columns = [
+        ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+        getPendenciasInteractiveDateColumn({
+            key: 'createdAtLabel',
+            label: 'Data Abertura',
+            sortKey: 'createdAt',
+            cellClass: 'p-3 text-xs text-slate-500 whitespace-nowrap'
+        })
+    ];
 
-    const subtitle = overviewMode
-        ? 'Requisições em aberto aguardando resposta do projetista.'
-        : 'Requisições aguardando sua resposta.';
-    const emptyMessage = overviewMode
-        ? 'Nenhuma requisição aguardando projetista.'
-        : 'Nenhuma requisição aguardando sua resposta.';
+    if (!overviewMode) {
+        columns.push(
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-36',
+                render: (row) => row.canViewRequest
+                    ? `<button type="button" onclick="openRequestFromPendencias(${row.id})"
+                        class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Requisição</button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        );
+    }
 
-    const createButtonHtml = canCreatePendenciasRequisicao()
-        ? `<button type="button" id="btn-pendencias-create-requisicao"
-            class="order-tab-action-btn text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">
-            <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5a.5.5 0 0 1 .5.5v4.5H13a.5.5 0 0 1 0 1H8.5V13a.5.5 0 0 1-1 0V8.5H3a.5.5 0 0 1 0-1h4.5V3a.5.5 0 0 1 .5-.5z"/></svg>
-            <span>Criar Requisição</span>
-        </button>`
-        : '';
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Requisição</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    ${createButtonHtml}
-                    <button type="button" id="btn-pendencias-refresh-requisicao"
-                        class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                        ${renderRefreshButtonInnerHtml()}
-                    </button>
-                </div>
-            </div>
-            ${requests.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[${overviewMode ? '920' : '820'}px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Data Abertura</th>
-                                ${overviewMode ? '' : '<th class="text-right p-3 font-semibold w-36">Ações</th>'}
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Requisição',
+        subtitle: overviewMode
+            ? 'Requisições em aberto aguardando resposta do projetista.'
+            : 'Requisições aguardando sua resposta.',
+        refreshButtonId: 'btn-pendencias-refresh-requisicao',
+        onRefresh: loadPendenciasRequisicao,
+        tableId: 'pendencias-requisicao',
+        rows,
+        columns,
+        emptyMessage: overviewMode
+            ? 'Nenhuma requisição aguardando projetista.'
+            : 'Nenhuma requisição aguardando sua resposta.',
+        minWidth: overviewMode ? '920px' : '820px',
+        headerActionsHtml: canCreatePendenciasRequisicao()
+            ? `<button type="button" id="btn-pendencias-create-requisicao"
+                class="order-tab-action-btn text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-slate-800">
+                <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 2.5a.5.5 0 0 1 .5.5v4.5H13a.5.5 0 0 1 0 1H8.5V13a.5.5 0 0 1-1 0V8.5H3a.5.5 0 0 1 0-1h4.5V3a.5.5 0 0 1 .5-.5z"/></svg>
+                <span>Criar Requisição</span>
+            </button>`
+            : ''
+    });
 
     content.querySelector('#btn-pendencias-create-requisicao')
         ?.addEventListener('click', () => openCreateRequestFromPendencias());
-    content.querySelector('#btn-pendencias-refresh-requisicao')
-        ?.addEventListener('click', () => loadPendenciasRequisicao());
 }
 
 async function loadPendenciasRequisicao() {

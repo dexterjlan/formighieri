@@ -317,6 +317,35 @@ html[data-theme="formighieri-sage"] table thead th {
     border-bottom: 1px solid var(--fm-table-border);
 }
 
+html[data-theme="formighieri-sage"] .interactive-table-toolbar {
+    background: var(--fm-surface) !important;
+    border-color: var(--fm-table-border) !important;
+}
+
+html[data-theme="formighieri-sage"] .interactive-table-count {
+    color: var(--fm-table-head-text) !important;
+}
+
+html[data-theme="formighieri-sage"] .interactive-table-clear {
+    color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] .interactive-table-sort-index {
+    background: var(--fm-sage-soft) !important;
+    color: var(--fm-sage-deep) !important;
+}
+
+html[data-theme="formighieri-sage"] table thead .interactive-table-filter-row th {
+    color: var(--fm-table-text) !important;
+    font-weight: 400;
+}
+
+html[data-theme="formighieri-sage"] .interactive-table-filter-input {
+    color: var(--fm-table-text) !important;
+    background: #ffffff !important;
+    border-color: var(--fm-table-border) !important;
+}
+
 html[data-theme="formighieri-sage"] table tbody tr {
     background: var(--fm-table-row-bg) !important;
 }

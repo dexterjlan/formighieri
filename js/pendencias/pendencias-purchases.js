@@ -93,85 +93,65 @@ function renderPendenciasEnviadosComprasList(items) {
     if (!content) return;
 
     const canView = canSeeCompraModal();
-
-    const rows = items.map(item => {
-        const orderCode = item.orderCode || item.project?.order?.orderCode || '—';
-        const clientName = item.clientName || getOrderClientName(item.project?.order) || '—';
-        const projectName = item.projectName || item.project?.name || '—';
-        const tipoLabel = typeof formatCompraTipoLabel === 'function'
+    const rows = (items || []).map(item => mapPendenciasInteractiveIdentity(item.project, {
+        id: item.id,
+        orderCode: item.orderCode || item.project?.order?.orderCode || '—',
+        clientName: item.clientName || getOrderClientName(item.project?.order) || '—',
+        projectName: item.projectName || item.project?.name || '—',
+        tipoLabel: typeof formatCompraTipoLabel === 'function'
             ? formatCompraTipoLabel(item.purchaseType, item.subtypeName)
-            : (item.purchaseType || '—');
-        const statusClass = typeof getCompraStatusBadgeClass === 'function'
+            : (item.purchaseType || '—'),
+        statusName: item.status || '—',
+        statusClass: typeof getCompraStatusBadgeClass === 'function'
             ? getCompraStatusBadgeClass(item.status)
-            : 'bg-amber-100 text-amber-800';
-        const actionCell = canView && item.id
-            ? `<button type="button"
-                class="pendencias-compras-open-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-amber-100 text-amber-800 hover:bg-amber-200"
-                data-compra-id="${item.id}">
-                Ver Compras
-            </button>`
-            : '<span class="text-xs text-slate-300">—</span>';
-
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectName)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(tipoLabel)}</td>
-                <td class="p-3">
-                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">
-                        ${escapeHtml(item.status || '—')}
-                    </span>
-                </td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
+            : 'bg-amber-100 text-amber-800'
+    }));
 
     const subtitle = canActCompraModal()
         ? 'Solicitações de compra geradas pela implantação.'
         : 'Visualização das solicitações de compra em aberto.';
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Enviados para Compras</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-enviados-compras"
-                    class="order-tab-action-btn text-xs bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg font-medium hover:bg-amber-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${items.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[860px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Código do Pedido</th>
-                                <th class="text-left p-3 font-semibold">Nome do Cliente</th>
-                                <th class="text-left p-3 font-semibold">Nome do Projeto</th>
-                                <th class="text-left p-3 font-semibold">Tipo</th>
-                                <th class="text-left p-3 font-semibold">Status</th>
-                                <th class="text-right p-3 font-semibold w-36">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhuma solicitação de compra em aberto.</p>'}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-enviados-compras')
-        ?.addEventListener('click', () => loadPendenciasEnviadosCompras());
-
-    content.querySelectorAll('.pendencias-compras-open-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const compraId = Number(button.dataset.compraId);
-            if (!compraId || typeof openCompraModal !== 'function') return;
-            openCompraModal(compraId);
-        });
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Enviados para Compras',
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-enviados-compras',
+        refreshButtonClass: 'order-tab-action-btn text-xs bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg font-medium hover:bg-amber-50',
+        onRefresh: loadPendenciasEnviadosCompras,
+        tableId: 'pendencias-enviados-compras',
+        rows,
+        minWidth: '860px',
+        emptyMessage: 'Nenhuma solicitação de compra em aberto.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({
+                orderLabel: 'Código do Pedido',
+                clientLabel: 'Nome do Cliente',
+                projectLabel: 'Nome do Projeto'
+            }),
+            {
+                key: 'tipoLabel',
+                label: 'Tipo',
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                render: (row) => canView && row.id
+                    ? `<button type="button"
+                        class="pendencias-compras-open-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-amber-100 text-amber-800 hover:bg-amber-200"
+                        data-compra-id="${row.id}">
+                        Ver Compras
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-compras-open-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const compraId = Number(button.dataset.compraId);
+                    if (!compraId || typeof openCompraModal !== 'function') return;
+                    openCompraModal(compraId);
+                });
+            });
+        }
     });
 }

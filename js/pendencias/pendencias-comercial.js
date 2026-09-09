@@ -125,65 +125,49 @@ function renderPendenciasAprovarConferenciaList(projects, conferenceByProjectId,
         ? 'Conferências confirmadas aguardando aprovação comercial.'
         : 'Visualização das conferências confirmadas aguardando aprovação.';
 
-    const rows = conferenceGroups.map(group => {
-        const orderCode = group.order?.orderCode || '—';
-        const clientName = getOrderClientName(group.order) || '—';
-        const projectSummary = getPendenciasConsultorConferenciaProjectSummary(group.projects);
-        const conference = group.conference;
-        const canView = Boolean(conference?.id);
-        const actionButtons = [];
+    const rows = conferenceGroups.map(group => mapPendenciasInteractiveIdentity(group.order, {
+        id: group.conference?.id || group.projects[0]?.id,
+        order: group.order,
+        projectName: getPendenciasConsultorConferenciaProjectSummary(group.projects),
+        conferenceId: group.conference?.id || ''
+    }));
 
-        if (canView) {
-            actionButtons.push(`<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`);
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Aprovar Conferência',
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-aprovar-conferencia',
+        onRefresh: loadPendenciasAprovarConferencia,
+        tableId: 'pendencias-aprovar-conferencia',
+        rows,
+        emptyMessage: 'Nenhuma conferência confirmada aguardando aprovação.',
+        minWidth: '680px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({
+                projectLabel: 'Projetos',
+                projectCellClass: 'p-3 text-xs text-slate-500'
+            }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-56',
+                render: (row) => row.conferenceId
+                    ? `<div class="flex flex-wrap justify-end gap-1">
+                        <button type="button"
+                            class="pendencias-aprovar-conferencia-ver-btn text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium"
+                            data-conference-id="${row.conferenceId}">
+                            Ver Conferência
+                        </button>
+                    </div>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-aprovar-conferencia-ver-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openAnteprojetoConferenceFromPendencias(Number(button.dataset.conferenceId));
+                });
+            });
         }
-
-        const actionCell = actionButtons.length
-            ? `<div class="flex flex-wrap justify-end gap-1">${actionButtons.join('')}</div>`
-            : '<span class="text-xs text-slate-300">—</span>';
-
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs text-slate-500">${escapeHtml(projectSummary)}</td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Aprovar Conferência</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-aprovar-conferencia"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${conferenceGroups.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[680px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projetos</th>
-                                <th class="text-right p-3 font-semibold w-56">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhuma conferência confirmada aguardando aprovação.</p>`}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-aprovar-conferencia')
-        ?.addEventListener('click', () => loadPendenciasAprovarConferencia());
+    });
 }
 
 async function loadPendenciasAprovarConferencia() {
@@ -324,75 +308,66 @@ function renderPendenciasConsultorConferenciaList(projects, conferenceByProjectI
         : 'Conferências dos seus pedidos aguardando retorno.';
 
     const rows = conferenceGroups.map(group => {
-        const orderCode = group.order?.orderCode || '—';
-        const clientName = getOrderClientName(group.order) || '—';
-        const projectSummary = getPendenciasConsultorConferenciaProjectSummary(group.projects);
         const deliveryDates = group.projects
             .map(project => project.deliveryDate)
             .filter(Boolean)
             .sort();
-        const deliveryDate = formatPendenciasDeliveryDate(deliveryDates[0]);
-        const conference = group.conference;
-        const canView = Boolean(conference?.id);
-        const actionButtons = [];
 
-        if (canView) {
-            actionButtons.push(`<button type="button" onclick="openAnteprojetoConferenceFromPendencias(${conference.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Ver Conferência</button>`);
-        }
-
-        const actionCell = actionButtons.length
-            ? `<div class="flex flex-wrap justify-end gap-1">${actionButtons.join('')}</div>`
-            : '<span class="text-xs text-slate-300">—</span>';
-
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs text-slate-500">${escapeHtml(projectSummary)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
+        return mapPendenciasInteractiveIdentity(group.order, {
+            id: group.conference?.id || group.projects[0]?.id,
+            order: group.order,
+            projectName: getPendenciasConsultorConferenciaProjectSummary(group.projects),
+            deliveryLabel: formatPendenciasDeliveryDate(deliveryDates[0]),
+            deliveryDate: deliveryDates[0] || null,
+            conferenceId: group.conference?.id || ''
+        });
+    });
 
     const emptyMessage = overviewMode
         ? 'Nenhuma conferência enviada aguardando retorno.'
         : 'Nenhuma conferência enviada nos seus pedidos.';
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Conferência</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-consultor-conferencia"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${conferenceGroups.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[820px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projetos</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-56">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-consultor-conferencia')
-        ?.addEventListener('click', () => loadPendenciasConsultorConferencia());
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Conferência',
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-consultor-conferencia',
+        onRefresh: loadPendenciasConsultorConferencia,
+        tableId: 'pendencias-consultor-conferencia',
+        rows,
+        emptyMessage,
+        minWidth: '820px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({
+                projectLabel: 'Projetos',
+                projectCellClass: 'p-3 text-xs text-slate-500'
+            }),
+            getPendenciasInteractiveDateColumn({
+                key: 'deliveryLabel',
+                label: 'Entrega',
+                sortKey: 'deliveryDate'
+            }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-56',
+                render: (row) => row.conferenceId
+                    ? `<div class="flex flex-wrap justify-end gap-1">
+                        <button type="button"
+                            class="pendencias-consultor-conferencia-ver-btn text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium"
+                            data-conference-id="${row.conferenceId}">
+                            Ver Conferência
+                        </button>
+                    </div>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-consultor-conferencia-ver-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openAnteprojetoConferenceFromPendencias(Number(button.dataset.conferenceId));
+                });
+            });
+        }
+    });
 }
 
 async function loadPendenciasConsultorConferencia() {
@@ -500,13 +475,7 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
         ? `Todos os projetos em ${titleText.toLowerCase()}.`
         : `Projetos dos seus pedidos em ${titleText.toLowerCase()}.`;
 
-    const rows = projects.map(project => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const projectLabel = typeof getPendenciasProjectDetailLabel === 'function'
-            ? getPendenciasProjectDetailLabel(project)
-            : (project?.name || 'Projeto');
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
+    const rows = (projects || []).map(project => {
         const approval = approvalsByProject[project.id];
         const projectStatusName = project.projectStatus?.name || '';
         const canApprove = approval
@@ -516,83 +485,111 @@ function renderPendenciasConsultorAguardandoAprovacaoList(projects, approvalsByP
             && (isOrderProjectEmRevisaoComercialConsStatus(projectStatusName) || isEmRevisaoComercialView)
             && typeof canRequestNewRevision === 'function'
             && canRequestNewRevision(approval, projectStatusName);
-        const actionButtons = [];
-
         const canCommercialRevision = approval
             && typeof canAccessCommercialRevision === 'function'
             && canAccessCommercialRevision(approval);
-
-        if (canApprove) {
-            actionButtons.push(`<button type="button" onclick="approveCommercialApprovalFromPendencias(${approval.id})"
-                class="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium">Aprovar</button>`);
-        }
-        if (showRequestRevision) {
-            actionButtons.push(`<button type="button" onclick="openCommercialRevisionFromPendencias(${approval.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Solicitar Revisão</button>`);
-        }
-        if (canCommercialRevision) {
-            actionButtons.push(`<button type="button" onclick="openCommercialRevisionCommercialFromPendencias(${approval.id})"
-                class="text-xs bg-purple-100 text-purple-800 hover:bg-purple-200 px-2.5 py-1 rounded-lg font-medium">Revisão Comercial</button>`);
-        }
-        if (!isEmRevisaoComercialView
+        const showVoltarRevisao = !isEmRevisaoComercialView
             && typeof canShowOrderProjectVoltarRevisaoAction === 'function'
-            && canShowOrderProjectVoltarRevisaoAction(project, project.orderId || project.order?.id)) {
-            actionButtons.push(`<button type="button" onclick="voltarRevisaoComercialFromPendencias(${project.id})"
-                class="text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 px-2.5 py-1 rounded-lg font-medium">Voltar Revisão</button>`);
-        }
+            && canShowOrderProjectVoltarRevisaoAction(project, project.orderId || project.order?.id);
 
-        const actionCell = actionButtons.length
-            ? `<div class="flex flex-wrap justify-end gap-1">${actionButtons.join('')}</div>`
-            : '<span class="text-xs text-slate-300">—</span>';
-
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
+        return mapPendenciasInteractiveIdentity(project, {
+            projectName: typeof getPendenciasProjectDetailLabel === 'function'
+                ? getPendenciasProjectDetailLabel(project)
+                : (project?.name || 'Projeto'),
+            deliveryLabel: formatPendenciasDeliveryDate(project.deliveryDate),
+            deliveryDate: project.deliveryDate,
+            approvalId: approval?.id || '',
+            canApprove,
+            showRequestRevision,
+            canCommercialRevision,
+            showVoltarRevisao
+        });
+    });
 
     const emptyMessage = overviewMode
         ? 'Nenhum projeto aguardando aprovação.'
         : 'Nenhum projeto aguardando aprovação nos seus pedidos.';
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">${escapeHtml(titleText)}</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-consultor-aprovacao"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[820px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                <th class="text-right p-3 font-semibold w-44">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-consultor-aprovacao')
-        ?.addEventListener('click', () => loadPendenciasConsultorAguardandoAprovacao());
+    renderPendenciasInteractiveTableScreen(content, {
+        title: titleText,
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-consultor-aprovacao',
+        onRefresh: loadPendenciasConsultorAguardandoAprovacao,
+        tableId: isEmRevisaoComercialView
+            ? 'pendencias-consultor-em-revisao-comercial'
+            : 'pendencias-consultor-aguardando-aprovacao',
+        rows,
+        emptyMessage,
+        minWidth: '820px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns(),
+            getPendenciasInteractiveDateColumn({
+                key: 'deliveryLabel',
+                label: 'Entrega',
+                sortKey: 'deliveryDate'
+            }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-44',
+                render: (row) => {
+                    const actionButtons = [];
+                    if (row.canApprove) {
+                        actionButtons.push(`<button type="button"
+                            class="pendencias-consultor-aprovar-btn text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium"
+                            data-approval-id="${row.approvalId}">
+                            Aprovar
+                        </button>`);
+                    }
+                    if (row.showRequestRevision) {
+                        actionButtons.push(`<button type="button"
+                            class="pendencias-consultor-solicitar-revisao-btn text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium"
+                            data-approval-id="${row.approvalId}">
+                            Solicitar Revisão
+                        </button>`);
+                    }
+                    if (row.canCommercialRevision) {
+                        actionButtons.push(`<button type="button"
+                            class="pendencias-consultor-revisao-comercial-btn text-xs bg-purple-100 text-purple-800 hover:bg-purple-200 px-2.5 py-1 rounded-lg font-medium"
+                            data-approval-id="${row.approvalId}">
+                            Revisão Comercial
+                        </button>`);
+                    }
+                    if (row.showVoltarRevisao) {
+                        actionButtons.push(`<button type="button"
+                            class="pendencias-consultor-voltar-revisao-btn text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 px-2.5 py-1 rounded-lg font-medium"
+                            data-project-id="${row.id}">
+                            Voltar Revisão
+                        </button>`);
+                    }
+                    return actionButtons.length
+                        ? `<div class="flex flex-wrap justify-end gap-1">${actionButtons.join('')}</div>`
+                        : '<span class="text-xs text-slate-300">—</span>';
+                }
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-consultor-aprovar-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    approveCommercialApprovalFromPendencias(Number(button.dataset.approvalId));
+                });
+            });
+            tbody?.querySelectorAll('.pendencias-consultor-solicitar-revisao-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openCommercialRevisionFromPendencias(Number(button.dataset.approvalId));
+                });
+            });
+            tbody?.querySelectorAll('.pendencias-consultor-revisao-comercial-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openCommercialRevisionCommercialFromPendencias(Number(button.dataset.approvalId));
+                });
+            });
+            tbody?.querySelectorAll('.pendencias-consultor-voltar-revisao-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    voltarRevisaoComercialFromPendencias(Number(button.dataset.projectId));
+                });
+            });
+        }
+    });
 }
 
 async function loadPendenciasConsultorAguardandoAprovacao() {
@@ -759,73 +756,70 @@ function renderPendenciasConsultorRequisicaoList(requests, overviewMode) {
         ? 'Requisições em aberto aguardando resposta do consultor, inclusive de Detalhamento.'
         : 'Requisições dos seus pedidos aguardando sua resposta, inclusive de Detalhamento.';
 
-    const rows = requests.map(request => {
-        const orderCode = request.order?.orderCode || '—';
-        const clientName = getOrderClientName(request.order) || '—';
-        const projectLabel = getPendenciasRequestProjectLabel(request);
-        const designerName = request.designerName || '—';
-        const canShowRequest = overviewMode
+    const rows = (requests || []).map(request => mapPendenciasInteractiveIdentity(request, {
+        order: request.order,
+        projectName: getPendenciasRequestProjectLabel(request),
+        designerName: request.designerName || '—',
+        requestType: typeof getRequestType === 'function' ? getRequestType(request) : request.requestType,
+        requestTypeLabel: typeof formatRequestType === 'function'
+            ? formatRequestType(typeof getRequestType === 'function' ? getRequestType(request) : request.requestType)
+            : (request.requestType || '—'),
+        createdAtLabel: request.createdAt ? formatDate(request.createdAt) : '—',
+        createdAt: request.createdAt,
+        canShowRequest: overviewMode
             ? currentUser?.role === 'Admin'
-            : isRequestWaitingConsultor(request) && canRespondAsConsultor(request);
-        const actionCell = canShowRequest
-            ? `<button type="button" onclick="openConsultorRequestFromPendencias(${request.id})"
-                class="text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium">Mostrar Requisição</button>`
-            : '<span class="text-xs text-slate-300">—</span>';
-
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${overviewMode
-                    ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>`
-                    : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3">${getRequestTypeBadgeHtml(request)}</td>
-                <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${request.createdAt ? formatDate(request.createdAt) : '—'}</td>
-                <td class="p-3 text-right whitespace-nowrap">${actionCell}</td>
-            </tr>
-        `;
-    }).join('');
+            : isRequestWaitingConsultor(request) && canRespondAsConsultor(request)
+    }));
 
     const emptyMessage = overviewMode
         ? 'Nenhuma requisição aguardando consultor.'
         : 'Nenhuma requisição aguardando sua resposta.';
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Requisições</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-consultor-requisicoes"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${requests.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm min-w-[${overviewMode ? '1000' : '900'}px]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Tipo</th>
-                                <th class="text-left p-3 font-semibold">Data Abertura</th>
-                                <th class="text-right p-3 font-semibold w-40">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-consultor-requisicoes')
-        ?.addEventListener('click', () => loadPendenciasConsultorRequisicoes());
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Requisições',
+        subtitle,
+        refreshButtonId: 'btn-pendencias-refresh-consultor-requisicoes',
+        onRefresh: loadPendenciasConsultorRequisicoes,
+        tableId: 'pendencias-consultor-requisicao',
+        rows,
+        emptyMessage,
+        minWidth: overviewMode ? '1000px' : '900px',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+            {
+                key: 'requestTypeLabel',
+                label: 'Tipo',
+                cellClass: 'p-3',
+                render: (row) => typeof getRequestTypeBadgeHtml === 'function'
+                    ? getRequestTypeBadgeHtml({ requestType: row.requestType })
+                    : escapeHtml(row.requestTypeLabel || '—')
+            },
+            getPendenciasInteractiveDateColumn({
+                key: 'createdAtLabel',
+                label: 'Data Abertura',
+                sortKey: 'createdAt',
+                cellClass: 'p-3 text-xs text-slate-500 whitespace-nowrap'
+            }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-40',
+                render: (row) => row.canShowRequest
+                    ? `<button type="button"
+                        class="pendencias-consultor-mostrar-requisicao-btn text-xs bg-sky-100 text-sky-800 hover:bg-sky-200 px-2.5 py-1 rounded-lg font-medium"
+                        data-request-id="${row.id}">
+                        Mostrar Requisição
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-consultor-mostrar-requisicao-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openConsultorRequestFromPendencias(Number(button.dataset.requestId));
+                });
+            });
+        }
+    });
 }
 
 async function loadPendenciasConsultorRequisicoes() {

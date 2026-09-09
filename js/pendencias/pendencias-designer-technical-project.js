@@ -170,78 +170,6 @@ function renderPendenciasAssociacaoPrevisaoInputs(project) {
     `;
 }
 
-function renderPendenciasSemResponsavelProjectRow(project, characteristicsMap = new Map(), options = {}) {
-    const mode = options.mode === 'projetista' ? 'projetista' : 'gestor';
-    const showPrevisao = options.showPrevisao !== false;
-    const showAction = options.showAction !== false;
-    const orderCode = project.order?.orderCode || '—';
-    const clientName = getOrderClientName(project.order) || '—';
-    const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-    const projectLabel = getPendenciasProjectDetailLabel(project);
-    const characteristicRows = characteristicsMap.get(Number(project.id)) || [];
-    const characteristicsCell = typeof renderPendenciasProjectCharacteristicsCell === 'function'
-        ? renderPendenciasProjectCharacteristicsCell(characteristicRows)
-        : 'Nenhuma';
-
-    const designerCell = mode === 'gestor'
-        ? `<td class="p-3 pendencias-sem-projetista-designer">
-                <select class="pendencias-gestor-designer-select w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
-                    data-project-id="${project.id}">
-                    <option value="">Selecione...</option>
-                    ${getPendenciasProjetistaOptionsHtml()}
-                </select>
-            </td>`
-        : '';
-
-    const previsaoCell = showPrevisao
-        ? `<td class="p-3 pendencias-sem-projetista-previsao">
-                ${renderPendenciasAssociacaoPrevisaoInputs(project)}
-            </td>`
-        : '';
-
-    const actionCell = showAction && mode === 'gestor'
-        ? `<button type="button"
-                class="pendencias-gestor-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
-                data-project-id="${project.id}"
-                data-delivery-date="${escapeHtml(getPendenciasPrevisaoInputMaxDate(project.deliveryDate))}">
-                Associar
-            </button>`
-        : '';
-
-    return `
-        <tr class="border-b border-slate-100 last:border-0">
-            <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-            <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-            <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-            <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-            <td class="p-3 text-xs text-slate-600 pendencias-sem-projetista-characteristics">${characteristicsCell}</td>
-            ${previsaoCell}
-            ${designerCell}
-            ${showAction ? `<td class="p-3 text-right pendencias-sem-projetista-action">${actionCell}</td>` : ''}
-        </tr>
-    `;
-}
-
-function renderPendenciasSemResponsavelTableHead(showDesigner = true, options = {}) {
-    const showPrevisao = options.showPrevisao !== false;
-    const showAction = options.showAction !== false;
-
-    return `
-        <tr>
-            <th class="text-left p-3 font-semibold">Pedido</th>
-            <th class="text-left p-3 font-semibold">Cliente</th>
-            <th class="text-left p-3 font-semibold">Projeto</th>
-            <th class="text-left p-3 font-semibold">Entrega Proj. Téc.</th>
-            <th class="text-left p-3 font-semibold min-w-[10rem]">Características</th>
-            ${showPrevisao ? '<th class="text-left p-3 font-semibold min-w-[11rem]">Previsão</th>' : ''}
-            ${showDesigner
-                ? '<th class="text-left p-3 font-semibold min-w-[11rem]">Projetista</th>'
-                : ''}
-            ${showAction ? '<th class="text-right p-3 font-semibold w-28">Ação</th>' : ''}
-        </tr>
-    `;
-}
-
 function renderPendenciasWorkloadPrevisaoInputs(project) {
     const inicioValue = getPendenciasPrevisaoInputValue(project.technicalProjectForecastStartDate);
     const fimValue = getPendenciasPrevisaoInputValue(project.technicalProjectForecastEndDate);
@@ -271,148 +199,67 @@ function renderPendenciasAguardandoProjetoTecnicoList(mine, overviewMode = false
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const renderRow = (project, mode, options = {}) => {
-        const orderCode = project.order?.orderCode || '—';
-        const clientName = getOrderClientName(project.order) || '—';
-        const deliveryDate = formatPendenciasDeliveryDate(project.deliveryDate);
-        const projectLabel = getPendenciasProjectDetailLabel(project);
-        const statusName = getPendenciasProjectStatusName(project);
-        const showDesignerColumn = Boolean(options.showDesignerColumn);
-        const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
-        const showPrevisaoStartColumn = Boolean(options.showPrevisaoStartColumn);
-        const showPrevisaoEndColumn = Boolean(options.showPrevisaoEndColumn);
-        const showActionColumn = options.showActionColumn !== false;
+    const rows = (mine || []).map(project => mapPendenciasInteractiveIdentity(project, {
+        designerName: project.designer?.name || '—',
+        deliveryLabel: formatPendenciasDeliveryDate(project.deliveryDate),
+        deliveryDate: project.deliveryDate,
+        forecastStartLabel: formatPendenciasDeliveryDate(project.technicalProjectForecastStartDate),
+        forecastStartDate: project.technicalProjectForecastStartDate,
+        forecastEndLabel: formatPendenciasDeliveryDate(project.technicalProjectForecastEndDate),
+        forecastEndDate: project.technicalProjectForecastEndDate,
+        statusName: getPendenciasProjectStatusName(project)
+    }));
 
-        let actionCell = '';
-        if (showActionColumn) {
-            if (statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) {
-                actionCell = `<button type="button"
-                    class="pendencias-iniciar-projeto-btn text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-1.5 rounded-lg font-medium"
-                    data-project-id="${project.id}">
-                    Iniciar projeto
-                </button>`;
-            } else {
-                const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
-                actionCell = `<span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName || '—')}</span>`;
-            }
-        }
-
-        const statusCell = !showActionColumn
-            ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">
-                    <span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${getPendenciasProjectStatusBadgeClass(statusName)}">${escapeHtml(statusName || '—')}</span>
-                </td>`
-            : '';
-
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${showDesignerColumn
-                    ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(project.designer?.name || '—')}</td>`
-                    : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                ${showPrevisaoStartColumn
-                    ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(formatPendenciasDeliveryDate(project.technicalProjectForecastStartDate))}</td>`
-                    : ''}
-                ${showPrevisaoEndColumn
-                    ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(formatPendenciasDeliveryDate(project.technicalProjectForecastEndDate))}</td>`
-                    : ''}
-                ${showPrevisaoColumn
-                    ? `<td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(formatTechnicalProjectForecastRange(project.technicalProjectForecastStartDate, project.technicalProjectForecastEndDate))}</td>`
-                    : ''}
-                ${statusCell}
-                ${showActionColumn ? `<td class="p-3 text-right">${actionCell}</td>` : ''}
-            </tr>
-        `;
-    };
-
-    const renderTable = (title, rows, emptyMessage, options = {}) => {
-        const lastColumnLabel = options.lastColumnLabel || 'Ação';
-        const showDesignerColumn = Boolean(options.showDesignerColumn);
-        const showPrevisaoColumn = Boolean(options.showPrevisaoColumn);
-        const showPrevisaoStartColumn = Boolean(options.showPrevisaoStartColumn);
-        const showPrevisaoEndColumn = Boolean(options.showPrevisaoEndColumn);
-        const showActionColumn = options.showActionColumn !== false;
-        const showStatusColumn = !showActionColumn;
-
-        return `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">${escapeHtml(title)}</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${rows.length} projeto${rows.length === 1 ? '' : 's'}</p>
-                </div>
-            </div>
-            ${rows.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                ${showDesignerColumn ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Entrega</th>
-                                ${showPrevisaoStartColumn
-                                    ? '<th class="text-left p-3 font-semibold whitespace-nowrap">Início prev.</th>'
-                                    : ''}
-                                ${showPrevisaoEndColumn
-                                    ? '<th class="text-left p-3 font-semibold whitespace-nowrap">Fim prev.</th>'
-                                    : ''}
-                                ${showPrevisaoColumn
-                                    ? '<th class="text-left p-3 font-semibold">Previsão</th>'
-                                    : ''}
-                                ${showStatusColumn
-                                    ? '<th class="text-left p-3 font-semibold">Status</th>'
-                                    : ''}
-                                ${showActionColumn
-                                    ? `<th class="text-right p-3 font-semibold min-w-[18rem]">${escapeHtml(lastColumnLabel)}</th>`
-                                    : ''}
-                            </tr>
-                        </thead>
-                        <tbody>${rows.join('')}</tbody>
-                    </table>
-                </div>`
-                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${escapeHtml(emptyMessage)}</p>`}
-        </div>
-    `;
-    };
-
-    content.innerHTML = `
-        <div class="space-y-4">
-            <div class="flex justify-end">
-                <button type="button" id="btn-pendencias-refresh-aguardando-pt"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${renderTable(
-                overviewMode ? 'Associados a projetistas' : 'Associados a mim',
-                mine.map(project => renderRow(project, 'mine', {
-                    showDesignerColumn: overviewMode,
-                    showPrevisaoStartColumn: true,
-                    showPrevisaoEndColumn: true,
-                    showActionColumn: true
-                })),
-                overviewMode
-                    ? 'Nenhum projeto associado a projetistas.'
-                    : 'Nenhum projeto associado a você.',
-                {
-                    showDesignerColumn: overviewMode,
-                    showPrevisaoStartColumn: true,
-                    showPrevisaoEndColumn: true,
-                    showActionColumn: true
+    renderPendenciasInteractiveTableScreen(content, {
+        title: overviewMode ? 'Associados a projetistas' : 'Associados a mim',
+        subtitle: overviewMode
+            ? 'Projetos associados a projetistas aguardando início do projeto técnico.'
+            : 'Projetos associados a você aguardando início do projeto técnico.',
+        refreshButtonId: 'btn-pendencias-refresh-aguardando-pt',
+        onRefresh: loadPendenciasAguardandoProjetoTecnico,
+        tableId: 'pendencias-aguardando-projeto-tecnico',
+        rows,
+        minWidth: overviewMode ? '56rem' : '48rem',
+        emptyMessage: overviewMode
+            ? 'Nenhum projeto associado a projetistas.'
+            : 'Nenhum projeto associado a você.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+            getPendenciasInteractiveDateColumn({
+                key: 'deliveryLabel',
+                label: 'Entrega',
+                sortKey: 'deliveryDate'
+            }),
+            getPendenciasInteractiveDateColumn({
+                key: 'forecastStartLabel',
+                label: 'Início prev.',
+                sortKey: 'forecastStartDate'
+            }),
+            getPendenciasInteractiveDateColumn({
+                key: 'forecastEndLabel',
+                label: 'Fim prev.',
+                sortKey: 'forecastEndDate'
+            }),
+            getPendenciasInteractiveActionColumn({
+                thClass: 'min-w-[18rem]',
+                render: (row) => {
+                    if (row.statusName === PENDENCIAS_STATUS_AGUARDANDO_PT) {
+                        return `<button type="button"
+                            class="pendencias-iniciar-projeto-btn text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-3 py-1.5 rounded-lg font-medium"
+                            data-project-id="${row.id}">
+                            Iniciar projeto
+                        </button>`;
+                    }
+                    const statusClass = getPendenciasProjectStatusBadgeClass(row.statusName);
+                    return `<span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(row.statusName || '—')}</span>`;
                 }
-            )}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-aguardando-pt')
-        ?.addEventListener('click', () => loadPendenciasAguardandoProjetoTecnico());
-
-    content.querySelectorAll('.pendencias-iniciar-projeto-btn').forEach(button => {
-        button.addEventListener('click', () => iniciarPendenciaProjetoTecnico(Number(button.dataset.projectId)));
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-iniciar-projeto-btn').forEach(button => {
+                button.addEventListener('click', () => iniciarPendenciaProjetoTecnico(Number(button.dataset.projectId)));
+            });
+        }
     });
 }
 
@@ -1292,55 +1139,104 @@ function renderPendenciasProjetosSemProjetistas(projects, characteristicsMap = n
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const projectRows = projects.map(project => renderPendenciasSemResponsavelProjectRow(
-        project,
-        characteristicsMap,
-        { mode: 'gestor' }
-    )).join('');
+    const rows = (projects || []).map(project => {
+        const characteristicRows = characteristicsMap.get(Number(project.id)) || [];
+        const characteristicLabels = typeof getProjectCharacteristicLabelsFromRows === 'function'
+            ? getProjectCharacteristicLabelsFromRows(characteristicRows)
+            : [];
+        const characteristicHtml = typeof renderPendenciasProjectCharacteristicsCell === 'function'
+            ? renderPendenciasProjectCharacteristicsCell(characteristicRows)
+            : 'Nenhuma';
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Aguardando Projeto Técnico sem responsável</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">${projects.length} projeto${projects.length === 1 ? '' : 's'}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-sem-projetistas"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${renderRefreshButtonInnerHtml()}
-                </button>
-            </div>
-            ${projects.length
-                ? `<div class="overflow-x-auto">
-                    <table class="pendencias-sem-projetista-table w-full text-sm min-w-[72rem]">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            ${renderPendenciasSemResponsavelTableHead(true)}
-                        </thead>
-                        <tbody>${projectRows}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projeto aguardando projeto técnico sem responsável.</p>'}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-sem-projetistas')
-        ?.addEventListener('click', () => loadPendenciasProjetosSemProjetistas());
-
-    content.querySelectorAll('.pendencias-gestor-associar-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const projectId = Number(button.dataset.projectId);
-            const row = button.closest('tr');
-            const select = row?.querySelector('.pendencias-gestor-designer-select')
-                || content.querySelector(`.pendencias-gestor-designer-select[data-project-id="${projectId}"]`);
-            const previsaoValues = getPendenciasPrevisaoValuesFromContainer(row);
-            associarPendenciaProjetoAProjetista(
-                projectId,
-                Number(select?.value),
-                previsaoValues.inicioDate,
-                previsaoValues.previsaoDate,
-                button.dataset.deliveryDate || ''
-            );
+        return mapPendenciasInteractiveIdentity(project, {
+            deliveryLabel: formatPendenciasDeliveryDate(project.deliveryDate),
+            deliveryDate: project.deliveryDate,
+            deliveryDateMax: getPendenciasPrevisaoInputMaxDate(project.deliveryDate),
+            characteristicLabels: characteristicLabels.join(', ') || 'Nenhuma',
+            characteristicHtml,
+            technicalProjectForecastStartDate: project.technicalProjectForecastStartDate,
+            technicalProjectForecastEndDate: project.technicalProjectForecastEndDate
         });
+    });
+
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Aguardando Projeto Técnico sem responsável',
+        subtitle: 'Associe um projetista e informe a previsão do projeto técnico.',
+        refreshButtonId: 'btn-pendencias-refresh-sem-projetistas',
+        onRefresh: loadPendenciasProjetosSemProjetistas,
+        tableId: 'pendencias-projetos-sem-projetistas',
+        rows,
+        minWidth: '72rem',
+        emptyMessage: 'Nenhum projeto aguardando projeto técnico sem responsável.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns(),
+            getPendenciasInteractiveDateColumn({
+                key: 'deliveryLabel',
+                label: 'Entrega Proj. Téc.',
+                sortKey: 'deliveryDate'
+            }),
+            {
+                key: 'characteristicLabels',
+                label: 'Características',
+                thClass: 'min-w-[10rem]',
+                cellClass: 'p-3 text-xs text-slate-600 pendencias-sem-projetista-characteristics',
+                render: (row) => row.characteristicHtml
+            },
+            {
+                key: 'forecast',
+                label: 'Previsão',
+                type: 'action',
+                sortable: true,
+                filterable: true,
+                thClass: 'min-w-[11rem]',
+                cellClass: 'p-3 pendencias-sem-projetista-previsao',
+                getSortValue: (row) => row.technicalProjectForecastStartDate || '',
+                getFilterValue: (row) => [
+                    formatPendenciasDeliveryDate(row.technicalProjectForecastStartDate),
+                    formatPendenciasDeliveryDate(row.technicalProjectForecastEndDate)
+                ].join(' '),
+                render: (row) => renderPendenciasAssociacaoPrevisaoInputs(row)
+            },
+            {
+                key: 'designerSelect',
+                label: 'Projetista',
+                type: 'action',
+                thClass: 'min-w-[11rem]',
+                cellClass: 'p-3 pendencias-sem-projetista-designer',
+                render: (row) => `<select class="pendencias-gestor-designer-select w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                    data-project-id="${row.id}">
+                    <option value="">Selecione...</option>
+                    ${getPendenciasProjetistaOptionsHtml()}
+                </select>`
+            },
+            getPendenciasInteractiveActionColumn({
+                thClass: 'w-28',
+                render: (row) => `<button type="button"
+                    class="pendencias-gestor-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
+                    data-project-id="${row.id}"
+                    data-delivery-date="${escapeHtml(row.deliveryDateMax || '')}">
+                    Associar
+                </button>`
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-gestor-associar-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const projectId = Number(button.dataset.projectId);
+                    const row = button.closest('tr');
+                    const select = row?.querySelector('.pendencias-gestor-designer-select')
+                        || tbody.querySelector(`.pendencias-gestor-designer-select[data-project-id="${projectId}"]`);
+                    const previsaoValues = getPendenciasPrevisaoValuesFromContainer(row);
+                    associarPendenciaProjetoAProjetista(
+                        projectId,
+                        Number(select?.value),
+                        previsaoValues.inicioDate,
+                        previsaoValues.previsaoDate,
+                        button.dataset.deliveryDate || ''
+                    );
+                });
+            });
+        }
     });
 }
 

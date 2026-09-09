@@ -17,6 +17,7 @@ const SCRIPTS = [
     'js/core/status-badges.js',
     'js/core/query-filters.js',
     'js/core/utils-ui.js',
+    'js/core/interactive-table.js',
     'js/core/utils-order-consultant.js',
     'js/core/utils-conversation-permissions.js',
     'js/core/utils-commercial-approval.js',

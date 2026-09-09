@@ -442,6 +442,162 @@ function renderPendenciasSidebar() {
     });
 }
 
+function getPendenciasInteractiveIdentityColumns(options = {}) {
+    const columns = [
+        {
+            key: 'orderCode',
+            label: options.orderLabel || 'Pedido',
+            cellClass: 'p-3 text-xs font-mono text-slate-600'
+        },
+        {
+            key: 'clientName',
+            label: options.clientLabel || 'Cliente',
+            cellClass: 'p-3 text-xs text-slate-600'
+        }
+    ];
+    if (options.includeDesigner) {
+        columns.push({
+            key: 'designerName',
+            label: options.designerLabel || 'Projetista',
+            cellClass: 'p-3 text-xs text-slate-700'
+        });
+    }
+    columns.push({
+        key: 'projectName',
+        label: options.projectLabel || 'Projeto',
+        cellClass: options.projectCellClass || 'p-3 text-xs font-medium text-slate-800'
+    });
+    return columns;
+}
+
+function mapPendenciasInteractiveIdentity(record, extras = {}) {
+    const order = extras.order || record?.order || record?.project?.order || record?.orderProject?.order;
+    const projectName = extras.projectName
+        || (typeof getPendenciasProjectLabel === 'function' && record && !record.orderProject
+            ? getPendenciasProjectLabel(record)
+            : null)
+        || record?.orderProject?.name
+        || record?.project?.name
+        || record?.name
+        || '—';
+
+    return {
+        id: extras.id || record?.id,
+        orderCode: extras.orderCode || order?.orderCode || record?.orderCode || '—',
+        clientName: extras.clientName
+            || (typeof getOrderClientName === 'function' ? getOrderClientName(order) : null)
+            || record?.clientName
+            || '—',
+        projectName,
+        designerName: extras.designerName || record?.designer?.name || '—',
+        ...extras
+    };
+}
+
+function getPendenciasInteractiveStatusColumn(options = {}) {
+    return {
+        key: options.key || 'statusName',
+        label: options.label || 'Status',
+        cellClass: options.cellClass || 'p-3',
+        render: options.render || (row => {
+            const statusName = row.statusName || '—';
+            const statusClass = row.statusClass
+                || (typeof getPendenciasProjectStatusBadgeClass === 'function'
+                    ? getPendenciasProjectStatusBadgeClass(statusName)
+                    : 'bg-slate-100 text-slate-600');
+            return `<span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>`;
+        })
+    };
+}
+
+function getPendenciasInteractiveDateColumn(options = {}) {
+    return {
+        key: options.key,
+        label: options.label,
+        type: 'date',
+        sortKey: options.sortKey || options.key,
+        cellClass: options.cellClass || 'p-3 text-xs text-slate-600 whitespace-nowrap'
+    };
+}
+
+function getPendenciasInteractiveActionColumn(options = {}) {
+    return {
+        key: 'action',
+        label: options.label || 'Ação',
+        type: 'action',
+        align: 'right',
+        thClass: options.thClass || 'w-36',
+        cellClass: options.cellClass || 'p-3 text-right whitespace-nowrap',
+        render: options.render
+    };
+}
+
+function renderPendenciasInteractiveTableScreen(content, config = {}) {
+    if (!content) return;
+
+    const {
+        title,
+        subtitle = '',
+        refreshButtonId,
+        refreshButtonClass = 'order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50',
+        headerActionsHtml = '',
+        onRefresh,
+        tableId,
+        rows = [],
+        columns = [],
+        emptyMessage = 'Nenhum registro.',
+        filteredEmptyMessage = 'Nenhum registro encontrado com os filtros aplicados.',
+        minWidth = '760px',
+        onBind
+    } = config;
+
+    const mountId = `${tableId}-mount`;
+    content.innerHTML = `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                <div>
+                    <h3 class="font-bold text-sm text-slate-900">${escapeHtml(title)}</h3>
+                    ${subtitle ? `<p class="text-xs text-slate-400 mt-0.5">${escapeHtml(subtitle)}</p>` : ''}
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    ${headerActionsHtml}
+                    ${refreshButtonId
+                        ? `<button type="button" id="${escapeHtml(refreshButtonId)}"
+                            class="${escapeHtml(refreshButtonClass)}">
+                            ${typeof renderRefreshButtonInnerHtml === 'function' ? renderRefreshButtonInnerHtml() : 'Atualizar'}
+                        </button>`
+                        : ''}
+                </div>
+            </div>
+            <div id="${escapeHtml(mountId)}"></div>
+        </div>
+    `;
+
+    if (refreshButtonId && onRefresh) {
+        content.querySelector(`#${refreshButtonId}`)?.addEventListener('click', onRefresh);
+    }
+
+    const mountEl = document.getElementById(mountId);
+    if (typeof mountInteractiveTable !== 'function') {
+        if (mountEl) {
+            mountEl.innerHTML = '<p class="text-xs text-red-500 text-center py-8 px-4">Componente de tabela interativa indisponível.</p>';
+        }
+        return;
+    }
+
+    mountInteractiveTable(mountEl, {
+        tableId,
+        rows,
+        columns,
+        emptyMessage,
+        filteredEmptyMessage,
+        minWidth,
+        onBind,
+        getRowClass: config.getRowClass,
+        getRowAttrs: config.getRowAttrs
+    });
+}
+
 function renderPendenciasPlaceholder(title, message) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;

@@ -1,49 +1,59 @@
 let pendenciasThirdPartyProjectsCache = [];
 
-function renderPendenciasThirdPartyProjectIdentityCells(project) {
-    const orderCode = project.order?.orderCode || '—';
-    const clientName = getOrderClientName(project.order) || '—';
-    const projectName = project.orderProject?.name || 'Projeto';
-
-    return `
-            <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-            <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-            <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectName)}</td>
-    `;
+function mapPendenciasThirdPartyInteractiveRow(project, extras = {}) {
+    return mapPendenciasInteractiveIdentity(project, {
+        projectName: project.orderProject?.name || 'Projeto',
+        characteristicName: project.projectCharacteristic?.name || '—',
+        filePath: project.filePath || '',
+        designerName: project.designer?.name || '—',
+        project,
+        ...extras
+    });
 }
 
-function renderPendenciasThirdPartyGestorRow(project, projetistas = []) {
-    const options = projetistas.map(projetista => `
-        <option value="${projetista.id}">${escapeHtml(projetista.name)}</option>
+function renderPendenciasThirdPartyGestorDesignerSelect(project, designers = []) {
+    const options = designers.map(designer => `
+        <option value="${designer.id}">${escapeHtml(designer.name)}</option>
     `).join('');
 
     return `
-        <tr data-third-party-project-id="${project.id}">
-            ${renderPendenciasThirdPartyProjectIdentityCells(project)}
-            <td class="p-3 text-slate-600">${escapeHtml(project.projectCharacteristic?.name || '—')}</td>
-            <td class="p-3">
-                <select class="pendencias-third-party-designer-select w-full min-w-[10rem] px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white"
-                    data-third-party-project-id="${project.id}">
-                    <option value="">Selecione...</option>
-                    ${options}
-                </select>
-            </td>
-            <td class="p-3">
-                <button type="button"
-                    class="pendencias-third-party-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-2.5 py-1 rounded-lg font-medium"
-                    data-third-party-project-id="${project.id}">
-                    Associar
-                </button>
-            </td>
-        </tr>
+        <select class="pendencias-third-party-designer-select w-full min-w-[10rem] px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white"
+            data-third-party-project-id="${project.id}">
+            <option value="">Selecione...</option>
+            ${options}
+        </select>
     `;
 }
 
-function renderPendenciasThirdPartyProjetistaRow(project, overviewMode = false) {
+function renderPendenciasThirdPartyGestorActionButton(project) {
+    return `
+        <button type="button"
+            class="pendencias-third-party-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-2.5 py-1 rounded-lg font-medium"
+            data-third-party-project-id="${project.id}">
+            Associar
+        </button>
+    `;
+}
+
+function renderPendenciasThirdPartyProjetistaPathInput(project) {
+    const canAct = canActThirdPartyProjectAsProjetista(project);
+    const isOpen = project.status === THIRD_PARTY_PROJECT_STATUS_OPEN;
+    const pathDisabled = !canAct || !isOpen;
+
+    return `
+        <input type="text"
+            class="pendencias-third-party-path-input w-full min-w-[12rem] px-2 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-violet-600"
+            value="${escapeHtml(project.filePath || '')}"
+            placeholder="Caminho do arquivo"
+            data-third-party-project-id="${project.id}"
+            ${pathDisabled ? 'disabled' : ''}>
+    `;
+}
+
+function renderPendenciasThirdPartyProjetistaActions(project) {
     const canAct = canActThirdPartyProjectAsProjetista(project);
     const isOpen = project.status === THIRD_PARTY_PROJECT_STATUS_OPEN;
     const isInReview = project.status === THIRD_PARTY_PROJECT_STATUS_IN_REVIEW;
-    const pathDisabled = !canAct || !isOpen;
 
     let actionButtons = '';
     if (canAct && isOpen) {
@@ -77,69 +87,42 @@ function renderPendenciasThirdPartyProjetistaRow(project, overviewMode = false) 
         `;
     }
 
-    return `
-        <tr data-third-party-project-id="${project.id}">
-            ${renderPendenciasThirdPartyProjectIdentityCells(project)}
-            ${overviewMode
-                ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(project.designer?.name || '—')}</td>`
-                : ''}
-            <td class="p-3">
-                <input type="text"
-                    class="pendencias-third-party-path-input w-full min-w-[12rem] px-2 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-violet-600"
-                    value="${escapeHtml(project.filePath || '')}"
-                    placeholder="Caminho do arquivo"
-                    data-third-party-project-id="${project.id}"
-                    ${pathDisabled ? 'disabled' : ''}>
-            </td>
-            <td class="p-3">
-                <div class="flex flex-wrap gap-1.5">
-                    ${actionButtons}
-                </div>
-            </td>
-        </tr>
-    `;
+    return `<div class="flex flex-wrap gap-1.5">${actionButtons}</div>`;
 }
 
-function renderPendenciasThirdPartyConsultorRow(project) {
+function renderPendenciasThirdPartyConsultorActions(project) {
     const canReview = typeof canReviewThirdPartyProjectAsConsultor === 'function'
         && canReviewThirdPartyProjectAsConsultor(project);
     const canApprove = typeof canApproveThirdPartyProject === 'function'
         && canApproveThirdPartyProject(project);
 
     return `
-        <tr data-third-party-project-id="${project.id}">
-            ${renderPendenciasThirdPartyProjectIdentityCells(project)}
-            <td class="p-3 text-slate-600">${escapeHtml(project.designer?.name || 'Sem projetista')}</td>
-            <td class="p-3 text-xs font-mono text-slate-600 break-all">${escapeHtml(project.filePath || '—')}</td>
-            <td class="p-3">
-                <div class="flex flex-wrap gap-1.5">
-                    ${canReview ? `
-                        <button type="button"
-                            class="pendencias-third-party-consultor-review-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-2.5 py-1 rounded-lg font-medium"
-                            data-third-party-project-id="${project.id}">
-                            Revisar
-                        </button>
-                    ` : ''}
-                    ${canApprove ? `
-                        <button type="button"
-                            class="pendencias-third-party-approve-btn text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-2.5 py-1 rounded-lg font-medium"
-                            data-third-party-project-id="${project.id}">
-                            Aprovar
-                        </button>
-                    ` : ''}
-                    <button type="button"
-                        class="pendencias-third-party-revisions-history-btn text-xs bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-2.5 py-1 rounded-lg font-medium"
-                        data-third-party-project-id="${project.id}">
-                        Revisões
-                    </button>
-                    <button type="button"
-                        class="pendencias-third-party-history-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium"
-                        data-third-party-project-id="${project.id}">
-                        Histórico
-                    </button>
-                </div>
-            </td>
-        </tr>
+        <div class="flex flex-wrap gap-1.5">
+            ${canReview ? `
+                <button type="button"
+                    class="pendencias-third-party-consultor-review-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-2.5 py-1 rounded-lg font-medium"
+                    data-third-party-project-id="${project.id}">
+                    Revisar
+                </button>
+            ` : ''}
+            ${canApprove ? `
+                <button type="button"
+                    class="pendencias-third-party-approve-btn text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-2.5 py-1 rounded-lg font-medium"
+                    data-third-party-project-id="${project.id}">
+                    Aprovar
+                </button>
+            ` : ''}
+            <button type="button"
+                class="pendencias-third-party-revisions-history-btn text-xs bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 px-2.5 py-1 rounded-lg font-medium"
+                data-third-party-project-id="${project.id}">
+                Revisões
+            </button>
+            <button type="button"
+                class="pendencias-third-party-history-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium"
+                data-third-party-project-id="${project.id}">
+                Histórico
+            </button>
+        </div>
     `;
 }
 
@@ -293,7 +276,7 @@ async function loadPendenciasThirdPartySemProjetista() {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando projetos de terceiros...</p>';
     }
 
-    const [projects, projetistas] = await Promise.all([
+    const [projects, designers] = await Promise.all([
         fetchThirdPartyProjectsWithoutDesigner(),
         typeof fetchPendenciasActiveProjetistas === 'function'
             ? fetchPendenciasActiveProjetistas()
@@ -304,43 +287,49 @@ async function loadPendenciasThirdPartySemProjetista() {
 
     if (!content) return;
 
-    const rows = projects.map(project => renderPendenciasThirdPartyGestorRow(project, projetistas)).join('');
+    renderPendenciasThirdPartySemProjetistaList(projects, designers);
+}
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Projetos de Terceiros sem Projetista</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">Associe um projetista responsável por cada projeto de terceiros em aberto.</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-third-party-sem-projetista"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${typeof renderRefreshButtonInnerHtml === 'function' ? renderRefreshButtonInnerHtml() : 'Atualizar'}
-                </button>
-            </div>
-            ${projects.length ? `
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Característica</th>
-                                <th class="text-left p-3 font-semibold min-w-[12rem]">Projetista</th>
-                                <th class="text-left p-3 font-semibold w-28">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">${rows}</tbody>
-                    </table>
-                </div>
-            ` : '<p class="text-xs text-slate-400 text-center py-10 px-4">Nenhum projeto de terceiros aguardando projetista.</p>'}
-        </div>
-    `;
+function renderPendenciasThirdPartySemProjetistaList(projects, designers = []) {
+    const content = document.getElementById('pendencias-content');
+    if (!content) return;
 
-    bindPendenciasThirdPartyGestorActions(content);
-    document.getElementById('btn-pendencias-refresh-third-party-sem-projetista')
-        ?.addEventListener('click', loadPendenciasThirdPartySemProjetista);
+    const rows = (projects || []).map(project => mapPendenciasThirdPartyInteractiveRow(project));
+
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Projetos de Terceiros sem Projetista',
+        subtitle: 'Associe um projetista responsável por cada projeto de terceiros em aberto.',
+        refreshButtonId: 'btn-pendencias-refresh-third-party-sem-projetista',
+        onRefresh: loadPendenciasThirdPartySemProjetista,
+        tableId: 'pendencias-third-party-sem-projetista',
+        rows,
+        emptyMessage: 'Nenhum projeto de terceiros aguardando projetista.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns(),
+            {
+                key: 'characteristicName',
+                label: 'Característica',
+                cellClass: 'p-3 text-slate-600'
+            },
+            {
+                key: 'designerSelect',
+                label: 'Projetista',
+                type: 'action',
+                thClass: 'min-w-[12rem]',
+                cellClass: 'p-3',
+                render: (row) => renderPendenciasThirdPartyGestorDesignerSelect(row.project, designers)
+            },
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-28',
+                cellClass: 'p-3',
+                render: (row) => renderPendenciasThirdPartyGestorActionButton(row.project)
+            })
+        ],
+        onBind(tbody) {
+            bindPendenciasThirdPartyGestorActions(tbody);
+        }
+    });
 }
 
 async function loadPendenciasThirdPartyProjetista() {
@@ -361,47 +350,51 @@ async function loadPendenciasThirdPartyProjetista() {
 
     if (!content) return;
 
-    const rows = projects.map(project => renderPendenciasThirdPartyProjetistaRow(project, overviewMode)).join('');
+    renderPendenciasThirdPartyProjetistaList(projects, overviewMode);
+}
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Projetos de Terceiros</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">
-                        ${overviewMode
-                            ? 'Visão geral dos projetos de terceiros não aprovados.'
-                            : 'Projetos de terceiros atribuídos a você que ainda não foram aprovados.'}
-                    </p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-third-party-projetista"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${typeof renderRefreshButtonInnerHtml === 'function' ? renderRefreshButtonInnerHtml() : 'Atualizar'}
-                </button>
-            </div>
-            ${projects.length ? `
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                ${overviewMode ? '<th class="text-left p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="text-left p-3 font-semibold min-w-[12rem]">Caminho do arquivo</th>
-                                <th class="text-left p-3 font-semibold w-44">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">${rows}</tbody>
-                    </table>
-                </div>
-            ` : '<p class="text-xs text-slate-400 text-center py-10 px-4">Nenhum projeto de terceiros pendente.</p>'}
-        </div>
-    `;
+function renderPendenciasThirdPartyProjetistaList(projects, overviewMode = false) {
+    const content = document.getElementById('pendencias-content');
+    if (!content) return;
 
-    bindPendenciasThirdPartyProjetistaActions(content);
-    document.getElementById('btn-pendencias-refresh-third-party-projetista')
-        ?.addEventListener('click', loadPendenciasThirdPartyProjetista);
+    const rows = (projects || []).map(project => mapPendenciasThirdPartyInteractiveRow(project));
+
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Projetos de Terceiros',
+        subtitle: overviewMode
+            ? 'Visão geral dos projetos de terceiros não aprovados.'
+            : 'Projetos de terceiros atribuídos a você que ainda não foram aprovados.',
+        refreshButtonId: 'btn-pendencias-refresh-third-party-projetista',
+        onRefresh: loadPendenciasThirdPartyProjetista,
+        tableId: 'pendencias-third-party-projetista',
+        rows,
+        minWidth: overviewMode ? '860px' : '760px',
+        emptyMessage: 'Nenhum projeto de terceiros pendente.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+            {
+                key: 'filePath',
+                label: 'Caminho do arquivo',
+                type: 'action',
+                sortable: true,
+                filterable: true,
+                thClass: 'min-w-[12rem]',
+                cellClass: 'p-3',
+                getSortValue: (row) => row.filePath || '',
+                getFilterValue: (row) => row.filePath || '',
+                render: (row) => renderPendenciasThirdPartyProjetistaPathInput(row.project)
+            },
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-44',
+                cellClass: 'p-3',
+                render: (row) => renderPendenciasThirdPartyProjetistaActions(row.project)
+            })
+        ],
+        onBind(tbody) {
+            bindPendenciasThirdPartyProjetistaActions(tbody);
+        }
+    });
 }
 
 async function loadPendenciasThirdPartyConsultor() {
@@ -418,45 +411,45 @@ async function loadPendenciasThirdPartyConsultor() {
 
     if (!content) return;
 
-    const rows = projects.map(renderPendenciasThirdPartyConsultorRow).join('');
+    renderPendenciasThirdPartyConsultorList(projects, overviewMode);
+}
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="font-bold text-sm text-slate-900">Projetos de Terceiros Enviados</h3>
-                    <p class="text-xs text-slate-400 mt-0.5">
-                        ${overviewMode
-                            ? 'Todos os projetos de terceiros enviados aguardando revisão ou aprovação.'
-                            : 'Projetos de terceiros dos seus pedidos aguardando revisão ou aprovação.'}
-                    </p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-third-party-consultor"
-                    class="order-tab-action-btn text-xs bg-white border border-violet-200 text-violet-800 px-3 py-1.5 rounded-lg font-medium hover:bg-violet-50">
-                    ${typeof renderRefreshButtonInnerHtml === 'function' ? renderRefreshButtonInnerHtml() : 'Atualizar'}
-                </button>
-            </div>
-            ${projects.length ? `
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500">
-                            <tr>
-                                <th class="text-left p-3 font-semibold">Pedido</th>
-                                <th class="text-left p-3 font-semibold">Cliente</th>
-                                <th class="text-left p-3 font-semibold">Projeto</th>
-                                <th class="text-left p-3 font-semibold">Projetista</th>
-                                <th class="text-left p-3 font-semibold min-w-[12rem]">Caminho</th>
-                                <th class="text-left p-3 font-semibold w-52">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">${rows}</tbody>
-                    </table>
-                </div>
-            ` : '<p class="text-xs text-slate-400 text-center py-10 px-4">Nenhum projeto de terceiros enviado pendente.</p>'}
-        </div>
-    `;
+function renderPendenciasThirdPartyConsultorList(projects, overviewMode = false) {
+    const content = document.getElementById('pendencias-content');
+    if (!content) return;
 
-    bindPendenciasThirdPartyConsultorActions(content);
-    document.getElementById('btn-pendencias-refresh-third-party-consultor')
-        ?.addEventListener('click', loadPendenciasThirdPartyConsultor);
+    const rows = (projects || []).map(project => mapPendenciasThirdPartyInteractiveRow(project, {
+        designerName: project.designer?.name || 'Sem projetista',
+        filePath: project.filePath || '—'
+    }));
+
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Projetos de Terceiros Enviados',
+        subtitle: overviewMode
+            ? 'Todos os projetos de terceiros enviados aguardando revisão ou aprovação.'
+            : 'Projetos de terceiros dos seus pedidos aguardando revisão ou aprovação.',
+        refreshButtonId: 'btn-pendencias-refresh-third-party-consultor',
+        onRefresh: loadPendenciasThirdPartyConsultor,
+        tableId: 'pendencias-third-party-consultor',
+        rows,
+        minWidth: '860px',
+        emptyMessage: 'Nenhum projeto de terceiros enviado pendente.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ includeDesigner: true }),
+            {
+                key: 'filePath',
+                label: 'Caminho',
+                cellClass: 'p-3 text-xs font-mono text-slate-600 break-all'
+            },
+            getPendenciasInteractiveActionColumn({
+                label: 'Ações',
+                thClass: 'w-52',
+                cellClass: 'p-3',
+                render: (row) => renderPendenciasThirdPartyConsultorActions(row.project)
+            })
+        ],
+        onBind(tbody) {
+            bindPendenciasThirdPartyConsultorActions(tbody);
+        }
+    });
 }

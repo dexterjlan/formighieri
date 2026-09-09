@@ -101,92 +101,78 @@ async function loadPendenciasGestorDetalhamento() {
     renderPendenciasGestorDetalhamentoList(records.map(mapPendenciasDetalhamentoRow));
 }
 
-function renderPendenciasGestorDetalhamentoList(rows) {
+function renderPendenciasGestorDetalhamentoList(records) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const tableRows = rows.map(row => {
-        const orderCode = row.order?.orderCode || '—';
-        const clientName = getOrderClientName(row.order) || '—';
-        const projectLabel = getPendenciasProjectDetailLabel(row);
-        const deliveryDate = formatPendenciasDeliveryDate(row.deliveryDate);
-        const statusClass = getDetalhamentoStatusBadgeClass(row.detalhamentoStatus);
+    const rows = (records || []).map(record => mapPendenciasInteractiveIdentity(record, {
+        detalhamentoId: record.detalhamentoId,
+        projectFilePath: record.projectFilePath || '',
+        statusName: record.detalhamentoStatus,
+        statusClass: typeof getDetalhamentoStatusBadgeClass === 'function'
+            ? getDetalhamentoStatusBadgeClass(record.detalhamentoStatus)
+            : 'bg-slate-100 text-slate-600',
+        deliveryLabel: formatPendenciasDeliveryDate(record.deliveryDate),
+        deliveryDate: record.deliveryDate
+    }));
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-xs text-slate-600 max-w-[12rem] truncate" title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</td>
-                <td class="p-3">
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${statusClass}">${escapeHtml(row.detalhamentoStatus)}</span>
-                </td>
-                <td class="p-3 min-w-[11rem]">
-                    <select class="pendencias-detalhamento-designer-select w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
-                        data-detalhamento-id="${row.detalhamentoId}"
-                        data-project-id="${row.id}">
-                        <option value="">Selecione...</option>
-                        ${getDetalhamentoProjetistaOptionsHtml()}
-                    </select>
-                </td>
-                <td class="p-3 text-right">
-                    <button type="button"
-                        class="pendencias-detalhamento-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
-                        data-detalhamento-id="${row.detalhamentoId}"
-                        data-project-id="${row.id}">
-                        Associar
-                    </button>
-                </td>
-            </tr>
-        `;
-    }).join('');
-
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="text-sm font-bold text-slate-800">Aguardando Detalhamento</h3>
-                    <p class="text-xs text-slate-500 mt-0.5">Projetos em produção sem projetista de detalhamento.</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-gestor-detalhamento"
-                    class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
-                    Atualizar
-                </button>
-            </div>
-            ${rows.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[56rem]">
-                        <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
-                            <tr>
-                                <th class="p-3 font-semibold">Pedido</th>
-                                <th class="p-3 font-semibold">Cliente</th>
-                                <th class="p-3 font-semibold">Projeto</th>
-                                <th class="p-3 font-semibold">Entrega Proj. Téc.</th>
-                                <th class="p-3 font-semibold">Pasta (implantação)</th>
-                                <th class="p-3 font-semibold">Status</th>
-                                <th class="p-3 font-semibold">Projetista</th>
-                                <th class="p-3 font-semibold text-right">Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-10">Nenhum projeto aguardando associação.</p>'}
-        </div>
-    `;
-
-    content.querySelector('#btn-pendencias-refresh-gestor-detalhamento')
-        ?.addEventListener('click', () => loadPendenciasGestorDetalhamento());
-
-    content.querySelectorAll('.pendencias-detalhamento-associar-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            const detalhamentoId = Number(button.dataset.detalhamentoId);
-            const orderProjectId = Number(button.dataset.projectId);
-            const row = button.closest('tr');
-            const designerId = Number(row?.querySelector('.pendencias-detalhamento-designer-select')?.value || 0);
-            associarPendenciaDetalhamentoProjetista(detalhamentoId, designerId, orderProjectId);
-        });
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Aguardando Detalhamento',
+        subtitle: 'Projetos em produção sem projetista de detalhamento.',
+        refreshButtonId: 'btn-pendencias-refresh-gestor-detalhamento',
+        refreshButtonClass: 'text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700',
+        onRefresh: loadPendenciasGestorDetalhamento,
+        tableId: 'pendencias-gestor-detalhamento',
+        rows,
+        minWidth: '56rem',
+        emptyMessage: 'Nenhum projeto aguardando associação.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns(),
+            getPendenciasInteractiveDateColumn({
+                key: 'deliveryLabel',
+                label: 'Entrega Proj. Téc.',
+                sortKey: 'deliveryDate'
+            }),
+            {
+                key: 'projectFilePath',
+                label: 'Pasta (implantação)',
+                cellClass: 'p-3 text-xs text-slate-600 max-w-[12rem] truncate',
+                render: (row) => `<span title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</span>`
+            },
+            getPendenciasInteractiveStatusColumn(),
+            {
+                key: 'designerSelect',
+                label: 'Projetista',
+                type: 'action',
+                thClass: 'min-w-[11rem]',
+                cellClass: 'p-3 min-w-[11rem]',
+                render: (row) => `<select class="pendencias-detalhamento-designer-select w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
+                    data-detalhamento-id="${row.detalhamentoId}"
+                    data-project-id="${row.id}">
+                    <option value="">Selecione...</option>
+                    ${getDetalhamentoProjetistaOptionsHtml()}
+                </select>`
+            },
+            getPendenciasInteractiveActionColumn({
+                render: (row) => `<button type="button"
+                    class="pendencias-detalhamento-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
+                    data-detalhamento-id="${row.detalhamentoId}"
+                    data-project-id="${row.id}">
+                    Associar
+                </button>`
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-detalhamento-associar-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const detalhamentoId = Number(button.dataset.detalhamentoId);
+                    const orderProjectId = Number(button.dataset.projectId);
+                    const row = button.closest('tr');
+                    const designerId = Number(row?.querySelector('.pendencias-detalhamento-designer-select')?.value || 0);
+                    associarPendenciaDetalhamentoProjetista(detalhamentoId, designerId, orderProjectId);
+                });
+            });
+        }
     });
 }
 
@@ -266,112 +252,99 @@ async function loadPendenciasProjetistaDetalhamento() {
     renderPendenciasProjetistaDetalhamentoList(records.map(mapPendenciasDetalhamentoRow), overviewMode);
 }
 
-function renderPendenciasProjetistaDetalhamentoList(rows, overviewMode = false) {
+function renderPendenciasProjetistaDetalhamentoList(records, overviewMode = false) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const tableRows = rows.map(row => {
-        const orderCode = row.order?.orderCode || '—';
-        const clientName = getOrderClientName(row.order) || '—';
-        const projectLabel = getPendenciasProjectDetailLabel(row);
-        const deliveryDate = formatPendenciasDeliveryDate(row.deliveryDate);
-        const designerName = row.designerName || '—';
-        const statusClass = getDetalhamentoStatusBadgeClass(row.detalhamentoStatus);
-        const canStart = row.detalhamentoStatus === DETALHAMENTO_STATUS_AGUARDANDO;
-        const canOpen = row.detalhamentoStatus === DETALHAMENTO_STATUS_EM_ANDAMENTO || canStart;
+    const rows = (records || []).map(record => mapPendenciasInteractiveIdentity(record, {
+        detalhamentoId: record.detalhamentoId,
+        projectFilePath: record.projectFilePath || '',
+        designerName: record.designerName || '—',
+        statusName: record.detalhamentoStatus,
+        statusClass: typeof getDetalhamentoStatusBadgeClass === 'function'
+            ? getDetalhamentoStatusBadgeClass(record.detalhamentoStatus)
+            : 'bg-slate-100 text-slate-600',
+        deliveryLabel: formatPendenciasDeliveryDate(record.deliveryDate),
+        deliveryDate: record.deliveryDate,
+        canStart: record.detalhamentoStatus === DETALHAMENTO_STATUS_AGUARDANDO,
+        canOpen: record.detalhamentoStatus === DETALHAMENTO_STATUS_EM_ANDAMENTO
+            || record.detalhamentoStatus === DETALHAMENTO_STATUS_AGUARDANDO
+    }));
 
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-                <td class="p-3 text-xs text-slate-600">${escapeHtml(clientName)}</td>
-                ${overviewMode ? `<td class="p-3 text-xs text-slate-700">${escapeHtml(designerName)}</td>` : ''}
-                <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryDate)}</td>
-                <td class="p-3 text-xs text-slate-600 max-w-[12rem] truncate" title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</td>
-                <td class="p-3">
-                    <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${statusClass}">${escapeHtml(row.detalhamentoStatus)}</span>
-                </td>
-                <td class="p-3 text-right space-x-1">
-                    ${canStart
-                        ? `<button type="button"
+    renderPendenciasInteractiveTableScreen(content, {
+        title: 'Detalhamento',
+        subtitle: overviewMode
+            ? 'Todos os detalhamentos aguardando início ou em andamento.'
+            : 'Projetos atribuídos a você aguardando início ou em andamento.',
+        refreshButtonId: 'btn-pendencias-refresh-projetista-detalhamento',
+        refreshButtonClass: 'text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700',
+        onRefresh: loadPendenciasProjetistaDetalhamento,
+        tableId: 'pendencias-projetista-detalhamento',
+        rows,
+        minWidth: overviewMode ? '52rem' : '48rem',
+        emptyMessage: 'Nenhum detalhamento pendente.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+            getPendenciasInteractiveDateColumn({
+                key: 'deliveryLabel',
+                label: 'Entrega Proj. Téc.',
+                sortKey: 'deliveryDate'
+            }),
+            {
+                key: 'projectFilePath',
+                label: 'Pasta (implantação)',
+                cellClass: 'p-3 text-xs text-slate-600 max-w-[12rem] truncate',
+                render: (row) => `<span title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</span>`
+            },
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveActionColumn({
+                cellClass: 'p-3 text-right whitespace-nowrap space-x-1',
+                render: (row) => {
+                    const projectName = escapeHtml(row.projectName || 'Projeto');
+                    return `
+                        ${row.canStart
+                            ? `<button type="button"
                                 class="pendencias-detalhamento-iniciar-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-violet-100 text-violet-800 hover:bg-violet-200"
                                 data-project-id="${row.id}"
-                                data-project-name="${escapeHtml(projectLabel)}">
+                                data-project-name="${projectName}">
                                 Iniciar
                             </button>`
-                        : ''}
-                    ${canOpen
-                        ? `<button type="button"
+                            : ''}
+                        ${row.canOpen
+                            ? `<button type="button"
                                 class="pendencias-detalhamento-open-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-indigo-100 text-indigo-800 hover:bg-indigo-200"
                                 data-project-id="${row.id}"
-                                data-project-name="${escapeHtml(projectLabel)}">
+                                data-project-name="${projectName}">
                                 Abrir
                             </button>`
-                        : ''}
-                </td>
-            </tr>
-        `;
-    }).join('');
+                            : ''}
+                    `;
+                }
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pendencias-detalhamento-open-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    const projectId = Number(button.dataset.projectId);
+                    const projectName = button.dataset.projectName || 'Projeto';
+                    if (projectId && typeof openDetalhamentoModal === 'function') {
+                        openDetalhamentoModal(projectId, projectName);
+                    }
+                });
+            });
 
-    content.innerHTML = `
-        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
-                <div>
-                    <h3 class="text-sm font-bold text-slate-800">Detalhamento</h3>
-                    <p class="text-xs text-slate-500 mt-0.5">${overviewMode
-                        ? 'Todos os detalhamentos aguardando início ou em andamento.'
-                        : 'Projetos atribuídos a você aguardando início ou em andamento.'}</p>
-                </div>
-                <button type="button" id="btn-pendencias-refresh-projetista-detalhamento"
-                    class="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700">
-                    Atualizar
-                </button>
-            </div>
-            ${rows.length
-                ? `<div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[48rem]">
-                        <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
-                            <tr>
-                                <th class="p-3 font-semibold">Pedido</th>
-                                <th class="p-3 font-semibold">Cliente</th>
-                                ${overviewMode ? '<th class="p-3 font-semibold">Projetista</th>' : ''}
-                                <th class="p-3 font-semibold">Projeto</th>
-                                <th class="p-3 font-semibold">Entrega Proj. Téc.</th>
-                                <th class="p-3 font-semibold">Pasta (implantação)</th>
-                                <th class="p-3 font-semibold">Status</th>
-                                <th class="p-3 font-semibold text-right">Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody>${tableRows}</tbody>
-                    </table>
-                </div>`
-                : '<p class="text-xs text-slate-400 text-center py-10">Nenhum detalhamento pendente.</p>'}
-        </div>
-    `;
+            tbody?.querySelectorAll('.pendencias-detalhamento-iniciar-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    const projectId = Number(button.dataset.projectId);
+                    const projectName = button.dataset.projectName || 'Projeto';
+                    if (!projectId || typeof openDetalhamentoModal !== 'function') return;
 
-    content.querySelector('#btn-pendencias-refresh-projetista-detalhamento')
-        ?.addEventListener('click', () => loadPendenciasProjetistaDetalhamento());
-
-    content.querySelectorAll('.pendencias-detalhamento-open-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            const projectId = Number(button.dataset.projectId);
-            const projectName = button.dataset.projectName || 'Projeto';
-            if (projectId && typeof openDetalhamentoModal === 'function') {
-                openDetalhamentoModal(projectId, projectName);
-            }
-        });
-    });
-
-    content.querySelectorAll('.pendencias-detalhamento-iniciar-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const projectId = Number(button.dataset.projectId);
-            const projectName = button.dataset.projectName || 'Projeto';
-            if (!projectId || typeof openDetalhamentoModal !== 'function') return;
-
-            await openDetalhamentoModal(projectId, projectName);
-            if (typeof handleDetalhamentoIniciar === 'function') {
-                await handleDetalhamentoIniciar();
-            }
-        });
+                    await openDetalhamentoModal(projectId, projectName);
+                    if (typeof handleDetalhamentoIniciar === 'function') {
+                        await handleDetalhamentoIniciar();
+                    }
+                });
+            });
+        }
     });
 }
