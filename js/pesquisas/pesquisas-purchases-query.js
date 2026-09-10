@@ -1,6 +1,23 @@
 let pesquisasPurchasesCache = [];
 let pesquisasPurchaseStatusOptions = [];
 
+function getPesquisasPurchaseDefaultCheckedStatuses(statusOptions = []) {
+    const closedNames = typeof getCompraClosedStatusNames === 'function'
+        ? getCompraClosedStatusNames()
+        : ['Fechado'];
+
+    return statusOptions.filter(status => !closedNames.includes(status));
+}
+
+async function loadPesquisasPurchaseStatusOptions() {
+    if (typeof loadPurchaseStatuses === 'function') {
+        const statuses = await loadPurchaseStatuses(false);
+        pesquisasPurchaseStatusOptions = (statuses || []).map(item => item.name).filter(Boolean);
+        return pesquisasPurchaseStatusOptions;
+    }
+    return [];
+}
+
 async function fetchAllPurchasesForSearch() {
     const { data, error } = await supabaseClient
         .from('Purchase')
@@ -56,35 +73,24 @@ async function enrichPesquisasPurchases(purchases = []) {
         const project = projectsById[purchase.orderProjectId] || null;
         const purchaseItem = purchaseItemsById[purchase.implementationPurchaseItemId] || null;
         const subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
-        return {
-            ...purchase,
-            project,
-            orderCode: project?.order?.orderCode || '',
-            clientName: getOrderClientName(project?.order) || '',
-            projectName: project?.name || '',
-            subtypeName,
-            tipoLabel: typeof formatCompraTipoLabel === 'function'
-                ? formatCompraTipoLabel(purchase.purchaseType, subtypeName)
-                : (purchase.purchaseType || '—')
-        };
+        const tipoLabel = typeof formatCompraTipoLabel === 'function'
+            ? formatCompraTipoLabel(purchase.purchaseType, subtypeName)
+            : (purchase.purchaseType || '—');
+
+        return mapPendenciasInteractiveIdentity(project, {
+            id: purchase.id,
+            orderCode: project?.order?.orderCode || '—',
+            clientName: getOrderClientName(project?.order) || '—',
+            projectName: project?.name || '—',
+            tipoLabel,
+            statusName: purchase.status || '—',
+            statusClass: typeof getCompraStatusBadgeClass === 'function'
+                ? getCompraStatusBadgeClass(purchase.status)
+                : 'bg-amber-100 text-amber-800',
+            expectedDeliveryAt: purchase.expectedDeliveryAt,
+            expectedDeliveryLabel: purchase.expectedDeliveryAt ? formatDate(purchase.expectedDeliveryAt) : '—'
+        });
     });
-}
-
-function getPesquisasPurchaseDefaultCheckedStatuses(statusOptions = []) {
-    const closedNames = typeof getCompraClosedStatusNames === 'function'
-        ? getCompraClosedStatusNames()
-        : ['Fechado'];
-
-    return statusOptions.filter(status => !closedNames.includes(status));
-}
-
-async function loadPesquisasPurchaseStatusOptions() {
-    if (typeof loadPurchaseStatuses === 'function') {
-        const statuses = await loadPurchaseStatuses(false);
-        pesquisasPurchaseStatusOptions = (statuses || []).map(item => item.name).filter(Boolean);
-        return pesquisasPurchaseStatusOptions;
-    }
-    return [];
 }
 
 async function openPesquisasPurchaseDetail(purchaseId) {
@@ -97,12 +103,55 @@ async function openPesquisasPurchaseDetail(purchaseId) {
 
 window.openPesquisasPurchaseDetail = openPesquisasPurchaseDetail;
 
-async function searchPesquisasPurchases() {
-    const tbody = document.getElementById('pesquisas-purchases-list');
-    const countEl = document.getElementById('pesquisas-purchases-count');
-    if (!tbody || !countEl) return;
+function renderPesquisasPurchasesTable(rows = []) {
+    const mountEl = document.getElementById('pesquisas-purchases-table-mount');
+    if (!mountEl) return;
 
-    tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-xs text-slate-400 text-center">Carregando...</td></tr>`;
+    mountPesquisasInteractiveTable(mountEl, {
+        refreshButtonId: 'btn-pesquisas-refresh-purchases',
+        onRefresh: refreshPesquisasPurchasesQuery,
+        tableId: 'pesquisas-purchases',
+        rows,
+        minWidth: '960px',
+        emptyMessage: 'Nenhuma compra encontrada.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns(),
+            {
+                key: 'tipoLabel',
+                label: 'Tipo',
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveDateColumn({
+                key: 'expectedDeliveryLabel',
+                label: 'Data Previsão Entrega',
+                sortKey: 'expectedDeliveryAt'
+            }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ação',
+                thClass: 'w-24',
+                render: (row) => row.id
+                    ? `<button type="button"
+                        class="pesquisas-purchases-open-btn text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium"
+                        data-purchase-id="${Number(row.id)}">
+                        Detalhe
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pesquisas-purchases-open-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openPesquisasPurchaseDetail(button.dataset.purchaseId);
+                });
+            });
+        }
+    });
+}
+
+async function searchPesquisasPurchases() {
+    const mountEl = document.getElementById('pesquisas-purchases-table-mount');
+    if (!mountEl) return;
 
     try {
         if (!pesquisasPurchasesCache.length) {
@@ -113,44 +162,19 @@ async function searchPesquisasPurchases() {
         const rows = pesquisasPurchasesCache.filter(purchase => matchesPesquisasTextFilters(purchase, filters, {
             orderCode: item => item.orderCode || '',
             clientName: item => item.clientName || '',
-            status: item => item.status || ''
+            status: item => item.statusName || ''
         }));
 
-        countEl.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
-
-        if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-xs text-slate-400">Nenhuma compra encontrada.</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = rows.map(purchase => {
-            const statusClass = typeof getCompraStatusBadgeClass === 'function'
-                ? getCompraStatusBadgeClass(purchase.status)
-                : 'bg-amber-100 text-amber-800';
-
-            return `
-                <tr class="border-b border-slate-100 last:border-0">
-                    <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(purchase.orderCode || '—')}</td>
-                    <td class="p-3 text-xs text-slate-700">${escapeHtml(purchase.clientName || '—')}</td>
-                    <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(purchase.projectName || '—')}</td>
-                    <td class="p-3 text-xs text-slate-600">${escapeHtml(purchase.tipoLabel || '—')}</td>
-                    <td class="p-3 text-xs">
-                        <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(purchase.status || '—')}</span>
-                    </td>
-                    <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${purchase.expectedDeliveryAt ? formatDate(purchase.expectedDeliveryAt) : '—'}</td>
-                    <td class="p-3 whitespace-nowrap">
-                        <button type="button"
-                            onclick="openPesquisasPurchaseDetail(${purchase.id})"
-                            class="text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium">Detalhe</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
+        renderPesquisasPurchasesTable(rows);
     } catch (error) {
         console.error('searchPesquisasPurchases:', error);
-        tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-xs text-red-500 text-center">Erro ao carregar compras: ${escapeHtml(error.message || 'Erro desconhecido')}</td></tr>`;
-        countEl.textContent = '0 registros';
+        mountEl.innerHTML = `<p class="text-xs text-red-500 text-center py-10 px-4">${escapeHtml(error.message || 'Erro ao carregar compras.')}</p>`;
     }
+}
+
+async function refreshPesquisasPurchasesQuery() {
+    pesquisasPurchasesCache = [];
+    await searchPesquisasPurchases();
 }
 
 async function loadPesquisasPurchasesQuery() {
@@ -161,27 +185,21 @@ async function loadPesquisasPurchasesQuery() {
     const statusOptions = [...statuses];
     const defaultCheckedStatuses = getPesquisasPurchaseDefaultCheckedStatuses(statusOptions);
 
-    const tableHeadHtml = `
-        <th class="text-left p-3 font-semibold">Pedido</th>
-        <th class="text-left p-3 font-semibold">Cliente</th>
-        <th class="text-left p-3 font-semibold">Projeto</th>
-        <th class="text-left p-3 font-semibold">Tipo</th>
-        <th class="text-left p-3 font-semibold">Status</th>
-        <th class="text-left p-3 font-semibold">Data Previsão Entrega</th>
-        <th class="text-left p-3 font-semibold w-24">Ação</th>
-    `;
-
-    content.innerHTML = renderPesquisasQueryShell(
-        'purchases',
-        'Compras',
-        'Consulte compras enviadas para o setor de compras.',
+    renderPesquisasFilterLayout(content, {
+        sectionId: 'purchases',
+        title: 'Compras',
+        description: 'Consulte compras enviadas para o setor de compras.',
         statusOptions,
-        tableHeadHtml,
-        'pesquisas-purchases-list',
         defaultCheckedStatuses
-    );
+    });
 
     bindPesquisasQueryForm('purchases', searchPesquisasPurchases, defaultCheckedStatuses);
+
+    const mountEl = document.getElementById('pesquisas-purchases-table-mount');
+    if (mountEl) {
+        mountEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando compras...</p>';
+    }
+
     await searchPesquisasPurchases();
 }
 

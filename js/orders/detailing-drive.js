@@ -28,10 +28,8 @@ function detailingDriveEntityParams() {
     };
 }
 
-async function resolveDetailingDriveContext() {
-    const orderProjectId = Number(activeDetalhamentoOrderProjectId);
-    const fallbackName = activeDetalhamentoProjectName || 'Projeto';
-    const entityId = Number(activeDetalhamentoRecord?.id || 0);
+async function resolveDetailingDriveContextForRecord(orderProjectId, record, projectNameFallback = 'Projeto') {
+    const entityId = Number(record?.id || 0);
     if (!orderProjectId || !entityId) return null;
 
     const { data, error } = await supabaseClient
@@ -41,22 +39,35 @@ async function resolveDetailingDriveContext() {
         .maybeSingle();
 
     if (error) {
-        console.warn('resolveDetailingDriveContext:', error);
+        console.warn('resolveDetailingDriveContextForRecord:', error);
     }
 
     const orderCode = data?.order?.orderCode || '';
-    const projectName = data?.name || fallbackName;
+    const projectName = data?.name || projectNameFallback;
     if (!orderCode || !projectName) return null;
 
-    const params = detailingDriveEntityParams();
+    const params = {
+        folderKind: DRIVE_FILE_FOLDER_KIND.DETAILING,
+        entityType: DRIVE_FILE_ENTITY_TYPE.DETAILING,
+        entityId
+    };
+
     return {
         ...params,
         orderCode,
         projectName,
         orderId: Number(data?.orderId || 0) || null,
-        orderProjectId,
+        orderProjectId: Number(orderProjectId),
         folderPath: buildDriveFolderPath(orderCode, projectName, params.folderKind)
     };
+}
+
+async function resolveDetailingDriveContext() {
+    return resolveDetailingDriveContextForRecord(
+        Number(activeDetalhamentoOrderProjectId),
+        activeDetalhamentoRecord,
+        activeDetalhamentoProjectName || 'Projeto'
+    );
 }
 
 function renderDetailingDriveFiles(files = []) {
@@ -127,14 +138,59 @@ async function loadDetailingDriveFiles() {
     }
 }
 
-async function uploadDetailingDriveFiles(fileList) {
+async function uploadFilesToDetailingDrive(fileList, context, options = {}) {
     const files = Array.from(fileList || []);
-    if (!files.length) return;
+    if (!files.length || !context) return false;
 
     if (!isGoogleDriveAppsScriptConfigured()) {
         alertAppDialog('Drive não configurado no Apps Script.', { variant: 'warning', title: 'Aviso' });
-        return;
+        return false;
     }
+
+    const validationError = typeof validateDriveUploadFiles === 'function'
+        ? validateDriveUploadFiles(files)
+        : '';
+    if (validationError) {
+        alertAppDialog(validationError, { variant: 'warning', title: 'Aviso' });
+        return false;
+    }
+
+    const setLoading = typeof options.setLoading === 'function' ? options.setLoading : null;
+    const waitStatus = typeof options.waitStatus === 'function'
+        ? options.waitStatus
+        : (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    try {
+        setLoading?.(true, 'Enviando arquivo(s) para o Drive...');
+
+        for (const file of files) {
+            await saveDriveFileUpload(file, context, (sent, total) => {
+                if (!setLoading || !total) return;
+                const pct = Math.min(100, Math.round((sent / total) * 100));
+                setLoading(true, `Enviando ${file.name} (${pct}%)...`);
+            });
+        }
+
+        setLoading?.(true, 'Arquivo(s) enviado(s).', 'success');
+        await waitStatus(900);
+        setLoading?.(false);
+        return true;
+    } catch (error) {
+        console.error('uploadFilesToDetailingDrive:', error);
+        if (setLoading) {
+            setLoading(true, error.message || 'Erro ao enviar.', 'error');
+            await waitStatus(2200);
+            setLoading(false);
+        } else {
+            alertAppDialog(error.message || 'Erro ao enviar arquivo.');
+        }
+        return false;
+    }
+}
+
+async function uploadDetailingDriveFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
 
     if (!detailingDriveContext) {
         detailingDriveContext = await resolveDetailingDriveContext();
@@ -144,43 +200,13 @@ async function uploadDetailingDriveFiles(fileList) {
         return;
     }
 
-    const validationError = typeof validateDriveUploadFiles === 'function'
-        ? validateDriveUploadFiles(files)
-        : '';
-    if (validationError) {
-        alertAppDialog(validationError, { variant: 'warning', title: 'Aviso' });
-        return;
-    }
+    const uploaded = await uploadFilesToDetailingDrive(files, detailingDriveContext, {
+        setLoading: typeof setDetalhamentoModalLoading === 'function' ? setDetalhamentoModalLoading : null,
+        waitStatus: typeof waitDetalhamentoStatus === 'function' ? waitDetalhamentoStatus : null
+    });
 
-    try {
-        if (typeof setDetalhamentoModalLoading === 'function') {
-            setDetalhamentoModalLoading(true, 'Enviando arquivo(s) para o Drive...');
-        }
-
-        for (const file of files) {
-            await saveDriveFileUpload(file, detailingDriveContext, (sent, total) => {
-                if (typeof setDetalhamentoModalLoading !== 'function' || !total) return;
-                const pct = Math.min(100, Math.round((sent / total) * 100));
-                setDetalhamentoModalLoading(true, `Enviando ${file.name} (${pct}%)...`);
-            });
-        }
-
+    if (uploaded) {
         await loadDetailingDriveFiles();
-
-        if (typeof setDetalhamentoModalLoading === 'function') {
-            setDetalhamentoModalLoading(true, 'Arquivo(s) enviado(s).', 'success');
-            await waitDetalhamentoStatus(900);
-            setDetalhamentoModalLoading(false);
-        }
-    } catch (error) {
-        console.error('uploadDetailingDriveFiles:', error);
-        if (typeof setDetalhamentoModalLoading === 'function') {
-            setDetalhamentoModalLoading(true, error.message || 'Erro ao enviar.', 'error');
-            await waitDetalhamentoStatus(2200);
-            setDetalhamentoModalLoading(false);
-        } else {
-            alertAppDialog(error.message || 'Erro ao enviar arquivo.');
-        }
     }
 }
 
@@ -205,3 +231,5 @@ function bindDetailingDriveEvents() {
 
 window.loadDetailingDriveFiles = loadDetailingDriveFiles;
 window.bindDetailingDriveEvents = bindDetailingDriveEvents;
+window.resolveDetailingDriveContextForRecord = resolveDetailingDriveContextForRecord;
+window.uploadFilesToDetailingDrive = uploadFilesToDetailingDrive;

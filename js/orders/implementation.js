@@ -883,6 +883,9 @@ async function openImplementationModal(orderProjectId, projectName = '', options
         document.getElementById('implantacao-modal-project-name').textContent = activeImplantacaoProjectName;
         populateImplantacaoForm(activeImplantacaoRecord);
         updateImplantacaoActionButtons(activeImplantacaoRecord);
+        if (typeof refreshImplantacaoDetalhamentoUploadSection === 'function') {
+            await refreshImplantacaoDetalhamentoUploadSection(activeImplantacaoRecord);
+        }
         toggleModal('implantacao-modal', true);
     } catch (error) {
         if (error.message?.includes('ImplementationPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
@@ -897,6 +900,9 @@ async function openImplementationModal(orderProjectId, projectName = '', options
 
 function closeImplementationModal() {
     setImplantacaoModalLoading(false);
+    if (typeof resetImplantacaoDetalhamentoUploadSection === 'function') {
+        resetImplantacaoDetalhamentoUploadSection();
+    }
     toggleModal('implantacao-modal', false);
     activeImplantacaoOrderProjectId = null;
     activeImplantacaoRecord = null;
@@ -927,7 +933,9 @@ const IMPLANTACAO_MODAL_OVERLAY = createModalOverlayConfig('implantacao-modal', 
         'btn-implantacao-enviar-producao',
         'btn-implantacao-enviar-compras',
         'btn-implantacao-encerrar',
-        'btn-implantacao-salvar'
+        'btn-implantacao-salvar',
+        'btn-implantacao-detalhamento-select-file',
+        'btn-implantacao-detalhamento-upload'
     ],
     reenableElementIdsOnHide: [],
     closeButtonSelector: '#implantacao-modal button[onclick="closeImplantacaoModal()"]',
@@ -1017,6 +1025,9 @@ async function handleImplantacaoEnviarProducao() {
 
         activeImplantacaoRecord = data;
         populateImplantacaoForm(data);
+        if (typeof refreshImplantacaoDetalhamentoUploadSection === 'function') {
+            await refreshImplantacaoDetalhamentoUploadSection(data);
+        }
 
         if (typeof notifyImplantacaoEnviarProducaoEmail === 'function') {
             let orderId = activeOrderId;
@@ -1251,6 +1262,10 @@ function bindImplementationEvents() {
         ?.addEventListener('click', handleImplantacaoEncerrar);
     document.getElementById('btn-implantacao-salvar')
         ?.addEventListener('click', handleImplantacaoSalvar);
+
+    if (typeof bindImplantacaoDetalhamentoUploadEvents === 'function') {
+        bindImplantacaoDetalhamentoUploadEvents();
+    }
 }
 
 const bindImplantacaoEvents = bindImplementationEvents;

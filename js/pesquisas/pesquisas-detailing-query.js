@@ -5,7 +5,6 @@ const PESQUISAS_DETAILING_STATUS_OPTIONS = [
 ];
 const PESQUISAS_DETAILING_DEFAULT_CHECKED_STATUSES = PESQUISAS_DETAILING_STATUS_OPTIONS
     .filter(status => status !== DETALHAMENTO_STATUS_PRONTO);
-const PESQUISAS_DETAILING_TABLE_COLSPAN = 8;
 
 let pesquisasDetailingCache = [];
 
@@ -43,15 +42,25 @@ async function fetchPesquisasDetailings() {
 function mapPesquisasDetailingRow(record) {
     const project = record.orderProject || {};
     const order = project.order || {};
-    return {
-        ...record,
-        orderCode: order.orderCode || '',
-        clientName: typeof getOrderClientName === 'function' ? (getOrderClientName(order) || '') : '',
-        projectName: project.name || '',
+    const statusName = record.status || '—';
+
+    return mapPendenciasInteractiveIdentity(record, {
+        id: record.id,
         projectId: project.id || record.orderProjectId,
-        designerName: record.designer?.name || '',
-        designerId: record.designerId || record.designer?.id || null
-    };
+        orderCode: order.orderCode || '—',
+        clientName: typeof getOrderClientName === 'function' ? (getOrderClientName(order) || '—') : '—',
+        projectName: project.name || '—',
+        designerName: record.designer?.name || '—',
+        designerId: record.designerId || record.designer?.id || null,
+        statusName,
+        statusClass: typeof getDetalhamentoStatusBadgeClass === 'function'
+            ? getDetalhamentoStatusBadgeClass(statusName)
+            : 'bg-amber-100 text-amber-800',
+        startedAt: record.startedAt,
+        startedAtLabel: formatPesquisasDetailingDate(record.startedAt),
+        completedAt: record.completedAt,
+        completedAtLabel: formatPesquisasDetailingDate(record.completedAt)
+    });
 }
 
 async function enrichPesquisasDetailings(records = []) {
@@ -97,12 +106,63 @@ async function openPesquisasDetailingDetail(projectId, projectName) {
 
 window.openPesquisasDetailingDetail = openPesquisasDetailingDetail;
 
-async function searchPesquisasDetailing() {
-    const tbody = document.getElementById('pesquisas-detailing-list');
-    const countEl = document.getElementById('pesquisas-detailing-count');
-    if (!tbody || !countEl) return;
+function renderPesquisasDetailingTable(rows = []) {
+    const mountEl = document.getElementById('pesquisas-detailing-table-mount');
+    if (!mountEl) return;
 
-    tbody.innerHTML = `<tr><td colspan="${PESQUISAS_DETAILING_TABLE_COLSPAN}" class="p-4 text-xs text-slate-400 text-center">Carregando...</td></tr>`;
+    mountPesquisasInteractiveTable(mountEl, {
+        refreshButtonId: 'btn-pesquisas-refresh-detailing',
+        onRefresh: refreshPesquisasDetailingQuery,
+        tableId: 'pesquisas-detailing',
+        rows,
+        minWidth: '980px',
+        emptyMessage: 'Nenhum detalhamento encontrado.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns({
+                projectLabel: 'Nome do projeto'
+            }),
+            {
+                key: 'designerName',
+                label: 'Projetista',
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveDateColumn({
+                key: 'startedAtLabel',
+                label: 'Início',
+                sortKey: 'startedAt'
+            }),
+            getPendenciasInteractiveDateColumn({
+                key: 'completedAtLabel',
+                label: 'Fim',
+                sortKey: 'completedAt'
+            }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ação',
+                thClass: 'w-24',
+                render: (row) => row.projectId
+                    ? `<button type="button"
+                        class="pesquisas-detailing-open-btn text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium"
+                        data-project-id="${Number(row.projectId)}"
+                        data-project-name="${escapeHtml(row.projectName || 'Projeto')}">
+                        Detalhe
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pesquisas-detailing-open-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openPesquisasDetailingDetail(button.dataset.projectId, button.dataset.projectName);
+                });
+            });
+        }
+    });
+}
+
+async function searchPesquisasDetailing() {
+    const mountEl = document.getElementById('pesquisas-detailing-table-mount');
+    if (!mountEl) return;
 
     try {
         if (!pesquisasDetailingCache.length) {
@@ -117,7 +177,7 @@ async function searchPesquisasDetailing() {
             if (!matchesPesquisasTextFilters(record, filters, {
                 orderCode: item => item.orderCode || '',
                 clientName: item => item.clientName || '',
-                status: item => item.status || ''
+                status: item => item.statusName || ''
             })) {
                 return false;
             }
@@ -130,50 +190,16 @@ async function searchPesquisasDetailing() {
             return true;
         });
 
-        countEl.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
-
-        if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="${PESQUISAS_DETAILING_TABLE_COLSPAN}" class="p-6 text-center text-xs text-slate-400">Nenhum detalhamento encontrado.</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = rows.map(record => {
-            const statusClass = typeof getDetalhamentoStatusBadgeClass === 'function'
-                ? getDetalhamentoStatusBadgeClass(record.status)
-                : 'bg-amber-100 text-amber-800';
-            const projectName = record.projectName || 'Projeto';
-
-            return `
-                <tr class="border-b border-slate-100 last:border-0">
-                    <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(record.orderCode || '—')}</td>
-                    <td class="p-3 text-xs text-slate-700">${escapeHtml(record.clientName || '—')}</td>
-                    <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(projectName || '—')}</td>
-                    <td class="p-3 text-xs text-slate-600">${escapeHtml(record.designerName || '—')}</td>
-                    <td class="p-3 text-xs">
-                        <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(record.status || '—')}</span>
-                    </td>
-                    <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${escapeHtml(formatPesquisasDetailingDate(record.startedAt))}</td>
-                    <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${escapeHtml(formatPesquisasDetailingDate(record.completedAt))}</td>
-                    <td class="p-3 whitespace-nowrap">
-                        <button type="button"
-                            class="pesquisas-detailing-open-btn text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium"
-                            data-project-id="${Number(record.projectId) || 0}"
-                            data-project-name="${escapeHtml(projectName)}">Detalhe</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        tbody.querySelectorAll('.pesquisas-detailing-open-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                openPesquisasDetailingDetail(button.dataset.projectId, button.dataset.projectName);
-            });
-        });
+        renderPesquisasDetailingTable(rows);
     } catch (error) {
         console.error('searchPesquisasDetailing:', error);
-        tbody.innerHTML = `<tr><td colspan="${PESQUISAS_DETAILING_TABLE_COLSPAN}" class="p-4 text-xs text-red-500 text-center">Erro ao carregar detalhamentos: ${escapeHtml(error.message || 'Erro desconhecido')}</td></tr>`;
-        countEl.textContent = '0 registros';
+        mountEl.innerHTML = `<p class="text-xs text-red-500 text-center py-10 px-4">${escapeHtml(error.message || 'Erro ao carregar detalhamentos.')}</p>`;
     }
+}
+
+async function refreshPesquisasDetailingQuery() {
+    pesquisasDetailingCache = [];
+    await searchPesquisasDetailing();
 }
 
 async function loadPesquisasDetailingQuery() {
@@ -183,17 +209,6 @@ async function loadPesquisasDetailingQuery() {
     pesquisasDetailingCache = [];
     const statusOptions = [...PESQUISAS_DETAILING_STATUS_OPTIONS];
     const defaultCheckedStatuses = [...PESQUISAS_DETAILING_DEFAULT_CHECKED_STATUSES];
-
-    const tableHeadHtml = `
-        <th class="text-left p-3 font-semibold">Pedido</th>
-        <th class="text-left p-3 font-semibold">Cliente</th>
-        <th class="text-left p-3 font-semibold">Nome do projeto</th>
-        <th class="text-left p-3 font-semibold">Projetista</th>
-        <th class="text-left p-3 font-semibold">Status</th>
-        <th class="text-left p-3 font-semibold">Início</th>
-        <th class="text-left p-3 font-semibold">Fim</th>
-        <th class="text-left p-3 font-semibold w-24">Ação</th>
-    `;
 
     const extraFiltersHtml = `
         <div>
@@ -210,16 +225,14 @@ async function loadPesquisasDetailingQuery() {
         </div>
     `;
 
-    content.innerHTML = renderPesquisasQueryShell(
-        'detailing',
-        'Detalhamento',
-        'Consulte detalhamentos por pedido, cliente, projeto, projetista e status.',
+    renderPesquisasFilterLayout(content, {
+        sectionId: 'detailing',
+        title: 'Detalhamento',
+        description: 'Consulte detalhamentos por pedido, cliente, projeto, projetista e status.',
         statusOptions,
-        tableHeadHtml,
-        'pesquisas-detailing-list',
         defaultCheckedStatuses,
         extraFiltersHtml
-    );
+    });
 
     bindPesquisasQueryForm('detailing', searchPesquisasDetailing, defaultCheckedStatuses, {
         selectIds: ['pesquisas-detailing-designer'],
@@ -230,6 +243,11 @@ async function loadPesquisasDetailingQuery() {
         await populatePesquisasDetailingDesignerFilter();
     } catch (error) {
         console.warn('loadPesquisasDetailingQuery filters:', error);
+    }
+
+    const mountEl = document.getElementById('pesquisas-detailing-table-mount');
+    if (mountEl) {
+        mountEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando detalhamentos...</p>';
     }
 
     await searchPesquisasDetailing();

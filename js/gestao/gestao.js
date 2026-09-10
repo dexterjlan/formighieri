@@ -737,7 +737,7 @@ function collectGestaoProjectFormData() {
         technicalProjectForecastEndDate: existing?.technicalProjectForecastEndDate ?? null,
         technicalProjectForecastStartDate: existing?.technicalProjectForecastStartDate ?? null,
         approvalNetworkPath: document.getElementById('gestao-project-caminho-rede-aprovacao')?.value?.trim() || null,
-        conferenceNetworkPath: existing?.conferenceNetworkPath ?? null,
+        conferenceNetworkPath: document.getElementById('gestao-project-caminho-rede-conferencia')?.value?.trim() || null,
         isComplementary: Boolean(document.getElementById('gestao-project-complementar')?.checked),
         parentProjectCode: normalizeProjectCodeInput(document.getElementById('gestao-project-parent-code')?.value || ''),
         isReplaced: Boolean(document.getElementById('gestao-project-substituido')?.checked),

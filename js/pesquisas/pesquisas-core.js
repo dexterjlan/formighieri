@@ -99,7 +99,28 @@ function updatePesquisasNav() {
     }
 }
 
-function renderPesquisasQueryShell(sectionId, title, description, statusOptions, tableHeadHtml, tableBodyId, defaultCheckedStatuses = null, extraFiltersHtml = '') {
+function renderPesquisasError(content, title, message) {
+    if (!content) return;
+    content.innerHTML = `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                <h3 class="font-bold text-sm text-slate-900">${escapeHtml(title)}</h3>
+            </div>
+            <p class="text-xs text-red-500 text-center py-10 px-4">${escapeHtml(message)}</p>
+        </div>
+    `;
+}
+
+function renderPesquisasFilterLayout(content, config = {}) {
+    const {
+        sectionId,
+        title,
+        description,
+        statusOptions = [],
+        defaultCheckedStatuses = null,
+        extraFiltersHtml = ''
+    } = config;
+
     const statusContainerId = `pesquisas-${sectionId}-status`;
     const checkedStatuses = defaultCheckedStatuses ?? statusOptions;
     const statusOptionsHtml = renderCheckboxFilterGroup(statusContainerId, statusOptions, {
@@ -107,7 +128,7 @@ function renderPesquisasQueryShell(sectionId, title, description, statusOptions,
         inputName: `${sectionId}-status`
     });
 
-    return `
+    content.innerHTML = `
         <div class="space-y-4">
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-5">
                 <h2 class="font-bold text-sm text-slate-900">${escapeHtml(title)}</h2>
@@ -139,19 +160,7 @@ function renderPesquisasQueryShell(sectionId, title, description, statusOptions,
                     </div>
                 </form>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-3 border-b border-slate-100 bg-slate-50/50">
-                    <span class="text-xs text-slate-500" id="pesquisas-${sectionId}-count">0 registros</span>
-                </div>
-                <div class="overflow-x-auto max-h-[calc(100vh-340px)] overflow-y-auto">
-                    <table class="w-full text-sm">
-                        <thead class="bg-slate-50 text-xs uppercase text-slate-500 sticky top-0">
-                            <tr>${tableHeadHtml}</tr>
-                        </thead>
-                        <tbody id="${tableBodyId}" class="divide-y divide-slate-100"></tbody>
-                    </table>
-                </div>
-            </div>
+            <div id="pesquisas-${sectionId}-table-mount"></div>
         </div>
     `;
 }
@@ -199,6 +208,76 @@ function bindPesquisasQueryForm(sectionId, onSearch, defaultStatuses = [], extra
             resetCheckboxFilter(filter.containerId, filter.defaultValues || []);
         });
         onSearch();
+    });
+}
+
+function mountPesquisasInteractiveTable(mountEl, config = {}) {
+    if (!mountEl) return;
+
+    const {
+        refreshButtonId,
+        refreshButtonClass = 'order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50',
+        onRefresh,
+        tableId,
+        rows = [],
+        columns = [],
+        emptyMessage = 'Nenhum registro.',
+        filteredEmptyMessage = 'Nenhum registro encontrado com os filtros aplicados.',
+        minWidth = '760px',
+        disableSort = false,
+        onBind
+    } = config;
+
+    const mountId = `${tableId}-mount`;
+    mountEl.innerHTML = `
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div class="p-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-end items-center gap-2">
+                ${refreshButtonId
+                    ? `<button type="button" id="${escapeHtml(refreshButtonId)}"
+                        class="${escapeHtml(refreshButtonClass)}">
+                        ${typeof renderRefreshButtonInnerHtml === 'function' ? renderRefreshButtonInnerHtml() : 'Atualizar'}
+                    </button>`
+                    : ''}
+            </div>
+            <div id="${escapeHtml(mountId)}"></div>
+        </div>
+    `;
+
+    if (refreshButtonId && onRefresh) {
+        mountEl.querySelector(`#${refreshButtonId}`)?.addEventListener('click', onRefresh);
+    }
+
+    const tableMountEl = document.getElementById(mountId);
+    if (typeof mountInteractiveTable !== 'function') {
+        if (tableMountEl) {
+            tableMountEl.innerHTML = '<p class="text-xs text-red-500 text-center py-8 px-4">Componente de tabela interativa indisponível.</p>';
+        }
+        return;
+    }
+
+    mountInteractiveTable(tableMountEl, {
+        tableId,
+        rows,
+        columns,
+        emptyMessage,
+        filteredEmptyMessage,
+        minWidth,
+        disableSort,
+        onBind,
+        getRowClass: config.getRowClass,
+        getRowAttrs: config.getRowAttrs
+    });
+}
+
+function renderPesquisasInteractiveTableScreen(content, config = {}) {
+    if (typeof mountInteractiveTable !== 'function') {
+        renderPesquisasError(content, config.title || 'Pesquisas', 'Componente de tabela indisponível.');
+        return;
+    }
+
+    mountPesquisasInteractiveTable(content, {
+        filteredEmptyMessage: 'Nenhum registro encontrado com os filtros aplicados.',
+        ...config
     });
 }
 

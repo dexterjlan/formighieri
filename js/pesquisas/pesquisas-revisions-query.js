@@ -1,7 +1,7 @@
 const PESQUISAS_REVISIONS_STATUS_OPTIONS = ['Aberta', 'Iniciado', 'Encerrada'];
 const PESQUISAS_REVISIONS_DEFAULT_CHECKED_STATUSES = ['Aberta', 'Iniciado'];
 const PESQUISAS_REVISIONS_TYPE_OPTIONS = ['Comercial', 'Técnica', 'Revisor', 'Terceiro'];
-const PESQUISAS_REVISIONS_TABLE_COLSPAN = 12;
+
 let pesquisasRevisionsCache = [];
 
 function getRevisionSearchTypeLabel(revisionType) {
@@ -233,12 +233,130 @@ async function openPesquisasRevisionDetail(revisionId) {
 
 window.openPesquisasRevisionDetail = openPesquisasRevisionDetail;
 
-async function searchPesquisasRevisions() {
-    const tbody = document.getElementById('pesquisas-revisions-list');
-    const countEl = document.getElementById('pesquisas-revisions-count');
-    if (!tbody || !countEl) return;
+function getRevisionSearchStatusClass(statusLabel) {
+    if (statusLabel === 'Encerrada') return 'bg-emerald-100 text-emerald-800';
+    if (statusLabel === 'Iniciado') return 'bg-sky-100 text-sky-800';
+    return 'bg-amber-100 text-amber-800';
+}
 
-    tbody.innerHTML = `<tr><td colspan="${PESQUISAS_REVISIONS_TABLE_COLSPAN}" class="p-4 text-xs text-slate-400 text-center">Carregando...</td></tr>`;
+function mapPesquisasRevisionRows(revisions = [], sequentialMaps = null) {
+    const maps = sequentialMaps || buildRevisionSequentialMaps(revisions);
+
+    return revisions.map(revision => {
+        const context = getRevisionSearchContext(revision);
+        const statusName = getRevisionSearchStatusLabel(revision);
+
+        return {
+            id: revision.id,
+            orderCode: context.orderCode,
+            clientName: context.clientName,
+            consultantName: context.consultantName,
+            designerName: context.designerName,
+            designerId: context.designerId,
+            projectName: context.projectName,
+            typeLabel: getRevisionSearchTypeLabel(revision.revisionType),
+            sequential: getRevisionSearchSequential(revision, maps),
+            statusName,
+            statusClass: getRevisionSearchStatusClass(statusName),
+            createdAt: revision.createdAt,
+            createdAtLabel: revision.createdAt ? formatDate(revision.createdAt) : '—',
+            revisionStartedAt: revision.revisionStartedAt,
+            startedAtLabel: revision.revisionStartedAt ? formatDate(revision.revisionStartedAt) : '—',
+            revisionCompletedAt: revision.revisionCompletedAt,
+            completedAtLabel: revision.revisionCompletedAt ? formatDate(revision.revisionCompletedAt) : '—'
+        };
+    });
+}
+
+function renderPesquisasRevisionsTable(rows = []) {
+    const mountEl = document.getElementById('pesquisas-revisions-table-mount');
+    if (!mountEl) return;
+
+    mountPesquisasInteractiveTable(mountEl, {
+        refreshButtonId: 'btn-pesquisas-refresh-revisions',
+        onRefresh: refreshPesquisasRevisionsQuery,
+        tableId: 'pesquisas-revisions',
+        rows,
+        minWidth: '1180px',
+        emptyMessage: 'Nenhuma revisão encontrada.',
+        columns: [
+            {
+                key: 'orderCode',
+                label: 'Pedido',
+                cellClass: 'p-3 text-xs font-mono text-slate-600'
+            },
+            {
+                key: 'clientName',
+                label: 'Cliente',
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'consultantName',
+                label: 'Consultor',
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'designerName',
+                label: 'Projetista',
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'projectName',
+                label: 'Projeto',
+                cellClass: 'p-3 text-xs font-medium text-slate-800'
+            },
+            {
+                key: 'typeLabel',
+                label: 'Tipo Requisição',
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'sequential',
+                label: 'Sequencial',
+                align: 'center',
+                cellClass: 'p-3 text-xs text-slate-600 text-center'
+            },
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveDateColumn({
+                key: 'createdAtLabel',
+                label: 'Data Abertura',
+                sortKey: 'createdAt'
+            }),
+            getPendenciasInteractiveDateColumn({
+                key: 'startedAtLabel',
+                label: 'Data Início',
+                sortKey: 'revisionStartedAt'
+            }),
+            getPendenciasInteractiveDateColumn({
+                key: 'completedAtLabel',
+                label: 'Data Fim',
+                sortKey: 'revisionCompletedAt'
+            }),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ação',
+                thClass: 'w-24',
+                render: (row) => row.id
+                    ? `<button type="button"
+                        class="pesquisas-revisions-open-btn text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium"
+                        data-revision-id="${Number(row.id)}">
+                        Detalhe
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pesquisas-revisions-open-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openPesquisasRevisionDetail(button.dataset.revisionId);
+                });
+            });
+        }
+    });
+}
+
+async function searchPesquisasRevisions() {
+    const mountEl = document.getElementById('pesquisas-revisions-table-mount');
+    if (!mountEl) return;
 
     try {
         if (!pesquisasRevisionsCache.length) {
@@ -254,7 +372,7 @@ async function searchPesquisasRevisions() {
         );
         const sequentialMaps = buildRevisionSequentialMaps(pesquisasRevisionsCache);
 
-        const rows = pesquisasRevisionsCache.filter(revision => {
+        const filtered = pesquisasRevisionsCache.filter(revision => {
             const context = getRevisionSearchContext(revision);
             if (!matchesPesquisasTextFilters(revision, filters, {
                 orderCode: () => context.orderCode,
@@ -271,50 +389,16 @@ async function searchPesquisasRevisions() {
             return true;
         });
 
-        countEl.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
-
-        if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="${PESQUISAS_REVISIONS_TABLE_COLSPAN}" class="p-6 text-center text-xs text-slate-400">Nenhuma revisão encontrada.</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = rows.map(revision => {
-            const context = getRevisionSearchContext(revision);
-            const statusLabel = getRevisionSearchStatusLabel(revision);
-            const statusClass = statusLabel === 'Encerrada'
-                ? 'bg-emerald-100 text-emerald-800'
-                : statusLabel === 'Iniciado'
-                    ? 'bg-sky-100 text-sky-800'
-                    : 'bg-amber-100 text-amber-800';
-
-            return `
-                <tr class="border-b border-slate-100 last:border-0">
-                    <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(context.orderCode)}</td>
-                    <td class="p-3 text-xs text-slate-700">${escapeHtml(context.clientName)}</td>
-                    <td class="p-3 text-xs text-slate-600">${escapeHtml(context.consultantName)}</td>
-                    <td class="p-3 text-xs text-slate-600">${escapeHtml(context.designerName)}</td>
-                    <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(context.projectName)}</td>
-                    <td class="p-3 text-xs text-slate-600">${escapeHtml(getRevisionSearchTypeLabel(revision.revisionType))}</td>
-                    <td class="p-3 text-xs text-slate-600 text-center">${getRevisionSearchSequential(revision, sequentialMaps)}</td>
-                    <td class="p-3 text-xs">
-                        <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusLabel)}</span>
-                    </td>
-                    <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${revision.createdAt ? formatDate(revision.createdAt) : '—'}</td>
-                    <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${revision.revisionStartedAt ? formatDate(revision.revisionStartedAt) : '—'}</td>
-                    <td class="p-3 text-xs text-slate-500 whitespace-nowrap">${revision.revisionCompletedAt ? formatDate(revision.revisionCompletedAt) : '—'}</td>
-                    <td class="p-3 whitespace-nowrap">
-                        <button type="button"
-                            onclick="openPesquisasRevisionDetail(${revision.id})"
-                            class="text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium">Detalhe</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
+        renderPesquisasRevisionsTable(mapPesquisasRevisionRows(filtered, sequentialMaps));
     } catch (error) {
         console.error('searchPesquisasRevisions:', error);
-        tbody.innerHTML = `<tr><td colspan="${PESQUISAS_REVISIONS_TABLE_COLSPAN}" class="p-4 text-xs text-red-500 text-center">Erro ao carregar revisões: ${escapeHtml(error.message || 'Erro desconhecido')}</td></tr>`;
-        countEl.textContent = '0 registros';
+        mountEl.innerHTML = `<p class="text-xs text-red-500 text-center py-10 px-4">${escapeHtml(error.message || 'Erro ao carregar revisões.')}</p>`;
     }
+}
+
+async function refreshPesquisasRevisionsQuery() {
+    pesquisasRevisionsCache = [];
+    await searchPesquisasRevisions();
 }
 
 async function loadPesquisasRevisionsQuery() {
@@ -323,21 +407,6 @@ async function loadPesquisasRevisionsQuery() {
 
     const statusOptions = [...PESQUISAS_REVISIONS_STATUS_OPTIONS];
     const defaultCheckedStatuses = [...PESQUISAS_REVISIONS_DEFAULT_CHECKED_STATUSES];
-
-    const tableHeadHtml = `
-        <th class="text-left p-3 font-semibold">Pedido</th>
-        <th class="text-left p-3 font-semibold">Cliente</th>
-        <th class="text-left p-3 font-semibold">Consultor</th>
-        <th class="text-left p-3 font-semibold">Projetista</th>
-        <th class="text-left p-3 font-semibold">Projeto</th>
-        <th class="text-left p-3 font-semibold">Tipo Requisição</th>
-        <th class="text-center p-3 font-semibold">Sequencial</th>
-        <th class="text-left p-3 font-semibold">Status</th>
-        <th class="text-left p-3 font-semibold">Data Abertura</th>
-        <th class="text-left p-3 font-semibold">Data Início</th>
-        <th class="text-left p-3 font-semibold">Data Fim</th>
-        <th class="text-left p-3 font-semibold w-24">Ação</th>
-    `;
 
     const extraFiltersHtml = `
         <div>
@@ -366,16 +435,14 @@ async function loadPesquisasRevisionsQuery() {
         </div>
     `;
 
-    content.innerHTML = renderPesquisasQueryShell(
-        'revisions',
-        'Revisões',
-        'Consulte revisões comerciais, técnicas, do revisor e de terceiros.',
+    renderPesquisasFilterLayout(content, {
+        sectionId: 'revisions',
+        title: 'Revisões',
+        description: 'Consulte revisões comerciais, técnicas, do revisor e de terceiros.',
         statusOptions,
-        tableHeadHtml,
-        'pesquisas-revisions-list',
         defaultCheckedStatuses,
         extraFiltersHtml
-    );
+    });
 
     bindPesquisasQueryForm('revisions', searchPesquisasRevisions, defaultCheckedStatuses, {
         selectIds: ['pesquisas-revisions-consultor', 'pesquisas-revisions-projetista'],
@@ -394,6 +461,11 @@ async function loadPesquisasRevisionsQuery() {
         } catch (error) {
             console.warn('loadPesquisasRevisionsQuery filters:', error);
         }
+    }
+
+    const mountEl = document.getElementById('pesquisas-revisions-table-mount');
+    if (mountEl) {
+        mountEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando revisões...</p>';
     }
 
     await searchPesquisasRevisions();

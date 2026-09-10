@@ -81,6 +81,7 @@ const SCRIPTS = [
     'js/orders/implementation.js',
     'js/orders/detailing.js',
     'js/orders/detailing-drive.js',
+    'js/orders/implementation-detailing-upload.js',
     'js/pendencias/pendencias-core.js',
     'js/pendencias/pendencias-designer-technical-project.js',
     'js/pendencias/pendencias-third-party.js',

@@ -5,6 +5,7 @@ const PESQUISAS_REQUESTS_STATUS_OPTIONS = [
 ];
 const PESQUISAS_REQUESTS_DEFAULT_CHECKED_STATUSES = PESQUISAS_REQUESTS_STATUS_OPTIONS
     .filter(status => status !== 'Encerrado');
+
 let pesquisasRequestsCache = [];
 
 async function fetchPesquisasOrderRequests() {
@@ -50,6 +51,30 @@ async function enrichPesquisasRequests(requests = []) {
             orderProject: project,
             projectName: project?.name || '—'
         };
+    });
+}
+
+function mapPesquisasRequestRows(requests = []) {
+    return requests.map(request => {
+        const requestType = typeof getRequestType === 'function' ? getRequestType(request) : 'project';
+        const statusName = typeof normalizeRequestStatus === 'function'
+            ? normalizeRequestStatus(request)
+            : (request.status || '—');
+
+        return mapPendenciasInteractiveIdentity(request, {
+            id: request.id,
+            orderCode: request.order?.orderCode || '—',
+            clientName: getOrderClientName(request.order) || '—',
+            projectName: request.projectName || '—',
+            requestType,
+            requestTypeLabel: typeof formatRequestType === 'function'
+                ? formatRequestType(requestType)
+                : requestType,
+            statusName,
+            statusClass: typeof getRequestStatusBadgeClass === 'function'
+                ? getRequestStatusBadgeClass(statusName)
+                : 'bg-slate-100 text-slate-600'
+        });
     });
 }
 
@@ -99,12 +124,56 @@ async function openPesquisasRequestDetail(requestId) {
 
 window.openPesquisasRequestDetail = openPesquisasRequestDetail;
 
-async function searchPesquisasRequests() {
-    const tbody = document.getElementById('pesquisas-requests-list');
-    const countEl = document.getElementById('pesquisas-requests-count');
-    if (!tbody || !countEl) return;
+function renderPesquisasRequestsTable(rows = []) {
+    const mountEl = document.getElementById('pesquisas-requests-table-mount');
+    if (!mountEl) return;
 
-    tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-xs text-slate-400 text-center">Carregando...</td></tr>`;
+    mountPesquisasInteractiveTable(mountEl, {
+        refreshButtonId: 'btn-pesquisas-refresh-requests',
+        onRefresh: refreshPesquisasRequestsQuery,
+        tableId: 'pesquisas-requests',
+        rows,
+        minWidth: '860px',
+        emptyMessage: 'Nenhuma requisição encontrada.',
+        columns: [
+            ...getPendenciasInteractiveIdentityColumns(),
+            {
+                key: 'requestTypeLabel',
+                label: 'Tipo',
+                cellClass: 'p-3',
+                render: (row) => {
+                    const badgeClass = typeof getRequestTypeBadgeClass === 'function'
+                        ? getRequestTypeBadgeClass(row.requestType)
+                        : 'bg-slate-100 text-slate-600';
+                    return `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${badgeClass}">${escapeHtml(row.requestTypeLabel || '—')}</span>`;
+                }
+            },
+            getPendenciasInteractiveStatusColumn(),
+            getPendenciasInteractiveActionColumn({
+                label: 'Ação',
+                thClass: 'w-24',
+                render: (row) => row.id
+                    ? `<button type="button"
+                        class="pesquisas-requests-open-btn text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium"
+                        data-request-id="${Number(row.id)}">
+                        Detalhe
+                    </button>`
+                    : '<span class="text-xs text-slate-300">—</span>'
+            })
+        ],
+        onBind(tbody) {
+            tbody?.querySelectorAll('.pesquisas-requests-open-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    openPesquisasRequestDetail(button.dataset.requestId);
+                });
+            });
+        }
+    });
+}
+
+async function searchPesquisasRequests() {
+    const mountEl = document.getElementById('pesquisas-requests-table-mount');
+    if (!mountEl) return;
 
     try {
         if (!pesquisasRequestsCache.length) {
@@ -112,44 +181,22 @@ async function searchPesquisasRequests() {
         }
 
         const filters = getPesquisasTextFilters('requests');
-        const rows = pesquisasRequestsCache.filter(request => matchesPesquisasTextFilters(request, filters, {
+        const filtered = pesquisasRequestsCache.filter(request => matchesPesquisasTextFilters(request, filters, {
             orderCode: item => item.order?.orderCode || '',
             clientName: item => getOrderClientName(item.order) || '',
-            status: item => normalizeRequestStatus(item)
+            status: item => (typeof normalizeRequestStatus === 'function' ? normalizeRequestStatus(item) : item.status)
         }));
 
-        countEl.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
-
-        if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-xs text-slate-400">Nenhuma requisição encontrada.</td></tr>`;
-            return;
-        }
-
-        tbody.innerHTML = rows.map(request => {
-            const status = normalizeRequestStatus(request);
-            const statusClass = getRequestStatusBadgeClass(status);
-            return `
-                <tr class="border-b border-slate-100 last:border-0">
-                    <td class="p-3 text-xs font-mono text-slate-600">${escapeHtml(request.order?.orderCode || '—')}</td>
-                    <td class="p-3 text-xs text-slate-700">${escapeHtml(getOrderClientName(request.order) || '—')}</td>
-                    <td class="p-3 text-xs font-medium text-slate-800">${escapeHtml(request.projectName || '—')}</td>
-                    <td class="p-3">${getRequestTypeBadgeHtml(request)}</td>
-                    <td class="p-3 text-xs">
-                        <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(status)}</span>
-                    </td>
-                    <td class="p-3 whitespace-nowrap">
-                        <button type="button"
-                            onclick="openPesquisasRequestDetail(${request.id})"
-                            class="text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium">Detalhe</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
+        renderPesquisasRequestsTable(mapPesquisasRequestRows(filtered));
     } catch (error) {
         console.error('searchPesquisasRequests:', error);
-        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-xs text-red-500 text-center">Erro ao carregar requisições: ${escapeHtml(error.message || 'Erro desconhecido')}</td></tr>`;
-        countEl.textContent = '0 registros';
+        mountEl.innerHTML = `<p class="text-xs text-red-500 text-center py-10 px-4">${escapeHtml(error.message || 'Erro ao carregar requisições.')}</p>`;
     }
+}
+
+async function refreshPesquisasRequestsQuery() {
+    pesquisasRequestsCache = [];
+    await searchPesquisasRequests();
 }
 
 async function loadPesquisasRequestsQuery() {
@@ -159,26 +206,21 @@ async function loadPesquisasRequestsQuery() {
     const statusOptions = [...PESQUISAS_REQUESTS_STATUS_OPTIONS];
     const defaultCheckedStatuses = [...PESQUISAS_REQUESTS_DEFAULT_CHECKED_STATUSES];
 
-    const tableHeadHtml = `
-        <th class="text-left p-3 font-semibold">Pedido</th>
-        <th class="text-left p-3 font-semibold">Cliente</th>
-        <th class="text-left p-3 font-semibold">Projeto</th>
-        <th class="text-left p-3 font-semibold">Tipo</th>
-        <th class="text-left p-3 font-semibold">Status</th>
-        <th class="text-left p-3 font-semibold w-24">Ação</th>
-    `;
-
-    content.innerHTML = renderPesquisasQueryShell(
-        'requests',
-        'Requisições',
-        'Consulte requisições entre consultor e projetista.',
+    renderPesquisasFilterLayout(content, {
+        sectionId: 'requests',
+        title: 'Requisições',
+        description: 'Consulte requisições entre consultor e projetista.',
         statusOptions,
-        tableHeadHtml,
-        'pesquisas-requests-list',
         defaultCheckedStatuses
-    );
+    });
 
     bindPesquisasQueryForm('requests', searchPesquisasRequests, defaultCheckedStatuses);
+
+    const mountEl = document.getElementById('pesquisas-requests-table-mount');
+    if (mountEl) {
+        mountEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando requisições...</p>';
+    }
+
     await searchPesquisasRequests();
 }
 
