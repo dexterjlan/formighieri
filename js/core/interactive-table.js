@@ -97,6 +97,26 @@ function isInteractiveTableColumnFilterable(column) {
     return column.type !== 'action';
 }
 
+function isInteractiveTableColumnFilterLocked(column) {
+    return Boolean(column?.filterLocked);
+}
+
+function getInteractiveTableLockedFilterValue(column) {
+    if (column?.lockedFilterValue == null) return '';
+    return String(column.lockedFilterValue);
+}
+
+function applyInteractiveTableLockedFilters(state, columns = []) {
+    if (!state.filters || typeof state.filters !== 'object') {
+        state.filters = {};
+    }
+    (columns || []).forEach(column => {
+        if (!column?.key || !isInteractiveTableColumnFilterLocked(column)) return;
+        state.filters[column.key] = getInteractiveTableLockedFilterValue(column);
+    });
+    return state;
+}
+
 function isInteractiveTableColumnSortable(column) {
     if (column.sortable === false) return false;
     if (column.sortable === true) return true;
@@ -184,6 +204,7 @@ function compareInteractiveTableValues(left, right, column, direction) {
 function filterInteractiveTableRows(rows, columns, filters = {}) {
     return (rows || []).filter(row => columns.every(column => {
         if (!isInteractiveTableColumnFilterable(column)) return true;
+        if (isInteractiveTableColumnFilterLocked(column)) return true;
         const query = normalizeInteractiveTableSearch(filters[column.key]);
         if (!query) return true;
         return getInteractiveTableFilterValues(row, column).some(value => (
@@ -222,8 +243,15 @@ function getInteractiveTableVisibleRows(rows, columns, state) {
     return sortInteractiveTableRows(filtered, columns, state.sorts);
 }
 
-function hasInteractiveTableFilters(filters = {}) {
-    return Object.values(filters).some(value => String(value || '').trim());
+function hasInteractiveTableClearableFilters(filters = {}, columns = []) {
+    const lockedKeys = new Set(
+        (columns || [])
+            .filter(column => isInteractiveTableColumnFilterLocked(column))
+            .map(column => column.key)
+    );
+    return Object.entries(filters).some(([key, value]) => (
+        String(value || '').trim() && !lockedKeys.has(key)
+    ));
 }
 
 function formatInteractiveTableCount(visibleCount, totalCount) {
@@ -325,17 +353,26 @@ function renderInteractiveTableHead(columns, state, options = {}) {
         }
         const value = escapeHtml(state.filters[column.key] || '');
         const label = escapeHtml(column.label || '');
-        const inputClass = column.filterInputClass
-            ? `interactive-table-filter-input ${column.filterInputClass}`
-            : 'interactive-table-filter-input';
+        const locked = isInteractiveTableColumnFilterLocked(column);
+        const inputClass = [
+            'interactive-table-filter-input',
+            column.filterInputClass || '',
+            locked ? 'interactive-table-filter-input--locked' : ''
+        ].filter(Boolean).join(' ');
+        const lockedAttrs = locked
+            ? ' readonly disabled aria-readonly="true" title="Filtro fixo no usuário logado"'
+            : '';
+        const ariaLabel = locked
+            ? `Filtro fixo: ${label}`
+            : `Filtrar ${label}`;
         return `<th class="${alignClass} ${thClass}">
             <input type="search"
                 class="${escapeHtml(inputClass)}"
                 data-filter-key="${escapeHtml(column.key)}"
                 value="${value}"
                 placeholder="Filtrar"
-                aria-label="Filtrar ${label}"
-                autocomplete="off">
+                aria-label="${escapeHtml(ariaLabel)}"
+                autocomplete="off"${lockedAttrs}>
         </th>`;
     }).join('');
 
@@ -352,7 +389,10 @@ function mountInteractiveTable(container, config = {}) {
     const columns = config.columns || [];
     const rows = config.rows || [];
     const disableSort = Boolean(config.disableSort);
-    const state = getInteractiveTableState(tableId, config.defaultSort, columns, { disableSort });
+    const state = applyInteractiveTableLockedFilters(
+        getInteractiveTableState(tableId, config.defaultSort, columns, { disableSort }),
+        columns
+    );
     const minWidth = config.minWidth || '760px';
 
     if (!rows.length) {
@@ -390,7 +430,7 @@ function mountInteractiveTable(container, config = {}) {
         if (countEl) {
             countEl.textContent = formatInteractiveTableCount(visibleRows.length, rows.length);
         }
-        clearFiltersBtn?.classList.toggle('hidden', !hasInteractiveTableFilters(state.filters));
+        clearFiltersBtn?.classList.toggle('hidden', !hasInteractiveTableClearableFilters(state.filters, columns));
         clearSortsBtn?.classList.toggle('hidden', !(state.sorts || []).length);
         if (typeof config.onBind === 'function') {
             config.onBind(tbody, visibleRows);
@@ -426,14 +466,24 @@ function mountInteractiveTable(container, config = {}) {
     thead?.addEventListener('input', event => {
         const input = event.target.closest('[data-filter-key]');
         if (!input) return;
+        const column = columns.find(item => item.key === input.dataset.filterKey);
+        if (isInteractiveTableColumnFilterLocked(column)) return;
         state.filters[input.dataset.filterKey] = input.value;
         refreshBody();
     });
 
     clearFiltersBtn?.addEventListener('click', () => {
-        state.filters = {};
+        const nextFilters = {};
+        columns.forEach(column => {
+            if (!isInteractiveTableColumnFilterLocked(column)) return;
+            nextFilters[column.key] = getInteractiveTableLockedFilterValue(column);
+        });
+        state.filters = nextFilters;
         thead?.querySelectorAll('[data-filter-key]').forEach(input => {
-            input.value = '';
+            const column = columns.find(item => item.key === input.dataset.filterKey);
+            input.value = isInteractiveTableColumnFilterLocked(column)
+                ? getInteractiveTableLockedFilterValue(column)
+                : '';
         });
         refreshBody();
     });

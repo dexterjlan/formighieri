@@ -2267,6 +2267,14 @@ body.gestao-kanban-fullscreen-active {
     padding-right: 0.3rem;
 }
 
+.interactive-table-filter-input--locked,
+.interactive-table-filter-input:disabled,
+.interactive-table-filter-input[readonly] {
+    background: rgb(248 250 252);
+    color: rgb(71 85 105);
+    cursor: not-allowed;
+}
+
 .programacoes-col-seq {
     width: 3.5rem;
     max-width: 4.25rem;

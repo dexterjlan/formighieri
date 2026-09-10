@@ -357,6 +357,14 @@ html[data-theme="formighieri-sage"] .interactive-table-filter-input {
     border-color: var(--fm-table-border) !important;
 }
 
+html[data-theme="formighieri-sage"] .interactive-table-filter-input--locked,
+html[data-theme="formighieri-sage"] .interactive-table-filter-input:disabled,
+html[data-theme="formighieri-sage"] .interactive-table-filter-input[readonly] {
+    background: var(--fm-surface) !important;
+    color: var(--fm-ink-muted) !important;
+    cursor: not-allowed;
+}
+
 html[data-theme="formighieri-sage"] table tbody tr {
     background: var(--fm-table-row-bg) !important;
 }

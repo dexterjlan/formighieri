@@ -5,16 +5,57 @@ function isMissingProjectProductionQueueError(error) {
 }
 
 function getProgramacoesProjectsSelect() {
+    const orderEmbed = typeof getOrderSalesOrderEmbed === 'function'
+        ? getOrderSalesOrderEmbed('clientDeliveryDate')
+        : 'order:salesOrders(id, orderCode, clientId, clientDeliveryDate, client:Client(name))';
     const base = typeof getPendenciasProjectSelect === 'function'
-        ? getPendenciasProjectSelect()
+        ? getPendenciasProjectSelect({ orderExtraFields: 'clientDeliveryDate' })
         : `
         id, orderId, projectCode, name, designerId, statusId, deliveryDate, deliveryPhaseId,
-        ${typeof getOrderSalesOrderEmbed === 'function' ? getOrderSalesOrderEmbed() : 'order:salesOrders(id, orderCode, clientId, client:Client(name))'},
+        ${orderEmbed},
         designer:appUsers!OrderProject_designerId_fkey(id, name),
         projectStatus:OrderProjectStatus(id, name)
     `;
 
     return `${base}, isComplementary, isReplaced, productionMonth`;
+}
+
+function formatProgramacoesDateLabel(dateStr) {
+    if (typeof formatPendenciasDeliveryDate === 'function') {
+        return formatPendenciasDeliveryDate(dateStr);
+    }
+    if (!dateStr) return '—';
+    const normalized = String(dateStr).slice(0, 10);
+    const [year, month, day] = normalized.split('-');
+    if (year && month && day) return `${day}/${month}/${year}`;
+    return String(dateStr);
+}
+
+function getProgramacoesClientDeliveryPhase(project, phasesByOrderId = {}) {
+    const phases = phasesByOrderId[Number(project?.orderId)] || [];
+    if (phases.length < 2) return null;
+    const phaseId = Number(project?.deliveryPhaseId);
+    return (phaseId
+        ? phases.find(item => Number(item.id) === phaseId)
+        : phases[0]) || null;
+}
+
+function getProgramacoesClientDeliveryDate(project, phasesByOrderId = {}) {
+    const phase = getProgramacoesClientDeliveryPhase(project, phasesByOrderId);
+    if (phase?.deliveryDate) return phase.deliveryDate;
+    return project?.order?.clientDeliveryDate || null;
+}
+
+function getProgramacoesLockedDesigner(user = currentUser) {
+    if (!user || user.role !== 'Projetista') return null;
+    if (typeof isGestorProjetos === 'function' && isGestorProjetos(user)) return null;
+    return user;
+}
+
+function filterProgramacoesQueueForViewer(queueRows = []) {
+    const designer = getProgramacoesLockedDesigner();
+    if (!designer?.id) return queueRows;
+    return queueRows.filter(row => Number(row.orderProject?.designerId) === Number(designer.id));
 }
 
 function formatProgramacoesProductionMonthLabel(productionMonth) {
@@ -159,6 +200,7 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
 
     const canReorder = typeof canReorderProgramacoesProjects === 'function'
         && canReorderProgramacoesProjects();
+    const lockedDesigner = getProgramacoesLockedDesigner();
     const maxSequence = queueRows.reduce((max, row) => Math.max(max, Number(row.sequence) || 0), 0);
 
     const rows = queueRows.map(item => {
@@ -166,12 +208,11 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         const statusName = typeof getPendenciasProjectStatusName === 'function'
             ? getPendenciasProjectStatusName(project)
             : (project?.projectStatus?.name || '—');
-        const deliveryLabel = typeof formatPendenciasProjectDeliveryDate === 'function'
-            ? formatPendenciasProjectDeliveryDate(project, phasesByOrderId)
-            : (project?.deliveryDate || '—');
-        const deliveryDate = typeof getPendenciasProjectEffectiveDeliveryDate === 'function'
-            ? getPendenciasProjectEffectiveDeliveryDate(project, phasesByOrderId)
-            : project?.deliveryDate;
+        const clientDeliveryPhase = getProgramacoesClientDeliveryPhase(project, phasesByOrderId);
+        const clientDeliveryDate = getProgramacoesClientDeliveryDate(project, phasesByOrderId);
+        const clientDeliveryLabel = formatProgramacoesDateLabel(clientDeliveryDate);
+        const projectDeliveryDate = project?.deliveryDate || null;
+        const projectDeliveryLabel = formatProgramacoesDateLabel(projectDeliveryDate);
         const productionMonth = project?.productionMonth || null;
         const productionMonthLabel = formatProgramacoesProductionMonthLabel(productionMonth);
 
@@ -181,8 +222,11 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
                 orderProjectId: Number(item.orderProjectId || project.id),
                 sequence: Number(item.sequence) || 0,
                 statusName,
-                deliveryLabel,
-                deliveryDate,
+                clientDeliveryLabel,
+                clientDeliveryDate,
+                clientDeliveryPhaseName: clientDeliveryPhase?.name || '',
+                projectDeliveryLabel,
+                projectDeliveryDate,
                 productionMonth,
                 productionMonthLabel,
                 designerName: project?.designer?.name || '—'
@@ -196,8 +240,11 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
                 projectName: project?.name || '—',
                 statusName,
                 designerName: project?.designer?.name || '—',
-                deliveryLabel,
-                deliveryDate,
+                clientDeliveryLabel,
+                clientDeliveryDate,
+                clientDeliveryPhaseName: clientDeliveryPhase?.name || '',
+                projectDeliveryLabel,
+                projectDeliveryDate,
                 productionMonth,
                 productionMonthLabel
             });
@@ -249,13 +296,42 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         {
             key: 'designerName',
             label: 'Projetista',
-            cellClass: 'p-3 text-xs text-slate-700'
+            cellClass: 'p-3 text-xs text-slate-700',
+            ...(lockedDesigner ? {
+                filterLocked: true,
+                lockedFilterValue: lockedDesigner.name || ''
+            } : {})
         },
         {
-            key: 'deliveryLabel',
-            label: 'Data de entrega',
+            key: 'clientDeliveryLabel',
+            label: 'Dt Entrg. Cli.',
+            title: 'Data de entrega no cliente (fase do projeto, se houver)',
+            thClass: 'whitespace-nowrap',
             cellClass: 'p-3 text-xs text-slate-600 whitespace-nowrap',
-            getFilterValue: row => [row.deliveryLabel, row.deliveryDate].filter(Boolean).join(' ')
+            getFilterValue: row => [
+                row.clientDeliveryLabel,
+                row.clientDeliveryDate,
+                row.clientDeliveryPhaseName
+            ].filter(Boolean).join(' '),
+            render: (row) => {
+                const label = row.clientDeliveryLabel || '—';
+                const phaseName = String(row.clientDeliveryPhaseName || '').trim();
+                const title = phaseName
+                    ? `${phaseName}: ${label}`
+                    : 'Data de entrega no cliente';
+                const phaseHtml = phaseName
+                    ? `<span class="block text-[10px] leading-tight text-slate-400 font-medium">${escapeHtml(phaseName)}</span>`
+                    : '';
+                return `<span title="${escapeHtml(title)}">${escapeHtml(label)}${phaseHtml}</span>`;
+            }
+        },
+        {
+            key: 'projectDeliveryLabel',
+            label: 'Dt Proj.',
+            title: 'Data de entrega do projeto',
+            thClass: 'whitespace-nowrap',
+            cellClass: 'p-3 text-xs text-slate-600 whitespace-nowrap',
+            getFilterValue: row => [row.projectDeliveryLabel, row.projectDeliveryDate].filter(Boolean).join(' ')
         },
         {
             key: 'productionMonthLabel',
@@ -289,7 +365,9 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
 
     renderPendenciasInteractiveTableScreen(content, {
         title: 'Projetos',
-        subtitle: 'Prioridade do time de projetos para entregar à produção. Quanto mais acima, maior a prioridade.',
+        subtitle: lockedDesigner
+            ? 'Seus projetos na fila para produção. Quanto mais acima, maior a prioridade.'
+            : 'Prioridade do time de projetos para entregar à produção. Quanto mais acima, maior a prioridade.',
         refreshButtonId: 'btn-programacoes-refresh-projects',
         headerActionsHtml: typeof PROGRAMACOES_FULLSCREEN_BUTTON_HTML === 'string'
             ? PROGRAMACOES_FULLSCREEN_BUTTON_HTML
@@ -299,8 +377,10 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         rows,
         columns,
         disableSort: true,
-        minWidth: '74rem',
-        emptyMessage: 'Nenhum projeto na fila de programação.',
+        minWidth: '76rem',
+        emptyMessage: lockedDesigner
+            ? 'Nenhum projeto seu na fila de programação.'
+            : 'Nenhum projeto na fila de programação.',
         onBind(tbody) {
             if (typeof syncProgramacoesFullscreenButton === 'function') {
                 syncProgramacoesFullscreenButton();
@@ -408,7 +488,7 @@ async function loadProgramacoesProjects(options = {}) {
         return;
     }
 
-    const queueRows = result.data || [];
+    const queueRows = filterProgramacoesQueueForViewer(result.data || []);
     const projects = queueRows.map(row => row.orderProject);
     const phasesByOrderId = typeof fetchPhasesByOrderIdForPendenciasProjects === 'function'
         ? await fetchPhasesByOrderIdForPendenciasProjects(projects)

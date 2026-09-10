@@ -26,7 +26,8 @@ function getPendenciasProjectSelect(options = {}) {
     const {
         includeStatus = true,
         includeDesigner = true,
-        includeAwaitingConstructionNote = true
+        includeAwaitingConstructionNote = true,
+        orderExtraFields = ''
     } = options;
 
     const fields = [
@@ -46,7 +47,7 @@ function getPendenciasProjectSelect(options = {}) {
         fields.push('awaitingConstructionNote');
     }
 
-    const embeds = [getOrderSalesOrderEmbed()];
+    const embeds = [getOrderSalesOrderEmbed(orderExtraFields)];
     if (includeDesigner) embeds.push(ORDER_PROJECT_DESIGNER_EMBED);
     if (includeStatus) embeds.push(ORDER_PROJECT_STATUS_EMBED);
 
