@@ -5,7 +5,7 @@ const WELCOME_FLOW_LANE_META = {
     projetista: { label: 'Projetista', legendClass: 'welcome-legend--projetista' },
     revisor: { label: 'Revisor', legendClass: 'welcome-legend--revisor' },
     'projetista-ppcp': { label: 'Projetista (PPCP)', legendClass: 'welcome-legend--projetista-ppcp' },
-    'gestor-fabrica': { label: 'Gestor Fábrica', legendClass: 'welcome-legend--gestor-fabrica' }
+    'gestor-fabrica': { label: 'Fábrica', legendClass: 'welcome-legend--gestor-fabrica' }
 };
 
 const WELCOME_FLOW_STEPS = [

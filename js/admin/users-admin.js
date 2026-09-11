@@ -38,8 +38,14 @@ const USER_FLAG_CONFIG = [
     {
         id: 'gestor-fabrica',
         label: 'Gestor de Fábrica',
-        hint: 'Aba Fábrica, Gestão e programação de montagem',
-        appliesTo: role => role === 'Marceneiro'
+        hint: 'Aba Fábrica do pedido, Gestão e programação de montagem',
+        appliesTo: role => role === 'Fábrica' || role === 'Marceneiro'
+    },
+    {
+        id: 'administrativo',
+        label: 'Administrativo',
+        hint: 'Pendências da Fábrica e edição da programação de montagem',
+        appliesTo: role => role === 'Fábrica' || role === 'Marceneiro'
     },
     {
         id: 'terceiro',
@@ -64,6 +70,11 @@ const USER_ROLE_CARD_STYLES = {
         accent: 'border-l-sky-500',
         bg: 'bg-sky-50/70',
         ring: 'ring-sky-100'
+    },
+    'Fábrica': {
+        accent: 'border-l-orange-500',
+        bg: 'bg-orange-50/70',
+        ring: 'ring-orange-100'
     },
     Marceneiro: {
         accent: 'border-l-orange-500',
@@ -90,14 +101,15 @@ function buildUserRoleBadges(u) {
     const isAdminUser = u.role === 'Admin';
     const isConsultorUser = u.role === 'Consultor';
     const isProjetistaUser = u.role === 'Projetista';
-    const isMarceneiroUser = u.role === 'Marceneiro';
+    const isFabricaUser = u.role === 'Fábrica' || u.role === 'Marceneiro';
     const canHaveGestorProjetos = isAdminUser || isProjetistaUser;
     const badges = [];
 
     if (u.role === 'Admin') {
         badges.push('<span class="text-[10px] font-bold uppercase bg-slate-900 text-amber-500 px-2 py-0.5 rounded">Admin</span>');
     } else if (u.role) {
-        badges.push(`<span class="text-[10px] font-semibold uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${escapeHtml(u.role)}</span>`);
+        const roleLabel = u.role === 'Marceneiro' ? 'Fábrica' : u.role;
+        badges.push(`<span class="text-[10px] font-semibold uppercase bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${escapeHtml(roleLabel)}</span>`);
     } else {
         badges.push('<span class="text-[10px] font-semibold uppercase bg-slate-100 text-slate-400 px-2 py-0.5 rounded">Sem perfil</span>');
     }
@@ -108,7 +120,8 @@ function buildUserRoleBadges(u) {
     if (isProjetistaUser && u.isPpcp) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">PPCP</span>');
     if (isProjetistaUser && u.isReviewer) badges.push('<span class="text-[10px] bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-teal-100">Revisor</span>');
     if (isProjetistaUser && u.isDetailing) badges.push('<span class="text-[10px] bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-100">Detalhamento</span>');
-    if (isMarceneiroUser && u.isFactoryManager) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
+    if (isFabricaUser && u.isFactoryManager) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
+    if (isFabricaUser && u.isFactoryAdministrative) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Administrativo</span>');
     if (u.isThirdParty) badges.push('<span class="text-[10px] bg-stone-100 text-stone-700 px-2 py-0.5 rounded border border-stone-200">Terceiro</span>');
 
     return badges.join('');
@@ -127,6 +140,7 @@ function buildUserFlagCheckbox(u, flag) {
         ppcp: Boolean(u.isPpcp),
         revisor: Boolean(u.isReviewer ?? u.isProjectLeader),
         'gestor-fabrica': Boolean(u.isFactoryManager),
+        administrativo: Boolean(u.isFactoryAdministrative),
         detalhamento: Boolean(u.isDetailing),
         terceiro: Boolean(u.isThirdParty)
     };
@@ -174,6 +188,7 @@ function mergeUserFlagChecks(u, checks) {
         isPpcp: checks.ppcp ?? u.isPpcp,
         isReviewer: checks.revisor ?? u.isReviewer ?? u.isProjectLeader,
         isFactoryManager: checks['gestor-fabrica'] ?? u.isFactoryManager,
+        isFactoryAdministrative: checks.administrativo ?? u.isFactoryAdministrative,
         isDetailing: checks.detalhamento ?? u.isDetailing,
         isThirdParty: checks.terceiro ?? u.isThirdParty
     };
@@ -204,6 +219,8 @@ function userMatchesAdminFilters(u, filters) {
     if (filters.role) {
         if (filters.role === '__none__') {
             if (u.role) return false;
+        } else if (filters.role === 'Fábrica') {
+            if (u.role !== 'Fábrica' && u.role !== 'Marceneiro') return false;
         } else if ((u.role || '') !== filters.role) {
             return false;
         }
@@ -281,7 +298,7 @@ function renderUsersAdminCards(users) {
                             <option value="Admin" ${u.role === 'Admin' ? 'selected' : ''}>Admin</option>
                             <option value="Projetista" ${u.role === 'Projetista' ? 'selected' : ''}>Projetista</option>
                             <option value="Consultor" ${u.role === 'Consultor' ? 'selected' : ''}>Consultor</option>
-                            <option value="Marceneiro" ${u.role === 'Marceneiro' ? 'selected' : ''}>Marceneiro</option>
+                            <option value="Fábrica" ${u.role === 'Fábrica' || u.role === 'Marceneiro' ? 'selected' : ''}>Fábrica</option>
                             <option value="Compras" ${u.role === 'Compras' ? 'selected' : ''}>Compras</option>
                         </select>
                     </div>
@@ -359,13 +376,13 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty, calendarColor')
         .order('name', { ascending: true });
 
     if (result.error?.message?.includes('calendarColor')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty')
             .order('name', { ascending: true });
     }
 
@@ -416,7 +433,7 @@ function refreshLoggedInUserDisplay() {
     if (display) {
         display.innerText = typeof getLoggedInUserDisplayText === 'function'
             ? getLoggedInUserDisplayText()
-            : `Logado como: ${currentUser.name} (${currentUser.role || 'Sem perfil'})`;
+            : `Logado como: ${currentUser.name} (${typeof formatUserRoleLabel === 'function' ? formatUserRoleLabel(currentUser.role) : (currentUser.role || 'Sem perfil')})`;
     }
 
     if (typeof updateAdminNav === 'function') updateAdminNav();
@@ -437,20 +454,23 @@ async function saveUserRole(userId) {
     const revisorCheck = document.getElementById(`revisor-check-${userId}`);
     const detalhamentoCheck = document.getElementById(`detalhamento-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
+    const administrativoCheck = document.getElementById(`administrativo-check-${userId}`);
     const terceiroCheck = document.getElementById(`terceiro-check-${userId}`);
     const rawCalendarColor = getCalendarColorInput(userId)?.value;
     const calendarColor = typeof normalizeGoogleCalendarColorHex === 'function'
         ? (normalizeGoogleCalendarColorHex(rawCalendarColor) || null)
         : (String(rawCalendarColor || '').trim() || null);
     const name = nameInput?.value.trim() || '';
-    const role = select?.value;
+    const role = select?.value === 'Marceneiro' ? 'Fábrica' : select?.value;
     const isConferenceReviewer = role === 'Projetista' && Boolean(conferenteCheck?.checked);
     const isCommercialManager = (role === 'Admin' || role === 'Consultor') && Boolean(gestorComercialCheck?.checked);
     const isProjectsManager = (role === 'Admin' || role === 'Projetista') && Boolean(gestorProjetosCheck?.checked);
     const isPpcp = role === 'Projetista' && Boolean(ppcpCheck?.checked);
     const isReviewer = role === 'Projetista' && Boolean(revisorCheck?.checked);
     const isDetailing = role === 'Projetista' && Boolean(detalhamentoCheck?.checked);
-    const isFactoryManager = role === 'Marceneiro' && Boolean(gestorFabricaCheck?.checked);
+    const isFactoryRole = role === 'Fábrica' || role === 'Marceneiro';
+    const isFactoryManager = isFactoryRole && Boolean(gestorFabricaCheck?.checked);
+    const isFactoryAdministrative = isFactoryRole && Boolean(administrativoCheck?.checked);
     const isThirdParty = role !== 'Admin' && Boolean(terceiroCheck?.checked);
 
     if (!name) {
@@ -460,7 +480,7 @@ async function saveUserRole(userId) {
     }
 
     if (!role) {
-        alertAppDialog("Selecione Admin, Projetista, Consultor, Marceneiro ou Compras.");
+        alertAppDialog("Selecione Admin, Projetista, Consultor, Fábrica ou Compras.");
         return;
     }
 
@@ -478,21 +498,46 @@ async function saveUserRole(userId) {
         .eq('id', userId)
         .maybeSingle();
 
-    let payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty, calendarColor };
+    let payload = {
+        name,
+        role,
+        isConferenceReviewer,
+        isCommercialManager,
+        isProjectsManager,
+        isPpcp,
+        isReviewer,
+        isFactoryManager,
+        isFactoryAdministrative,
+        isDetailing,
+        isThirdParty,
+        calendarColor
+    };
     let { error } = await supabaseClient
         .from('appUsers')
         .update(payload)
         .eq('id', userId);
 
     if (error?.message?.includes('calendarColor')) {
-        payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty };
+        payload = {
+            name,
+            role,
+            isConferenceReviewer,
+            isCommercialManager,
+            isProjectsManager,
+            isPpcp,
+            isReviewer,
+            isFactoryManager,
+            isFactoryAdministrative,
+            isDetailing,
+            isThirdParty
+        };
         ({ error } = await supabaseClient
             .from('appUsers')
             .update(payload)
             .eq('id', userId));
     }
 
-    if (error?.message?.includes('isFactoryManager') || error?.message?.includes('isPpcp') || error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader') || error?.message?.includes('isDetailing') || error?.message?.includes('isThirdParty')) {
+    if (error?.message?.includes('isFactoryAdministrative') || error?.message?.includes('isFactoryManager') || error?.message?.includes('isPpcp') || error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader') || error?.message?.includes('isDetailing') || error?.message?.includes('isThirdParty')) {
         payload = { name, role, isConferenceReviewer, isCommercialManager, isProjectsManager };
         ({ error } = await supabaseClient
             .from('appUsers')
@@ -530,6 +575,7 @@ async function saveUserRole(userId) {
             isPpcp,
             isReviewer,
             isFactoryManager,
+            isFactoryAdministrative,
             isDetailing,
             isThirdParty,
             calendarColor

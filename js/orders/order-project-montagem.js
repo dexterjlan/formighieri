@@ -144,7 +144,7 @@ function closeOrderProjectMontagemFimModal() {
 
 async function openOrderProjectMontagemInicioModal(projectId, projectName = '') {
     if (!canActOrderDetailTab('fabrica')) {
-        alertAppDialog('Somente o Gestor de Fábrica ou Admin pode registrar montagem.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente Fábrica (Administrativo/Gestor) ou Admin pode registrar montagem.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -178,7 +178,7 @@ async function openOrderProjectMontagemInicioModal(projectId, projectName = '') 
 
 async function openOrderProjectMontagemFimModal(projectId, projectName = '') {
     if (!canActOrderDetailTab('fabrica')) {
-        alertAppDialog('Somente o Gestor de Fábrica ou Admin pode registrar montagem.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente Fábrica (Administrativo/Gestor) ou Admin pode registrar montagem.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 

@@ -1,4 +1,16 @@
 const COMPANY_EMAIL_DOMAINS = ['formighierimoveis.com.br', 'formighierimadeiras.com.br'];
+const USER_ROLE_FABRICA = 'Fábrica';
+const USER_ROLE_FABRICA_LEGACY = 'Marceneiro';
+
+function isFabricaRole(user = currentUser) {
+    const role = user?.role;
+    return role === USER_ROLE_FABRICA || role === USER_ROLE_FABRICA_LEGACY;
+}
+
+function formatUserRoleLabel(role) {
+    if (!role) return 'Sem perfil';
+    return role === USER_ROLE_FABRICA_LEGACY ? USER_ROLE_FABRICA : role;
+}
 
 function isAdmin() {
     return currentUser?.role === 'Admin';
@@ -45,6 +57,7 @@ function normalizeAppUserProfile(profile) {
         isProjectsManager: Boolean(profile.isProjectsManager),
         isPpcp: Boolean(profile.isPpcp),
         isFactoryManager: Boolean(profile.isFactoryManager),
+        isFactoryAdministrative: Boolean(profile.isFactoryAdministrative),
         isDetailing: Boolean(profile.isDetailing),
         isReviewer: Boolean(profile.isReviewer ?? profile.isProjectLeader),
         isThirdParty: Boolean(profile.isThirdParty)
@@ -80,7 +93,23 @@ function isDetalhamento(user = currentUser) {
 }
 
 function isGestorFabrica(user = currentUser) {
-    return user?.role === 'Marceneiro' && Boolean(user?.isFactoryManager);
+    return isFabricaRole(user) && Boolean(user?.isFactoryManager);
+}
+
+function isFactoryAdministrative(user = currentUser) {
+    return isFabricaRole(user) && Boolean(user?.isFactoryAdministrative);
+}
+
+function canSeePendenciasFabricaMenu(user = currentUser) {
+    return canSeeAllPendenciasMenus()
+        || isGestorFabrica(user)
+        || isFactoryAdministrative(user);
+}
+
+function canActPendenciasFabrica(user = currentUser) {
+    return canSeeAllPendenciasMenus()
+        || isGestorFabrica(user)
+        || isFactoryAdministrative(user);
 }
 
 function canSeeRequestProfileField(user = currentUser) {
@@ -97,7 +126,7 @@ function syncRequestProfileColumnVisibility() {
 }
 
 function isMarceneiro(user = currentUser) {
-    return user?.role === 'Marceneiro';
+    return isFabricaRole(user);
 }
 
 function isCompras(user = currentUser) {
@@ -144,7 +173,10 @@ function canAccessGestao(user = currentUser) {
 
 function canAccessMontagemProgramacao(user = currentUser) {
     if (isThirdParty(user)) return false;
-    return isAdmin(user) || isGestorProjetos(user) || isGestorFabrica(user);
+    return isAdmin(user)
+        || isGestorProjetos(user)
+        || isGestorFabrica(user)
+        || isFactoryAdministrative(user);
 }
 
 function canViewKanban(user = currentUser) {
@@ -232,7 +264,7 @@ const ORDER_DETAIL_TAB_RESPONSIBLE_LABELS = {
     requests: 'Consultor, Projetista ou Admin',
     anteprojeto: 'Conferente ou Admin',
     medicao: 'Conferente ou Admin',
-    fabrica: 'Gestor de Fábrica ou Admin',
+    fabrica: 'Fábrica (Administrativo/Gestor) ou Admin',
     compras: 'Equipe de Compras'
 };
 
@@ -251,7 +283,7 @@ function canActOrderDetailTab(tabKey, user = currentUser) {
         case 'medicao':
             return isConferente(user) || isGestorComercial(user);
         case 'fabrica':
-            return isGestorFabrica(user);
+            return isGestorFabrica(user) || isFactoryAdministrative(user);
         case 'compras':
             return isCompras(user);
         default:

@@ -95,7 +95,9 @@ function revealAuthenticatedShell() {
     hideAuthScreens();
     document.getElementById('main-panel').classList.remove('hidden');
 
-    const roleLabel = currentUser.role || 'Sem perfil';
+    const roleLabel = typeof formatUserRoleLabel === 'function'
+        ? formatUserRoleLabel(currentUser.role)
+        : (currentUser.role || 'Sem perfil');
     document.getElementById('user-display').innerText = typeof getLoggedInUserDisplayText === 'function'
         ? getLoggedInUserDisplayText()
         : `Logado como: ${currentUser.name} (${roleLabel})`;

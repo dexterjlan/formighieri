@@ -194,7 +194,7 @@ async function fetchActiveGestoresRecipientEmails() {
 
     const { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, role, isCommercialManager, isProjectsManager, isFactoryManager')
+        .select('email, role, isCommercialManager, isProjectsManager, isFactoryManager, isFactoryAdministrative')
         .eq('isActive', true);
 
     if (error) throw error;
@@ -203,7 +203,7 @@ async function fetchActiveGestoresRecipientEmails() {
         .filter(user => (
             ((user.role === 'Admin' || user.role === 'Consultor') && user.isCommercialManager)
             || ((user.role === 'Admin' || user.role === 'Projetista') && user.isProjectsManager)
-            || (user.role === 'Marceneiro' && user.isFactoryManager)
+            || ((user.role === 'Fábrica' || user.role === 'Marceneiro') && (user.isFactoryManager || user.isFactoryAdministrative))
         ))
         .map(user => user.email);
 
@@ -262,17 +262,17 @@ async function fetchActiveGestorFabricaRecipientEmails() {
 
     const { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, role, isFactoryManager')
+        .select('email, role, isFactoryManager, isFactoryAdministrative')
         .eq('isActive', true);
 
-    if (error?.message?.includes('isFactoryManager')) {
+    if (error?.message?.includes('isFactoryAdministrative') || error?.message?.includes('isFactoryManager')) {
         return [];
     }
 
     if (error) throw error;
 
     const emails = (data || [])
-        .filter(user => user.role === 'Marceneiro' && user.isFactoryManager)
+        .filter(user => (user.role === 'Fábrica' || user.role === 'Marceneiro') && (user.isFactoryManager || user.isFactoryAdministrative))
         .map(user => user.email);
 
     const unique = uniqueEmails(emails);

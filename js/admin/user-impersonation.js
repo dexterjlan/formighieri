@@ -40,7 +40,9 @@ function clearUserImpersonationState() {
 
 function getLoggedInUserDisplayText() {
     if (!currentUser) return 'Usuário: -';
-    const roleLabel = currentUser.role || 'Sem perfil';
+    const roleLabel = typeof formatUserRoleLabel === 'function'
+        ? formatUserRoleLabel(currentUser.role)
+        : (currentUser.role || 'Sem perfil');
     if (isImpersonating()) {
         return `Vendo como: ${currentUser.name} (${roleLabel})`;
     }
@@ -57,7 +59,9 @@ function updateUserImpersonationBanner() {
 
     if (!active || !textEl) return;
 
-    const roleLabel = currentUser?.role || 'Sem perfil';
+    const roleLabel = typeof formatUserRoleLabel === 'function'
+        ? formatUserRoleLabel(currentUser?.role)
+        : (currentUser?.role || 'Sem perfil');
     const email = currentUser?.email ? ` · ${currentUser.email}` : '';
     textEl.textContent = `${currentUser?.name || 'Usuário'} (${roleLabel}${email})`;
 }
@@ -68,19 +72,19 @@ async function queryAppUserById(userId) {
 
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty, calendarColor')
         .eq('id', normalizedId)
         .maybeSingle();
 
     if (result.error?.message?.includes('calendarColor')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isDetailing, isThirdParty')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty')
             .eq('id', normalizedId)
             .maybeSingle();
     }
 
-    if (result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isThirdParty')) {
+    if (result.error?.message?.includes('isFactoryAdministrative') || result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isThirdParty')) {
         result = await supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager')

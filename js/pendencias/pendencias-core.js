@@ -222,11 +222,15 @@ function getPendenciasProjetistaMenuItems() {
 }
 
 function canSeePendenciasGestorFabricaMenu() {
-    return canSeeAllPendenciasMenus() || isGestorFabrica();
+    return typeof canSeePendenciasFabricaMenu === 'function'
+        ? canSeePendenciasFabricaMenu()
+        : (canSeeAllPendenciasMenus() || isGestorFabrica());
 }
 
 function canActPendenciasGestorFabrica() {
-    return canSeeAllPendenciasMenus() || isGestorFabrica();
+    return typeof canActPendenciasFabricaMenu === 'function'
+        ? canActPendenciasFabricaMenu()
+        : (canSeeAllPendenciasMenus() || isGestorFabrica());
 }
 
 function canAccessPendencias() {
@@ -265,6 +269,7 @@ async function getPendenciasStatusIdByName(name) {
 function getPrimaryGestorPendenciasSection() {
     if (isGestorProjetos()) return 'gestor-projetos';
     if (isGestorComercial()) return 'gestor-comercial';
+    if (isFactoryAdministrative()) return 'gestor-fabrica';
     if (isGestorFabrica()) return 'gestor-fabrica';
     return null;
 }
@@ -327,7 +332,7 @@ function getPendenciasSidebarSections() {
         },
         {
             id: 'gestor-fabrica',
-            label: 'Gestor de Fábrica',
+            label: 'Fábrica',
             visible: canSeePendenciasGestorFabricaMenu(),
             items: [
                 { id: 'aguardando-montagem-interna', label: 'Aguar. Mont. Int.' },
@@ -1008,7 +1013,7 @@ function loadPendenciasContent() {
         consultor: 'Consultor',
         'gestor-comercial': 'Gestor Comercial',
         'gestor-projetos': 'Gestor de Projetos',
-        'gestor-fabrica': 'Gestor de Fábrica',
+        'gestor-fabrica': 'Fábrica',
         compras: 'Compras',
         projetista: 'Projetista'
     };
