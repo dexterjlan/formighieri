@@ -86,7 +86,11 @@ function buildCalendarGoogleContactLines(contacts) {
         const label = item.isPrimary || contacts.length === 1 ? 'Contato' : `Contato ${index + 1}`;
         if (item.name) lines.push(`${label}: ${item.name}`);
         const phone = formatCalendarGoogleContactPhone(item.phone);
-        if (phone) lines.push(`Telefone: ${phone}`);
+        if (phone) lines.push(`Celular: ${phone}`);
+        const landline = typeof formatContactLandlinePhone === 'function'
+            ? formatContactLandlinePhone(item.landlinePhone)
+            : String(item.landlinePhone || '').trim();
+        if (landline) lines.push(`Fixo: ${landline}`);
         if (item.email) lines.push(`E-mail: ${item.email}`);
     });
     return lines;

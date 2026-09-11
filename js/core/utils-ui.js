@@ -146,13 +146,27 @@ async function fetchCadastroRecord(table, id, columns, fallbackColumns) {
     return { data, error };
 }
 
+function formatContactLandlinePhoneDisplay(value) {
+    if (typeof formatContactLandlinePhone === 'function') return formatContactLandlinePhone(value);
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 10);
+    if (!digits) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)})${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)})${digits.slice(2, 6)}-${digits.slice(6)}`;
+}
+
 function buildContactDetailRows(contacts) {
     if (!contacts?.length) {
         return [{ label: 'Contatos', value: 'Nenhum contato cadastrado' }];
     }
     return contacts.map((item, index) => {
         const title = item.isPrimary ? 'Contato principal' : `Contato ${index + 1}`;
-        const parts = [item.name, formatContactPhoneDisplay(item.phone), item.email].filter(Boolean);
+        const parts = [
+            item.name,
+            item.phone ? `Celular: ${formatContactPhoneDisplay(item.phone)}` : '',
+            item.landlinePhone ? `Fixo: ${formatContactLandlinePhoneDisplay(item.landlinePhone)}` : '',
+            item.email
+        ].filter(Boolean);
         return { label: title, value: parts.join('\n') || '—' };
     });
 }

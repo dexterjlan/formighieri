@@ -116,7 +116,7 @@ function validateArchitectPhoneEmail(phoneValue, emailValue) {
     const phone = formatArchitectPhone(phoneValue);
     const digits = phone.replace(/\D/g, '');
     if (digits.length > 0 && digits.length !== 11) {
-        return { error: 'Informe o telefone no formato (00)00000-0000.' };
+        return { error: 'Informe o celular no formato (00)00000-0000.' };
     }
     const email = String(emailValue || '').trim();
     if (email && !isValidArchitectEmail(email)) {

@@ -1,11 +1,12 @@
-// Cadastro de contatos (nome, telefone, e-mail) de cliente e arquiteto.
+// Cadastro de contatos (nome, celular, telefone fixo, e-mail) de cliente e arquiteto.
 const CONTACT_OWNER_TYPE_CLIENT = 'client';
 const CONTACT_OWNER_TYPE_ARCHITECT = 'architect';
-const CONTACT_COLUMNS = 'id, ownerType, ownerId, name, phone, email, isPrimary, isActive, sortOrder';
+const CONTACT_COLUMNS = 'id, ownerType, ownerId, name, phone, landlinePhone, email, isPrimary, isActive, sortOrder';
+const CONTACT_COLUMNS_LEGACY = 'id, ownerType, ownerId, name, phone, email, isPrimary, isActive, sortOrder';
 
 let contactManagerOwner = { type: null, id: null, name: '' };
 
-function formatContactPhone(value) {
+function formatContactMobilePhone(value) {
     if (typeof formatArchitectPhone === 'function') return formatArchitectPhone(value);
     const digits = String(value || '').replace(/\D/g, '').slice(0, 11);
     if (!digits) return '';
@@ -14,50 +15,91 @@ function formatContactPhone(value) {
     return `(${digits.slice(0, 2)})${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
-function validateContactPhoneEmail(phoneValue, emailValue) {
-    if (typeof validateArchitectPhoneEmail === 'function') {
-        return validateArchitectPhoneEmail(phoneValue, emailValue);
+function formatContactLandlinePhone(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 10);
+    if (!digits) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)})${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)})${digits.slice(2, 6)}-${digits.slice(6)}`;
+}
+
+function formatContactPhone(value) {
+    return formatContactMobilePhone(value);
+}
+
+function validateContactFields({ phone, landlinePhone, email } = {}) {
+    const mobile = formatContactMobilePhone(phone);
+    const mobileDigits = mobile.replace(/\D/g, '');
+    if (mobileDigits.length > 0 && mobileDigits.length !== 11) {
+        return { error: 'Informe o celular no formato (00)00000-0000.' };
     }
-    const phone = formatContactPhone(phoneValue);
-    const digits = phone.replace(/\D/g, '');
-    if (digits.length > 0 && digits.length !== 11) {
-        return { error: 'Informe o telefone no formato (00)00000-0000.' };
+
+    const landline = formatContactLandlinePhone(landlinePhone);
+    const landlineDigits = landline.replace(/\D/g, '');
+    if (landlineDigits.length > 0 && landlineDigits.length !== 10) {
+        return { error: 'Informe o telefone fixo no formato (00)0000-0000.' };
     }
-    const email = String(emailValue || '').trim();
-    if (email && !/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(email)) {
+
+    const normalizedEmail = String(email || '').trim();
+    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(normalizedEmail)) {
         return { error: 'Informe um e-mail válido.' };
     }
-    return { phone: phone || null, email: email || null };
+
+    return {
+        phone: mobile || null,
+        landlinePhone: landline || null,
+        email: normalizedEmail || null
+    };
+}
+
+function validateContactPhoneEmail(phoneValue, emailValue, landlinePhoneValue = null) {
+    return validateContactFields({
+        phone: phoneValue,
+        landlinePhone: landlinePhoneValue,
+        email: emailValue
+    });
 }
 
 function contactPhoneDigits(value) {
     return String(value || '').replace(/\D/g, '');
 }
 
+function isMissingContactLandlineColumnError(error) {
+    const message = String(error?.message || '');
+    return /landlinePhone|schema cache/i.test(message);
+}
+
 async function fetchContacts(ownerType, ownerId, options = {}) {
     const id = Number(ownerId);
     if (!ownerType || !id) return [];
 
-    let query = supabaseClient
-        .from('Contact')
-        .select(CONTACT_COLUMNS)
-        .eq('ownerType', ownerType)
-        .eq('ownerId', id)
-        .order('isPrimary', { ascending: false })
-        .order('sortOrder', { ascending: true })
-        .order('id', { ascending: true });
-    if (!options.includeInactive) {
-        query = query.eq('isActive', true);
+    const buildQuery = (columns) => {
+        let query = supabaseClient
+            .from('Contact')
+            .select(columns)
+            .eq('ownerType', ownerType)
+            .eq('ownerId', id)
+            .order('isPrimary', { ascending: false })
+            .order('sortOrder', { ascending: true })
+            .order('id', { ascending: true });
+        if (!options.includeInactive) {
+            query = query.eq('isActive', true);
+        }
+        return query;
+    };
+
+    let { data, error } = await buildQuery(CONTACT_COLUMNS);
+    if (error && isMissingContactLandlineColumnError(error)) {
+        ({ data, error } = await buildQuery(CONTACT_COLUMNS_LEGACY));
     }
 
-    const { data, error } = await query;
     if (error) {
         if (!/Contact|schema cache/i.test(error.message || '')) {
             console.error('fetchContacts:', error);
         }
         return [];
     }
-    return data || [];
+    return (data || []).map(item => ({ ...item, landlinePhone: item.landlinePhone || null }));
 }
 
 async function clearOtherPrimaryContacts(ownerType, ownerId, keepId = null) {
@@ -78,6 +120,7 @@ async function persistContact(payload, contactId = null) {
         ownerId: Number(payload.ownerId),
         name: String(payload.name || '').trim(),
         phone: payload.phone || null,
+        landlinePhone: payload.landlinePhone || null,
         email: payload.email || null,
         isPrimary: payload.isPrimary === true,
         isActive: payload.isActive !== false,
@@ -94,10 +137,18 @@ async function persistContact(payload, contactId = null) {
         await clearOtherPrimaryContacts(record.ownerType, record.ownerId, contactId);
     }
 
-    const query = contactId
-        ? supabaseClient.from('Contact').update(record).eq('id', Number(contactId))
-        : supabaseClient.from('Contact').insert(record);
-    const { data, error } = await query.select(CONTACT_COLUMNS).single();
+    const runPersist = (body, columns) => {
+        const query = contactId
+            ? supabaseClient.from('Contact').update(body).eq('id', Number(contactId))
+            : supabaseClient.from('Contact').insert(body);
+        return query.select(columns).single();
+    };
+
+    let { data, error } = await runPersist(record, CONTACT_COLUMNS);
+    if (error && isMissingContactLandlineColumnError(error)) {
+        const { landlinePhone: _landlinePhone, ...legacyRecord } = record;
+        ({ data, error } = await runPersist(legacyRecord, CONTACT_COLUMNS_LEGACY));
+    }
     return { data, error };
 }
 
@@ -109,16 +160,23 @@ async function deleteContact(contactId) {
 async function upsertOwnerContact(ownerType, ownerId, fields = {}) {
     const id = Number(ownerId);
     const name = String(fields.name || fields.contactName || '').trim();
-    const validated = validateContactPhoneEmail(fields.phone, fields.email);
+    const validated = validateContactFields({
+        phone: fields.phone,
+        landlinePhone: fields.landlinePhone,
+        email: fields.email
+    });
     if (validated.error) return { error: { message: validated.error } };
     const phone = validated.phone;
+    const landlinePhone = validated.landlinePhone;
     const email = validated.email;
-    if (!id || (!name && !phone && !email)) return { data: null, error: null };
+    if (!id || (!name && !phone && !landlinePhone && !email)) return { data: null, error: null };
 
     const existing = await fetchContacts(ownerType, id, { includeInactive: true });
     const phoneDigits = contactPhoneDigits(phone);
+    const landlineDigits = contactPhoneDigits(landlinePhone);
     const match = existing.find(item => {
         if (phoneDigits && contactPhoneDigits(item.phone) === phoneDigits) return true;
+        if (landlineDigits && contactPhoneDigits(item.landlinePhone) === landlineDigits) return true;
         if (email && String(item.email || '').trim().toLowerCase() === email.toLowerCase()) return true;
         if (name && String(item.name || '').trim().toLowerCase() === name.toLowerCase()) return true;
         return false;
@@ -130,6 +188,7 @@ async function upsertOwnerContact(ownerType, ownerId, fields = {}) {
             ownerId: id,
             name: match.name,
             phone: match.phone,
+            landlinePhone: match.landlinePhone || null,
             email: match.email,
             isPrimary: match.isPrimary,
             isActive: match.isActive !== false,
@@ -137,8 +196,12 @@ async function upsertOwnerContact(ownerType, ownerId, fields = {}) {
         };
         if (name && !String(match.name || '').trim()) patch.name = name;
         if (phone && !match.phone) patch.phone = phone;
+        if (landlinePhone && !match.landlinePhone) patch.landlinePhone = landlinePhone;
         if (email && !match.email) patch.email = email;
-        const changed = patch.name !== match.name || patch.phone !== match.phone || patch.email !== match.email;
+        const changed = patch.name !== match.name
+            || patch.phone !== match.phone
+            || patch.landlinePhone !== (match.landlinePhone || null)
+            || patch.email !== match.email;
         if (!changed) return { data: match, error: null };
         return persistContact(patch, match.id);
     }
@@ -148,27 +211,58 @@ async function upsertOwnerContact(ownerType, ownerId, fields = {}) {
         ownerId: id,
         name: name || 'Contato',
         phone,
+        landlinePhone,
         email,
         isPrimary: existing.length === 0,
         isActive: true
     });
 }
 
-function readContactFormFields(root, nameSelector, phoneSelector, emailSelector, primarySelector) {
+function readContactFormFields(root, nameSelector, phoneSelector, landlinePhoneSelector, emailSelector, primarySelector) {
     const name = root.querySelector?.(nameSelector)?.value.trim()
         || document.getElementById(nameSelector.replace('#', ''))?.value.trim()
         || '';
     const phoneEl = root.querySelector?.(phoneSelector) || document.getElementById(phoneSelector.replace('#', ''));
+    const landlineEl = root.querySelector?.(landlinePhoneSelector)
+        || document.getElementById(landlinePhoneSelector.replace('#', ''));
     const emailEl = root.querySelector?.(emailSelector) || document.getElementById(emailSelector.replace('#', ''));
     const primaryEl = primarySelector
         ? (root.querySelector?.(primarySelector) || document.getElementById(primarySelector.replace('#', '')))
         : null;
-    const validated = validateContactPhoneEmail(phoneEl?.value, emailEl?.value);
+    const validated = validateContactFields({
+        phone: phoneEl?.value,
+        landlinePhone: landlineEl?.value,
+        email: emailEl?.value
+    });
     return {
         name,
         isPrimary: Boolean(primaryEl?.checked),
         ...validated
     };
+}
+
+function bindContactMobilePhoneMask(input) {
+    if (typeof bindArchitectPhoneMask === 'function') {
+        bindArchitectPhoneMask(input);
+        return;
+    }
+    if (!input || input.dataset.phoneMaskBound === '1') return;
+    input.dataset.phoneMaskBound = '1';
+    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('maxlength', '14');
+    input.addEventListener('input', () => {
+        input.value = formatContactMobilePhone(input.value);
+    });
+}
+
+function bindContactLandlinePhoneMask(input) {
+    if (!input || input.dataset.landlinePhoneMaskBound === '1') return;
+    input.dataset.landlinePhoneMaskBound = '1';
+    input.setAttribute('inputmode', 'numeric');
+    input.setAttribute('maxlength', '13');
+    input.addEventListener('input', () => {
+        input.value = formatContactLandlinePhone(input.value);
+    });
 }
 
 async function openContactManagerModal({ ownerType, ownerId, ownerName } = {}) {
@@ -183,7 +277,7 @@ async function openContactManagerModal({ ownerType, ownerId, ownerName } = {}) {
     if (title) title.textContent = 'Contatos';
     if (subtitle) subtitle.textContent = contactManagerOwner.name
         ? `Cadastro de ${contactManagerOwner.name}`
-        : 'Inclua telefone, e-mail e a pessoa de contato.';
+        : 'Inclua celular, telefone fixo, e-mail e a pessoa de contato.';
     if (!document.getElementById('contact-manager-modal')) {
         alertAppDialog('Não foi possível abrir os contatos. Recarregue a página.');
         return;
@@ -213,12 +307,15 @@ async function renderContactManagerList() {
 
     list.innerHTML = contacts.map(item => `
         <div class="border border-slate-200 rounded-xl p-3 space-y-2" data-contact-id="${item.id}">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input type="text" class="contact-row-name w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
                     placeholder="Contato" value="${escapeHtml(item.name || '')}">
-                <input type="text" class="contact-row-phone w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                    inputmode="numeric" maxlength="14" placeholder="(00)00000-0000"
-                    value="${escapeHtml(formatContactPhone(item.phone))}">
+                <input type="text" class="contact-row-mobile w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
+                    inputmode="numeric" maxlength="14" placeholder="Celular (00)00000-0000"
+                    value="${escapeHtml(formatContactMobilePhone(item.phone))}">
+                <input type="text" class="contact-row-landline w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
+                    inputmode="numeric" maxlength="13" placeholder="Fixo (00)0000-0000"
+                    value="${escapeHtml(formatContactLandlinePhone(item.landlinePhone))}">
                 <input type="email" class="contact-row-email w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
                     placeholder="email@dominio.com" value="${escapeHtml(item.email || '')}">
             </div>
@@ -236,9 +333,8 @@ async function renderContactManagerList() {
         </div>
     `).join('');
 
-    list.querySelectorAll('.contact-row-phone').forEach(input => {
-        if (typeof bindArchitectPhoneMask === 'function') bindArchitectPhoneMask(input);
-    });
+    list.querySelectorAll('.contact-row-mobile').forEach(bindContactMobilePhoneMask);
+    list.querySelectorAll('.contact-row-landline').forEach(bindContactLandlinePhoneMask);
 }
 
 async function addContactFromManager(event) {
@@ -247,6 +343,7 @@ async function addContactFromManager(event) {
         document,
         '#contact-manager-new-name',
         '#contact-manager-new-phone',
+        '#contact-manager-new-landline-phone',
         '#contact-manager-new-email',
         '#contact-manager-new-primary'
     );
@@ -264,6 +361,7 @@ async function addContactFromManager(event) {
         ownerId: contactManagerOwner.id,
         name: fields.name,
         phone: fields.phone,
+        landlinePhone: fields.landlinePhone,
         email: fields.email,
         isPrimary: fields.isPrimary
     });
@@ -282,10 +380,11 @@ async function saveContactManagerRow(card) {
         alertAppDialog('Informe o nome do contato.');
         return;
     }
-    const validated = validateContactPhoneEmail(
-        card.querySelector('.contact-row-phone')?.value,
-        card.querySelector('.contact-row-email')?.value
-    );
+    const validated = validateContactFields({
+        phone: card.querySelector('.contact-row-mobile')?.value,
+        landlinePhone: card.querySelector('.contact-row-landline')?.value,
+        email: card.querySelector('.contact-row-email')?.value
+    });
     if (validated.error) {
         alertAppDialog(validated.error);
         return;
@@ -295,6 +394,7 @@ async function saveContactManagerRow(card) {
         ownerId: contactManagerOwner.id,
         name,
         phone: validated.phone,
+        landlinePhone: validated.landlinePhone,
         email: validated.email,
         isPrimary: Boolean(card.querySelector('.contact-row-primary')?.checked)
     }, contactId);
@@ -324,10 +424,10 @@ function bindGestaoContactEvents() {
         if (event.target.closest('.contact-row-save')) await saveContactManagerRow(card);
         if (event.target.closest('.contact-row-delete')) await deleteContactManagerRow(card);
     });
-    if (typeof bindArchitectPhoneMask === 'function') {
-        bindArchitectPhoneMask(document.getElementById('contact-manager-new-phone'));
-        bindArchitectPhoneMask(document.getElementById('cliente-create-phone'));
-    }
+    bindContactMobilePhoneMask(document.getElementById('contact-manager-new-phone'));
+    bindContactLandlinePhoneMask(document.getElementById('contact-manager-new-landline-phone'));
+    bindContactMobilePhoneMask(document.getElementById('cliente-create-phone'));
+    bindContactLandlinePhoneMask(document.getElementById('cliente-create-landline-phone'));
 }
 
 window.CONTACT_OWNER_TYPE_CLIENT = CONTACT_OWNER_TYPE_CLIENT;
@@ -338,4 +438,7 @@ window.deleteContact = deleteContact;
 window.upsertOwnerContact = upsertOwnerContact;
 window.openContactManagerModal = openContactManagerModal;
 window.bindGestaoContactEvents = bindGestaoContactEvents;
+window.validateContactFields = validateContactFields;
 window.validateContactPhoneEmail = validateContactPhoneEmail;
+window.formatContactLandlinePhone = formatContactLandlinePhone;
+window.bindContactLandlinePhoneMask = bindContactLandlinePhoneMask;

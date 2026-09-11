@@ -1956,10 +1956,12 @@ async function saveClienteCreateFromPicker(event) {
     const contactFields = typeof validateContactPhoneEmail === 'function'
         ? validateContactPhoneEmail(
             document.getElementById('cliente-create-phone')?.value,
-            document.getElementById('cliente-create-email')?.value
+            document.getElementById('cliente-create-email')?.value,
+            document.getElementById('cliente-create-landline-phone')?.value
         )
         : {
             phone: document.getElementById('cliente-create-phone')?.value.trim() || null,
+            landlinePhone: document.getElementById('cliente-create-landline-phone')?.value.trim() || null,
             email: document.getElementById('cliente-create-email')?.value.trim() || null
         };
     if (contactFields.error) {
@@ -1995,6 +1997,7 @@ async function saveClienteCreateFromPicker(event) {
         await upsertOwnerContact(ownerType, data.id, {
             name: contactName,
             phone: contactFields.phone,
+            landlinePhone: contactFields.landlinePhone,
             email: contactFields.email
         });
     }
