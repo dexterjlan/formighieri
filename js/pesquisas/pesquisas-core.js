@@ -168,14 +168,14 @@ function renderPesquisasFilterLayout(content, config = {}) {
 function getPesquisasTextFilters(sectionId) {
     return {
         pedido: document.getElementById(`pesquisas-${sectionId}-pedido`)?.value.trim().toLowerCase() || '',
-        cliente: document.getElementById(`pesquisas-${sectionId}-cliente`)?.value.trim().toLowerCase() || '',
+        cliente: normalizeSearchText(document.getElementById(`pesquisas-${sectionId}-cliente`)?.value || ''),
         statuses: getCheckboxFilterValues(`pesquisas-${sectionId}-status`, [])
     };
 }
 
 function matchesPesquisasTextFilters(row, filters, getters = {}) {
     const orderCode = (getters.orderCode?.(row) || '').toLowerCase();
-    const clientName = (getters.clientName?.(row) || '').toLowerCase();
+    const clientName = normalizeSearchText(getters.clientName?.(row) || '');
     const status = getters.status?.(row) || '';
 
     if (filters.pedido && !orderCode.includes(filters.pedido)) return false;

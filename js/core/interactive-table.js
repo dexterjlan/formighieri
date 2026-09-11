@@ -7,11 +7,9 @@ const INTERACTIVE_TABLE_DEFAULT_SORT_SPECS = [
 const interactiveTableStates = {};
 
 function normalizeInteractiveTableSearch(value) {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim();
+    return typeof normalizeSearchText === 'function'
+        ? normalizeSearchText(value)
+        : String(value || '').toLowerCase().trim();
 }
 
 function normalizeInteractiveTableSorts(defaultSort = null) {

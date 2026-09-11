@@ -24,6 +24,7 @@ let comercialDealsCache = [];
 let comercialConsultantsCache = [];
 let comercialActiveTab = 'board';
 let comercialOwnerFilter = 'mine';
+let comercialConsultantUserId = '';
 
 function comercialTodayIso() {
     if (typeof getLocalIsoDate === 'function') return getLocalIsoDate();
@@ -139,6 +140,85 @@ function applyComercialOwnerScope(query) {
     return query.eq('ownerUserId', currentUser.id);
 }
 
+function getComercialConsultantFilterUserId() {
+    if (!canSeeAllDeals() || comercialOwnerFilter !== 'all' || !comercialConsultantUserId) return null;
+    const userId = Number(comercialConsultantUserId);
+    return userId || null;
+}
+
+function getComercialConsultantFilterDealStatus() {
+    if (comercialActiveTab === 'won') return 'won';
+    if (comercialActiveTab === 'lost') return 'lost';
+    return 'open';
+}
+
+async function fetchComercialDealOwners(status = 'open') {
+    const pageSize = 1000;
+    const owners = new Map();
+    let from = 0;
+
+    while (true) {
+        let query = supabaseClient
+            .from('Deal')
+            .select('ownerUserId, owner:appUsers!ownerUserId(id, name)')
+            .eq('status', status)
+            .order('ownerUserId', { ascending: true })
+            .range(from, from + pageSize - 1);
+        query = applyComercialOwnerScope(query);
+
+        const { data, error } = await query;
+        if (error) {
+            console.warn('fetchComercialDealOwners:', error);
+            break;
+        }
+
+        (data || []).forEach(deal => {
+            const userId = Number(deal.ownerUserId);
+            if (!userId || owners.has(userId)) return;
+            owners.set(userId, deal.owner?.name || `Usuário #${userId}`);
+        });
+
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+    }
+
+    return [...owners.entries()]
+        .map(([id, name]) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+}
+
+async function fillComercialConsultantSelect() {
+    const select = document.getElementById('comercial-filter-consultant');
+    const wrap = document.getElementById('comercial-filter-consultant-wrap');
+    if (!select || !wrap) return;
+
+    const show = canSeeAllDeals() && comercialOwnerFilter === 'all';
+    wrap.classList.toggle('hidden', !show);
+    if (!show) {
+        comercialConsultantUserId = '';
+        select.value = '';
+        return;
+    }
+
+    const current = comercialConsultantUserId;
+    select.innerHTML = '<option value="">Todos</option>';
+
+    const owners = await fetchComercialDealOwners(getComercialConsultantFilterDealStatus());
+    owners.forEach(user => {
+        const option = document.createElement('option');
+        option.value = String(user.id);
+        option.textContent = user.name || `Usuário #${user.id}`;
+        select.appendChild(option);
+    });
+
+    if (current && [...select.options].some(option => option.value === current)) {
+        select.value = current;
+    } else {
+        comercialConsultantUserId = '';
+        select.value = '';
+    }
+}
+
 async function loadComercialStages(activeOnly = true) {
     let query = supabaseClient
         .from('DealStage')
@@ -199,7 +279,9 @@ async function loadComercialDeals(status = 'open') {
 function filterComercialBoardDeals(deals) {
     const temperature = document.getElementById('comercial-filter-temperature')?.value || '';
     const missingNext = Boolean(document.getElementById('comercial-filter-no-next')?.checked);
+    const consultantUserId = getComercialConsultantFilterUserId();
     return (deals || []).filter(deal => {
+        if (consultantUserId && Number(deal.ownerUserId) !== consultantUserId) return false;
         if (temperature && deal.temperature !== temperature) return false;
         if (missingNext && dealHasOpenActivity(deal)) return false;
         return true;
@@ -364,6 +446,11 @@ function bindComercialEvents() {
     document.getElementById('btn-comercial-new-deal')?.addEventListener('click', () => openComercialDealPanel(null));
     document.getElementById('comercial-filter-owner')?.addEventListener('change', event => {
         comercialOwnerFilter = event.target.value === 'all' ? 'all' : 'mine';
+        fillComercialConsultantSelect();
+        refreshComercialView();
+    });
+    document.getElementById('comercial-filter-consultant')?.addEventListener('change', event => {
+        comercialConsultantUserId = event.target.value || '';
         refreshComercialView();
     });
     document.getElementById('comercial-filter-temperature')?.addEventListener('change', () => {

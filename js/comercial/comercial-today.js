@@ -21,7 +21,18 @@ async function loadComercialToday() {
         return;
     }
 
-    const rows = (data || []).filter(item => item.deal && item.deal.status === 'open');
+    if (typeof fillComercialConsultantSelect === 'function') {
+        await fillComercialConsultantSelect();
+    }
+
+    const consultantUserId = typeof getComercialConsultantFilterUserId === 'function'
+        ? getComercialConsultantFilterUserId()
+        : null;
+    const rows = (data || []).filter(item => {
+        if (!item.deal || item.deal.status !== 'open') return false;
+        if (consultantUserId && Number(item.deal.ownerUserId) !== consultantUserId) return false;
+        return true;
+    });
     if (!rows.length) {
         list.innerHTML = '<p class="text-xs text-slate-400">Nenhuma atividade para hoje ou atrasada. Bom sinal — ou o funil está vazio.</p>';
         return;

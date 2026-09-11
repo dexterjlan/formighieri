@@ -4685,6 +4685,36 @@ body.montagem-prog-resizing {
     border-style: dashed;
 }
 
+.comercial-card__fields {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.comercial-card__field {
+    display: flex;
+    gap: 0.35rem;
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+.comercial-card__label {
+    color: rgb(100 116 139);
+    flex-shrink: 0;
+}
+
+.comercial-card__value {
+    color: rgb(51 65 85);
+    min-width: 0;
+    word-break: break-word;
+}
+
+.comercial-card__value--alert {
+    color: rgb(185 28 28);
+    font-weight: 600;
+}
+
 .comercial-temp {
     display: inline-flex;
     align-items: center;

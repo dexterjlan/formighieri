@@ -385,7 +385,7 @@ function renderOrdersList() {
     const list = document.getElementById("orders-list");
     list.innerHTML = "";
 
-    const filter = document.getElementById("filter-order-client")?.value.trim().toLowerCase() || '';
+    const filter = normalizeSearchText(document.getElementById("filter-order-client")?.value || '');
     const filterMine = document.getElementById('filter-order-mine')?.checked
         && currentUser?.role === 'Consultor';
 
@@ -404,7 +404,7 @@ function renderOrdersList() {
         ));
     }
     if (filter) {
-        orders = orders.filter(o => getOrderClientName(o).toLowerCase().includes(filter));
+        orders = orders.filter(o => normalizeSearchText(getOrderClientName(o)).includes(filter));
     }
 
     orders.sort((a, b) => {

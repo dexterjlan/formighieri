@@ -3,6 +3,7 @@ async function loadComercialBoard() {
     if (!board) return;
     board.innerHTML = '<p class="text-xs text-slate-400 p-4">Carregando funil...</p>';
     await loadComercialDeals('open');
+    await fillComercialConsultantSelect();
     renderComercialBoard();
 }
 
@@ -46,6 +47,27 @@ function renderComercialBoard() {
     });
 }
 
+function renderComercialDealCardField(label, value, valueClass = '') {
+    return `
+        <p class="comercial-card__field">
+            <span class="comercial-card__label">${escapeHtml(label)}</span>
+            <span class="comercial-card__value ${valueClass}">${escapeHtml(value || '—')}</span>
+        </p>
+    `;
+}
+
+function buildComercialDealCardNextActivityLabel(deal, next, overdue) {
+    if (!next) {
+        return deal.status === 'open' ? 'Sem próxima atividade' : '—';
+    }
+    const type = COMMERCIAL_ACTIVITY_TYPE_LABELS[next.type] || next.type;
+    const date = formatComercialDate(next.dueDate);
+    const time = next.dueTime ? ` ${String(next.dueTime).slice(0, 5)}` : '';
+    const subject = next.subject ? ` — ${next.subject}` : '';
+    const prefix = overdue ? 'Atrasada: ' : '';
+    return `${prefix}${type} · ${date}${time}${subject}`;
+}
+
 function buildComercialDealCard(deal) {
     const next = getDealNextActivity(deal);
     const overdue = isDealNextOverdue(deal);
@@ -60,22 +82,21 @@ function buildComercialDealCard(deal) {
     const waitingOrder = deal.status === 'won' && !deal.orderId
         ? '<p class="text-[10px] text-amber-700 font-semibold mt-1">Aguardando pedido</p>'
         : '';
-    const nextLabel = next
-        ? `${overdue ? 'Atrasada: ' : ''}${COMMERCIAL_ACTIVITY_TYPE_LABELS[next.type] || next.type} · ${formatComercialDate(next.dueDate)}`
-        : (deal.status === 'open' ? 'Sem próxima atividade' : '');
-    const idleLabel = formatDealIdleDaysLabel(deal);
-    const idleDays = daysSinceDealChange(deal);
-    const idleClass = idleDays != null && idleDays >= 7 ? 'text-amber-700 font-semibold' : 'text-slate-400';
+    const nextActivityLabel = buildComercialDealCardNextActivityLabel(deal, next, overdue);
+    const nextValueClass = overdue || noNext ? 'comercial-card__value--alert' : '';
     card.innerHTML = `
         <div class="flex items-start justify-between gap-2">
             <p class="text-xs font-semibold text-slate-800 leading-snug min-w-0">${escapeHtml(deal.title || 'Sem título')}</p>
             ${temp}
         </div>
-        <p class="text-[11px] text-slate-500 mt-1">${escapeHtml(deal.client?.name || 'Sem cliente')}</p>
-        ${deal.wpsQuoteCode ? `<p class="text-[10px] text-slate-500 mt-0.5 font-mono">WPS ${escapeHtml(deal.wpsQuoteCode)}</p>` : ''}
-        <p class="text-[11px] text-slate-600 mt-1">${escapeHtml(formatComercialMoney(deal.value) || '—')} · ${escapeHtml(deal.owner?.name || '—')}</p>
-        ${nextLabel ? `<p class="text-[10px] mt-1 ${overdue || noNext ? 'text-red-700 font-semibold' : 'text-slate-400'}">${escapeHtml(nextLabel)}</p>` : ''}
-        ${idleLabel ? `<p class="text-[10px] mt-1 ${idleClass}">Última alteração ${escapeHtml(idleLabel)}</p>` : ''}
+        <div class="comercial-card__fields">
+            ${renderComercialDealCardField('Cliente:', deal.client?.name || 'Sem cliente')}
+            ${renderComercialDealCardField('Arquiteto:', deal.architect?.name)}
+            ${renderComercialDealCardField('Consultor:', deal.owner?.name)}
+            ${renderComercialDealCardField('Valor:', formatComercialMoney(deal.value) || '—')}
+            ${renderComercialDealCardField('Próx. atividade:', nextActivityLabel, nextValueClass)}
+        </div>
+        ${deal.wpsQuoteCode ? `<p class="text-[10px] text-slate-400 mt-1 font-mono">WPS ${escapeHtml(deal.wpsQuoteCode)}</p>` : ''}
         ${waitingOrder}
     `;
     card.addEventListener('click', () => openComercialDealPanel(deal.id));
@@ -124,6 +145,7 @@ async function loadComercialStatusList(status) {
     if (!list) return;
     list.innerHTML = '<p class="text-xs text-slate-400">Carregando...</p>';
     await loadComercialDeals(status);
+    await fillComercialConsultantSelect();
     const deals = filterComercialBoardDeals(comercialDealsCache);
     if (!deals.length) {
         list.innerHTML = `<p class="text-xs text-slate-400">${status === 'won' ? 'Nenhum negócio ganho.' : 'Nenhum negócio perdido.'}</p>`;
