@@ -1,10 +1,28 @@
+const EMAIL_SEND_MAX_ATTEMPTS = 3;
+const EMAIL_SEND_TIMEOUT_MS = 12000;
+const EMAIL_SEND_RETRY_BASE_DELAY_MS = 750;
+
 function isGoogleAppsScriptConfigured() {
     return Boolean(GOOGLE_APPS_SCRIPT_URL && NOTIFICATION_SCRIPT_SECRET);
 }
 
-async function sendEmailViaGoogleAppsScript(payload) {
+function delayEmailRetry(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function buildEmailErrorLogPayload(payload, meta = {}) {
+    return {
+        subject: payload?.subject || null,
+        to_email: payload?.to_email || null,
+        cc_email: payload?.cc_email || null,
+        attemptCount: meta.attemptCount || EMAIL_SEND_MAX_ATTEMPTS,
+        ...(meta.extra && typeof meta.extra === 'object' ? meta.extra : {})
+    };
+}
+
+async function executeEmailFetch(payload) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), EMAIL_SEND_TIMEOUT_MS);
 
     try {
         await fetch(GOOGLE_APPS_SCRIPT_URL, {
@@ -23,9 +41,51 @@ async function sendEmailViaGoogleAppsScript(payload) {
             }),
             signal: controller.signal
         });
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw new Error(`Timeout ao enviar e-mail (${EMAIL_SEND_TIMEOUT_MS}ms)`);
+        }
+        throw error;
     } finally {
         clearTimeout(timeoutId);
     }
+}
+
+async function deliverEmailWithRetries(payload, meta = {}) {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= EMAIL_SEND_MAX_ATTEMPTS; attempt += 1) {
+        try {
+            await executeEmailFetch(payload);
+            return;
+        } catch (error) {
+            lastError = error;
+            console.warn(`sendEmailViaGoogleAppsScript: tentativa ${attempt}/${EMAIL_SEND_MAX_ATTEMPTS} falhou`, error);
+            if (attempt < EMAIL_SEND_MAX_ATTEMPTS) {
+                await delayEmailRetry(EMAIL_SEND_RETRY_BASE_DELAY_MS * attempt);
+            }
+        }
+    }
+
+    const message = lastError?.message
+        || String(lastError || 'Falha ao enviar e-mail após múltiplas tentativas');
+
+    if (typeof logAppError === 'function') {
+        await logAppError({
+            source: APP_ERROR_SOURCES?.EMAIL || 'email',
+            message,
+            context: meta.context || payload?.subject || 'email',
+            payload: buildEmailErrorLogPayload(payload, {
+                ...meta,
+                attemptCount: EMAIL_SEND_MAX_ATTEMPTS
+            }),
+            error: lastError
+        });
+    }
+}
+
+async function sendEmailViaGoogleAppsScript(payload, meta = {}) {
+    void deliverEmailWithRetries(payload, meta);
 }
 
 const REVISION_EMAIL_IMAGE_URL_TTL = 60 * 60 * 24 * 7;

@@ -232,36 +232,6 @@ async function fetchOrderRequestNotificationContext(orderId, orderProjectId, des
     };
 }
 
-function isGoogleAppsScriptConfigured() {
-    return Boolean(GOOGLE_APPS_SCRIPT_URL && NOTIFICATION_SCRIPT_SECRET);
-}
-
-async function sendEmailViaGoogleAppsScript(payload) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-    try {
-        await fetch(GOOGLE_APPS_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-                secret: NOTIFICATION_SCRIPT_SECRET,
-                to_email: payload.to_email,
-                from_name: payload.from_name,
-                reply_to: payload.reply_to,
-                subject: payload.subject,
-                message_body: payload.message_body,
-                message_html: payload.message_html,
-                cc_email: payload.cc_email || ''
-            }),
-            signal: controller.signal
-        });
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
-
 const APPROVAL_EMAIL_TITLE = {
     approval_requested: 'Aprovação Solicitada',
     revision_created: 'Revisão Criada',

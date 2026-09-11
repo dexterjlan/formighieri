@@ -443,7 +443,8 @@ async function fetchPendenciasConsultorAguardandoAprovacaoProjects(targetStatusN
     }
 
     const approvalsByProjectRaw = await fetchCommercialApprovalsByProjectIds(
-        projects.map(project => project.id)
+        projects.map(project => project.id),
+        projects
     );
 
     const approvalsByProject = {};

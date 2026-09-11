@@ -240,6 +240,10 @@ function canAccessPendencias() {
 }
 
 async function getPendenciasStatusIdByName(name) {
+    if (typeof getOrderProjectStatusIdByName === 'function') {
+        return getOrderProjectStatusIdByName(name);
+    }
+
     const { data, error } = await supabaseClient
         .from('OrderProjectStatus')
         .select('id')
@@ -626,6 +630,10 @@ function waitPendenciasStatus(ms) {
 }
 
 async function getPendenciasStatusIdsByNames(names) {
+    if (typeof getOrderProjectStatusIdsByNames === 'function') {
+        return getOrderProjectStatusIdsByNames(names);
+    }
+
     const uniqueNames = [...new Set(names.filter(Boolean))];
     const ids = [];
 
@@ -695,6 +703,39 @@ function sortPendenciasByEffectiveDeliveryDate(projects, phasesByOrderId = {}) {
     });
 }
 
+async function countPendenciasProjects(filters = {}) {
+    const { statusId, statusIds, designerId, unassignedOnly = false, assignedOnly = false } = filters;
+
+    const buildQuery = (withInactiveFilter = true) => {
+        let query = supabaseClient
+            .from('OrderProject')
+            .select('id', { count: 'exact', head: true });
+
+        if (statusId) query = query.eq('statusId', statusId);
+        if (statusIds?.length) query = query.in('statusId', statusIds);
+        if (designerId) query = query.eq('designerId', designerId);
+        if (unassignedOnly) query = query.is('designerId', null);
+        if (assignedOnly) query = query.not('designerId', 'is', null);
+        if (withInactiveFilter) {
+            query = query.eq('isComplementary', false).eq('isReplaced', false);
+        }
+        return query;
+    };
+
+    let result = await buildQuery(true);
+
+    if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
+        result = await buildQuery(false);
+    }
+
+    if (result.error) {
+        console.error('countPendenciasProjects:', result.error);
+        return { error: result.error, count: 0 };
+    }
+
+    return { error: null, count: result.count ?? 0 };
+}
+
 async function queryPendenciasProjects(filters = {}) {
     const { statusId, statusIds, designerId, unassignedOnly = false, assignedOnly = false } = filters;
 
@@ -762,17 +803,24 @@ async function enrichPendenciasProjectsWithStatus(projects) {
     const statusIds = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
     if (!statusIds.length) return projects;
 
-    const { data: statuses, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id, name')
-        .in('id', statusIds);
+    let statuses = [];
+    if (typeof ensureOrderProjectStatusesForIds === 'function') {
+        statuses = await ensureOrderProjectStatusesForIds(statusIds);
+    } else {
+        const { data, error } = await supabaseClient
+            .from('OrderProjectStatus')
+            .select('id, name')
+            .in('id', statusIds);
 
-    if (error) {
-        console.error('enrichPendenciasProjectsWithStatus:', error);
-        return projects;
+        if (error) {
+            console.error('enrichPendenciasProjectsWithStatus:', error);
+            return projects;
+        }
+
+        statuses = data || [];
     }
 
-    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+    const statusById = Object.fromEntries(statuses.map(status => [status.id, status]));
     return projects.map(project => ({
         ...project,
         projectStatus: project.projectStatus || statusById[project.statusId] || null
@@ -975,6 +1023,10 @@ function showPendencias() {
     if (!canAccessPendencias()) {
         alertAppDialog('Você não tem acesso à tela de pendências.');
         return;
+    }
+
+    if (typeof loadOrderProjectStatusesCache === 'function') {
+        void loadOrderProjectStatusesCache();
     }
 
     const gestorSection = getPrimaryGestorPendenciasSection();

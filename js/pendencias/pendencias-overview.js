@@ -85,9 +85,15 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 const overviewMode = typeof isPendenciasProjetistaOverviewMode === 'function'
                     ? isPendenciasProjetistaOverviewMode()
                     : isAdmin();
-                const projects = await fetchThirdPartyProjectsForProjetista(currentUser?.id, {
-                    includeAll: overviewMode
-                });
+                const projects = typeof filterPendenciasThirdPartyForProjetista === 'function'
+                    ? filterPendenciasThirdPartyForProjetista(
+                        await fetchThirdPartyProjectsForProjetista(currentUser?.id, {
+                            includeAll: overviewMode
+                        })
+                    )
+                    : await fetchThirdPartyProjectsForProjetista(currentUser?.id, {
+                        includeAll: overviewMode
+                    });
                 return projects.length;
             }
             case 'projetista:em-revisao': {
@@ -107,16 +113,25 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 return error ? null : requests.length;
             }
             case 'projetista:nomear': {
-                const { error, projects } = await fetchPendenciasNomearProjects();
-                return error ? null : projects.length;
+                const overviewMode = typeof isPendenciasProjetistaOverviewMode === 'function'
+                    ? isPendenciasProjetistaOverviewMode()
+                    : (isAdmin() || isGestorProjetos());
+                const statusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_NOMEAR);
+                if (!statusId) return null;
+                const result = await countPendenciasProjects(
+                    overviewMode
+                        ? { statusId }
+                        : { statusId, designerId: Number(currentUser?.id) }
+                );
+                return result.error ? null : result.count;
             }
             case 'projetista:aguardando-ppcp': {
-                const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_AGUARDANDO_PPCP);
-                return error ? null : projects.length;
+                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_AGUARDANDO_PPCP);
+                return error ? null : count;
             }
             case 'projetista:implantacao': {
-                const { error, projects } = await fetchPendenciasImplantacoesAbertas();
-                return error ? null : projects.length;
+                const { error, count } = await countPendenciasImplantacoesAbertas();
+                return error ? null : count;
             }
             case 'projetista:detalhamento': {
                 const { error, records } = await fetchPendenciasDetalhamentosForProjetista(currentUser?.id, {
@@ -138,14 +153,15 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 return error ? null : orders.length;
             }
             case 'gestor-comercial:pendencia-por-consultor': {
-                if (typeof fetchPendenciasConsultantPendingBoard !== 'function') return null;
-                const { error, consultants } = await fetchPendenciasConsultantPendingBoard();
-                if (error && !consultants?.length) return null;
-                return (consultants || []).reduce((sum, row) => sum + (row.total || 0), 0);
+                if (typeof countPendenciasConsultantPendingTotal !== 'function') return null;
+                const { error, count } = await countPendenciasConsultantPendingTotal();
+                return error ? null : count;
             }
             case 'gestor-comercial:aguardando-medicao': {
-                const { error, projects } = await fetchPendenciasAguardandoMeasurementProjects();
-                return error ? null : projects.length;
+                const statusIds = await getPendenciasStatusIdsByNames(PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES);
+                if (!statusIds.length) return null;
+                const result = await countPendenciasProjects({ statusIds });
+                return result.error ? null : result.count;
             }
             case 'gestor-comercial:aprovar-conferencia': {
                 const { error, projects, conferenceByProjectId } = await fetchPendenciasAprovarConferenciaProjects();
@@ -153,42 +169,49 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 return groupPendenciasConsultorConferenciaByConference(projects, conferenceByProjectId).length;
             }
             case 'gestor-comercial:aguardando-entrega-tecnica': {
-                const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA);
-                return error ? null : projects.length;
+                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA);
+                return error ? null : count;
             }
             case 'gestor-projetos:carga-por-projetista': {
-                const { error, workload } = await fetchPendenciasProjetistaWorkload();
-                if (error) return null;
-                return (workload || []).reduce((sum, row) => sum + (row.projects || []).length, 0);
+                if (typeof countPendenciasProjetistaWorkload !== 'function') return null;
+                const { error, count } = await countPendenciasProjetistaWorkload();
+                return error ? null : count;
             }
             case 'gestor-projetos:projetos-sem-projetistas': {
-                const { error, projects } = await fetchPendenciasAguardandoPtSemProjetista();
-                return error ? null : projects.length;
+                const statusId = await getPendenciasStatusIdByName(PENDENCIAS_STATUS_AGUARDANDO_PT);
+                if (!statusId) return null;
+                const result = await countPendenciasProjects({ statusId, unassignedOnly: true });
+                return result.error ? null : result.count;
             }
             case 'gestor-projetos:terceiros-sem-projetistas': {
-                if (typeof fetchThirdPartyProjectsWithoutDesigner !== 'function') return null;
-                const projects = await fetchThirdPartyProjectsWithoutDesigner();
-                return projects.length;
+                const { count, error } = await supabaseClient
+                    .from('ThirdPartyProject')
+                    .select('id', { count: 'exact', head: true })
+                    .is('designerId', null)
+                    .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED);
+                if (error?.message?.includes('ThirdPartyProject')) return 0;
+                if (error) return null;
+                return count ?? 0;
             }
             case 'gestor-projetos:aguardando-detalhamento': {
                 const { error, records } = await fetchPendenciasDetalhamentosSemProjetista();
                 return error ? null : records.length;
             }
             case 'gestor-projetos:expedicao': {
-                const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EXPEDICAO);
-                return error ? null : projects.length;
+                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EXPEDICAO);
+                return error ? null : count;
             }
             case 'gestor-projetos:montagem-externa': {
-                const { error, projects } = await fetchPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);
-                return error ? null : projects.length;
+                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);
+                return error ? null : count;
             }
             case 'gestor-fabrica:aguardando-montagem-interna': {
-                const { error, projects } = await fetchPendenciasFabricaProjectsByStatusName(PENDENCIAS_STATUS_EM_PRODUCAO);
-                return error ? null : projects.length;
+                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EM_PRODUCAO);
+                return error ? null : count;
             }
             case 'gestor-fabrica:em-montagem': {
-                const { error, projects } = await fetchPendenciasFabricaProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_INTERNA);
-                return error ? null : projects.length;
+                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_INTERNA);
+                return error ? null : count;
             }
             case 'compras:enviados-compras': {
                 const { error, items } = await fetchPendenciasEnviadosCompras();
@@ -323,4 +346,10 @@ async function loadPendenciasSectionOverview() {
     );
 
     renderPendenciasSectionOverview(section, countResults);
+}
+
+async function refreshPendenciasOverviewCounts() {
+    if (!pendenciasActiveItem && pendenciasActiveSection) {
+        await loadPendenciasSectionOverview();
+    }
 }

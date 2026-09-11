@@ -1046,13 +1046,49 @@ function getGestaoKanbanExportDesignerName(project) {
     return fromCache?.name || '';
 }
 
-function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplementar = false) {
+function canExportGestaoKanbanSaleValue() {
+    return typeof isAdmin === 'function' && isAdmin();
+}
+
+function getGestaoKanbanExportColumnConfig() {
+    const baseHeaders = [
+        'Status',
+        'Pedido',
+        'Cliente',
+        'Consultor',
+        'Fase',
+        'Data Entrega',
+        'Data Entrega Projeto',
+        'Projeto',
+        'Código Projeto'
+    ];
+    const tailHeaders = ['Tipo', 'Projetista'];
+    const baseColWidths = [24, 12, 28, 22, 16, 14, 20, 28, 14];
+    const tailColWidths = [14, 22];
+
+    if (canExportGestaoKanbanSaleValue()) {
+        return {
+            headers: [...baseHeaders, 'Valor Projeto', ...tailHeaders],
+            includeSaleValue: true,
+            valueColumnIndex: baseHeaders.length,
+            colWidths: [...baseColWidths, 16, ...tailColWidths]
+        };
+    }
+
+    return {
+        headers: [...baseHeaders, ...tailHeaders],
+        includeSaleValue: false,
+        valueColumnIndex: -1,
+        colWidths: [...baseColWidths, ...tailColWidths]
+    };
+}
+
+function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplementar = false, includeSaleValue = false) {
     const orderDeliveryDate = getGestaoKanbanCardDeliveryDate(order, phase);
     const projectDeliveryDate = project.deliveryDate || '';
     const designerName = getGestaoKanbanExportDesignerName(project);
-    const saleValue = getGestaoKanbanExportProjectSaleValue(project);
 
-    return [
+    const row = [
         statusName,
         order.orderCode || '',
         getOrderClientName(order) || '',
@@ -1061,16 +1097,24 @@ function buildGestaoKanbanExportRow(statusName, order, phase, project, isComplem
         parseGestaoKanbanExportExcelDate(orderDeliveryDate),
         parseGestaoKanbanExportExcelDate(projectDeliveryDate),
         project.name || '',
-        project.projectCode || '',
-        saleValue,
+        project.projectCode || ''
+    ];
+
+    if (includeSaleValue) {
+        row.push(getGestaoKanbanExportProjectSaleValue(project));
+    }
+
+    row.push(
         isComplementar ? 'Complementar' : 'Principal',
         designerName
-    ];
+    );
+
+    return row;
 }
 
-function applyGestaoKanbanExportSheetFormats(sheet, dataRowCount, XLSX) {
+function applyGestaoKanbanExportSheetFormats(sheet, dataRowCount, XLSX, valueColumnIndex = -1) {
     const dateColumns = [5, 6];
-    const valueColumn = 9;
+    const valueColumn = valueColumnIndex;
 
     for (let row = 1; row <= dataRowCount; row++) {
         dateColumns.forEach(col => {
@@ -1083,6 +1127,8 @@ function applyGestaoKanbanExportSheetFormats(sheet, dataRowCount, XLSX) {
             cell.z = 'dd/mm/yyyy';
         });
 
+        if (valueColumn < 0) continue;
+
         const valueRef = XLSX.utils.encode_cell({ r: row, c: valueColumn });
         const valueCell = sheet[valueRef];
         if (valueCell && typeof valueCell.v === 'number' && Number.isFinite(valueCell.v)) {
@@ -1092,16 +1138,16 @@ function applyGestaoKanbanExportSheetFormats(sheet, dataRowCount, XLSX) {
     }
 }
 
-function buildGestaoKanbanExportRows(orders, statuses) {
+function buildGestaoKanbanExportRows(orders, statuses, includeSaleValue = false) {
     const rows = [];
 
     statuses.forEach(status => {
         const cards = buildGestaoKanbanCardsForStatus(status.id, orders);
         cards.forEach(({ order, phase, projectTree }) => {
             projectTree.forEach(({ project, children }) => {
-                rows.push(buildGestaoKanbanExportRow(status.name, order, phase, project, false));
+                rows.push(buildGestaoKanbanExportRow(status.name, order, phase, project, false, includeSaleValue));
                 (children || []).forEach(child => {
-                    rows.push(buildGestaoKanbanExportRow(status.name, order, phase, child, true));
+                    rows.push(buildGestaoKanbanExportRow(status.name, order, phase, child, true, includeSaleValue));
                 });
             });
         });
@@ -1173,44 +1219,22 @@ async function exportGestaoKanbanToExcel() {
             return;
         }
 
-        const dataRows = buildGestaoKanbanExportRows(orders, statuses);
+        const exportColumns = getGestaoKanbanExportColumnConfig();
+        const dataRows = buildGestaoKanbanExportRows(orders, statuses, exportColumns.includeSaleValue);
         if (!dataRows.length) {
             alertAppDialog('Nenhum projeto no kanban para exportar.', { variant: 'warning', title: 'Aviso' });
             return;
         }
 
-        const headers = [
-            'Status',
-            'Pedido',
-            'Cliente',
-            'Consultor',
-            'Fase',
-            'Data Entrega',
-            'Data Entrega Projeto',
-            'Projeto',
-            'Código Projeto',
-            'Valor Projeto',
-            'Tipo',
-            'Projetista'
-        ];
-
         const XLSX = await loadSheetJsLibrary();
-        const sheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-        applyGestaoKanbanExportSheetFormats(sheet, dataRows.length, XLSX);
-        sheet['!cols'] = [
-            { wch: 24 },
-            { wch: 12 },
-            { wch: 28 },
-            { wch: 22 },
-            { wch: 16 },
-            { wch: 14 },
-            { wch: 20 },
-            { wch: 28 },
-            { wch: 14 },
-            { wch: 16 },
-            { wch: 14 },
-            { wch: 22 }
-        ];
+        const sheet = XLSX.utils.aoa_to_sheet([exportColumns.headers, ...dataRows]);
+        applyGestaoKanbanExportSheetFormats(
+            sheet,
+            dataRows.length,
+            XLSX,
+            exportColumns.valueColumnIndex
+        );
+        sheet['!cols'] = exportColumns.colWidths.map(width => ({ wch: width }));
 
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, sheet, 'Kanban');

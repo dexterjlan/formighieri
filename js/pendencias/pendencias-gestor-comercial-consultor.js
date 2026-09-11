@@ -100,7 +100,8 @@ async function fetchConsultantPendingStatusChangedAt(projectIds, statusNames) {
     return map;
 }
 
-async function collectConsultantPendingItems() {
+async function collectConsultantPendingItems(options = {}) {
+    const { countOnly = false } = options;
     const items = [];
     const errors = [];
 
@@ -143,29 +144,43 @@ async function collectConsultantPendingItems() {
     const awaitingApprovalProjects = awaitingApprovalResult.projects || [];
     const conferenceByProjectId = conferenceResult.conferenceByProjectId || {};
 
-    const [conferenceChangedAt, commercialReviewChangedAt, awaitingApprovalChangedAt] = await Promise.all([
-        fetchConsultantPendingStatusChangedAt(
-            conferenceProjects.map(project => project.id),
-            [PENDENCIAS_STATUS_CONFERENCIA_ENVIADA]
-        ),
-        fetchConsultantPendingStatusChangedAt(
-            commercialReviewProjects.map(project => project.id),
-            [PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL]
-        ),
-        fetchConsultantPendingStatusChangedAt(
-            awaitingApprovalProjects.map(project => project.id),
-            [PENDENCIAS_STATUS_AGUARDANDO_APROVACAO]
-        )
-    ]);
+    let conferenceChangedAt = {};
+    let commercialReviewChangedAt = {};
+    let awaitingApprovalChangedAt = {};
 
-    const [enrichedConference, enrichedCommercialReview, enrichedAwaitingApproval, enrichedRequests, enrichedThirdParty] =
-        await Promise.all([
-            enrichItemsWithOrderConsultantUserId(conferenceProjects),
-            enrichItemsWithOrderConsultantUserId(commercialReviewProjects),
-            enrichItemsWithOrderConsultantUserId(awaitingApprovalProjects),
-            enrichItemsWithOrderConsultantUserId(requestResult.requests || []),
-            enrichItemsWithOrderConsultantUserId(thirdPartyProjects)
+    if (!countOnly) {
+        [conferenceChangedAt, commercialReviewChangedAt, awaitingApprovalChangedAt] = await Promise.all([
+            fetchConsultantPendingStatusChangedAt(
+                conferenceProjects.map(project => project.id),
+                [PENDENCIAS_STATUS_CONFERENCIA_ENVIADA]
+            ),
+            fetchConsultantPendingStatusChangedAt(
+                commercialReviewProjects.map(project => project.id),
+                [PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL]
+            ),
+            fetchConsultantPendingStatusChangedAt(
+                awaitingApprovalProjects.map(project => project.id),
+                [PENDENCIAS_STATUS_AGUARDANDO_APROVACAO]
+            )
         ]);
+    }
+
+    let enrichedConference = conferenceProjects;
+    let enrichedCommercialReview = commercialReviewProjects;
+    let enrichedAwaitingApproval = awaitingApprovalProjects;
+    let enrichedRequests = requestResult.requests || [];
+    let enrichedThirdParty = thirdPartyProjects;
+
+    if (!countOnly) {
+        [enrichedConference, enrichedCommercialReview, enrichedAwaitingApproval, enrichedRequests, enrichedThirdParty] =
+            await Promise.all([
+                enrichItemsWithOrderConsultantUserId(conferenceProjects),
+                enrichItemsWithOrderConsultantUserId(commercialReviewProjects),
+                enrichItemsWithOrderConsultantUserId(awaitingApprovalProjects),
+                enrichItemsWithOrderConsultantUserId(requestResult.requests || []),
+                enrichItemsWithOrderConsultantUserId(thirdPartyProjects)
+            ]);
+    }
 
     enrichedConference.forEach(project => {
         const conference = conferenceByProjectId[project.id];
@@ -221,6 +236,14 @@ async function collectConsultantPendingItems() {
     });
 
     return { error: errors[0] || null, items };
+}
+
+async function countPendenciasConsultantPendingTotal() {
+    const { error, items } = await collectConsultantPendingItems({ countOnly: true });
+    if (error && !items?.length) {
+        return { error, count: null };
+    }
+    return { error: null, count: items.length };
 }
 
 function groupConsultantPendingOrderItems(items) {

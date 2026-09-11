@@ -540,6 +540,23 @@ function renderPendenciasAguardandoMedicaoList(projects) {
     });
 }
 
+async function countPendenciasProjectsByStatusName(statusName) {
+    const statusId = await getPendenciasStatusIdByName(statusName);
+
+    if (!statusId) {
+        return {
+            error: new Error(`Status "${statusName}" não encontrado.`),
+            count: 0
+        };
+    }
+
+    const result = await countPendenciasProjects({ statusId });
+    return {
+        error: result.error,
+        count: result.count ?? 0
+    };
+}
+
 async function fetchPendenciasProjectsByStatusName(statusName) {
     const statusId = await getPendenciasStatusIdByName(statusName);
 
@@ -891,14 +908,52 @@ async function loadPendenciasAguardandoPpcp() {
     });
 }
 
-async function fetchPendenciasImplantacoesAbertas() {
+async function countPendenciasImplantacoesAbertas() {
     const statusEncerrado = typeof IMPLANTACAO_STATUS_ENCERRADO === 'string'
         ? IMPLANTACAO_STATUS_ENCERRADO
         : 'Encerrado';
     const overviewMode = typeof isImplantacaoPendenciasOverviewMode === 'function'
         && isImplantacaoPendenciasOverviewMode();
 
-    if (typeof fetchOrderProjectsInImplantacaoStatus === 'function'
+    let query = supabaseClient
+        .from('Implementation')
+        .select('id', { count: 'exact', head: true })
+        .neq('status', statusEncerrado);
+
+    if (!overviewMode) {
+        const userId = Number(currentUser?.id);
+        if (!userId) {
+            return { error: null, count: 0 };
+        }
+        query = query.eq('designerId', userId);
+    }
+
+    const { count, error } = await query;
+
+    if (error?.message?.includes('Implementation')) {
+        return {
+            error: new Error('Tabela Implementation não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.'),
+            count: 0
+        };
+    }
+
+    if (error) {
+        return { error, count: 0 };
+    }
+
+    return { error: null, count: count ?? 0 };
+}
+
+async function fetchPendenciasImplantacoesAbertas(options = {}) {
+    const { skipOrphanRepair = false } = options;
+    const statusEncerrado = typeof IMPLANTACAO_STATUS_ENCERRADO === 'string'
+        ? IMPLANTACAO_STATUS_ENCERRADO
+        : 'Encerrado';
+    const overviewMode = typeof isImplantacaoPendenciasOverviewMode === 'function'
+        && isImplantacaoPendenciasOverviewMode();
+
+    if (!skipOrphanRepair
+        && typeof fetchOrderProjectsInImplantacaoStatus === 'function'
         && typeof ensureImplantacaoRecordsForProjects === 'function') {
         const orphanProjects = await fetchOrderProjectsInImplantacaoStatus();
         if (orphanProjects.length) {

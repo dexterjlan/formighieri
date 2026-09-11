@@ -42,6 +42,18 @@ async function enrichPesquisasRequests(requests = []) {
         projectsById = Object.fromEntries((projects || []).map(project => [project.id, project]));
     }
 
+    const designerIds = [...new Set(requests.map(request => request.designerId).filter(Boolean))];
+    let designerById = {};
+
+    if (designerIds.length) {
+        const { data: designers } = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .in('id', designerIds);
+
+        designerById = Object.fromEntries((designers || []).map(designer => [designer.id, designer]));
+    }
+
     return requests.map(request => {
         const order = ordersById[request.orderId] || null;
         const project = projectsById[request.orderProjectId] || null;
@@ -49,7 +61,11 @@ async function enrichPesquisasRequests(requests = []) {
             ...request,
             order,
             orderProject: project,
-            projectName: project?.name || '—'
+            projectName: project?.name || '—',
+            consultantName: typeof getOrderConsultantNameFromRecord === 'function'
+                ? (getOrderConsultantNameFromRecord(order) || '—')
+                : '—',
+            designerName: designerById[request.designerId]?.name || '—'
         };
     });
 }
@@ -66,6 +82,8 @@ function mapPesquisasRequestRows(requests = []) {
             orderCode: request.order?.orderCode || '—',
             clientName: getOrderClientName(request.order) || '—',
             projectName: request.projectName || '—',
+            consultantName: request.consultantName || '—',
+            designerName: request.designerName || '—',
             requestType,
             requestTypeLabel: typeof formatRequestType === 'function'
                 ? formatRequestType(requestType)
@@ -133,10 +151,24 @@ function renderPesquisasRequestsTable(rows = []) {
         onRefresh: refreshPesquisasRequestsQuery,
         tableId: 'pesquisas-requests',
         rows,
-        minWidth: '860px',
+        minWidth: '1020px',
         emptyMessage: 'Nenhuma requisição encontrada.',
         columns: [
             ...getPendenciasInteractiveIdentityColumns(),
+            {
+                key: 'consultantName',
+                label: 'Consultor',
+                sortable: true,
+                filterable: true,
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'designerName',
+                label: 'Projetista',
+                sortable: true,
+                filterable: true,
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
             {
                 key: 'requestTypeLabel',
                 label: 'Tipo',

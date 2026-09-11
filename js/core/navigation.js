@@ -282,12 +282,10 @@ async function restoreAppNavState() {
                 showDashboard();
                 if (state.activeOrderId && typeof selectOrder === 'function') {
                     await selectOrder(state.activeOrderId);
-                    if (state.orderDetailTab && typeof switchOrderDetailTab === 'function') {
-                        switchOrderDetailTab(state.orderDetailTab);
-                        if (state.orderDetailTab === 'third-party'
-                            && typeof loadOrderThirdPartyProjectsTab === 'function') {
-                            await loadOrderThirdPartyProjectsTab(state.activeOrderId);
-                        }
+                    if (state.orderDetailTab
+                        && typeof switchOrderDetailTab === 'function'
+                        && state.orderDetailTab !== getFirstVisibleOrderDetailTab?.()) {
+                        await switchOrderDetailTab(state.orderDetailTab, { awaitTabLoad: true });
                     }
                 }
                 return true;

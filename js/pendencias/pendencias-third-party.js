@@ -1,13 +1,43 @@
 let pendenciasThirdPartyProjectsCache = [];
 
+function filterPendenciasThirdPartyForProjetista(projects = []) {
+    return projects.filter(project =>
+        project.status === THIRD_PARTY_PROJECT_STATUS_OPEN
+        || project.status === THIRD_PARTY_PROJECT_STATUS_IN_REVIEW
+    );
+}
+
 function mapPendenciasThirdPartyInteractiveRow(project, extras = {}) {
     return mapPendenciasInteractiveIdentity(project, {
         projectName: project.orderProject?.name || 'Projeto',
         characteristicName: project.projectCharacteristic?.name || '—',
+        subtypeName: project.thirdPartySubtype?.name || '—',
         filePath: project.filePath || '',
         designerName: project.designer?.name || '—',
         project,
         ...extras
+    });
+}
+
+function renderPendenciasThirdPartyDetailButton(project) {
+    return `
+        <button type="button"
+            class="pendencias-third-party-detail-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium"
+            data-third-party-project-id="${project.id}">
+            Detalhes
+        </button>
+    `;
+}
+
+function bindPendenciasThirdPartyDetailActions(content) {
+    content.querySelectorAll('.pendencias-third-party-detail-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            const projectId = Number(button.dataset.thirdPartyProjectId);
+            const project = pendenciasThirdPartyProjectsCache.find(item => Number(item.id) === projectId);
+            if (project && typeof openThirdPartyProjectDetailModal === 'function') {
+                openThirdPartyProjectDetailModal(project);
+            }
+        });
     });
 }
 
@@ -87,7 +117,12 @@ function renderPendenciasThirdPartyProjetistaActions(project) {
         `;
     }
 
-    return `<div class="flex flex-wrap gap-1.5">${actionButtons}</div>`;
+    return `
+        <div class="flex flex-wrap gap-1.5">
+            ${renderPendenciasThirdPartyDetailButton(project)}
+            ${actionButtons}
+        </div>
+    `;
 }
 
 function renderPendenciasThirdPartyConsultorActions(project) {
@@ -98,6 +133,7 @@ function renderPendenciasThirdPartyConsultorActions(project) {
 
     return `
         <div class="flex flex-wrap gap-1.5">
+            ${renderPendenciasThirdPartyDetailButton(project)}
             ${canReview ? `
                 <button type="button"
                     class="pendencias-third-party-consultor-review-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-2.5 py-1 rounded-lg font-medium"
@@ -169,6 +205,8 @@ function bindPendenciasThirdPartyProjetistaActions(content) {
             openThirdPartyProjectRevisionModal(Number(button.dataset.thirdPartyProjectId));
         });
     });
+
+    bindPendenciasThirdPartyDetailActions(content);
 }
 
 function bindPendenciasThirdPartyConsultorActions(content) {
@@ -197,6 +235,8 @@ function bindPendenciasThirdPartyConsultorActions(content) {
             if (project) openThirdPartyProjectStatusHistoryModal(project);
         });
     });
+
+    bindPendenciasThirdPartyDetailActions(content);
 }
 
 async function associarPendenciaThirdPartyProjectProjetista(thirdPartyProjectId, designerId) {
@@ -342,9 +382,11 @@ async function loadPendenciasThirdPartyProjetista() {
         ? isPendenciasProjetistaOverviewMode()
         : (isAdmin() || (typeof canSeePendenciasGestorProjetosMenu === 'function'
             && canSeePendenciasGestorProjetosMenu()));
-    const projects = await fetchThirdPartyProjectsForProjetista(currentUser?.id, {
-        includeAll: overviewMode
-    });
+    const projects = filterPendenciasThirdPartyForProjetista(
+        await fetchThirdPartyProjectsForProjetista(currentUser?.id, {
+            includeAll: overviewMode
+        })
+    );
 
     pendenciasThirdPartyProjectsCache = projects;
 
@@ -362,8 +404,8 @@ function renderPendenciasThirdPartyProjetistaList(projects, overviewMode = false
     renderPendenciasInteractiveTableScreen(content, {
         title: 'Projetos de Terceiros',
         subtitle: overviewMode
-            ? 'Visão geral dos projetos de terceiros não aprovados.'
-            : 'Projetos de terceiros atribuídos a você que ainda não foram aprovados.',
+            ? 'Projetos de terceiros em aberto ou em revisão.'
+            : 'Seus projetos de terceiros em aberto ou em revisão.',
         refreshButtonId: 'btn-pendencias-refresh-third-party-projetista',
         onRefresh: loadPendenciasThirdPartyProjetista,
         tableId: 'pendencias-third-party-projetista',
@@ -372,6 +414,13 @@ function renderPendenciasThirdPartyProjetistaList(projects, overviewMode = false
         emptyMessage: 'Nenhum projeto de terceiros pendente.',
         columns: [
             ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
+            {
+                key: 'subtypeName',
+                label: 'Subtipo',
+                sortable: true,
+                filterable: true,
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
             {
                 key: 'filePath',
                 label: 'Caminho do arquivo',
@@ -386,7 +435,7 @@ function renderPendenciasThirdPartyProjetistaList(projects, overviewMode = false
             },
             getPendenciasInteractiveActionColumn({
                 label: 'Ações',
-                thClass: 'w-44',
+                thClass: 'w-56',
                 cellClass: 'p-3',
                 render: (row) => renderPendenciasThirdPartyProjetistaActions(row.project)
             })
@@ -426,8 +475,8 @@ function renderPendenciasThirdPartyConsultorList(projects, overviewMode = false)
     renderPendenciasInteractiveTableScreen(content, {
         title: 'Projetos de Terceiros Enviados',
         subtitle: overviewMode
-            ? 'Todos os projetos de terceiros enviados aguardando revisão ou aprovação.'
-            : 'Projetos de terceiros dos seus pedidos aguardando revisão ou aprovação.',
+            ? 'Projetos de terceiros enviados aguardando revisão ou aprovação.'
+            : 'Projetos de terceiros enviados dos seus pedidos.',
         refreshButtonId: 'btn-pendencias-refresh-third-party-consultor',
         onRefresh: loadPendenciasThirdPartyConsultor,
         tableId: 'pendencias-third-party-consultor',
@@ -437,13 +486,20 @@ function renderPendenciasThirdPartyConsultorList(projects, overviewMode = false)
         columns: [
             ...getPendenciasInteractiveIdentityColumns({ includeDesigner: true }),
             {
+                key: 'subtypeName',
+                label: 'Subtipo',
+                sortable: true,
+                filterable: true,
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
                 key: 'filePath',
                 label: 'Caminho',
                 cellClass: 'p-3 text-xs font-mono text-slate-600 break-all'
             },
             getPendenciasInteractiveActionColumn({
                 label: 'Ações',
-                thClass: 'w-52',
+                thClass: 'w-64',
                 cellClass: 'p-3',
                 render: (row) => renderPendenciasThirdPartyConsultorActions(row.project)
             })

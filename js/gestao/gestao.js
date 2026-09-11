@@ -294,6 +294,14 @@ function showGestaoProjectHistoryPanel() {
 }
 
 async function loadGestaoProjectStatuses(activeOnly = false) {
+    if (typeof loadOrderProjectStatusesCache === 'function') {
+        const cache = await loadOrderProjectStatusesCache();
+        gestaoProjectStatusesCache = activeOnly
+            ? cache.filter(status => status.isActive !== false)
+            : cache;
+        return gestaoProjectStatusesCache;
+    }
+
     let query = supabaseClient
         .from('OrderProjectStatus')
         .select('id, name, sortOrder, isActive')

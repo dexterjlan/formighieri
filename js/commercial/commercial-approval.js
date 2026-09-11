@@ -485,17 +485,24 @@ async function enrichCommercialApprovalProjectsWithStatus(projects) {
     const statusIds = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
     if (!statusIds.length) return projects;
 
-    const { data: statuses, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id, name')
-        .in('id', statusIds);
+    let statuses = [];
+    if (typeof ensureOrderProjectStatusesForIds === 'function') {
+        statuses = await ensureOrderProjectStatusesForIds(statusIds);
+    } else {
+        const { data, error } = await supabaseClient
+            .from('OrderProjectStatus')
+            .select('id, name')
+            .in('id', statusIds);
 
-    if (error) {
-        console.error('enrichCommercialApprovalProjectsWithStatus:', error);
-        return projects;
+        if (error) {
+            console.error('enrichCommercialApprovalProjectsWithStatus:', error);
+            return projects;
+        }
+
+        statuses = data || [];
     }
 
-    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+    const statusById = Object.fromEntries(statuses.map(status => [status.id, status]));
     return projects.map(project => ({
         ...project,
         projectStatus: project.projectStatus || statusById[project.statusId] || null

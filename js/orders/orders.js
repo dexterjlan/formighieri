@@ -492,12 +492,20 @@ async function loadConsultants() {
     });
 }
 
-function updateOrderTabCounts(projectsCount, anteprojetoCount, medicoesCount, requestsCount, comprasCount) {
+function updateOrderTabCounts(
+    projectsCount,
+    anteprojetoCount,
+    medicoesCount,
+    requestsCount,
+    comprasCount,
+    thirdPartyCount
+) {
     const projectsCountEl = document.getElementById('order-projects-count');
     const anteprojetoCountEl = document.getElementById('order-tab-anteprojeto-count');
     const medicaoCountEl = document.getElementById('order-tab-medicao-count');
     const requestsCountEl = document.getElementById('order-tab-requests-count');
     const comprasCountEl = document.getElementById('order-tab-compras-count');
+    const thirdPartyCountEl = document.getElementById('order-tab-third-party-count');
 
     if (projectsCountEl && projectsCount !== undefined) {
         projectsCountEl.textContent = `(${projectsCount})`;
@@ -513,6 +521,87 @@ function updateOrderTabCounts(projectsCount, anteprojetoCount, medicoesCount, re
     }
     if (comprasCountEl && comprasCount !== undefined) {
         comprasCountEl.textContent = `(${comprasCount})`;
+    }
+    if (thirdPartyCountEl && thirdPartyCount !== undefined) {
+        thirdPartyCountEl.textContent = `(${thirdPartyCount})`;
+    }
+}
+
+async function fetchOrderDetailTabCounts(orderId, projectIds = []) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId) return null;
+
+    let resolvedProjectIds = [...new Set((projectIds || []).map(id => Number(id)).filter(Boolean))];
+
+    const [medicaoRes, anteprojetoRes, requestsRes, thirdPartyRes] = await Promise.all([
+        supabaseClient
+            .from('Measurement')
+            .select('id', { count: 'exact', head: true })
+            .eq('orderId', normalizedId),
+        supabaseClient
+            .from('PreliminaryDesignConference')
+            .select('id', { count: 'exact', head: true })
+            .eq('orderId', normalizedId),
+        supabaseClient
+            .from('OrderRequest')
+            .select('id', { count: 'exact', head: true })
+            .eq('orderId', normalizedId),
+        supabaseClient
+            .from('ThirdPartyProject')
+            .select('id', { count: 'exact', head: true })
+            .eq('orderId', normalizedId)
+    ]);
+
+    if (!resolvedProjectIds.length) {
+        const { data: projects } = await supabaseClient
+            .from('OrderProject')
+            .select('id')
+            .eq('orderId', normalizedId);
+        resolvedProjectIds = (projects || []).map(project => Number(project.id)).filter(Boolean);
+    }
+
+    let comprasCount = 0;
+    if (resolvedProjectIds.length) {
+        const comprasRes = await supabaseClient
+            .from('Purchase')
+            .select('id', { count: 'exact', head: true })
+            .in('orderProjectId', resolvedProjectIds);
+        comprasCount = comprasRes.count ?? 0;
+    }
+
+    let thirdPartyCount = thirdPartyRes.count ?? 0;
+    if (thirdPartyRes.error && resolvedProjectIds.length) {
+        const fallback = await supabaseClient
+            .from('ThirdPartyProject')
+            .select('id', { count: 'exact', head: true })
+            .in('orderProjectId', resolvedProjectIds);
+        thirdPartyCount = fallback.count ?? 0;
+    }
+
+    return {
+        medicoes: medicaoRes.count ?? 0,
+        anteprojeto: anteprojetoRes.count ?? 0,
+        requests: requestsRes.count ?? 0,
+        compras: comprasCount,
+        thirdParty: thirdPartyCount
+    };
+}
+
+async function refreshOrderDetailTabCounts(orderId, projectIds = []) {
+    try {
+        const counts = await fetchOrderDetailTabCounts(orderId, projectIds);
+        if (!counts) return;
+
+        updateOrderTabCounts(
+            undefined,
+            counts.anteprojeto,
+            counts.medicoes,
+            counts.requests,
+            counts.compras,
+            counts.thirdParty
+        );
+    } catch (error) {
+        console.error('refreshOrderDetailTabCounts:', error);
     }
 }
 
@@ -629,9 +718,53 @@ function updateOrderDetailTabsVisibility() {
     updateOrderTabsChromeVisibility();
 }
 
-function switchOrderDetailTab(tab) {
+const orderDetailTabsLoadedByOrderId = {};
+let selectOrderLoadToken = 0;
+
+function resetOrderDetailTabsLoaded(orderId) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId) return;
+    orderDetailTabsLoadedByOrderId[normalizedId] = {};
+}
+
+function isOrderDetailTabLoaded(orderId, tab) {
+    const normalizedId = Number(orderId);
+    return Boolean(orderDetailTabsLoadedByOrderId[normalizedId]?.[tab]);
+}
+
+function markOrderDetailTabLoaded(orderId, tab) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId || !tab) return;
+    if (!orderDetailTabsLoadedByOrderId[normalizedId]) {
+        orderDetailTabsLoadedByOrderId[normalizedId] = {};
+    }
+    orderDetailTabsLoadedByOrderId[normalizedId][tab] = true;
+}
+
+async function ensureOrderDetailTabLoaded(tab, orderId = activeOrderId) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId || !ORDER_DETAIL_TABS[tab] || isOrderDetailTabLoaded(normalizedId, tab)) {
+        return;
+    }
+
+    if (tab === 'medicao' && typeof loadMedicoes === 'function') {
+        await loadMedicoes(normalizedId);
+    } else if (tab === 'anteprojeto' && typeof loadAnteprojetoConferences === 'function') {
+        await loadAnteprojetoConferences(normalizedId);
+    } else if (tab === 'requests' && typeof loadConversations === 'function') {
+        await loadConversations(normalizedId);
+    } else if (tab === 'compras' && typeof loadOrderCompras === 'function') {
+        await loadOrderCompras(normalizedId);
+    } else if (tab === 'third-party' && typeof loadOrderThirdPartyProjectsTab === 'function') {
+        await loadOrderThirdPartyProjectsTab(normalizedId);
+    }
+
+    markOrderDetailTabLoaded(normalizedId, tab);
+}
+
+async function switchOrderDetailTab(tab, options = {}) {
     if (!tab || !ORDER_DETAIL_TABS[tab]) {
-        switchOrderDetailTab('medicao');
+        await switchOrderDetailTab('medicao', options);
         return;
     }
 
@@ -650,6 +783,14 @@ function switchOrderDetailTab(tab) {
 
     updateOrderDetailActionButtons();
     updateOrderTabReadonlyNotice(tab);
+
+    if (activeOrderId) {
+        if (options.awaitTabLoad) {
+            await ensureOrderDetailTabLoaded(tab, activeOrderId);
+        } else {
+            void ensureOrderDetailTabLoaded(tab, activeOrderId);
+        }
+    }
 
     if (typeof saveAppNavState === 'function' && activeOrderId) {
         saveAppNavState({
@@ -695,100 +836,147 @@ async function fillOrderDetailArchitect(order) {
     el.textContent = `🏛️ Arquiteto: ${name || '—'}`;
 }
 
-async function selectOrder(id) {
-    if (typeof refreshCurrentUserProfile === 'function') {
-        await refreshCurrentUserProfile();
+function orderDetailHasCachedRelations(order) {
+    if (!order?.orderCode) return false;
+    const clientName = typeof getOrderClientName === 'function' ? getOrderClientName(order) : '';
+    return Boolean(clientName && clientName !== '—');
+}
+
+function mergeOrderDetailRecord(cached, fetched) {
+    const order = { ...(cached || {}), ...(fetched || {}) };
+    if (!order.client?.name && cached?.client) order.client = cached.client;
+    if (!order.consultor?.name && cached?.consultor) order.consultor = cached.consultor;
+    if (!order.architect?.name && cached?.architect) order.architect = cached.architect;
+    if (!order.creator?.name && cached?.creator) order.creator = cached.creator;
+    return order;
+}
+
+async function queryOrderDetailRecordById(orderId, select) {
+    return supabaseClient
+        .from('salesOrders')
+        .select(select)
+        .eq('id', orderId)
+        .maybeSingle();
+}
+
+async function fetchOrderDetailRecord(id) {
+    const normalizedId = Number(id);
+    const cached = ordersCache.find(item => Number(item.id) === normalizedId) || null;
+
+    if (cached && orderDetailHasCachedRelations(cached)) {
+        return { ...cached };
     }
 
-    activeOrderId = id;
-    document.getElementById("empty-state").classList.add("hidden");
-    document.getElementById("order-content").classList.remove("hidden");
+    const selectVariants = [
+        `*, creator:appUsers!salesOrders_createdById_fkey(name), ${SALES_ORDER_RELATIONS_SELECT}, architect:Architect(id, name)`,
+        `*, creator:appUsers!salesOrders_createdById_fkey(name), ${SALES_ORDER_RELATIONS_SELECT}`,
+        `*, ${SALES_ORDER_RELATIONS_SELECT}`,
+        '*, creator:appUsers!salesOrders_createdById_fkey(name)',
+        '*'
+    ];
 
     let order = null;
     let fetchError = null;
 
-    const selectWithArchitect = `*, creator:appUsers!salesOrders_createdById_fkey(name), ${SALES_ORDER_RELATIONS_SELECT}, architect:Architect(id, name)`;
-    const selectBase = `*, creator:appUsers!salesOrders_createdById_fkey(name), ${SALES_ORDER_RELATIONS_SELECT}`;
-
-    let primary = await supabaseClient
-        .from('salesOrders')
-        .select(selectWithArchitect)
-        .eq('id', id)
-        .single();
-
-    if (primary.error && /architect|Architect/i.test(primary.error.message || '')) {
-        primary = await supabaseClient
-            .from('salesOrders')
-            .select(selectBase)
-            .eq('id', id)
-            .single();
-    }
-
-    if (!primary.error && primary.data) {
-        order = primary.data;
-    } else if (primary.error?.message?.includes('Client') || primary.error?.message?.includes('consultor')) {
-        const fallback = await supabaseClient
-            .from('salesOrders')
-            .select('*, creator:appUsers!salesOrders_createdById_fkey(name)')
-            .eq('id', id)
-            .single();
-        if (!fallback.error && fallback.data) {
-            order = fallback.data;
-            const cached = ordersCache.find(item => Number(item.id) === Number(id));
-            if (cached?.client) order.client = cached.client;
-            if (cached?.consultor) order.consultor = cached.consultor;
-            if (cached?.architect) order.architect = cached.architect;
-        } else {
-            fetchError = fallback.error || primary.error;
+    for (const select of selectVariants) {
+        const { data, error } = await queryOrderDetailRecordById(normalizedId, select);
+        if (!error && data) {
+            order = data;
+            break;
         }
-    } else {
-        fetchError = primary.error;
+
+        fetchError = error;
+        const message = String(error?.message || '');
+        const isRecoverable = /coerce|Client|consultor|architect|Architect|creator|appUsers|does not exist|relationship/i.test(message);
+        if (!isRecoverable) break;
     }
 
-    if (fetchError || !order) return;
+    if (!order) {
+        if (cached) {
+            return { ...cached };
+        }
+        throw fetchError || new Error('Pedido não encontrado.');
+    }
 
-    document.getElementById("det-code").innerText = order.orderCode;
-    document.getElementById("det-client").innerText = getOrderClientName(order);
-    document.getElementById("det-info").innerText =
+    order = mergeOrderDetailRecord(cached, order);
+
+    const cacheIndex = ordersCache.findIndex(item => Number(item.id) === normalizedId);
+    if (cacheIndex >= 0) {
+        ordersCache[cacheIndex] = { ...ordersCache[cacheIndex], ...order };
+    } else {
+        ordersCache.push(order);
+    }
+
+    return order;
+}
+
+async function applyOrderDetailHeader(order) {
+    document.getElementById('det-code').innerText = order.orderCode;
+    document.getElementById('det-client').innerText = getOrderClientName(order);
+    document.getElementById('det-info').innerText =
         `📋 Consultor: ${getOrderConsultantNameFromRecord(order)} | Criado por: ${order.creator?.name || 'Sistema'}`;
     await fillOrderDetailArchitect(order);
-    const saleDateEl = document.getElementById("det-sale-date");
+
+    const saleDateEl = document.getElementById('det-sale-date');
     if (saleDateEl) {
         const saleDateLabel = typeof formatGestaoDate === 'function'
             ? formatGestaoDate(order.saleDate)
             : (order.saleDate || '—');
         saleDateEl.innerText = `Data de venda: ${saleDateLabel}`;
     }
-    document.getElementById("det-delivery").innerText = formatOrderDeliverySummary(order.id, order.clientDeliveryDate);
+
+    document.getElementById('det-delivery').innerText = formatOrderDeliverySummary(order.id, order.clientDeliveryDate);
     activeOrderAddrId = Number(order.addrId) || null;
+}
 
-    await loadOrderPhasesForOrders(ordersCache.length ? ordersCache : [order]);
-    loadOrders();
-    await loadOrderProjects(id);
-    loadConversations(id);
+async function selectOrder(id) {
+    const normalizedId = Number(id);
+    if (!normalizedId) return;
 
-    if (typeof loadAnteprojetoConferences === 'function') {
-        loadAnteprojetoConferences(id);
-    }
-    if (typeof loadMedicoes === 'function') {
-        loadMedicoes(id);
-    }
-    if (typeof loadOrderCompras === 'function') {
-        loadOrderCompras(id);
-    }
-    if (typeof loadOrderThirdPartyProjectsTab === 'function') {
-        await loadOrderThirdPartyProjectsTab(id);
+    const loadToken = ++selectOrderLoadToken;
+
+    if (typeof showAppSessionLoading === 'function') {
+        await showAppSessionLoading('Carregando pedido...', 'Buscando projetos e dados do pedido');
     }
 
-    updateOrderDetailTabsVisibility();
-    switchOrderDetailTab(getFirstVisibleOrderDetailTab());
+    try {
+        activeOrderId = normalizedId;
+        document.getElementById('empty-state')?.classList.add('hidden');
+        document.getElementById('order-content')?.classList.remove('hidden');
 
-    if (typeof saveAppNavState === 'function') {
-        saveAppNavState({
-            view: 'dashboard',
-            activeOrderId: id,
-            orderDetailTab: getFirstVisibleOrderDetailTab()
-        });
+        const order = await fetchOrderDetailRecord(normalizedId);
+        if (loadToken !== selectOrderLoadToken) return;
+
+        await applyOrderDetailHeader(order);
+        if (loadToken !== selectOrderLoadToken) return;
+
+        resetOrderDetailTabsLoaded(normalizedId);
+
+        if (typeof loadOrderProjectStatusesCache === 'function') {
+            void loadOrderProjectStatusesCache();
+        }
+
+        await loadOrderProjects(normalizedId);
+        if (loadToken !== selectOrderLoadToken) return;
+
+        void refreshOrderDetailTabCounts(
+            normalizedId,
+            typeof orderProjectsCache !== 'undefined'
+                ? orderProjectsCache.map(project => project.id)
+                : []
+        );
+
+        renderOrdersList();
+
+        updateOrderDetailTabsVisibility();
+        await switchOrderDetailTab(getFirstVisibleOrderDetailTab(), { awaitTabLoad: true });
+    } catch (error) {
+        console.error('selectOrder:', error);
+        alertAppDialog(error?.message ? `Erro ao carregar o pedido: ${error.message}` : 'Erro ao carregar o pedido.');
+    } finally {
+        if (loadToken === selectOrderLoadToken && typeof hideAppSessionLoading === 'function') {
+            hideAppSessionLoading();
+        }
     }
 }
 
@@ -931,25 +1119,19 @@ function bindOrderEvents() {
     document.getElementById('btn-order-addr-modal-close')?.addEventListener('click', () => toggleModal('order-addr-modal', false));
     document.getElementById('btn-order-addr-modal-close-x')?.addEventListener('click', () => toggleModal('order-addr-modal', false));
     document.getElementById('order-tab-medicao').addEventListener('click', async function () {
-        switchOrderDetailTab('medicao');
+        await switchOrderDetailTab('medicao');
     });
     document.getElementById('order-tab-anteprojeto').addEventListener('click', async function () {
-        switchOrderDetailTab('anteprojeto');
+        await switchOrderDetailTab('anteprojeto');
     });
     document.getElementById('order-tab-requests').addEventListener('click', async function () {
-        switchOrderDetailTab('requests');
+        await switchOrderDetailTab('requests');
     });
     document.getElementById('order-tab-compras')?.addEventListener('click', async function () {
-        switchOrderDetailTab('compras');
-        if (activeOrderId && typeof loadOrderCompras === 'function') {
-            loadOrderCompras(activeOrderId);
-        }
+        await switchOrderDetailTab('compras');
     });
     document.getElementById('order-tab-third-party')?.addEventListener('click', async function () {
-        switchOrderDetailTab('third-party');
-        if (activeOrderId && typeof loadOrderThirdPartyProjectsTab === 'function') {
-            loadOrderThirdPartyProjectsTab(activeOrderId);
-        }
+        await switchOrderDetailTab('third-party');
     });
 
     document.getElementById('filter-order-client').addEventListener('input', renderOrdersList);

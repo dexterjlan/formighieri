@@ -19,6 +19,17 @@ async function loadEnvironmentTypes() {
 }
 
 async function getVendidoProjectStatusId() {
+    if (typeof getOrderProjectStatusIdByName === 'function') {
+        const vendidoId = await getOrderProjectStatusIdByName('Vendido');
+        if (vendidoId) return vendidoId;
+    }
+
+    if (typeof loadOrderProjectStatusesCache === 'function') {
+        const cache = await loadOrderProjectStatusesCache();
+        const firstActive = cache.find(status => status.isActive !== false);
+        return firstActive?.id || cache[0]?.id || null;
+    }
+
     const { data, error } = await supabaseClient
         .from('OrderProjectStatus')
         .select('id')
@@ -85,7 +96,7 @@ function updateProjectsListHeader(count) {
 async function fetchOrderProjectActionContext(orderId, projectIds, projects = null) {
     const [approvalsByProject, implantacaoByProjectId, medicaoByProject, conferenciaByProject] = await Promise.all([
         typeof fetchCommercialApprovalsByProjectIds === 'function'
-            ? fetchCommercialApprovalsByProjectIds(projectIds)
+            ? fetchCommercialApprovalsByProjectIds(projectIds, projects)
             : Promise.resolve({}),
         typeof fetchImplantacoesMapForProjectIds === 'function'
             ? fetchImplantacoesMapForProjectIds(projectIds)
@@ -178,17 +189,24 @@ async function enrichOrderProjectsWithStatus(projects) {
     const statusIds = [...new Set(projects.map(project => project.statusId).filter(Boolean))];
     if (!statusIds.length) return projects;
 
-    const { data: statuses, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id, name, sortOrder')
-        .in('id', statusIds);
+    let statuses = [];
+    if (typeof ensureOrderProjectStatusesForIds === 'function') {
+        statuses = await ensureOrderProjectStatusesForIds(statusIds);
+    } else {
+        const { data, error } = await supabaseClient
+            .from('OrderProjectStatus')
+            .select('id, name, sortOrder')
+            .in('id', statusIds);
 
-    if (error) {
-        console.error('enrichOrderProjectsWithStatus:', error);
-        return projects;
+        if (error) {
+            console.error('enrichOrderProjectsWithStatus:', error);
+            return projects;
+        }
+
+        statuses = data || [];
     }
 
-    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+    const statusById = Object.fromEntries(statuses.map(status => [status.id, status]));
     return projects.map(project => ({
         ...project,
         projectStatus: project.projectStatus || statusById[project.statusId] || null
@@ -325,10 +343,7 @@ async function loadOrderProjects(orderId) {
     const list = document.getElementById('order-projects-list');
 
     if (typeof loadOrderPhasesForOrders === 'function') {
-        const ordersForPhases = (typeof ordersCache !== 'undefined' && ordersCache.length)
-            ? ordersCache
-            : [{ id: orderId }];
-        await loadOrderPhasesForOrders(ordersForPhases);
+        await loadOrderPhasesForOrders([{ id: Number(orderId) }]);
     }
 
     const projects = await fetchOrderProjectsForOrder(orderId);

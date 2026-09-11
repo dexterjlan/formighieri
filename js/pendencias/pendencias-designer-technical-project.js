@@ -83,6 +83,20 @@ function sortPendenciasByDeliveryDate(projects) {
     });
 }
 
+function sortPendenciasWorkloadProjectsByClientName(projects) {
+    return [...projects].sort((a, b) => {
+        const clientA = typeof getOrderClientName === 'function'
+            ? (getOrderClientName(a.order) || '')
+            : '';
+        const clientB = typeof getOrderClientName === 'function'
+            ? (getOrderClientName(b.order) || '')
+            : '';
+        const clientCompare = clientA.localeCompare(clientB, 'pt-BR', { sensitivity: 'base' });
+        if (clientCompare !== 0) return clientCompare;
+        return (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' });
+    });
+}
+
 function sortPendenciasByForecastStartThenDelivery(projects) {
     return [...projects].sort((a, b) => {
         const aHasForecast = Boolean(a.technicalProjectForecastStartDate);
@@ -489,6 +503,20 @@ function buildPendenciasProjetistaWorkloadRows(projetistas, projects, implementa
                 projects: sortPendenciasByDeliveryDate(row.projects)
             }))
     );
+}
+
+async function countPendenciasProjetistaWorkload() {
+    const statusIds = await getPendenciasStatusIdsByNames(PENDENCIAS_GESTOR_PROJETISTA_WORKLOAD_STATUSES);
+
+    if (!statusIds.length) {
+        return { error: new Error('Nenhum status de carga de projetistas encontrado.'), count: 0 };
+    }
+
+    const result = await countPendenciasProjects({ statusIds });
+    return {
+        error: result.error,
+        count: result.count ?? 0
+    };
 }
 
 async function fetchPendenciasProjetistaWorkload() {
@@ -941,7 +969,7 @@ function groupPendenciasProjectsByStatus(projects) {
     });
 
     PENDENCIAS_GESTOR_WORKLOAD_COLUMNS.forEach(status => {
-        grouped[status] = sortPendenciasByDeliveryDate(grouped[status]);
+        grouped[status] = sortPendenciasWorkloadProjectsByClientName(grouped[status]);
     });
 
     return grouped;

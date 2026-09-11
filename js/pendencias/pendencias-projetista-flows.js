@@ -119,7 +119,7 @@ async function fetchPendenciasEmRevisaoProjects() {
     const projectIds = projects.map(project => project.id);
     const [statusChangedAtByProject, approvalsByProject] = await Promise.all([
         fetchEmRevisaoStatusChangedAtByProjectIds(projectIds),
-        fetchCommercialApprovalsByProjectIds(projectIds)
+        fetchCommercialApprovalsByProjectIds(projectIds, projects)
     ]);
 
     const approvalIds = Object.values(approvalsByProject).map(approval => approval.id).filter(Boolean);
@@ -334,7 +334,8 @@ async function fetchPendenciasProjetoTecnicoProjects() {
     }
 
     const approvalsByProject = await fetchCommercialApprovalsByProjectIds(
-        projects.map(project => project.id)
+        projects.map(project => project.id),
+        projects
     );
 
     return {

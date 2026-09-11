@@ -207,9 +207,8 @@ async function loadOrderThirdPartyProjectsTab(orderId = activeOrderId) {
         }
     }
 
-    const countEl = document.getElementById('order-tab-third-party-count');
-    if (countEl) {
-        countEl.textContent = `(${orderThirdPartyProjectsCache.length})`;
+    if (typeof updateOrderTabCounts === 'function') {
+        updateOrderTabCounts(undefined, undefined, undefined, undefined, undefined, orderThirdPartyProjectsCache.length);
     }
 
     return orderThirdPartyProjectsCache;

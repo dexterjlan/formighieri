@@ -100,11 +100,18 @@ async function fetchOrderProjectsForWorkflowContext(projectIds) {
         : (result.data || []);
 }
 
-async function fetchCommercialApprovalsByProjectIds(projectIds) {
-    const projects = await fetchOrderProjectsForWorkflowContext(projectIds);
+async function fetchCommercialApprovalsByProjectIds(projectIds, projects = null) {
+    let resolvedProjects = Array.isArray(projects) && projects.length
+        ? projects
+        : await fetchOrderProjectsForWorkflowContext(projectIds);
+
+    if (resolvedProjects.length && typeof enrichCommercialApprovalProjectsWithStatus === 'function') {
+        resolvedProjects = await enrichCommercialApprovalProjectsWithStatus(resolvedProjects);
+    }
+
     const byProject = {};
 
-    projects.forEach(project => {
+    resolvedProjects.forEach(project => {
         const statusName = getCommercialApprovalProjectStatusName(project);
         const inCommercialWorkflow = isProjectInOpenCommercialWorkflow(statusName)
             || isCommercialWorkflowApprovedStatus(statusName);

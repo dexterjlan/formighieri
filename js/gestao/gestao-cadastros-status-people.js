@@ -78,6 +78,9 @@ async function saveGestaoProjectStatusRow(row) {
         return;
     }
 
+    if (typeof invalidateOrderProjectStatusesCache === 'function') {
+        invalidateOrderProjectStatusesCache();
+    }
     await loadGestaoProjectStatusList();
 }
 
@@ -114,6 +117,9 @@ async function deleteGestaoProjectStatusRow(row) {
         return;
     }
 
+    if (typeof invalidateOrderProjectStatusesCache === 'function') {
+        invalidateOrderProjectStatusesCache();
+    }
     await loadGestaoProjectStatusList();
 }
 
@@ -142,6 +148,10 @@ async function addGestaoProjectStatus(event) {
     if (error) {
         alertAppDialog('Erro ao adicionar status: ' + error.message);
         return;
+    }
+
+    if (typeof invalidateOrderProjectStatusesCache === 'function') {
+        invalidateOrderProjectStatusesCache();
     }
 
     document.getElementById('gestao-new-status-form')?.reset();
