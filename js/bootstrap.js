@@ -1,11 +1,28 @@
 const APP_CACHE_VERSION = '1.0.52';
 
-const PARTIALS = [
+const AUTH_PARTIALS = [
     'partials/login.html',
     'partials/register.html',
-    'partials/forgot-password.html',
-    'partials/main-panel.html',
-    'partials/modals.html'
+    'partials/forgot-password.html'
+];
+
+const DEFERRED_PARTIALS = [
+    'partials/main-panel.html'
+];
+
+const MODALS_PARTIAL = 'partials/modals.html';
+
+/** Scripts mínimos para exibir login e autenticar. */
+const BOOTSTRAP_CORE_SCRIPTS = [
+    'js/core/config.dev.js',
+    'js/core/config.prod.js',
+    'js/core/config.js',
+    'js/core/utils.js',
+    'js/core/utils-permissions.js',
+    'js/core/dialog.js',
+    'js/core/navigation.js',
+    'js/core/auth.js',
+    'js/core/main.js'
 ];
 
 const SCRIPTS = [
@@ -149,6 +166,14 @@ const SCRIPTS = [
     'js/core/main.js'
 ];
 
+const BOOTSTRAP_CORE_SCRIPT_SET = new Set(BOOTSTRAP_CORE_SCRIPTS);
+const APP_SCRIPTS = SCRIPTS.filter(src => !BOOTSTRAP_CORE_SCRIPT_SET.has(src));
+
+let appShellLoadPromise = null;
+let appShellLoaded = false;
+let deferredPartialsLoaded = false;
+let modalsPartialLoaded = false;
+
 function loadScript(src) {
     return new Promise((resolve, reject) => {
         const script = document.createElement('script');
@@ -157,6 +182,18 @@ function loadScript(src) {
         script.onerror = () => reject(new Error(`Falha ao carregar ${src}`));
         document.body.appendChild(script);
     });
+}
+
+async function fetchPartial(url) {
+    const response = await fetch(`${url}?v=${APP_CACHE_VERSION}`);
+    if (!response.ok) throw new Error(`Falha ao carregar ${url}`);
+    return response.text();
+}
+
+async function loadScriptsSequential(scripts) {
+    for (const src of scripts) {
+        await loadScript(`${src}?v=${APP_CACHE_VERSION}`);
+    }
 }
 
 async function loadAppVersion() {
@@ -181,28 +218,78 @@ async function loadAppVersion() {
     });
 }
 
+async function appendPartials(mount, urls) {
+    const htmlParts = await Promise.all(urls.map(fetchPartial));
+    mount.insertAdjacentHTML('beforeend', htmlParts.join('\n'));
+}
+
+async function ensureModalsPartial(mount) {
+    if (modalsPartialLoaded) return;
+    const html = await fetchPartial(MODALS_PARTIAL);
+    mount.insertAdjacentHTML('beforeend', html);
+    modalsPartialLoaded = true;
+}
+
+async function ensureDeferredPartials(mount) {
+    if (deferredPartialsLoaded) return;
+    await appendPartials(mount, DEFERRED_PARTIALS);
+    deferredPartialsLoaded = true;
+    await loadAppVersion();
+}
+
+async function loadAppShell(mount) {
+    await ensureDeferredPartials(mount);
+    await loadScriptsSequential(APP_SCRIPTS);
+    if (typeof initAppEvents === 'function') {
+        initAppEvents();
+    }
+    appShellLoaded = true;
+}
+
+function ensureAppScriptsLoaded() {
+    if (appShellLoaded) return Promise.resolve();
+    if (!appShellLoadPromise) {
+        const mount = document.getElementById('app-root');
+        appShellLoadPromise = loadAppShell(mount).catch(error => {
+            appShellLoadPromise = null;
+            throw error;
+        });
+    }
+    return appShellLoadPromise;
+}
+
+window.ensureAppScriptsLoaded = ensureAppScriptsLoaded;
+
+function shouldShowLoginScreen() {
+    if (typeof enterAppInProgress !== 'undefined' && enterAppInProgress) {
+        return false;
+    }
+    return true;
+}
+
 async function bootstrap() {
     const mount = document.getElementById('app-root');
 
     try {
-        const partialsVersion = APP_CACHE_VERSION;
-        const htmlParts = await Promise.all(
-            PARTIALS.map(url =>
-                fetch(`${url}?v=${partialsVersion}`).then(response => {
-                    if (!response.ok) throw new Error(`Falha ao carregar ${url}`);
-                    return response.text();
-                })
-            )
-        );
-
-        mount.innerHTML = htmlParts.join('\n');
+        const authHtmlParts = await Promise.all(AUTH_PARTIALS.map(fetchPartial));
+        mount.innerHTML = authHtmlParts.join('\n');
         await loadAppVersion();
 
-        for (const src of SCRIPTS) {
-            await loadScript(`${src}?v=${APP_CACHE_VERSION}`);
+        const modalsPromise = ensureModalsPartial(mount);
+
+        await loadScriptsSequential(BOOTSTRAP_CORE_SCRIPTS);
+        await modalsPromise;
+
+        initAuthShellEvents();
+
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (!session?.user && shouldShowLoginScreen()) {
+            showLoginScreen();
         }
 
-        initAppEvents();
+        ensureAppScriptsLoaded().catch(error => {
+            console.error('loadAppShell:', error);
+        });
     } catch (error) {
         console.error('bootstrap:', error);
         mount.innerHTML = `

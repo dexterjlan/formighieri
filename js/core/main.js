@@ -58,14 +58,27 @@ function showLoginScreen() {
     }
 }
 
-function initAppEvents() {
-    document.getElementById("btn-show-register").addEventListener("click", showRegisterScreen);
-    document.getElementById("btn-show-login").addEventListener("click", showLoginScreen);
+let authShellEventsInitialized = false;
+let appEventsInitialized = false;
+
+function initAuthShellEvents() {
+    if (authShellEventsInitialized) return;
+    authShellEventsInitialized = true;
+
+    document.getElementById("btn-show-register")?.addEventListener("click", showRegisterScreen);
+    document.getElementById("btn-show-login")?.addEventListener("click", showLoginScreen);
     document.getElementById("btn-show-forgot-password")?.addEventListener("click", showForgotPasswordScreen);
     document.getElementById("btn-forgot-back-login")?.addEventListener("click", showLoginScreen);
     bindAppDialogEvents();
-    bindOrderCodePickerEvents();
     bindAuthEvents();
+}
+
+function initAppEvents() {
+    if (appEventsInitialized) return;
+    appEventsInitialized = true;
+
+    bindLogoutEvent();
+    bindOrderCodePickerEvents();
     bindNavigationEvents();
     bindResponsiveLayout();
     bindCalendarEvents();

@@ -40,6 +40,10 @@ async function enterApp(authUserId, authUser = null) {
     }
 
     enterAppInProgress = (async () => {
+        if (typeof ensureAppScriptsLoaded === 'function') {
+            await showAppSessionLoading('Carregando...', 'Preparando a aplicação');
+            await ensureAppScriptsLoaded();
+        }
         await showAppSessionLoading('Carregando...', 'Carregando seu perfil');
         await Promise.all([
             loadUserProfile(authUserId, authUser),
@@ -325,8 +329,21 @@ async function loadUserProfile(authUserId, authUser = null) {
     throw new Error("Não foi possível carregar seu perfil: " + detail);
 }
 
+function bindLogoutEvent() {
+    const btn = document.getElementById("btn-logout");
+    if (!btn || btn.dataset.authBound === 'true') return;
+    btn.dataset.authBound = 'true';
+
+    btn.addEventListener("click", async function () {
+        if (typeof clearUserImpersonationState === 'function') clearUserImpersonationState();
+        if (typeof clearAppNavState === 'function') clearAppNavState();
+        await supabaseClient.auth.signOut();
+        location.reload();
+    });
+}
+
 function bindAuthEvents() {
-    document.getElementById("login-form").addEventListener("submit", async function (e) {
+    document.getElementById("login-form")?.addEventListener("submit", async function (e) {
         e.preventDefault();
         const btn = document.getElementById("btn-login-submit");
         const originalHtml = btn.innerHTML;
@@ -364,7 +381,7 @@ function bindAuthEvents() {
         }
     });
 
-    document.getElementById("register-form").addEventListener("submit", async function (e) {
+    document.getElementById("register-form")?.addEventListener("submit", async function (e) {
         e.preventDefault();
 
         const name = document.getElementById("reg-name").value.trim();
@@ -600,13 +617,6 @@ function bindAuthEvents() {
         clearAuthRedirectUrl();
         await supabaseClient.auth.signOut();
         showLoginScreen();
-    });
-
-    document.getElementById("btn-logout").addEventListener("click", async function () {
-        if (typeof clearUserImpersonationState === 'function') clearUserImpersonationState();
-        if (typeof clearAppNavState === 'function') clearAppNavState();
-        await supabaseClient.auth.signOut();
-        location.reload();
     });
 
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
