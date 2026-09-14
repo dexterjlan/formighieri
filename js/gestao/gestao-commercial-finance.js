@@ -15,7 +15,7 @@ let gestaoCommercialFinanceClientInstallmentsSchemaReady = true;
 
 function assertGestaoCommercialFinanceAccess() {
     if (!canAccessGestaoCommercialFinance()) {
-        alertAppDialog('Somente administradores podem acessar Comercial Financeiro.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente administradores e gestores comerciais podem acessar Comercial Financeiro.', { variant: 'warning', title: 'Aviso' });
         return false;
     }
     return true;

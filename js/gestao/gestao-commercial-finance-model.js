@@ -1,9 +1,12 @@
 const COMMERCIAL_FINANCE_PAYMENT_CASH = 'cash';
 const COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT = 'installment';
 
-function canAccessGestaoCommercialFinance(user) {
-    if (typeof isAdmin === 'function') {
-        return isAdmin(user);
+function canAccessGestaoCommercialFinance(user = currentUser) {
+    if (typeof isAdmin === 'function' && isAdmin(user)) {
+        return true;
+    }
+    if (typeof isGestorComercial === 'function' && isGestorComercial(user)) {
+        return true;
     }
     return user?.role === 'Admin';
 }
