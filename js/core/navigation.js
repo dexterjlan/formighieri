@@ -189,6 +189,15 @@ async function restoreGestaoView(state) {
         performance: () => {
             if (typeof showGestaoPerformancePanel === 'function') showGestaoPerformancePanel();
         },
+        'comercial-meta-venda': () => {
+            if (typeof showGestaoCommercialFinanceiroPanel === 'function') showGestaoCommercialFinanceiroPanel('meta-venda');
+        },
+        'comercial-vendas': () => {
+            if (typeof showGestaoCommercialFinanceiroPanel === 'function') showGestaoCommercialFinanceiroPanel('vendas');
+        },
+        'comercial-comissao-venda': () => {
+            if (typeof showGestaoCommercialFinanceiroPanel === 'function') showGestaoCommercialFinanceiroPanel('comissao-venda');
+        },
         'montagem-programacao': () => {
             if (typeof showProgramacaoMontagemView === 'function') showProgramacaoMontagemView({ fromGestao: true });
             else if (typeof showGestaoMontagemProgramacaoPanel === 'function') showGestaoMontagemProgramacaoPanel();

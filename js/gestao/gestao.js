@@ -34,6 +34,7 @@ function waitGestaoProjectFormStatus(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes'];
+const GESTAO_COMMERCIAL_FINANCE_NAV_KEYS = ['comercial-meta-venda', 'comercial-vendas', 'comercial-comissao-venda'];
 const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
 const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
@@ -84,13 +85,16 @@ function setGestaoNavActive(navKey) {
         'cronograma-pedido': document.getElementById('gestao-nav-cronograma-pedido'),
         'project-scheduling': document.getElementById('gestao-nav-project-scheduling'),
         relatorios: document.getElementById('gestao-nav-relatorios'),
-        performance: document.getElementById('gestao-nav-performance')
+        performance: document.getElementById('gestao-nav-performance'),
+        'comercial-meta-venda': document.getElementById('gestao-nav-comercial-meta-venda'),
+        'comercial-vendas': document.getElementById('gestao-nav-comercial-vendas'),
+        'comercial-comissao-venda': document.getElementById('gestao-nav-comercial-comissao')
     };
 
     Object.entries(navMap).forEach(([key, button]) => {
         if (!button) return;
 
-        const isSubItem = GESTAO_CADASTRO_NAV_KEYS.includes(key);
+        const isSubItem = GESTAO_CADASTRO_NAV_KEYS.includes(key) || GESTAO_COMMERCIAL_FINANCE_NAV_KEYS.includes(key);
         const activeClass = isSubItem ? GESTAO_NAV_SUB_ACTIVE_CLASS : GESTAO_NAV_ACTIVE_CLASS;
         const inactiveClass = isSubItem ? GESTAO_NAV_SUB_INACTIVE_CLASS : GESTAO_NAV_INACTIVE_CLASS;
         button.className = key === navKey ? activeClass : inactiveClass;
@@ -102,6 +106,8 @@ function setGestaoNavActive(navKey) {
 
     const cadastrosActive = GESTAO_CADASTRO_NAV_KEYS.includes(navKey);
     const cadastrosToggle = document.getElementById('gestao-nav-cadastros-toggle');
+    const commercialFinanceActive = GESTAO_COMMERCIAL_FINANCE_NAV_KEYS.includes(navKey);
+    const commercialFinanceToggle = document.getElementById('gestao-nav-comercial-financeiro-toggle');
 
     if (cadastrosActive) {
         setGestaoCadastrosNavExpanded(true);
@@ -109,6 +115,16 @@ function setGestaoNavActive(navKey) {
 
     if (cadastrosToggle) {
         cadastrosToggle.className = cadastrosActive
+            ? GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS
+            : GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS;
+    }
+
+    if (commercialFinanceActive && typeof setGestaoCommercialFinanceNavExpanded === 'function') {
+        setGestaoCommercialFinanceNavExpanded(true);
+    }
+
+    if (commercialFinanceToggle) {
+        commercialFinanceToggle.className = commercialFinanceActive
             ? GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS
             : GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS;
     }
@@ -127,6 +143,9 @@ function updateGestaoCadastrosNavVisibility() {
     }
     if (typeof updateProjectSchedulingNavVisibility === 'function') {
         updateProjectSchedulingNavVisibility();
+    }
+    if (typeof updateGestaoCommercialFinanceNavVisibility === 'function') {
+        updateGestaoCommercialFinanceNavVisibility();
     }
 }
 
@@ -250,6 +269,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-project-scheduling-panel')?.classList.add('hidden');
     document.getElementById('gestao-relatorios-panel')?.classList.add('hidden');
     document.getElementById('gestao-performance-panel')?.classList.add('hidden');
+    document.getElementById('gestao-comercial-financeiro-panel')?.classList.add('hidden');
     document.getElementById('gestao-import-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-history-panel')?.classList.add('hidden');
     if (typeof setGestaoDashboardFullscreen === 'function') {
@@ -1642,6 +1662,9 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoPerformanceEvents === 'function') {
         bindGestaoPerformanceEvents();
+    }
+    if (typeof bindGestaoCommercialFinanceEvents === 'function') {
+        bindGestaoCommercialFinanceEvents();
     }
     if (typeof bindGestaoImportEvents === 'function') {
         bindGestaoImportEvents();

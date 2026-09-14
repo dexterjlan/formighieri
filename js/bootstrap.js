@@ -88,6 +88,8 @@ const SCRIPTS = [
     'js/gestao/gestao-relatorios.js',
     'js/gestao/gestao-programacao-producao.js',
     'js/gestao/gestao-performance.js',
+    'js/gestao/gestao-commercial-finance-model.js',
+    'js/gestao/gestao-commercial-finance.js',
     'js/gestao/gestao-montagem-programacao-shared.js',
     'js/gestao/gestao-montagem-programacao-data.js',
     'js/gestao/gestao-montagem-programacao-calendar.js',

@@ -731,6 +731,478 @@ body {
     white-space: nowrap;
 }
 
+.gestao-performance-count-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.gestao-performance-exit-chart-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.gestao-performance-exit-chart {
+    display: grid;
+    grid-template-columns: repeat(var(--gestao-performance-exit-month-count, 6), minmax(2.5rem, 1fr));
+    gap: 0.5rem;
+    align-items: end;
+    min-height: 11rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+}
+
+.gestao-performance-exit-month {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.gestao-performance-exit-month-bars {
+    width: 100%;
+    height: 10rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0.2rem;
+    background: linear-gradient(to top, transparent 0, transparent calc(100% - 1px), rgb(241 245 249) calc(100% - 1px));
+}
+
+.gestao-performance-exit-bar {
+    width: 28%;
+    min-width: 0.35rem;
+    border-radius: 0.2rem 0.2rem 0 0;
+    min-height: 0;
+}
+
+.gestao-performance-exit-month-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: rgb(100 116 139);
+    text-align: center;
+}
+
+.gestao-performance-exit-month-total {
+    font-size: 0.5625rem;
+    color: rgb(148 163 184);
+    min-height: 0.85rem;
+    text-align: center;
+}
+
+.gestao-performance-exit-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.6875rem;
+    color: rgb(71 85 105);
+}
+
+.gestao-performance-exit-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.gestao-performance-exit-legend__swatch {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 9999px;
+    flex-shrink: 0;
+}
+
+.gestao-performance-exit-table-wrap {
+    overflow-x: auto;
+}
+
+.gestao-performance-exit-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.6875rem;
+}
+
+.gestao-performance-exit-table th,
+.gestao-performance-exit-table td {
+    padding: 0.45rem 0.5rem;
+    border-bottom: 1px solid rgb(241 245 249);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.gestao-performance-exit-table th:first-child,
+.gestao-performance-exit-table td:first-child,
+.gestao-performance-exit-table__month {
+    text-align: left;
+}
+
+.gestao-performance-exit-table thead th {
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: rgb(100 116 139);
+    background: rgb(248 250 252);
+}
+
+.gestao-performance-exit-table__metric {
+    font-weight: 600;
+    color: rgb(51 65 85);
+}
+
+.gestao-performance-exit-table__swatch {
+    display: inline-block;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 9999px;
+    margin-right: 0.3rem;
+    vertical-align: middle;
+}
+
+.gestao-performance-exit-table__value {
+    font-weight: 600;
+    color: rgb(51 65 85);
+}
+
+.gestao-performance-exit-project-lists {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gestao-performance-exit-month-group {
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    background: rgb(255 255 255);
+    padding: 0.35rem 0.5rem;
+}
+
+.gestao-performance-exit-month-group__summary {
+    cursor: pointer;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(51 65 85);
+    list-style: none;
+}
+
+.gestao-performance-exit-month-group__summary::-webkit-details-marker {
+    display: none;
+}
+
+.gestao-performance-exit-month-group__summary::before {
+    content: '▸ ';
+    color: rgb(100 116 139);
+}
+
+.gestao-performance-exit-month-group[open] .gestao-performance-exit-month-group__summary::before {
+    content: '▾ ';
+}
+
+.gestao-performance-exit-month-group__statuses {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+    padding-left: 0.35rem;
+}
+
+.gestao-performance-exit-project-list .gestao-performance-project-list__summary {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.gestao-commercial-finance-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.gestao-commercial-finance-table th,
+.gestao-commercial-finance-table td {
+    border-bottom: 1px solid rgb(241 245 249);
+    vertical-align: middle;
+}
+
+.gestao-commercial-finance-card {
+    width: 100%;
+}
+
+.gestao-commercial-finance-metric strong {
+    display: block;
+    margin-top: 0.2rem;
+}
+
+.gestao-commercial-finance-consultant-group__summary {
+    list-style: none;
+}
+
+.gestao-commercial-finance-consultant-group__summary::-webkit-details-marker {
+    display: none;
+}
+
+.gestao-commercial-finance-consultant-group__summary::before {
+    content: '▸ ';
+    color: rgb(100 116 139);
+}
+
+.gestao-commercial-finance-consultant-group[open] .gestao-commercial-finance-consultant-group__summary::before {
+    content: '▾ ';
+}
+
+.gestao-commercial-finance-sale-row--confirmed {
+    background: rgb(240 253 244);
+}
+
+.gestao-commercial-finance-meta-layout {
+    width: 100%;
+}
+
+.gestao-commercial-finance-meta-calendar {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.65rem;
+}
+
+.gestao-commercial-finance-meta-month-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+    min-height: 6.75rem;
+    padding: 0.75rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.75rem;
+    background: rgb(255 255 255);
+    text-align: left;
+    transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.gestao-commercial-finance-meta-month-card:hover {
+    border-color: rgb(199 210 254);
+    background: rgb(248 250 252);
+}
+
+.gestao-commercial-finance-meta-month-card.is-current {
+    border-color: rgb(165 180 252);
+}
+
+.gestao-commercial-finance-meta-month-card.is-selected {
+    border-color: rgb(99 102 241);
+    background: rgb(238 242 255);
+    box-shadow: 0 0 0 1px rgb(199 210 254);
+}
+
+.gestao-commercial-finance-meta-month-card__label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: rgb(100 116 139);
+    text-transform: uppercase;
+}
+
+.gestao-commercial-finance-meta-month-card__metric {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    line-height: 1.25;
+}
+
+.gestao-commercial-finance-meta-month-card__metric-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: rgb(148 163 184);
+    white-space: nowrap;
+}
+
+.gestao-commercial-finance-meta-month-card__value {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: rgb(30 41 59);
+}
+
+.gestao-commercial-finance-meta-month-card__realized {
+    font-size: 0.6875rem;
+    font-weight: 700;
+}
+
+.gestao-commercial-finance-meta-month-card__realized.is-above {
+    color: rgb(5 150 105);
+}
+
+.gestao-commercial-finance-meta-month-card__realized.is-below {
+    color: rgb(220 38 38);
+}
+
+.gestao-commercial-finance-meta-month-card__realized.is-neutral,
+.gestao-commercial-finance-meta-month-card__realized.is-empty {
+    color: rgb(100 116 139);
+}
+
+.gestao-commercial-finance-summary-matrix th:first-child,
+.gestao-commercial-finance-summary-matrix td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: inherit;
+}
+
+.gestao-commercial-finance-summary-matrix tbody td:first-child {
+    background: #fff;
+}
+
+.gestao-commercial-finance-summary-matrix tbody tr.bg-slate-50 td:first-child {
+    background: #f8fafc;
+}
+
+.gestao-commercial-finance-detail-matrix th:nth-child(-n+4),
+.gestao-commercial-finance-detail-matrix td:nth-child(-n+4) {
+    position: sticky;
+    z-index: 1;
+    background: inherit;
+}
+
+.gestao-commercial-finance-detail-matrix th:nth-child(1),
+.gestao-commercial-finance-detail-matrix td:nth-child(1) {
+    left: 0;
+    min-width: 5.5rem;
+}
+
+.gestao-commercial-finance-detail-matrix th:nth-child(2),
+.gestao-commercial-finance-detail-matrix td:nth-child(2) {
+    left: 5.5rem;
+    min-width: 4.5rem;
+}
+
+.gestao-commercial-finance-detail-matrix th:nth-child(3),
+.gestao-commercial-finance-detail-matrix td:nth-child(3) {
+    left: 10rem;
+    min-width: 8rem;
+}
+
+.gestao-commercial-finance-detail-matrix th:nth-child(4),
+.gestao-commercial-finance-detail-matrix td:nth-child(4) {
+    left: 18rem;
+    min-width: 7rem;
+}
+
+.gestao-commercial-finance-detail-matrix tbody td:nth-child(-n+4) {
+    background: #fff;
+}
+
+.gestao-commercial-finance-detail-matrix tfoot td:nth-child(-n+4) {
+    background: #eef2ff;
+}
+
+.commercial-finance-detail-month-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.125rem;
+    line-height: 1.2;
+    min-width: 4.75rem;
+}
+
+.commercial-finance-detail-month-cell__client {
+    color: rgb(30 41 59);
+    white-space: nowrap;
+}
+
+.commercial-finance-detail-month-cell__commission {
+    color: rgb(67 56 202);
+    font-size: 0.625rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.commercial-finance-detail-month-cell-td {
+    vertical-align: top;
+}
+
+.gestao-commercial-finance-meta-month-card__meta {
+    font-size: 0.625rem;
+    color: rgb(148 163 184);
+}
+
+@media (max-width: 1024px) {
+    .gestao-commercial-finance-meta-calendar {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 640px) {
+    .gestao-commercial-finance-meta-calendar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.gestao-performance-project-list {
+    margin-left: 0.15rem;
+}
+
+.gestao-performance-project-list__summary {
+    cursor: pointer;
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: rgb(79 70 229);
+    list-style: none;
+}
+
+.gestao-performance-project-list__summary::-webkit-details-marker {
+    display: none;
+}
+
+.gestao-performance-project-list__summary::before {
+    content: '▸ ';
+}
+
+.gestao-performance-project-list[open] .gestao-performance-project-list__summary::before {
+    content: '▾ ';
+}
+
+.gestao-performance-project-list__items {
+    margin-top: 0.25rem;
+    max-height: 10rem;
+    overflow-y: auto;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    background: rgb(248 250 252);
+    padding: 0.35rem 0.5rem;
+}
+
+.gestao-performance-project-list__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    font-size: 0.625rem;
+    line-height: 1.45;
+    color: rgb(71 85 105);
+    padding: 0.25rem 0;
+    border-bottom: 1px solid rgb(241 245 249);
+}
+
+.gestao-performance-project-list__text {
+    min-width: 0;
+    flex: 1;
+}
+
+.gestao-performance-project-list__total {
+    margin-top: 0.35rem;
+    padding: 0.35rem 0.5rem 0.15rem;
+    border-top: 1px solid rgb(226 232 240);
+    font-size: 0.625rem;
+    font-weight: 700;
+    color: rgb(51 65 85);
+    text-align: right;
+}
+
+.gestao-performance-project-list__item:last-child {
+    border-bottom: none;
+}
+
 @media (max-width: 640px) {
     .gestao-performance-bar-row {
         grid-template-columns: 1fr;
@@ -1572,8 +2044,10 @@ body.gestao-kanban-fullscreen-active {
 
 #gestao-relatorios-panel,
 #gestao-performance-panel,
+#gestao-comercial-financeiro-panel,
 #gestao-relatorios-content > section,
-#gestao-performance-content > section {
+#gestao-performance-content > section,
+#gestao-commercial-finance-content > section {
     width: 100%;
     max-width: none;
 }
@@ -2607,6 +3081,7 @@ body.programacoes-fullscreen-active {
     #gestao-project-scheduling-panel,
     #gestao-relatorios-panel,
     #gestao-performance-panel,
+    #gestao-comercial-financeiro-panel,
     #gestao-project-history-panel {
         min-height: auto;
     }

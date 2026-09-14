@@ -224,13 +224,13 @@ function getPendenciasProjetistaMenuItems() {
 function canSeePendenciasGestorFabricaMenu() {
     return typeof canSeePendenciasFabricaMenu === 'function'
         ? canSeePendenciasFabricaMenu()
-        : (canSeeAllPendenciasMenus() || isGestorFabrica());
+        : (canSeeAllPendenciasMenus() || isGestorFabrica() || isFactoryAdministrative());
 }
 
 function canActPendenciasGestorFabrica() {
-    return typeof canActPendenciasFabricaMenu === 'function'
-        ? canActPendenciasFabricaMenu()
-        : (canSeeAllPendenciasMenus() || isGestorFabrica());
+    return typeof canActPendenciasFabrica === 'function'
+        ? canActPendenciasFabrica()
+        : (canSeeAllPendenciasMenus() || isGestorFabrica() || isFactoryAdministrative());
 }
 
 function canAccessPendencias() {
