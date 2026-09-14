@@ -22,13 +22,18 @@ index_path, bootstrap_path, version = sys.argv[1], sys.argv[2], sys.argv[3]
 
 index_text = open(index_path, encoding="utf-8").read()
 index_updated = re.sub(
+    r'href="css/[^"]+\?v=[^"]+"',
+    lambda match: re.sub(r'\?v=[^"]+', f'?v={version}', match.group(0)),
+    index_text,
+)
+index_updated = re.sub(
     r'js/bootstrap\.js\?v=[^"]+',
     f'js/bootstrap.js?v={version}',
-    index_text,
+    index_updated,
     count=1,
 )
-if index_updated == index_text:
-    index_updated = index_text.replace(
+if 'js/bootstrap.js?v=' not in index_updated:
+    index_updated = index_updated.replace(
         'js/bootstrap.js"',
         f'js/bootstrap.js?v={version}"',
         1,

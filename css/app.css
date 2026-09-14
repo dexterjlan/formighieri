@@ -957,6 +957,14 @@ body {
     background: rgb(240 253 244);
 }
 
+.gestao-commercial-finance-sale-row--locked {
+    background: rgb(248 250 252);
+}
+
+.gestao-commercial-finance-sale-row--locked.gestao-commercial-finance-sale-row--confirmed {
+    background: rgb(236 253 245);
+}
+
 .gestao-commercial-finance-meta-layout {
     width: 100%;
 }

@@ -580,7 +580,7 @@ function filterCommercialFinanceCommissionEntriesByYear(entries = [], year) {
     const normalizedYear = Number(year);
     if (!Number.isFinite(normalizedYear)) return [];
     return sortCommercialFinanceCommissionEntries(
-        (entries || []).filter(entry => String(entry?.referenceYearMonth || '').startsWith(`${normalizedYear}-`))
+        (entries || []).filter(entry => String(entry?.saleYearMonth || '').startsWith(`${normalizedYear}-`))
     );
 }
 
@@ -596,14 +596,16 @@ function buildCommercialFinanceCommissionDetailMatrix(entries = [], year) {
     const rowsByOrder = {};
 
     (entries || []).forEach(entry => {
-        const referenceYearMonth = String(entry?.referenceYearMonth || '');
-        if (!referenceYearMonth.startsWith(`${normalizedYear}-`)) return;
+        const saleYearMonth = String(entry?.saleYearMonth || '');
+        if (!saleYearMonth.startsWith(`${normalizedYear}-`)) return;
 
+        const referenceYearMonth = String(entry?.referenceYearMonth || '');
         const orderKey = String(entry.salesOrderId || entry.orderCode || entry.id);
         if (!rowsByOrder[orderKey]) {
             rowsByOrder[orderKey] = {
                 salesOrderId: entry.salesOrderId,
                 saleDate: entry.saleDate,
+                saleYearMonth,
                 orderCode: entry.orderCode || '',
                 clientName: entry.clientName || '—',
                 consultantName: entry.consultantName || '—',
@@ -651,10 +653,7 @@ function buildCommercialFinanceCommissionDetailMatrix(entries = [], year) {
     return { monthKeys, rows, monthTotals };
 }
 
-function filterCommercialFinanceCommissionDetailRows(rows = [], referenceYearMonth) {
-    if (!referenceYearMonth) return rows;
-    return (rows || []).filter(row => {
-        const cell = row?.months?.[referenceYearMonth];
-        return cell && (cell.clientInstallmentAmount > 0 || cell.commissionAmount > 0);
-    });
+function filterCommercialFinanceCommissionDetailRows(rows = [], saleYearMonth) {
+    if (!saleYearMonth) return rows;
+    return (rows || []).filter(row => String(row?.saleYearMonth || '') === saleYearMonth);
 }

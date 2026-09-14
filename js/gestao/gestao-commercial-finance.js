@@ -458,13 +458,13 @@ async function fetchCommercialFinanceCommissionEntries(filters = {}) {
             .order('installmentNumber', { ascending: true });
 
         if (filters.year) {
-            query = query.like('referenceYearMonth', `${Number(filters.year)}-%`);
-        }
-        if (filters.referenceYearMonth) {
-            query = query.eq('referenceYearMonth', filters.referenceYearMonth);
+            query = query.like('saleYearMonth', `${Number(filters.year)}-%`);
         }
         if (filters.saleYearMonth) {
             query = query.eq('saleYearMonth', filters.saleYearMonth);
+        }
+        if (filters.referenceYearMonth) {
+            query = query.eq('referenceYearMonth', filters.referenceYearMonth);
         }
 
         const { data, error } = await query;
@@ -558,7 +558,7 @@ async function closeCommercialFinanceSaleMonth(saleYearMonth) {
 
     const entryPayload = draft.entries.map(entry => ({
         monthCloseId: closeRow.id,
-        salesOrderId: entry.salesOrderId,
+        salesOrderId: entry.salesOrderId || null,
         consultantUserId: entry.consultantUserId,
         saleDate: entry.saleDate,
         saleYearMonth: entry.saleYearMonth,
@@ -593,6 +593,45 @@ async function closeCommercialFinanceSaleMonth(saleYearMonth) {
         entryCount: entryPayload.length,
         saleYearMonth: normalizedYearMonth
     };
+}
+
+function isCommercialFinanceSaleMonthClosed(saleYearMonth) {
+    const normalized = String(saleYearMonth || '').trim();
+    return Boolean(normalized) && gestaoCommercialFinanceClosedSaleMonths.has(normalized);
+}
+
+function getCommercialFinanceOrderSaleYearMonth(order) {
+    return getCommercialFinanceYearMonthFromDate(order?.saleDate);
+}
+
+function isCommercialFinanceOrderInClosedMonth(order) {
+    return isCommercialFinanceSaleMonthClosed(getCommercialFinanceOrderSaleYearMonth(order));
+}
+
+async function reopenCommercialFinanceSaleMonth(saleYearMonth) {
+    const normalizedYearMonth = String(saleYearMonth || '').trim();
+    if (!normalizedYearMonth) {
+        return { ok: false, message: 'Informe o mês de venda para reabrir.' };
+    }
+    if (!gestaoCommercialFinanceClosedSaleMonths.has(normalizedYearMonth)) {
+        return { ok: false, message: 'Este mês de venda não está fechado.' };
+    }
+
+    const { error } = await supabaseClient
+        .from('SalesCommissionMonthClose')
+        .delete()
+        .eq('saleYearMonth', normalizedYearMonth);
+
+    if (error) {
+        markCommercialFinanceCommissionCloseSchemaUnavailable(error);
+        return { ok: false, message: error.message };
+    }
+
+    gestaoCommercialFinanceClosedSaleMonths.delete(normalizedYearMonth);
+    gestaoCommercialFinanceCommissionEntriesCache = (gestaoCommercialFinanceCommissionEntriesCache || [])
+        .filter(entry => entry.saleYearMonth !== normalizedYearMonth);
+
+    return { ok: true, saleYearMonth: normalizedYearMonth };
 }
 
 async function readCommercialFinanceOrderPaymentFields(orderId, orderCode = '') {
@@ -648,6 +687,13 @@ async function persistCommercialFinanceOrderPayment(orderId, paymentMethod, inst
     const normalizedOrderId = Number(orderId);
     const normalizedPaymentMethod = normalizeCommercialFinancePaymentMethod(paymentMethod);
     const cachedOrder = gestaoCommercialFinanceOrdersCache.find(order => Number(order.id) === normalizedOrderId);
+    if (isCommercialFinanceOrderInClosedMonth(cachedOrder)) {
+        const saleYearMonth = getCommercialFinanceOrderSaleYearMonth(cachedOrder);
+        return {
+            ok: false,
+            message: `O mês ${formatCommercialFinanceYearMonthLabel(saleYearMonth)} está fechado. Reabra o mês para alterar.`
+        };
+    }
     const orderCode = cachedOrder?.orderCode || '';
     const clientInstallmentCount = getCommercialFinanceOrderClientInstallments(cachedOrder).length;
     const normalizedInstallmentCount = normalizedPaymentMethod === COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT
@@ -865,24 +911,38 @@ function renderCommercialFinanceMetaCalendarMonthCard(
     const currentYearMonth = getCommercialFinanceCurrentYearMonth();
     const isCurrent = yearMonth === currentYearMonth;
     const isSelected = yearMonth === gestaoCommercialFinanceMetaSelectedYearMonth;
-    const tierCount = target?.tiers?.length || 0;
+    const savedTierCount = target?.tiers?.length || 0;
+    const tierMetaLabel = savedTierCount
+        ? `${savedTierCount} faixa${savedTierCount === 1 ? '' : 's'}`
+        : 'Faixas não salvas';
+
+    const cardToneClass = isSelected
+        ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-1 ring-indigo-200'
+        : isCurrent
+            ? 'border-indigo-300'
+            : 'border-slate-200 hover:border-indigo-200 hover:bg-slate-50';
+    const realizedColorClass = realizedTone === 'is-above'
+        ? 'text-emerald-600'
+        : realizedTone === 'is-below'
+            ? 'text-red-600'
+            : 'text-slate-500';
 
     return `
         <button type="button"
-            class="gestao-commercial-finance-meta-month-card ${isSelected ? 'is-selected' : ''} ${isCurrent ? 'is-current' : ''}"
+            class="gestao-commercial-finance-meta-month-card flex flex-col items-start gap-1 min-h-[6.75rem] w-full p-3 border rounded-xl bg-white text-left transition ${cardToneClass} ${isSelected ? 'is-selected' : ''} ${isCurrent ? 'is-current' : ''}"
             data-year-month="${escapeHtml(yearMonth)}">
-            <span class="gestao-commercial-finance-meta-month-card__label">${escapeHtml(formatCommercialFinanceMonthShortName(monthNumber))}</span>
-            <span class="gestao-commercial-finance-meta-month-card__metric">
-                <span class="gestao-commercial-finance-meta-month-card__metric-label">Meta:</span>
-                <strong class="gestao-commercial-finance-meta-month-card__value">${hasTarget ? escapeHtml(formatSaleValue(targetAmount)) : '—'}</strong>
+            <span class="gestao-commercial-finance-meta-month-card__label text-[11px] font-bold uppercase text-slate-500">${escapeHtml(formatCommercialFinanceMonthShortName(monthNumber))}</span>
+            <span class="gestao-commercial-finance-meta-month-card__metric flex items-baseline gap-1 leading-tight">
+                <span class="gestao-commercial-finance-meta-month-card__metric-label text-[10px] font-semibold text-slate-400">Meta:</span>
+                <strong class="gestao-commercial-finance-meta-month-card__value text-[13px] font-bold text-slate-800">${hasTarget ? escapeHtml(formatSaleValue(targetAmount)) : '—'}</strong>
             </span>
-            <span class="gestao-commercial-finance-meta-month-card__metric">
-                <span class="gestao-commercial-finance-meta-month-card__metric-label">Realizado:</span>
-                <span class="gestao-commercial-finance-meta-month-card__realized ${realizedTone}">
+            <span class="gestao-commercial-finance-meta-month-card__metric flex items-baseline gap-1 leading-tight">
+                <span class="gestao-commercial-finance-meta-month-card__metric-label text-[10px] font-semibold text-slate-400">Realizado:</span>
+                <span class="gestao-commercial-finance-meta-month-card__realized text-[11px] font-bold ${realizedColorClass} ${realizedTone}">
                     ${showRealized ? escapeHtml(formatSaleValue(realizedAmount)) : '—'}
                 </span>
             </span>
-            <span class="gestao-commercial-finance-meta-month-card__meta">${tierCount ? `${tierCount} faixa${tierCount === 1 ? '' : 's'}` : 'Sem faixas'}</span>
+            <span class="gestao-commercial-finance-meta-month-card__meta text-[10px] text-slate-400">${tierMetaLabel}</span>
         </button>
     `;
 }
@@ -912,7 +972,7 @@ function renderCommercialFinanceMetaCalendar(year, targetsByYearMonth = {}, real
                     Execute <code>supabase/feats/create-commercial-finance-tables.sql</code> no Supabase SQL Editor (veja também <code>PENDING-PROD-SQL.md</code>).
                 </p>
             ` : ''}
-            <div class="gestao-commercial-finance-meta-calendar">
+            <div class="gestao-commercial-finance-meta-calendar grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 w-full">
                 ${months.map(monthNumber => renderCommercialFinanceMetaCalendarMonthCard(
                     year,
                     monthNumber,
@@ -936,7 +996,8 @@ function renderCommercialFinanceMetaEditor(yearMonth, target = null) {
     const targetAmount = typeof formatSaleValueForInput === 'function'
         ? formatSaleValueForInput(target?.targetAmount ?? 0)
         : (target?.targetAmount ?? 0);
-    const tiers = target?.tiers?.length
+    const hasSavedTiers = Boolean(target?.tiers?.length);
+    const tiers = hasSavedTiers
         ? target.tiers
         : getCommercialFinanceDefaultMetaTiers();
     const previousYearMonth = getCommercialFinancePreviousYearMonth(yearMonth);
@@ -964,6 +1025,10 @@ function renderCommercialFinanceMetaEditor(yearMonth, target = null) {
                     <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <h5 class="text-xs font-bold text-slate-800">Faixas de alíquota</h5>
                         <div class="flex flex-wrap gap-2">
+                            <button type="button" id="gestao-commercial-finance-restore-default-tiers"
+                                class="text-xs bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-50">
+                                Restaurar sugestão padrão
+                            </button>
                             <button type="button" id="gestao-commercial-finance-copy-tiers-prev"
                                 class="text-xs bg-white border border-indigo-200 text-indigo-800 px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-50"
                                 data-previous-year-month="${escapeHtml(previousYearMonth)}"
@@ -976,8 +1041,13 @@ function renderCommercialFinanceMetaEditor(yearMonth, target = null) {
                             </button>
                         </div>
                     </div>
+                    ${!hasSavedTiers ? `
+                        <p class="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-2">
+                            Faixas abaixo são apenas <strong>sugestão padrão</strong>. Revise os valores e clique em <strong>Salvar meta</strong> para gravar neste mês.
+                        </p>
+                    ` : ''}
                     ${!previousTiers.length ? `
-                        <p class="text-[11px] text-slate-400 mb-2">Não há faixas cadastradas em ${escapeHtml(formatCommercialFinanceYearMonthLabel(previousYearMonth))}.</p>
+                        <p class="text-[11px] text-slate-400 mb-2">Não há faixas salvas em ${escapeHtml(formatCommercialFinanceYearMonthLabel(previousYearMonth))}.</p>
                     ` : ''}
                     <div class="gestao-commercial-finance-table-wrap overflow-x-auto border border-slate-200 rounded-lg">
                         <table class="gestao-commercial-finance-table w-full text-xs">
@@ -1248,6 +1318,14 @@ function replaceCommercialFinanceClientInstallmentModalRows(order, installments 
 function openCommercialFinanceClientInstallmentsModal(orderId) {
     const order = gestaoCommercialFinanceOrdersCache.find(item => Number(item.id) === Number(orderId));
     if (!order) return;
+    if (isCommercialFinanceOrderInClosedMonth(order)) {
+        const saleYearMonth = getCommercialFinanceOrderSaleYearMonth(order);
+        alertAppDialog(
+            `O mês ${formatCommercialFinanceYearMonthLabel(saleYearMonth)} está fechado. Reabra o mês para alterar as parcelas.`,
+            { variant: 'warning', title: 'Mês fechado' }
+        );
+        return;
+    }
 
     gestaoCommercialFinanceClientInstallmentsModalOrderId = Number(order.id);
     const context = document.getElementById('commercial-finance-client-installments-context');
@@ -1266,6 +1344,14 @@ async function saveCommercialFinanceClientInstallmentsFromModal() {
     const orderId = gestaoCommercialFinanceClientInstallmentsModalOrderId;
     const order = gestaoCommercialFinanceOrdersCache.find(item => Number(item.id) === Number(orderId));
     if (!order) return { ok: false, message: 'Pedido não encontrado.' };
+    if (isCommercialFinanceOrderInClosedMonth(order)) {
+        const saleYearMonth = getCommercialFinanceOrderSaleYearMonth(order);
+        alertAppDialog(
+            `O mês ${formatCommercialFinanceYearMonthLabel(saleYearMonth)} está fechado. Reabra o mês para alterar as parcelas.`,
+            { variant: 'warning', title: 'Mês fechado' }
+        );
+        return { ok: false };
+    }
 
     const installments = readCommercialFinanceClientInstallmentModalRows();
     const draftOrder = {
@@ -1363,12 +1449,25 @@ function renderCommercialFinanceVendasClosePanel(closeYearMonth = '') {
                     <strong class="text-sm ${isClosed ? 'text-emerald-800' : 'text-indigo-900'}">${isClosed ? 'Mês fechado' : 'Aberto'}</strong>
                 </div>
             </div>
-            <div class="flex justify-end">
-                <button type="button" id="gestao-commercial-finance-close-month-btn"
-                    class="text-xs bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                    ${isClosed || !gestaoCommercialFinanceCommissionCloseSchemaReady ? 'disabled' : ''}>
-                    Fechar mês
-                </button>
+            ${isClosed ? `
+                <p class="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                    As vendas deste mês estão bloqueadas para edição. Use <strong>Reabrir mês</strong> para permitir alterações; os registros de comissão serão removidos.
+                </p>
+            ` : ''}
+            <div class="flex justify-end gap-2">
+                ${isClosed ? `
+                    <button type="button" id="gestao-commercial-finance-reopen-month-btn"
+                        class="text-xs bg-white border border-amber-300 text-amber-800 px-4 py-2 rounded-lg font-medium hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        ${!gestaoCommercialFinanceCommissionCloseSchemaReady ? 'disabled' : ''}>
+                        Reabrir mês
+                    </button>
+                ` : `
+                    <button type="button" id="gestao-commercial-finance-close-month-btn"
+                        class="text-xs bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                        ${!gestaoCommercialFinanceCommissionCloseSchemaReady ? 'disabled' : ''}>
+                        Fechar mês
+                    </button>
+                `}
             </div>
         </section>
     `;
@@ -1394,19 +1493,23 @@ function renderGestaoCommercialFinanceVendas(orders = [], filters = {}) {
         const commissionConfirmed = isCommercialFinanceCommissionConfirmed(order);
         const isInstallment = paymentMethod === COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT;
         const installmentsConfigured = clientInstallmentCount > 0;
-        const rowClass = commissionConfirmed
-            ? 'gestao-commercial-finance-sale-row gestao-commercial-finance-sale-row--confirmed'
-            : 'gestao-commercial-finance-sale-row';
+        const isMonthClosed = isCommercialFinanceOrderInClosedMonth(order);
+        const rowClass = [
+            'gestao-commercial-finance-sale-row',
+            commissionConfirmed ? 'gestao-commercial-finance-sale-row--confirmed' : '',
+            isMonthClosed ? 'gestao-commercial-finance-sale-row--locked' : ''
+        ].filter(Boolean).join(' ');
 
         return `
-            <tr class="${rowClass}" data-order-id="${Number(order.id)}">
+            <tr class="${rowClass}" data-order-id="${Number(order.id)}" ${isMonthClosed ? 'data-month-closed="true"' : ''}>
                 <td class="p-2 font-mono text-[11px]">${escapeHtml(order.orderCode || '—')}</td>
                 <td class="p-2">${escapeHtml(formatGestaoDate(order.saleDate))}</td>
                 <td class="p-2">${escapeHtml(getOrderClientName(order))}</td>
                 <td class="p-2">${escapeHtml(getOrderConsultantNameFromRecord(order))}</td>
                 <td class="p-2 text-right font-semibold">${escapeHtml(formatSaleValue(saleValue))}</td>
                 <td class="p-2">
-                    <select class="gestao-commercial-finance-payment-method w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white">
+                    <select class="gestao-commercial-finance-payment-method w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg bg-white"
+                        ${isMonthClosed ? 'disabled' : ''}>
                         <option value="${COMMERCIAL_FINANCE_PAYMENT_CASH}" ${paymentMethod === COMMERCIAL_FINANCE_PAYMENT_CASH ? 'selected' : ''}>À vista</option>
                         <option value="${COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT}" ${paymentMethod === COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT ? 'selected' : ''}>Parcelado</option>
                     </select>
@@ -1414,7 +1517,7 @@ function renderGestaoCommercialFinanceVendas(orders = [], filters = {}) {
                 <td class="p-2">
                     <button type="button"
                         class="gestao-commercial-finance-client-installments-btn text-xs bg-white border ${installmentsConfigured ? 'border-emerald-200 text-emerald-800' : 'border-amber-200 text-amber-800'} px-2 py-1 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50"
-                        ${isInstallment ? '' : 'disabled'}>
+                        ${isInstallment && !isMonthClosed ? '' : 'disabled'}>
                         ${isInstallment
                             ? (installmentsConfigured ? `${clientInstallmentCount} parcela${clientInstallmentCount === 1 ? '' : 's'}` : 'Informar parcelas')
                             : 'Mês seguinte'}
@@ -1423,13 +1526,14 @@ function renderGestaoCommercialFinanceVendas(orders = [], filters = {}) {
                 <td class="p-2 text-center">
                     <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
                         <input type="checkbox" class="gestao-commercial-finance-commission-confirmed h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                            ${commissionConfirmed ? 'checked' : ''}>
+                            ${commissionConfirmed ? 'checked' : ''} ${isMonthClosed ? 'disabled' : ''}>
                         Confirmar
                     </label>
                 </td>
                 <td class="p-2 text-right">
-                    <button type="button" class="gestao-commercial-finance-save-sale text-xs bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-800">
-                        Salvar
+                    <button type="button" class="gestao-commercial-finance-save-sale text-xs bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                        ${isMonthClosed ? 'disabled' : ''}>
+                        ${isMonthClosed ? 'Fechado' : 'Salvar'}
                     </button>
                 </td>
             </tr>
@@ -1552,9 +1656,9 @@ function renderCommercialFinanceCommissionDetailMonthCell(cell = {}) {
     `;
 }
 
-function renderCommercialFinanceCommissionDetailTable(matrix = {}, referenceYearMonth = '') {
+function renderCommercialFinanceCommissionDetailTable(matrix = {}, saleYearMonth = '') {
     const { monthKeys = [], rows = [], monthTotals = {} } = matrix;
-    const visibleRows = filterCommercialFinanceCommissionDetailRows(rows, referenceYearMonth);
+    const visibleRows = filterCommercialFinanceCommissionDetailRows(rows, saleYearMonth);
     const fixedColumnCount = 6;
     const totalColumnCount = fixedColumnCount + monthKeys.length;
 
@@ -1580,7 +1684,7 @@ function renderCommercialFinanceCommissionDetailTable(matrix = {}, referenceYear
 
     const footerRow = visibleRows.length ? `
         <tr class="bg-indigo-50 text-indigo-900 font-semibold">
-            <td class="p-2" colspan="${fixedColumnCount}">Total${referenceYearMonth ? ` — ${escapeHtml(formatCommercialFinanceYearMonthLabel(referenceYearMonth))}` : ''}</td>
+            <td class="p-2" colspan="${fixedColumnCount}">Total${saleYearMonth ? ` — ${escapeHtml(formatCommercialFinanceYearMonthLabel(saleYearMonth))}` : ''}</td>
             ${monthKeys.map(monthKey => `
                 <td class="p-2 text-right align-top commercial-finance-detail-month-cell-td">
                     ${renderCommercialFinanceCommissionDetailMonthCell(monthTotals[monthKey])}
@@ -1615,62 +1719,33 @@ function renderCommercialFinanceCommissionDetailTable(matrix = {}, referenceYear
     `;
 }
 
-function formatCommercialFinanceCommissionDetailTitle(referenceYearMonth, year) {
-    if (!referenceYearMonth) {
-        return `Todos os meses de ${year}`;
+function formatCommercialFinanceCommissionDetailTitle(saleYearMonth, year) {
+    if (!saleYearMonth) {
+        return `Todas as vendas de ${year}`;
     }
-    return formatCommercialFinanceYearMonthLabel(referenceYearMonth);
+    return `Vendas de ${formatCommercialFinanceYearMonthLabel(saleYearMonth)}`;
 }
 
 function renderGestaoCommercialFinanceComissao(entries = [], filters = {}) {
     const year = Number(filters.year) || gestaoCommercialFinanceComissaoYear;
-    const referenceYearMonth = filters.referenceYearMonth !== undefined
-        ? filters.referenceYearMonth
+    const saleYearMonth = filters.saleYearMonth !== undefined
+        ? filters.saleYearMonth
         : gestaoCommercialFinanceComissaoMonth;
     const yearEntries = filterCommercialFinanceCommissionEntriesByYear(entries, year);
     const annualSummary = buildCommercialFinanceAnnualConsultantSummary(yearEntries, year);
     const detailMatrix = buildCommercialFinanceCommissionDetailMatrix(yearEntries, year);
     const detailRowCount = filterCommercialFinanceCommissionDetailRows(
         detailMatrix.rows,
-        referenceYearMonth
+        saleYearMonth
     ).length;
 
     return `
         <div class="space-y-4">
-            <section class="gestao-commercial-finance-card bg-white border border-slate-200 rounded-xl p-4 space-y-4">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                        <h4 class="text-sm font-bold text-slate-900">Comissão de Venda</h4>
-                        <p class="text-xs text-slate-500 mt-1">
-                            Registros gerados ao fechar o mês em <strong>Vendas</strong>. Resumo anual por consultor e detalhamento no formato da planilha.
-                        </p>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <div>
-                            <label for="gestao-commercial-finance-comissao-year" class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Ano</label>
-                            <select id="gestao-commercial-finance-comissao-year" class="w-28 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white">
-                                ${Array.from({ length: 5 }, (_, index) => {
-                                    const optionYear = year - 2 + index;
-                                    return `<option value="${optionYear}" ${optionYear === year ? 'selected' : ''}>${optionYear}</option>`;
-                                }).join('')}
-                            </select>
-                        </div>
-                        <div>
-                            <label for="gestao-commercial-finance-comissao-month" class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Mês ref.</label>
-                            <select id="gestao-commercial-finance-comissao-month" class="w-44 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white">
-                                <option value="" ${referenceYearMonth === '' ? 'selected' : ''}>Todos os meses</option>
-                                ${Array.from({ length: 12 }, (_, index) => {
-                                    const monthKey = buildCommercialFinanceYearMonthKey(year, index + 1);
-                                    return `
-                                        <option value="${escapeHtml(monthKey)}" ${monthKey === referenceYearMonth ? 'selected' : ''}>
-                                            ${escapeHtml(formatCommercialFinanceYearMonthLabel(monthKey))}
-                                        </option>
-                                    `;
-                                }).join('')}
-                            </select>
-                        </div>
-                    </div>
-                </div>
+            <section class="gestao-commercial-finance-card bg-white border border-slate-200 rounded-xl p-4 space-y-2">
+                <h4 class="text-sm font-bold text-slate-900">Comissão de Venda</h4>
+                <p class="text-xs text-slate-500">
+                    Registros gerados ao fechar o mês em <strong>Vendas</strong>. Resumo anual por consultor e detalhamento no formato da planilha.
+                </p>
                 ${!gestaoCommercialFinanceCommissionCloseSchemaReady ? `
                     <p class="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
                         Execute <code>supabase/feats/create-sales-commission-close-tables.sql</code> no Supabase SQL Editor.
@@ -1683,12 +1758,40 @@ function renderGestaoCommercialFinanceComissao(entries = [], filters = {}) {
                 ${renderCommercialFinanceAnnualSummaryTable(annualSummary, year)}
             </section>
 
+            <section class="gestao-commercial-finance-card bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+                <div class="flex flex-wrap gap-2">
+                    <div>
+                        <label for="gestao-commercial-finance-comissao-year" class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Ano</label>
+                        <select id="gestao-commercial-finance-comissao-year" class="w-28 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white">
+                            ${Array.from({ length: 5 }, (_, index) => {
+                                const optionYear = year - 2 + index;
+                                return `<option value="${optionYear}" ${optionYear === year ? 'selected' : ''}>${optionYear}</option>`;
+                            }).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="gestao-commercial-finance-comissao-month" class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Mês da venda</label>
+                        <select id="gestao-commercial-finance-comissao-month" class="w-44 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white">
+                            <option value="" ${saleYearMonth === '' ? 'selected' : ''}>Todos os meses</option>
+                            ${Array.from({ length: 12 }, (_, index) => {
+                                const monthKey = buildCommercialFinanceYearMonthKey(year, index + 1);
+                                return `
+                                    <option value="${escapeHtml(monthKey)}" ${monthKey === saleYearMonth ? 'selected' : ''}>
+                                        ${escapeHtml(formatCommercialFinanceYearMonthLabel(monthKey))}
+                                    </option>
+                                `;
+                            }).join('')}
+                        </select>
+                    </div>
+                </div>
+            </section>
+
             <section class="gestao-commercial-finance-card bg-white border border-slate-200 rounded-xl p-4 space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <h5 class="text-xs font-bold text-slate-800">Detalhamento — ${escapeHtml(formatCommercialFinanceCommissionDetailTitle(referenceYearMonth, year))}</h5>
+                    <h5 class="text-xs font-bold text-slate-800">Detalhamento — ${escapeHtml(formatCommercialFinanceCommissionDetailTitle(saleYearMonth, year))}</h5>
                     <span class="text-[10px] text-slate-400">${detailRowCount} venda${detailRowCount === 1 ? '' : 's'}</span>
                 </div>
-                ${renderCommercialFinanceCommissionDetailTable(detailMatrix, referenceYearMonth)}
+                ${renderCommercialFinanceCommissionDetailTable(detailMatrix, saleYearMonth)}
             </section>
         </div>
     `;
@@ -1754,16 +1857,16 @@ async function loadGestaoCommercialFinanceComissao() {
     const year = Number(document.getElementById('gestao-commercial-finance-comissao-year')?.value)
         || gestaoCommercialFinanceComissaoYear;
     const monthSelect = document.getElementById('gestao-commercial-finance-comissao-month');
-    const referenceYearMonth = monthSelect
+    const saleYearMonth = monthSelect
         ? monthSelect.value
         : gestaoCommercialFinanceComissaoMonth;
 
     gestaoCommercialFinanceComissaoYear = year;
-    if (referenceYearMonth === '') {
+    if (saleYearMonth === '') {
         gestaoCommercialFinanceComissaoMonth = '';
     } else {
-        gestaoCommercialFinanceComissaoMonth = referenceYearMonth.startsWith(`${year}-`)
-            ? referenceYearMonth
+        gestaoCommercialFinanceComissaoMonth = saleYearMonth.startsWith(`${year}-`)
+            ? saleYearMonth
             : buildCommercialFinanceYearMonthKey(year, 1);
     }
 
@@ -1780,7 +1883,7 @@ async function loadGestaoCommercialFinanceComissao() {
     if (!content) return;
     content.innerHTML = renderGestaoCommercialFinanceComissao(entries, {
         year,
-        referenceYearMonth: gestaoCommercialFinanceComissaoMonth
+        saleYearMonth: gestaoCommercialFinanceComissaoMonth
     });
     bindGestaoCommercialFinanceComissaoEvents();
 }
@@ -1895,6 +1998,12 @@ function bindGestaoCommercialFinanceEvents() {
             return;
         }
 
+        const restoreDefaultTiersButton = event.target.closest('#gestao-commercial-finance-restore-default-tiers');
+        if (restoreDefaultTiersButton) {
+            replaceCommercialFinanceTierRows(getCommercialFinanceDefaultMetaTiers());
+            return;
+        }
+
         const copyTiersButton = event.target.closest('#gestao-commercial-finance-copy-tiers-prev');
         if (copyTiersButton) {
             const previousYearMonth = copyTiersButton.dataset.previousYearMonth;
@@ -1920,6 +2029,38 @@ function bindGestaoCommercialFinanceEvents() {
         const removeTierButton = event.target.closest('.gestao-commercial-finance-remove-tier');
         if (removeTierButton) {
             removeTierButton.closest('.gestao-commercial-finance-tier-row')?.remove();
+            return;
+        }
+
+        const reopenMonthButton = event.target.closest('#gestao-commercial-finance-reopen-month-btn');
+        if (reopenMonthButton) {
+            const saleYearMonth = document.getElementById('gestao-commercial-finance-close-month')?.value
+                || getCommercialFinanceCurrentYearMonth();
+            const monthLabel = formatCommercialFinanceYearMonthLabel(saleYearMonth);
+            const confirmed = typeof confirmAppDialog === 'function'
+                ? await confirmAppDialog(
+                    `Reabrir ${monthLabel}? Os registros de comissão deste mês serão removidos e as vendas voltarão a ficar editáveis.`,
+                    { title: 'Reabrir mês de vendas', confirmLabel: 'Reabrir mês' }
+                )
+                : window.confirm(`Reabrir ${monthLabel}?`);
+            if (!confirmed) return;
+
+            reopenMonthButton.disabled = true;
+            reopenMonthButton.textContent = 'Reabrindo...';
+            const result = await reopenCommercialFinanceSaleMonth(saleYearMonth);
+            reopenMonthButton.disabled = false;
+            reopenMonthButton.textContent = 'Reabrir mês';
+
+            if (!result.ok) {
+                alertAppDialog(result.message || 'Não foi possível reabrir o mês.', { variant: 'warning', title: 'Aviso' });
+                return;
+            }
+
+            alertAppDialog(
+                `${monthLabel} reaberto. As vendas do mês podem ser alteradas novamente.`,
+                { variant: 'success', title: 'Sucesso' }
+            );
+            await loadGestaoCommercialFinanceVendas();
             return;
         }
 
@@ -1965,15 +2106,17 @@ function bindGestaoCommercialFinanceEvents() {
         }
 
         const button = event.target.closest('.gestao-commercial-finance-save-sale');
-        if (!button) return;
+        if (!button || button.disabled) return;
         const row = button.closest('.gestao-commercial-finance-sale-row');
         const orderId = Number(row?.dataset.orderId);
         if (!orderId) return;
+        if (row?.dataset.monthClosed === 'true') return;
 
         const paymentMethod = row.querySelector('.gestao-commercial-finance-payment-method')?.value;
         const cachedOrder = gestaoCommercialFinanceOrdersCache.find(order => Number(order.id) === orderId);
         const installmentCount = getCommercialFinanceOrderClientInstallments(cachedOrder).length || 1;
         const commissionConfirmed = Boolean(row.querySelector('.gestao-commercial-finance-commission-confirmed')?.checked);
+        const isMonthClosed = isCommercialFinanceOrderInClosedMonth(cachedOrder);
         button.disabled = true;
         button.textContent = 'Salvando...';
 
@@ -1983,8 +2126,8 @@ function bindGestaoCommercialFinanceEvents() {
             installmentCount,
             commissionConfirmed
         );
-        button.disabled = false;
-        button.textContent = 'Salvar';
+        button.disabled = isMonthClosed;
+        button.textContent = isMonthClosed ? 'Fechado' : 'Salvar';
 
         if (!result.ok) {
             alertAppDialog(result.message || 'Não foi possível salvar.', { variant: 'warning', title: 'Aviso' });
@@ -1993,7 +2136,7 @@ function bindGestaoCommercialFinanceEvents() {
         row.classList.toggle('gestao-commercial-finance-sale-row--confirmed', commissionConfirmed);
         button.textContent = 'Salvo!';
         window.setTimeout(() => {
-            button.textContent = 'Salvar';
+            button.textContent = isMonthClosed ? 'Fechado' : 'Salvar';
         }, 1200);
     });
 
@@ -2029,8 +2172,9 @@ function bindGestaoCommercialFinanceEvents() {
 
     document.getElementById('gestao-commercial-finance-content')?.addEventListener('change', (event) => {
         const select = event.target.closest('.gestao-commercial-finance-payment-method');
-        if (!select) return;
+        if (!select || select.disabled) return;
         const row = select.closest('.gestao-commercial-finance-sale-row');
+        if (row?.dataset.monthClosed === 'true') return;
         const installmentsButton = row?.querySelector('.gestao-commercial-finance-client-installments-btn');
         if (!installmentsButton) return;
         const isInstallment = select.value === COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT;
