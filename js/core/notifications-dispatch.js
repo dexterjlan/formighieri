@@ -1,13 +1,28 @@
-const EMAIL_SEND_MAX_ATTEMPTS = 3;
-const EMAIL_SEND_TIMEOUT_MS = 12000;
-const EMAIL_SEND_RETRY_BASE_DELAY_MS = 750;
+const EMAIL_SEND_MAX_ATTEMPTS = 1;
+const EMAIL_DEDUP_WINDOW_MS = 15000;
+const recentEmailSendKeys = new Map();
 
 function isGoogleAppsScriptConfigured() {
     return Boolean(GOOGLE_APPS_SCRIPT_URL && NOTIFICATION_SCRIPT_SECRET);
 }
 
-function delayEmailRetry(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+function buildEmailDedupKey(payload) {
+    return [
+        payload?.to_email || '',
+        payload?.cc_email || '',
+        payload?.subject || ''
+    ].join('\u0001');
+}
+
+function isDuplicateEmailSend(payload) {
+    const key = buildEmailDedupKey(payload);
+    const lastSentAt = recentEmailSendKeys.get(key);
+    if (!lastSentAt) return false;
+    return Date.now() - lastSentAt < EMAIL_DEDUP_WINDOW_MS;
+}
+
+function registerEmailSend(payload) {
+    recentEmailSendKeys.set(buildEmailDedupKey(payload), Date.now());
 }
 
 function buildEmailErrorLogPayload(payload, meta = {}) {
@@ -21,37 +36,33 @@ function buildEmailErrorLogPayload(payload, meta = {}) {
 }
 
 async function executeEmailFetch(payload) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), EMAIL_SEND_TIMEOUT_MS);
-
-    try {
-        await fetch(GOOGLE_APPS_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-                secret: NOTIFICATION_SCRIPT_SECRET,
-                to_email: payload.to_email,
-                from_name: payload.from_name,
-                reply_to: payload.reply_to,
-                subject: payload.subject,
-                message_body: payload.message_body,
-                message_html: payload.message_html,
-                cc_email: payload.cc_email || ''
-            }),
-            signal: controller.signal
-        });
-    } catch (error) {
-        if (error?.name === 'AbortError') {
-            throw new Error(`Timeout ao enviar e-mail (${EMAIL_SEND_TIMEOUT_MS}ms)`);
-        }
-        throw error;
-    } finally {
-        clearTimeout(timeoutId);
-    }
+    // Sem timeout/abort: com mode no-cors não há confirmação de entrega e o GAS pode
+    // demorar; abortar e reenviar gerava o mesmo e-mail várias vezes em produção.
+    await fetch(GOOGLE_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+            secret: NOTIFICATION_SCRIPT_SECRET,
+            to_email: payload.to_email,
+            from_name: payload.from_name,
+            reply_to: payload.reply_to,
+            subject: payload.subject,
+            message_body: payload.message_body,
+            message_html: payload.message_html,
+            cc_email: payload.cc_email || ''
+        })
+    });
 }
 
 async function deliverEmailWithRetries(payload, meta = {}) {
+    if (isDuplicateEmailSend(payload)) {
+        console.info('sendEmailViaGoogleAppsScript: envio duplicado ignorado', payload?.subject || '');
+        return;
+    }
+
+    registerEmailSend(payload);
+
     let lastError = null;
 
     for (let attempt = 1; attempt <= EMAIL_SEND_MAX_ATTEMPTS; attempt += 1) {
@@ -61,14 +72,11 @@ async function deliverEmailWithRetries(payload, meta = {}) {
         } catch (error) {
             lastError = error;
             console.warn(`sendEmailViaGoogleAppsScript: tentativa ${attempt}/${EMAIL_SEND_MAX_ATTEMPTS} falhou`, error);
-            if (attempt < EMAIL_SEND_MAX_ATTEMPTS) {
-                await delayEmailRetry(EMAIL_SEND_RETRY_BASE_DELAY_MS * attempt);
-            }
         }
     }
 
     const message = lastError?.message
-        || String(lastError || 'Falha ao enviar e-mail após múltiplas tentativas');
+        || String(lastError || 'Falha ao enviar e-mail');
 
     if (typeof logAppError === 'function') {
         await logAppError({
@@ -85,7 +93,7 @@ async function deliverEmailWithRetries(payload, meta = {}) {
 }
 
 async function sendEmailViaGoogleAppsScript(payload, meta = {}) {
-    void deliverEmailWithRetries(payload, meta);
+    return deliverEmailWithRetries(payload, meta);
 }
 
 const REVISION_EMAIL_IMAGE_URL_TTL = 60 * 60 * 24 * 7;

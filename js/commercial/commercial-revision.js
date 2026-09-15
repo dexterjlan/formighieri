@@ -1027,7 +1027,7 @@ async function sendRevisionBackToApproval() {
         if (typeof applyEmRevisaoComercialStatusForCommercialApproval === 'function') {
             await applyEmRevisaoComercialStatusForCommercialApproval(approval, { skipEmail: true });
         } else if (typeof applyAguardandoAprovacaoStatusForCommercialApproval === 'function') {
-            await applyAguardandoAprovacaoStatusForCommercialApproval(approval);
+            await applyAguardandoAprovacaoStatusForCommercialApproval(approval, { skipEmail: true });
         }
 
         approval.status = ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS;

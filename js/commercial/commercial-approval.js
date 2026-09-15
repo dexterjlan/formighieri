@@ -268,7 +268,7 @@ async function applyEmRevisaoComercialStatusToProjects(orderProjectIds, options 
     await notifyOrderProjectStatusChangeForProjects(uniqueIds, ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS, options);
 }
 
-async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
+async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds, options = {}) {
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
@@ -289,7 +289,7 @@ async function applyAguardandoAprovacaoStatusToProjects(orderProjectIds) {
 
     if (error) throw error;
 
-    await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Aguardando Aprovação');
+    await notifyOrderProjectStatusChangeForProjects(uniqueIds, 'Aguardando Aprovação', options);
 }
 
 const COMMERCIAL_REVISION_PROJECT_STATUS = ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ;
@@ -367,11 +367,11 @@ async function applyEmRevisaoStatusForCommercialApproval(approval, options = {})
     await applyEmRevisaoStatusToProjects([orderProjectId], options);
 }
 
-async function applyAguardandoAprovacaoStatusForCommercialApproval(approval) {
+async function applyAguardandoAprovacaoStatusForCommercialApproval(approval, options = {}) {
     const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
     if (!orderProjectId) return;
 
-    await applyAguardandoAprovacaoStatusToProjects([orderProjectId]);
+    await applyAguardandoAprovacaoStatusToProjects([orderProjectId], options);
 }
 
 async function applyEmRevisaoComercialStatusForCommercialApproval(approval, options = {}) {
