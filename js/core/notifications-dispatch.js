@@ -1088,21 +1088,27 @@ async function notifyMontagemExternaFinalizadaEmail(options = {}) {
 window.notifyMontagemExternaFinalizadaEmail = notifyMontagemExternaFinalizadaEmail;
 
 async function notifyOrderDeliveredEmail(options = {}) {
-    const { orderId, orderProjectId, actualDeliveryDate } = options;
-    if (!orderId || !orderProjectId) return;
+    const { orderId, orderProjectId, orderProjectIds, actualDeliveryDate } = options;
+    const resolvedProjectIds = [...new Set(
+        (Array.isArray(orderProjectIds) ? orderProjectIds : [orderProjectId])
+            .map(id => Number(id))
+            .filter(Boolean)
+    )];
+    if (!orderId || !resolvedProjectIds.length) return;
 
     try {
         const recipientEmails = await fetchActiveGestoresRecipientEmails();
         const dateLabel = typeof formatDisplayDate === 'function'
             ? formatDisplayDate(actualDeliveryDate)
             : (actualDeliveryDate || '—');
+        const multipleProjects = resolvedProjectIds.length > 1;
 
         await sendProcessNotificationEmail('pedido_entregue', {
             orderId,
-            orderProjectIds: [orderProjectId],
+            orderProjectIds: resolvedProjectIds,
             recipientEmails,
-            showProjectDetails: false,
-            projectSectionTitle: 'Projeto entregue',
+            showProjectDetails: multipleProjects,
+            projectSectionTitle: multipleProjects ? 'Projetos entregues' : 'Projeto entregue',
             accentColor: '#059669',
             extraFields: [
                 { label: 'Data de entrega', value: dateLabel },

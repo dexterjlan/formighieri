@@ -1959,9 +1959,20 @@
     <!-- MODAL: FINALIZAR ENTREGA TÉCNICA (lista de projetos do pedido / pendências) -->
     <div id="order-project-entrega-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 class="font-bold text-base text-slate-900 mb-1">Finalizar entrega</h3>
             <p id="order-project-entrega-context" class="text-xs text-slate-500 mb-4"></p>
+            <div id="order-project-entrega-batch-section" class="hidden mb-4 space-y-2">
+                <div class="rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-2">
+                    <p id="order-project-entrega-order-line" class="text-sm font-semibold text-slate-800">—</p>
+                    <p class="text-xs text-slate-500 mt-0.5">
+                        <span id="order-project-entrega-project-count">0</span> projeto(s) selecionado(s)
+                    </p>
+                </div>
+                <ul id="order-project-entrega-projects-list"
+                    class="text-xs text-slate-700 space-y-1 max-h-40 overflow-y-auto rounded-lg border border-slate-100 bg-white p-2 list-disc list-inside">
+                </ul>
+            </div>
             <div>
                 <label class="block text-xs font-semibold text-slate-500 mb-1" for="order-project-entrega-data">
                     Data de entrega do pedido <span class="text-red-500">*</span>
