@@ -608,6 +608,10 @@ function renderPendenciasInteractiveTableScreen(content, config = {}) {
         getRowClass: config.getRowClass,
         getRowAttrs: config.getRowAttrs
     });
+
+    if (typeof scheduleAppDocumentTitlePendenciasCountRefresh === 'function') {
+        scheduleAppDocumentTitlePendenciasCountRefresh(800);
+    }
 }
 
 function renderPendenciasPlaceholder(title, message) {
@@ -1050,6 +1054,9 @@ function showPendencias() {
     renderPendenciasSidebar();
     loadPendenciasContent();
     persistPendenciasNavState();
+    if (typeof scheduleAppDocumentTitlePendenciasCountRefresh === 'function') {
+        scheduleAppDocumentTitlePendenciasCountRefresh(0);
+    }
 }
 
 function persistPendenciasNavState() {

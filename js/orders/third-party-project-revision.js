@@ -410,7 +410,7 @@ async function openThirdPartyRevisionsHistoryModal(thirdPartyProjectId) {
     const contentEl = document.getElementById('third-party-revisions-history-content');
 
     if (contextEl) {
-        contextEl.textContent = `${getThirdPartyProjectLabel(project)} · ${revisions.length} revisão${revisions.length === 1 ? '' : 'ões'}`;
+        contextEl.textContent = `${getThirdPartyProjectLabel(project)} · ${revisions.length} ${revisions.length === 1 ? 'revisão' : 'revisões'}`;
     }
 
     if (!revisions.length) {

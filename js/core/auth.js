@@ -56,6 +56,9 @@ async function enterApp(authUserId, authUser = null) {
         }
         await showAppSessionLoading('Carregando...', 'Abrindo sua última tela');
         await showMainPanel();
+        if (typeof scheduleAppDocumentTitlePendenciasCountRefresh === 'function') {
+            scheduleAppDocumentTitlePendenciasCountRefresh(0);
+        }
     })();
 
     try {
@@ -626,6 +629,7 @@ function bindAuthEvents() {
             passwordRecoveryPending = false;
             if (typeof clearUserImpersonationState === 'function') clearUserImpersonationState();
             if (typeof clearAppNavState === 'function') clearAppNavState();
+            if (typeof resetAppDocumentTitle === 'function') resetAppDocumentTitle();
             return;
         }
         if (event === 'PASSWORD_RECOVERY') {

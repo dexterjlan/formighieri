@@ -398,6 +398,9 @@ function mountInteractiveTable(container, config = {}) {
         return state;
     }
 
+    const tableClass = config.tableClass || 'interactive-table w-full text-sm';
+    const theadClass = config.theadClass || 'bg-slate-50 text-xs uppercase text-slate-500';
+
     container.innerHTML = `
         <div class="interactive-table-toolbar">
             <span class="interactive-table-count" data-role="count"></span>
@@ -407,8 +410,8 @@ function mountInteractiveTable(container, config = {}) {
             </div>
         </div>
         <div class="overflow-x-auto">
-            <table class="interactive-table w-full text-sm" style="min-width: ${escapeHtml(minWidth)};" data-table-id="${escapeHtml(tableId)}">
-                <thead class="bg-slate-50 text-xs uppercase text-slate-500">${renderInteractiveTableHead(columns, state, { disableSort })}</thead>
+            <table class="${escapeHtml(tableClass)}" style="min-width: ${escapeHtml(minWidth)};" data-table-id="${escapeHtml(tableId)}">
+                <thead class="${escapeHtml(theadClass)}">${renderInteractiveTableHead(columns, state, { disableSort })}</thead>
                 <tbody data-role="body"></tbody>
             </table>
         </div>

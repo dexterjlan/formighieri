@@ -349,7 +349,107 @@ async function loadPendenciasSectionOverview() {
 }
 
 async function refreshPendenciasOverviewCounts() {
+    if (typeof scheduleAppDocumentTitlePendenciasCountRefresh === 'function') {
+        scheduleAppDocumentTitlePendenciasCountRefresh(100);
+    }
     if (!pendenciasActiveItem && pendenciasActiveSection) {
         await loadPendenciasSectionOverview();
     }
 }
+
+const APP_DOCUMENT_TITLE_BRAND = 'FGP';
+const APP_DOCUMENT_TITLE_SUFFIX = 'Formighieri Gestão de Processos';
+
+function getAppDocumentTitleBase() {
+    return `${APP_DOCUMENT_TITLE_BRAND} - ${APP_DOCUMENT_TITLE_SUFFIX}`;
+}
+
+function applyAppDocumentTitle(pendingCount) {
+    const base = getAppDocumentTitleBase();
+    if (!currentUser?.id) {
+        document.title = base;
+        return;
+    }
+    if (typeof canAccessPendencias === 'function' && !canAccessPendencias()) {
+        document.title = base;
+        return;
+    }
+
+    const count = Number(pendingCount);
+    if (!Number.isFinite(count) || count <= 0) {
+        document.title = base;
+        return;
+    }
+
+    document.title = `${APP_DOCUMENT_TITLE_BRAND} (${count}) - ${APP_DOCUMENT_TITLE_SUFFIX}`;
+}
+
+function resetAppDocumentTitle() {
+    document.title = getAppDocumentTitleBase();
+}
+
+async function fetchPendenciasUserTotalCount() {
+    if (!currentUser?.id) {
+        return 0;
+    }
+    if (typeof canAccessPendencias !== 'function' || !canAccessPendencias()) {
+        return 0;
+    }
+    if (typeof getPendenciasSidebarSections !== 'function') {
+        return 0;
+    }
+
+    const sections = getPendenciasSidebarSections();
+    const countTasks = [];
+
+    sections.forEach(section => {
+        (section.items || []).forEach(item => {
+            countTasks.push(fetchPendenciasOverviewItemCount(section.id, item.id));
+        });
+    });
+
+    if (!countTasks.length) {
+        return 0;
+    }
+
+    const counts = await Promise.all(countTasks);
+    return counts.reduce((sum, count) => (
+        typeof count === 'number' && count > 0 ? sum + count : sum
+    ), 0);
+}
+
+let appDocumentTitleRefreshTimer = null;
+let appDocumentTitleRefreshInFlight = null;
+
+async function refreshAppDocumentTitlePendenciasCount() {
+    if (appDocumentTitleRefreshInFlight) {
+        return appDocumentTitleRefreshInFlight;
+    }
+
+    appDocumentTitleRefreshInFlight = (async () => {
+        try {
+            const total = await fetchPendenciasUserTotalCount();
+            applyAppDocumentTitle(total);
+        } catch (error) {
+            console.warn('refreshAppDocumentTitlePendenciasCount:', error);
+        } finally {
+            appDocumentTitleRefreshInFlight = null;
+        }
+    })();
+
+    return appDocumentTitleRefreshInFlight;
+}
+
+function scheduleAppDocumentTitlePendenciasCountRefresh(delayMs = 400) {
+    if (appDocumentTitleRefreshTimer) {
+        clearTimeout(appDocumentTitleRefreshTimer);
+    }
+    appDocumentTitleRefreshTimer = window.setTimeout(() => {
+        appDocumentTitleRefreshTimer = null;
+        refreshAppDocumentTitlePendenciasCount();
+    }, delayMs);
+}
+
+window.resetAppDocumentTitle = resetAppDocumentTitle;
+window.scheduleAppDocumentTitlePendenciasCountRefresh = scheduleAppDocumentTitlePendenciasCountRefresh;
+window.refreshAppDocumentTitlePendenciasCount = refreshAppDocumentTitlePendenciasCount;

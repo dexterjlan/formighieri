@@ -59,8 +59,7 @@ async function fetchPendenciasEmRevisaoTecnicaRevisorProjects() {
             error: new Error(`Status "${PENDENCIAS_STATUS_EM_REVISAO_TECNICA_REVISOR}" não encontrado.`),
             overviewMode,
             projects: [],
-            statusChangedAtByProject: {},
-            revisionsByProject: {}
+            statusChangedAtByProject: {}
         };
     }
 
@@ -70,15 +69,12 @@ async function fetchPendenciasEmRevisaoTecnicaRevisorProjects() {
             error: result.error,
             overviewMode,
             projects: [],
-            statusChangedAtByProject: {},
-            revisionsByProject: {}
+            statusChangedAtByProject: {}
         };
     }
 
     let projects = sortPendenciasByDeliveryDate(result.data || []);
-    if (overviewMode) {
-        projects = await enrichPendenciasProjectsWithDesigner(projects);
-    }
+    projects = await enrichPendenciasProjectsWithDesigner(projects);
 
     const projectIds = projects.map(project => project.id);
     const statusChangedAtByProject = await fetchTechnicalReviewerStatusChangedAtByProjectIds(
@@ -86,33 +82,11 @@ async function fetchPendenciasEmRevisaoTecnicaRevisorProjects() {
         [PENDENCIAS_STATUS_EM_REVISAO_TECNICA_REVISOR, ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_LIDER_LEGACY]
     );
 
-    const revisions = await fetchRevisionsByOrderProjectIds(projectIds, [REVISION_TYPE_TECHNICAL_REVISOR]);
-    const openRevisions = revisions.filter(revision => revision.status === REVISION_STATUS_OPEN);
-    const revisionIds = openRevisions.map(revision => revision.id);
-    const activities = await fetchRevisionActivitiesByRevisionIds(revisionIds);
-
-    const activitiesByRevision = {};
-    activities.forEach(activity => {
-        if (!activitiesByRevision[activity.revisionId]) {
-            activitiesByRevision[activity.revisionId] = [];
-        }
-        activitiesByRevision[activity.revisionId].push(activity);
-    });
-
-    const revisionsByProject = {};
-    openRevisions.forEach(revision => {
-        revisionsByProject[revision.orderProjectId] = {
-            ...revision,
-            activities: activitiesByRevision[revision.id] || []
-        };
-    });
-
     return {
         error: null,
         overviewMode,
         projects,
-        statusChangedAtByProject,
-        revisionsByProject
+        statusChangedAtByProject
     };
 }
 
@@ -219,16 +193,13 @@ function getTechnicalReviewerRevisionProgressClass(revision) {
     return 'bg-amber-100 text-amber-800';
 }
 
-function renderPendenciasEmRevisaoTecnicaRevisorList(projects, statusChangedAtByProject, revisionsByProject, overviewMode) {
+function renderPendenciasEmRevisaoTecnicaRevisorList(projects, statusChangedAtByProject, overviewMode) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
     const rows = (projects || []).map(project => {
         const statusChangedAt = statusChangedAtByProject[project.id];
-        const revision = revisionsByProject[project.id];
         return mapPendenciasInteractiveIdentity(project, {
-            revisionProgressLabel: getTechnicalReviewerRevisionProgressLabel(revision),
-            revisionProgressClass: getTechnicalReviewerRevisionProgressClass(revision),
             statusChangedAtLabel: statusChangedAt ? formatDate(statusChangedAt) : '—',
             statusChangedAt,
             canAct: canReviewerActOnProject(project)
@@ -236,12 +207,14 @@ function renderPendenciasEmRevisaoTecnicaRevisorList(projects, statusChangedAtBy
     });
 
     const columns = [
-        ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
-        getPendenciasInteractiveStatusColumn({
-            key: 'revisionProgressLabel',
-            label: 'Revisão',
-            render: (row) => `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${row.revisionProgressClass}">${escapeHtml(row.revisionProgressLabel || '—')}</span>`
-        }),
+        ...getPendenciasInteractiveIdentityColumns(),
+        {
+            key: 'designerName',
+            label: 'Projetista',
+            sortable: true,
+            filterable: true,
+            cellClass: 'p-3 text-xs text-slate-700'
+        },
         getPendenciasInteractiveDateColumn({
             key: 'statusChangedAtLabel',
             label: 'Desde',
@@ -358,7 +331,7 @@ async function loadPendenciasEmRevisaoTecnicaRevisor() {
         return;
     }
 
-    const { error, overviewMode, projects, statusChangedAtByProject, revisionsByProject } =
+    const { error, overviewMode, projects, statusChangedAtByProject } =
         await fetchPendenciasEmRevisaoTecnicaRevisorProjects();
 
     if (error) {
@@ -369,7 +342,6 @@ async function loadPendenciasEmRevisaoTecnicaRevisor() {
     renderPendenciasEmRevisaoTecnicaRevisorList(
         projects,
         statusChangedAtByProject,
-        revisionsByProject,
         overviewMode
     );
 }

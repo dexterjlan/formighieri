@@ -1,5 +1,9 @@
 const COMMERCIAL_FINANCE_PAYMENT_CASH = 'cash';
 const COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT = 'installment';
+const COMMERCIAL_FINANCE_ENTRY_TYPE_CONSULTANT = 'consultant';
+const COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_OWN = 'manager_own';
+const COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_TEAM = 'manager_team';
+const COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_DELIVERY_BONUS = 'manager_delivery_bonus';
 
 function canAccessGestaoCommercialFinance(user = currentUser) {
     if (typeof isAdmin === 'function' && isAdmin(user)) {
@@ -83,24 +87,183 @@ function normalizeCommercialFinanceInstallmentCount(value, paymentMethod) {
     return count;
 }
 
-function isCommercialFinanceCommissionConfirmed(order) {
-    return Boolean(order?.commissionConfirmed);
+function isCommercialFinanceSaleImported(sale) {
+    return Boolean(sale?.isImported);
+}
+
+function isCommercialFinanceCommissionConfirmed(record) {
+    return Boolean(record?.isImported ?? record?.commissionConfirmed);
+}
+
+function filterCommercialFinanceCommissionSales(sales = []) {
+    return (sales || []).filter(sale => isCommercialFinanceSaleImported(sale));
 }
 
 function filterCommercialFinanceCommissionOrders(orders = []) {
-    return (orders || []).filter(order => isCommercialFinanceCommissionConfirmed(order));
+    return filterCommercialFinanceCommissionSales(orders);
+}
+
+function getCommercialFinanceImportedSaleValue(sale) {
+    const value = Number(sale?.saleValue);
+    return Number.isFinite(value) ? roundCommercialFinanceMoney(value) : 0;
+}
+
+function commercialFinanceSaleToCommissionRecord(sale) {
+    if (!sale) return null;
+
+    return {
+        id: sale.salesOrderId || sale.id,
+        salesOrderId: sale.salesOrderId || null,
+        commissionSaleId: sale.id,
+        orderCode: sale.orderCode || '',
+        saleDate: sale.saleDate,
+        saleYearMonth: sale.saleYearMonth || getCommercialFinanceYearMonthFromDate(sale.saleDate),
+        consultantUserId: sale.consultantUserId,
+        consultor: sale.consultant || { id: sale.consultantUserId, name: sale.consultantName || '' },
+        client: { name: sale.clientName || '' },
+        saleValue: getCommercialFinanceImportedSaleValue(sale),
+        paymentMethod: sale.paymentMethod,
+        installmentCount: sale.installmentCount,
+        commissionCountsForTier: sale.countsForTier,
+        commissionRateOverride: sale.rateOverride,
+        commissionRatePercent: sale.importedRatePercent,
+        isImported: sale.isImported,
+        commissionConfirmed: sale.isImported,
+        clientInstallments: sale.installments || [],
+        source: sale.source || 'fgp_order'
+    };
+}
+
+function mergeCommercialFinanceOrderWithSale(order, sale) {
+    const defaults = {
+        paymentMethod: COMMERCIAL_FINANCE_PAYMENT_CASH,
+        installmentCount: 1,
+        commissionCountsForTier: true,
+        commissionRateOverride: null,
+        commissionRatePercent: null,
+        isImported: false,
+        commissionConfirmed: false,
+        clientInstallments: []
+    };
+
+    if (!order) {
+        return sale ? commercialFinanceSaleToCommissionRecord(sale) : null;
+    }
+
+    if (!sale) {
+        return { ...order, ...defaults };
+    }
+
+    const mappedSale = commercialFinanceSaleToCommissionRecord(sale);
+    return {
+        ...order,
+        ...mappedSale,
+        projects: order.projects,
+        client: order.client || mappedSale.client,
+        consultor: order.consultor || mappedSale.consultor
+    };
+}
+
+function getCommercialFinanceRecordSaleValue(record) {
+    if (record?.saleValue != null && (record.isImported || record.commissionSaleId)) {
+        const importedValue = Number(record.saleValue);
+        if (Number.isFinite(importedValue)) {
+            return roundCommercialFinanceMoney(importedValue);
+        }
+    }
+    return getCommercialFinanceOrderSaleValue(record);
+}
+
+function getCommercialFinanceOrderProjectSaleValue(project, projectsById = {}) {
+    if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
+        return 0;
+    }
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+        return 0;
+    }
+
+    const baseValue = typeof getProjectEffectiveSaleValue === 'function'
+        ? getProjectEffectiveSaleValue(project)
+        : Number(project?.saleValue);
+    const normalizedBase = Number.isFinite(Number(baseValue)) ? Number(baseValue) : 0;
+
+    const childrenValue = Object.values(projectsById).reduce((sum, child) => {
+        if (!child || typeof isComplementaryOrderProject !== 'function' || !isComplementaryOrderProject(child)) {
+            return sum;
+        }
+        if (Number(child.parentProjectId) !== Number(project?.id)) return sum;
+        const value = Number(child.saleValue);
+        return sum + (Number.isFinite(value) ? value : 0);
+    }, 0);
+
+    return roundCommercialFinanceMoney(normalizedBase + childrenValue);
 }
 
 function getCommercialFinanceOrderSaleValue(order) {
     const projects = Array.isArray(order?.projects) ? order.projects : [];
-    const total = projects.reduce((sum, project) => {
-        const value = typeof getProjectEffectiveSaleValue === 'function'
-            ? getProjectEffectiveSaleValue(project)
-            : Number(project?.saleValue);
-        const normalized = Number.isFinite(Number(value)) ? Number(value) : 0;
-        return roundCommercialFinanceMoney(sum + normalized);
-    }, 0);
-    return roundCommercialFinanceMoney(total);
+    const projectsById = Object.fromEntries(
+        projects
+            .map(project => [Number(project.id), project])
+            .filter(([projectId]) => projectId)
+    );
+
+    return roundCommercialFinanceMoney(
+        projects.reduce(
+            (sum, project) => sum + getCommercialFinanceOrderProjectSaleValue(project, projectsById),
+            0
+        )
+    );
+}
+
+function isCommercialFinanceHistoricalImportRecord(record) {
+    return String(record?.source || '').trim() === 'historical_import';
+}
+
+function isCommercialFinanceImportedOnlyRecord(record) {
+    if (!record?.commissionSaleId && !record?.isImported) {
+        return false;
+    }
+    const salesOrderId = Number(record?.salesOrderId);
+    if (!salesOrderId) {
+        return Boolean(record?.commissionSaleId || record?.isImported);
+    }
+    return false;
+}
+
+function getCommercialFinanceRecordSaleYearMonth(record) {
+    return record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate);
+}
+
+function filterCommercialFinanceVendasOrders(orders = [], filters = {}) {
+    const monthFilter = filters.yearMonth || '';
+    const consultantFilter = String(filters.consultantName || '').trim().toLowerCase();
+
+    return (orders || []).filter(order => {
+        const saleYearMonth = getCommercialFinanceRecordSaleYearMonth(order);
+        if (monthFilter && saleYearMonth !== monthFilter) return false;
+
+        const consultantName = typeof getOrderConsultantNameFromRecord === 'function'
+            ? getOrderConsultantNameFromRecord(order).toLowerCase()
+            : String(order?.consultor?.name || '').toLowerCase();
+        if (consultantFilter && !consultantName.includes(consultantFilter)) return false;
+
+        return true;
+    });
+}
+
+function sumCommercialFinanceOrdersSaleValue(orders = []) {
+    return roundCommercialFinanceMoney(
+        (orders || []).reduce((total, order) => total + getCommercialFinanceRecordSaleValue(order), 0)
+    );
+}
+
+function sumCommercialFinanceImportedSalesValue(sales = []) {
+    return roundCommercialFinanceMoney(
+        filterCommercialFinanceCommissionSales(sales).reduce(
+            (total, sale) => total + getCommercialFinanceImportedSaleValue(sale),
+            0
+        )
+    );
 }
 
 function sortCommercialFinanceCommissionTiers(tiers = []) {
@@ -162,20 +325,42 @@ function sumCommercialFinanceClientInstallmentAmounts(installments = []) {
     }, 0);
 }
 
+function normalizeCommercialFinanceCashPaymentInstallments(order, installments = []) {
+    const saleValue = getCommercialFinanceRecordSaleValue(order);
+    const firstInstallment = (installments || [])[0] || {};
+    const paymentYearMonth = String(firstInstallment.paymentYearMonth || '').trim();
+    if (!paymentYearMonth) {
+        return [];
+    }
+
+    return [{
+        installmentNumber: 1,
+        paymentYearMonth,
+        clientInstallmentAmount: saleValue
+    }];
+}
+
 function validateCommercialFinanceOrderForCommission(order) {
     const paymentMethod = normalizeCommercialFinancePaymentMethod(order?.paymentMethod);
     const orderCode = order?.orderCode || 'pedido';
+    const saleValue = getCommercialFinanceRecordSaleValue(order);
+    const installments = getCommercialFinanceOrderClientInstallments(order);
+
+    if (paymentMethod === COMMERCIAL_FINANCE_PAYMENT_CASH) {
+        const cashInstallments = normalizeCommercialFinanceCashPaymentInstallments(order, installments);
+        if (!cashInstallments.length) {
+            return { ok: false, message: `Pedido ${orderCode}: informe o mês de pagamento.` };
+        }
+        return { ok: true };
+    }
 
     if (paymentMethod !== COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT) {
         return { ok: true };
     }
-
-    const installments = getCommercialFinanceOrderClientInstallments(order);
     if (!installments.length) {
         return { ok: false, message: `Pedido ${orderCode}: informe as parcelas do cliente.` };
     }
 
-    const saleValue = getCommercialFinanceOrderSaleValue(order);
     const installmentsTotal = sumCommercialFinanceClientInstallmentAmounts(installments);
     if (Math.abs(installmentsTotal - saleValue) > 0.01) {
         return {
@@ -208,7 +393,7 @@ function validateCommercialFinanceOrderForCommission(order) {
 }
 
 function buildCommercialFinanceCommissionInstallments(order, ratePercent) {
-    const saleValue = getCommercialFinanceOrderSaleValue(order);
+    const saleValue = getCommercialFinanceRecordSaleValue(order);
     const paymentMethod = normalizeCommercialFinancePaymentMethod(order?.paymentMethod);
     const saleYearMonth = getCommercialFinanceYearMonthFromDate(order?.saleDate);
     const rate = Number(ratePercent) || 0;
@@ -218,8 +403,17 @@ function buildCommercialFinanceCommissionInstallments(order, ratePercent) {
     }
 
     if (paymentMethod === COMMERCIAL_FINANCE_PAYMENT_CASH) {
-        const referenceYearMonth = addCommercialFinanceMonths(saleYearMonth, 1);
-        const commissionAmount = roundCommercialFinanceMoney(saleValue * rate / 100);
+        const cashInstallments = normalizeCommercialFinanceCashPaymentInstallments(
+            order,
+            getCommercialFinanceOrderClientInstallments(order)
+        );
+        const cashInstallment = cashInstallments[0];
+        if (!cashInstallment?.paymentYearMonth) {
+            return [];
+        }
+
+        const clientInstallmentAmount = roundCommercialFinanceMoney(cashInstallment.clientInstallmentAmount);
+        const commissionAmount = roundCommercialFinanceMoney(clientInstallmentAmount * rate / 100);
         if (commissionAmount <= 0) {
             return [];
         }
@@ -227,8 +421,8 @@ function buildCommercialFinanceCommissionInstallments(order, ratePercent) {
         return [{
             installmentNumber: 1,
             installmentCount: 1,
-            yearMonth: referenceYearMonth,
-            clientInstallmentAmount: saleValue,
+            yearMonth: cashInstallment.paymentYearMonth,
+            clientInstallmentAmount,
             amount: commissionAmount
         }];
     }
@@ -251,7 +445,7 @@ function buildCommercialFinanceCommissionInstallments(order, ratePercent) {
 }
 
 function orderCountsForCommercialFinanceTierSum(order) {
-    return order?.commissionCountsForTier !== false;
+    return order?.countsForTier !== false && order?.commissionCountsForTier !== false;
 }
 
 function parseCommercialFinanceRateOverrideInput(value) {
@@ -269,14 +463,19 @@ function formatCommercialFinanceRateOverrideForInput(order) {
 }
 
 function hasCommercialFinanceImportedCommissionRate(order) {
-    const rate = Number(order?.commissionRatePercent);
+    const rate = Number(order?.importedRatePercent ?? order?.commissionRatePercent);
     return Number.isFinite(rate) && rate > 0;
 }
 
 function getCommercialFinanceOrderExplicitRatePercent(order) {
-    if (order?.commissionRateOverride != null && order?.commissionRateOverride !== '') {
-        const rate = Number(order.commissionRateOverride);
+    const overrideValue = order?.rateOverride ?? order?.commissionRateOverride;
+    if (overrideValue != null && overrideValue !== '') {
+        const rate = Number(overrideValue);
         return Number.isFinite(rate) ? roundCommercialFinanceMoney(rate) : null;
+    }
+    const importedRate = order?.importedRatePercent ?? order?.commissionRatePercent;
+    if (Number.isFinite(Number(importedRate)) && Number(importedRate) > 0) {
+        return roundCommercialFinanceMoney(Number(importedRate));
     }
     if (hasCommercialFinanceImportedCommissionRate(order)) {
         return roundCommercialFinanceMoney(Number(order.commissionRatePercent));
@@ -284,14 +483,14 @@ function getCommercialFinanceOrderExplicitRatePercent(order) {
     return null;
 }
 
-function buildCommercialFinanceConsultantMonthlyTotals(orders = []) {
+function buildCommercialFinanceConsultantMonthlyTotals(records = []) {
     const totalsByConsultantMonth = {};
 
-    orders.forEach(order => {
-        if (!orderCountsForCommercialFinanceTierSum(order)) return;
+    records.forEach(record => {
+        if (!orderCountsForCommercialFinanceTierSum(record)) return;
 
-        const consultantUserId = Number(order?.consultantUserId || order?.consultor?.id);
-        const yearMonth = getCommercialFinanceYearMonthFromDate(order?.saleDate);
+        const consultantUserId = Number(record?.consultantUserId || record?.consultor?.id);
+        const yearMonth = record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate);
         if (!consultantUserId || !yearMonth) return;
 
         const key = `${consultantUserId}:${yearMonth}`;
@@ -305,9 +504,9 @@ function buildCommercialFinanceConsultantMonthlyTotals(orders = []) {
         }
 
         totalsByConsultantMonth[key].totalSales = roundCommercialFinanceMoney(
-            totalsByConsultantMonth[key].totalSales + getCommercialFinanceOrderSaleValue(order)
+            totalsByConsultantMonth[key].totalSales + getCommercialFinanceRecordSaleValue(record)
         );
-        totalsByConsultantMonth[key].orderIds.push(Number(order.id));
+        totalsByConsultantMonth[key].orderIds.push(Number(record.salesOrderId || record.id));
     });
 
     return totalsByConsultantMonth;
@@ -342,7 +541,7 @@ function getCommercialFinanceOrderCommissionRatePercent(order, rateByConsultantM
     }
 
     const consultantUserId = Number(order?.consultantUserId || order?.consultor?.id);
-    const saleYearMonth = getCommercialFinanceYearMonthFromDate(order?.saleDate);
+    const saleYearMonth = order?.saleYearMonth || getCommercialFinanceYearMonthFromDate(order?.saleDate);
     if (!consultantUserId || !saleYearMonth) return 0;
 
     const rateInfo = rateByConsultantMonth[`${consultantUserId}:${saleYearMonth}`] || { ratePercent: 0 };
@@ -355,27 +554,152 @@ function monthCommercialFinanceOrdersUseImportedCommissionRates(orders = []) {
         && confirmedOrders.every(order => getCommercialFinanceOrderExplicitRatePercent(order) !== null);
 }
 
-function monthNeedsCommercialFinanceTierRates(orders = [], saleYearMonth) {
-    const monthOrders = filterCommercialFinanceOrdersBySaleYearMonth(orders, saleYearMonth);
-    const confirmedOrders = filterCommercialFinanceCommissionOrders(monthOrders);
-    return confirmedOrders.some(order => getCommercialFinanceOrderExplicitRatePercent(order) === null);
+function getCommercialFinanceManagerUserId(users = []) {
+    const manager = (users || []).find(user =>
+        Boolean(user?.isCommercialManager)
+        && user?.isActive !== false
+        && (user?.role === 'Consultor' || user?.role === 'Admin')
+    );
+    return manager ? Number(manager.id) : null;
+}
+
+function isCommercialFinanceManagerSale(record, managerUserId) {
+    const normalizedManagerId = Number(managerUserId);
+    if (!normalizedManagerId) return false;
+    const consultantUserId = Number(record?.consultantUserId || record?.consultor?.id);
+    return consultantUserId === normalizedManagerId;
+}
+
+function isCommercialFinanceMonthlyTargetAchieved(targetAmount, realizedAmount) {
+    const target = Number(targetAmount) || 0;
+    const realized = Number(realizedAmount) || 0;
+    return target > 0 && realized >= target;
+}
+
+function getCommercialFinanceDefaultManagerMetaTiers() {
+    return [{ minAmount: 0, maxAmount: 9999999, ratePercent: 5 }];
+}
+
+function matchCommercialFinanceManagerTier(totalSales, managerTiers = []) {
+    return matchCommercialFinanceCommissionTier(totalSales, managerTiers);
+}
+
+function monthNeedsCommercialFinanceTierRates(records = [], saleYearMonth, managerUserId = null) {
+    const monthRecords = (records || []).filter(record => {
+        const yearMonth = record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate);
+        return yearMonth === saleYearMonth;
+    });
+    const confirmedRecords = filterCommercialFinanceCommissionOrders(monthRecords);
+    return confirmedRecords.some(record => {
+        if (managerUserId && isCommercialFinanceManagerSale(record, managerUserId)) {
+            return false;
+        }
+        return getCommercialFinanceOrderExplicitRatePercent(record) === null;
+    });
+}
+
+function monthNeedsCommercialFinanceManagerTierRates(records = [], saleYearMonth, managerUserId = null) {
+    const normalizedManagerId = Number(managerUserId);
+    if (!normalizedManagerId) return false;
+
+    const monthRecords = (records || []).filter(record => {
+        const yearMonth = record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate);
+        return yearMonth === saleYearMonth;
+    });
+    const confirmedRecords = filterCommercialFinanceCommissionOrders(monthRecords)
+        .filter(record => isCommercialFinanceManagerSale(record, normalizedManagerId));
+
+    return confirmedRecords.some(record => getCommercialFinanceOrderExplicitRatePercent(record) === null);
+}
+
+function formatCommercialFinanceEntryTypeLabel(entryType) {
+    switch (entryType) {
+        case COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_OWN:
+            return 'Venda própria (gestor)';
+        case COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_TEAM:
+            return 'Equipe';
+        case COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_DELIVERY_BONUS:
+            return 'Bônus entrega';
+        default:
+            return 'Consultor';
+    }
+}
+
+function buildCommercialFinanceManagerTeamEntryDrafts(
+    records = [],
+    saleYearMonth,
+    target = {},
+    managerUser = null,
+    managerUserId = null
+) {
+    const normalizedManagerId = Number(managerUserId);
+    const ratePercent = Number(target?.managerTeamSalePercent) || 0;
+    if (!normalizedManagerId || ratePercent <= 0) {
+        return [];
+    }
+
+    const referenceYearMonth = addCommercialFinanceMonths(saleYearMonth, 1);
+    const managerName = managerUser?.name || 'Gestor comercial';
+
+    return filterCommercialFinanceCommissionOrders(records)
+        .filter(record => !isCommercialFinanceManagerSale(record, normalizedManagerId))
+        .map(record => {
+            const saleValue = getCommercialFinanceRecordSaleValue(record);
+            const commissionAmount = roundCommercialFinanceMoney(saleValue * ratePercent / 100);
+            if (commissionAmount <= 0) {
+                return null;
+            }
+
+            const consultantName = typeof getOrderConsultantNameFromRecord === 'function'
+                ? getOrderConsultantNameFromRecord(record)
+                : (record?.consultor?.name || '');
+            const clientName = typeof getOrderClientName === 'function'
+                ? getOrderClientName(record)
+                : (record?.client?.name || record?.clientName || '');
+
+            return {
+                entryType: COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_TEAM,
+                salesOrderId: Number(record.salesOrderId || record.id) || null,
+                consultantUserId: normalizedManagerId,
+                saleDate: record.saleDate,
+                saleYearMonth,
+                referenceYearMonth,
+                orderCode: record.orderCode || '',
+                clientName,
+                consultantName: managerName,
+                saleConsultantName: consultantName,
+                saleValue,
+                clientInstallmentAmount: saleValue,
+                commissionAmount,
+                ratePercent,
+                installmentNumber: 1,
+                installmentCount: 1
+            };
+        })
+        .filter(Boolean);
 }
 
 function buildCommercialFinanceCommissionReport(
-    orders = [],
+    records = [],
     targetsByYearMonth = {},
-    consultantAdjustments = []
+    consultantAdjustments = [],
+    managerUserId = null
 ) {
-    const confirmedOrders = filterCommercialFinanceCommissionOrders(orders);
+    const confirmedOrders = filterCommercialFinanceCommissionOrders(records);
     const consultantTotals = buildCommercialFinanceConsultantMonthlyTotals(confirmedOrders);
     const adjustmentsByConsultantMonth = buildCommercialFinanceConsultantAdjustmentsMap(consultantAdjustments);
     const rateByConsultantMonth = {};
     const saleEntries = [];
 
     Object.values(consultantTotals).forEach(entry => {
-        const tiers = targetsByYearMonth[entry.yearMonth]?.tiers || [];
+        const isManager = Boolean(managerUserId) && Number(entry.consultantUserId) === Number(managerUserId);
+        const tiers = isManager
+            ? (targetsByYearMonth[entry.yearMonth]?.managerTiers || [])
+            : (targetsByYearMonth[entry.yearMonth]?.tiers || []);
         const match = matchCommercialFinanceCommissionTier(entry.totalSales, tiers);
-        const adjustments = adjustmentsByConsultantMonth[`${entry.consultantUserId}:${entry.yearMonth}`] || [];
+        const adjustments = isManager
+            ? []
+            : (adjustmentsByConsultantMonth[`${entry.consultantUserId}:${entry.yearMonth}`] || []);
         const adjustmentPercent = sumCommercialFinanceConsultantAdjustmentPercent(adjustments);
         const adjustedRate = Math.max(0, roundCommercialFinanceMoney(match.ratePercent + adjustmentPercent));
 
@@ -385,13 +709,14 @@ function buildCommercialFinanceCommissionReport(
             adjustmentPercent,
             totalSales: entry.totalSales,
             tier: match.tier,
-            adjustments
+            adjustments,
+            isManager
         };
     });
 
     confirmedOrders.forEach(order => {
         const consultantUserId = Number(order?.consultantUserId || order?.consultor?.id);
-        const saleYearMonth = getCommercialFinanceYearMonthFromDate(order?.saleDate);
+        const saleYearMonth = order?.saleYearMonth || getCommercialFinanceYearMonthFromDate(order?.saleDate);
         if (!consultantUserId || !saleYearMonth) return;
 
         const ratePercent = getCommercialFinanceOrderCommissionRatePercent(order, rateByConsultantMonth);
@@ -404,7 +729,7 @@ function buildCommercialFinanceCommissionReport(
             order,
             consultantUserId,
             saleYearMonth,
-            saleValue: getCommercialFinanceOrderSaleValue(order),
+            saleValue: getCommercialFinanceRecordSaleValue(order),
             ratePercent,
             totalCommission,
             installments
@@ -418,23 +743,17 @@ function buildCommercialFinanceCommissionReport(
     };
 }
 
-function getCommercialFinanceTeamSalesInMonth(orders = [], yearMonth, options = {}) {
-    const confirmedOnly = options.confirmedOnly !== false;
-    const sourceOrders = confirmedOnly
-        ? filterCommercialFinanceCommissionOrders(orders)
-        : (orders || []);
-
+function getCommercialFinanceTeamSalesInMonth(sales = [], yearMonth) {
     return roundCommercialFinanceMoney(
-        sourceOrders.reduce((total, order) => {
-            if (getCommercialFinanceYearMonthFromDate(order?.saleDate) !== yearMonth) {
-                return total;
-            }
-            return total + getCommercialFinanceOrderSaleValue(order);
+        filterCommercialFinanceCommissionSales(sales).reduce((total, sale) => {
+            const saleMonth = sale?.saleYearMonth || getCommercialFinanceYearMonthFromDate(sale?.saleDate);
+            if (saleMonth !== yearMonth) return total;
+            return total + getCommercialFinanceImportedSaleValue(sale);
         }, 0)
     );
 }
 
-function buildCommercialFinanceMonthlyRealizedSalesMap(orders = [], year) {
+function buildCommercialFinanceMonthlyRealizedSalesMap(sales = [], year) {
     const normalizedYear = Number(year);
     if (!Number.isFinite(normalizedYear)) {
         return {};
@@ -445,10 +764,22 @@ function buildCommercialFinanceMonthlyRealizedSalesMap(orders = [], year) {
             const yearMonth = buildCommercialFinanceYearMonthKey(normalizedYear, index + 1);
             return [
                 yearMonth,
-                getCommercialFinanceTeamSalesInMonth(orders, yearMonth, { confirmedOnly: false })
+                getCommercialFinanceTeamSalesInMonth(sales, yearMonth)
             ];
         })
     );
+}
+
+function filterCommercialFinanceSalesBySaleYearMonth(sales = [], saleYearMonth) {
+    if (!saleYearMonth) return [];
+    return (sales || []).filter(sale => {
+        const yearMonth = sale?.saleYearMonth || getCommercialFinanceYearMonthFromDate(sale?.saleDate);
+        return yearMonth === saleYearMonth;
+    });
+}
+
+function buildCommercialFinanceCommissionRecordsFromSales(sales = []) {
+    return (sales || []).map(sale => commercialFinanceSaleToCommissionRecord(sale)).filter(Boolean);
 }
 
 function buildCommercialFinanceMonthlySummary(report, yearMonth) {
@@ -523,20 +854,26 @@ function filterCommercialFinanceOrdersBySaleYearMonth(orders = [], saleYearMonth
 }
 
 function buildCommercialFinanceCommissionEntryDrafts(
-    orders = [],
+    records = [],
     targetsByYearMonth = {},
     saleYearMonth,
-    consultantAdjustments = []
+    consultantAdjustments = [],
+    managerUserId = null
 ) {
-    const monthOrders = filterCommercialFinanceOrdersBySaleYearMonth(orders, saleYearMonth);
-    const confirmedOrders = filterCommercialFinanceCommissionOrders(monthOrders);
-    const tiers = targetsByYearMonth[saleYearMonth]?.tiers || [];
+    const monthRecords = (records || []).filter(record => {
+        const yearMonth = record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate);
+        return yearMonth === saleYearMonth;
+    });
+    const confirmedOrders = filterCommercialFinanceCommissionOrders(monthRecords);
+    const monthTarget = targetsByYearMonth[saleYearMonth] || {};
+    const tiers = monthTarget.tiers || [];
+    const managerTiers = monthTarget.managerTiers || [];
     const monthAdjustments = (consultantAdjustments || []).filter(
         adjustment => adjustment.saleYearMonth === saleYearMonth
     );
     const report = buildCommercialFinanceCommissionReport(confirmedOrders, {
-        [saleYearMonth]: { tiers }
-    }, monthAdjustments);
+        [saleYearMonth]: { tiers, managerTiers }
+    }, monthAdjustments, managerUserId);
     const entries = [];
 
     report.saleEntries.forEach(entry => {
@@ -548,10 +885,14 @@ function buildCommercialFinanceCommissionEntryDrafts(
             ? getOrderClientName(order)
             : (order?.client?.name || '');
         const installmentCount = entry.installments.length || 1;
+        const entryType = managerUserId && Number(entry.consultantUserId) === Number(managerUserId)
+            ? COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_OWN
+            : COMMERCIAL_FINANCE_ENTRY_TYPE_CONSULTANT;
 
         entry.installments.forEach(installment => {
             entries.push({
-                salesOrderId: Number(order.id),
+                entryType,
+                salesOrderId: Number(order.salesOrderId || order.id) || null,
                 consultantUserId: entry.consultantUserId,
                 saleDate: order.saleDate,
                 saleYearMonth,
@@ -571,9 +912,21 @@ function buildCommercialFinanceCommissionEntryDrafts(
 
     return {
         confirmedCount: confirmedOrders.length,
-        pendingCount: monthOrders.length - confirmedOrders.length,
+        pendingCount: 0,
         entries
     };
+}
+
+function countCommercialFinancePendingOrdersForMonth(orders = [], sales = [], saleYearMonth) {
+    const importedOrderIds = new Set(
+        filterCommercialFinanceCommissionSales(sales)
+            .filter(sale => (sale.saleYearMonth || getCommercialFinanceYearMonthFromDate(sale.saleDate)) === saleYearMonth)
+            .map(sale => Number(sale.salesOrderId))
+            .filter(Boolean)
+    );
+
+    const monthOrders = filterCommercialFinanceOrdersBySaleYearMonth(orders, saleYearMonth);
+    return monthOrders.filter(order => !importedOrderIds.has(Number(order.id))).length;
 }
 
 function buildCommercialFinanceAnnualConsultantSummary(entries = [], year) {
@@ -663,7 +1016,7 @@ function filterCommercialFinanceCommissionEntriesByYear(entries = [], year) {
     const normalizedYear = Number(year);
     if (!Number.isFinite(normalizedYear)) return [];
     return sortCommercialFinanceCommissionEntries(
-        (entries || []).filter(entry => String(entry?.saleYearMonth || '').startsWith(`${normalizedYear}-`))
+        (entries || []).filter(entry => String(entry?.referenceYearMonth || '').startsWith(`${normalizedYear}-`))
     );
 }
 
@@ -679,11 +1032,12 @@ function buildCommercialFinanceCommissionDetailMatrix(entries = [], year) {
     const rowsByOrder = {};
 
     (entries || []).forEach(entry => {
-        const saleYearMonth = String(entry?.saleYearMonth || '');
-        if (!saleYearMonth.startsWith(`${normalizedYear}-`)) return;
-
         const referenceYearMonth = String(entry?.referenceYearMonth || '');
-        const orderKey = String(entry.salesOrderId || entry.orderCode || entry.id);
+        if (!referenceYearMonth.startsWith(`${normalizedYear}-`)) return;
+
+        const saleYearMonth = String(entry?.saleYearMonth || '');
+        const entryType = entry.entryType || COMMERCIAL_FINANCE_ENTRY_TYPE_CONSULTANT;
+        const orderKey = `${entryType}:${entry.salesOrderId || entry.orderCode || entry.id}`;
         if (!rowsByOrder[orderKey]) {
             rowsByOrder[orderKey] = {
                 salesOrderId: entry.salesOrderId,
@@ -692,6 +1046,7 @@ function buildCommercialFinanceCommissionDetailMatrix(entries = [], year) {
                 orderCode: entry.orderCode || '',
                 clientName: entry.clientName || '—',
                 consultantName: entry.consultantName || '—',
+                entryType,
                 saleValue: roundCommercialFinanceMoney(entry.saleValue),
                 ratePercent: entry.ratePercent,
                 months: Object.fromEntries(monthKeys.map(monthKey => [monthKey, emptyMonthCell()]))
@@ -736,7 +1091,140 @@ function buildCommercialFinanceCommissionDetailMatrix(entries = [], year) {
     return { monthKeys, rows, monthTotals };
 }
 
-function filterCommercialFinanceCommissionDetailRows(rows = [], saleYearMonth) {
-    if (!saleYearMonth) return rows;
-    return (rows || []).filter(row => String(row?.saleYearMonth || '') === saleYearMonth);
+function filterCommercialFinanceCommissionDetailRows(rows = [], referenceYearMonth) {
+    if (!referenceYearMonth) return rows;
+    return (rows || []).filter(row => {
+        const cell = row?.months?.[referenceYearMonth];
+        if (!cell) return false;
+        return Number(cell.commissionAmount || 0) > 0 || Number(cell.clientInstallmentAmount || 0) > 0;
+    });
+}
+
+function buildCommercialFinanceCommissionDetailMonthTotals(rows = [], monthKeys = []) {
+    const emptyMonthCell = () => ({
+        clientInstallmentAmount: 0,
+        commissionAmount: 0
+    });
+    const monthTotals = Object.fromEntries(monthKeys.map(monthKey => [monthKey, emptyMonthCell()]));
+
+    (rows || []).forEach(row => {
+        monthKeys.forEach(monthKey => {
+            const cell = row?.months?.[monthKey];
+            if (!cell) return;
+            monthTotals[monthKey].clientInstallmentAmount = roundCommercialFinanceMoney(
+                monthTotals[monthKey].clientInstallmentAmount + Number(cell.clientInstallmentAmount || 0)
+            );
+            monthTotals[monthKey].commissionAmount = roundCommercialFinanceMoney(
+                monthTotals[monthKey].commissionAmount + Number(cell.commissionAmount || 0)
+            );
+        });
+    });
+
+    return monthTotals;
+}
+
+function buildCommercialFinanceCommissionDetailColumns(monthKeys = []) {
+    const fixedColumns = [
+        {
+            key: 'saleDate',
+            label: 'Data Venda',
+            type: 'date',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 whitespace-nowrap normal-case',
+            cellClass: 'p-2 whitespace-nowrap text-xs text-slate-700',
+            getFilterValue: row => (
+                typeof formatGestaoDate === 'function'
+                    ? formatGestaoDate(row?.saleDate)
+                    : String(row?.saleDate || '')
+            ),
+            render: row => escapeHtml(
+                typeof formatGestaoDate === 'function'
+                    ? formatGestaoDate(row?.saleDate)
+                    : (row?.saleDate || '—')
+            )
+        },
+        {
+            key: 'orderCode',
+            label: 'Pedido',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 whitespace-nowrap normal-case',
+            cellClass: 'p-2 font-mono text-[11px] whitespace-nowrap text-slate-700',
+            render: row => escapeHtml(row?.orderCode || '—')
+        },
+        {
+            key: 'clientName',
+            label: 'Cliente',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 whitespace-nowrap normal-case',
+            cellClass: 'p-2 whitespace-nowrap text-xs text-slate-700',
+            render: row => escapeHtml(row?.clientName || '—')
+        },
+        {
+            key: 'consultantName',
+            label: 'Vendedor',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 whitespace-nowrap normal-case',
+            cellClass: 'p-2 whitespace-nowrap text-xs text-slate-700',
+            render: row => escapeHtml(row?.consultantName || '—')
+        },
+        {
+            key: 'entryType',
+            label: 'Tipo',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 whitespace-nowrap normal-case',
+            cellClass: 'p-2 whitespace-nowrap text-xs text-slate-700',
+            getSortValue: row => formatCommercialFinanceEntryTypeLabel(row?.entryType),
+            getFilterValue: row => formatCommercialFinanceEntryTypeLabel(row?.entryType),
+            render: row => escapeHtml(formatCommercialFinanceEntryTypeLabel(row?.entryType))
+        },
+        {
+            key: 'saleValue',
+            label: 'Valor venda',
+            type: 'number',
+            sortable: false,
+            filterable: false,
+            align: 'right',
+            thClass: 'p-2 whitespace-nowrap normal-case',
+            cellClass: 'p-2 text-right whitespace-nowrap text-xs text-slate-700',
+            render: row => escapeHtml(
+                typeof formatSaleValue === 'function'
+                    ? formatSaleValue(row?.saleValue)
+                    : String(row?.saleValue ?? '—')
+            )
+        },
+        {
+            key: 'ratePercent',
+            label: 'Alíquota',
+            type: 'number',
+            sortable: false,
+            filterable: false,
+            align: 'right',
+            thClass: 'p-2 whitespace-nowrap normal-case',
+            cellClass: 'p-2 text-right whitespace-nowrap text-xs text-slate-700',
+            render: row => escapeHtml(formatCommercialFinanceRatePercent(row?.ratePercent))
+        }
+    ];
+
+    return fixedColumns;
+}
+
+function appendCommercialFinanceCommissionDetailMonthColumns(columns = [], monthKeys = [], renderMonthCell) {
+    const monthColumns = (monthKeys || []).map(monthKey => ({
+        key: `month_${monthKey}`,
+        label: formatCommercialFinanceMonthShortName(monthKey.split('-')[1]),
+        sortable: false,
+        filterable: false,
+        align: 'right',
+        thClass: 'p-2 text-right font-semibold whitespace-nowrap normal-case',
+        cellClass: 'p-2 text-right align-top commercial-finance-detail-month-cell-td text-xs text-slate-700',
+        render: row => (typeof renderMonthCell === 'function'
+            ? renderMonthCell(row?.months?.[monthKey])
+            : '—')
+    }));
+    return [...columns, ...monthColumns];
 }

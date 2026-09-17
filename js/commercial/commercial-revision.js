@@ -641,7 +641,7 @@ async function openCommercialRevisionsHistoryView(approvalId, prefetched = null,
     const contextEl = document.getElementById('commercial-revisions-history-context');
     const contentEl = document.getElementById('commercial-revisions-history-content');
     if (contextEl) {
-        contextEl.textContent = `Projeto: ${getCommercialApprovalProjectName(approval) || '—'} · ${revisions.length} revisão${revisions.length === 1 ? '' : 'ões'}`;
+        contextEl.textContent = `Projeto: ${getCommercialApprovalProjectName(approval) || '—'} · ${revisions.length} ${revisions.length === 1 ? 'revisão' : 'revisões'}`;
     }
 
     if (contentEl) {

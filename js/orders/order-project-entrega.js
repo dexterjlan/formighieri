@@ -333,6 +333,14 @@ async function finalizeEntregaTecnicaForProjects(projectIds = [], options = {}) 
             });
         }
 
+        if (typeof processManagerDeliveryBonusAfterEntrega === 'function') {
+            try {
+                await processManagerDeliveryBonusAfterEntrega(orderId, normalizedProjectIds);
+            } catch (bonusError) {
+                console.warn('processManagerDeliveryBonusAfterEntrega:', bonusError);
+            }
+        }
+
         await refreshOrderProjectEntregaViews();
 
         if (typeof onSuccess === 'function') {

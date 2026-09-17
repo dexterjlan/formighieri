@@ -98,6 +98,10 @@ async function queryAppUserById(userId) {
 function applyImpersonatedUserUi() {
     updateUserImpersonationBanner();
 
+    if (typeof scheduleAppDocumentTitlePendenciasCountRefresh === 'function') {
+        scheduleAppDocumentTitlePendenciasCountRefresh(0);
+    }
+
     if (typeof refreshLoggedInUserDisplay === 'function') {
         refreshLoggedInUserDisplay();
         return;

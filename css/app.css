@@ -1065,8 +1065,8 @@ body {
     background: #f8fafc;
 }
 
-.gestao-commercial-finance-detail-matrix th:nth-child(-n+4),
-.gestao-commercial-finance-detail-matrix td:nth-child(-n+4) {
+.gestao-commercial-finance-detail-matrix th:nth-child(-n+5),
+.gestao-commercial-finance-detail-matrix td:nth-child(-n+5) {
     position: sticky;
     z-index: 1;
     background: inherit;
@@ -1096,12 +1096,29 @@ body {
     min-width: 7rem;
 }
 
-.gestao-commercial-finance-detail-matrix tbody td:nth-child(-n+4) {
+.gestao-commercial-finance-detail-matrix th:nth-child(5),
+.gestao-commercial-finance-detail-matrix td:nth-child(5) {
+    left: 25rem;
+    min-width: 6rem;
+}
+
+.gestao-commercial-finance-detail-matrix tbody td:nth-child(-n+5) {
     background: #fff;
 }
 
-.gestao-commercial-finance-detail-matrix tfoot td:nth-child(-n+4) {
+.gestao-commercial-finance-detail-matrix tfoot td:nth-child(-n+5) {
     background: #eef2ff;
+}
+
+.gestao-commercial-finance-detail-table-shell .interactive-table-toolbar {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgb(226 232 240);
+    background: #fff;
+}
+
+.gestao-commercial-finance-detail-table-shell .interactive-table-filter-input {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.5rem;
 }
 
 .commercial-finance-detail-month-cell {
