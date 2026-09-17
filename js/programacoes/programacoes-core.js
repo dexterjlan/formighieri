@@ -1,5 +1,6 @@
 const PROGRAMACOES_SECTIONS = [
-    { id: 'projects', label: 'Projetos' }
+    { id: 'projects', label: 'Projetos' },
+    { id: 'deliveries', label: 'Entregas' }
 ];
 
 let programacoesActiveSection = 'projects';
@@ -65,6 +66,13 @@ async function loadProgramacoesContent() {
     if (programacoesActiveSection === 'projects') {
         if (typeof loadProgramacoesProjects === 'function') {
             await loadProgramacoesProjects();
+        }
+        return;
+    }
+
+    if (programacoesActiveSection === 'deliveries') {
+        if (typeof loadProgramacoesDeliveries === 'function') {
+            await loadProgramacoesDeliveries();
         }
         return;
     }

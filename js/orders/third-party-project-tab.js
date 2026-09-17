@@ -66,6 +66,11 @@ function renderOrderThirdPartyProjectRow(project) {
             class="order-third-party-revisions-btn text-xs bg-white border border-violet-200 text-violet-700 hover:bg-violet-50 px-2.5 py-1 rounded-lg font-medium"
             data-third-party-project-id="${project.id}">
             Revisões
+        </button>`,
+        `<button type="button"
+            class="order-third-party-observation-btn text-xs bg-white border border-amber-200 text-amber-800 hover:bg-amber-50 px-2.5 py-1 rounded-lg font-medium"
+            data-third-party-project-id="${project.id}">
+            Observação
         </button>`
     ];
 
@@ -178,6 +183,14 @@ function renderOrderThirdPartyProjectsList(projects = []) {
     container.querySelectorAll('.order-third-party-revisions-btn').forEach(button => {
         button.addEventListener('click', () => {
             openThirdPartyRevisionsHistoryModal(Number(button.dataset.thirdPartyProjectId));
+        });
+    });
+
+    container.querySelectorAll('.order-third-party-observation-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            if (typeof openThirdPartyProjectObservationModal === 'function') {
+                openThirdPartyProjectObservationModal(Number(button.dataset.thirdPartyProjectId));
+            }
         });
     });
 }

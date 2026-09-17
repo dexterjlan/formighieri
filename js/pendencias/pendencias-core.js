@@ -559,6 +559,7 @@ function renderPendenciasInteractiveTableScreen(content, config = {}) {
         filteredEmptyMessage = 'Nenhum registro encontrado com os filtros aplicados.',
         minWidth = '760px',
         disableSort = false,
+        defaultSort = null,
         onBind
     } = config;
 
@@ -604,6 +605,7 @@ function renderPendenciasInteractiveTableScreen(content, config = {}) {
         filteredEmptyMessage,
         minWidth,
         disableSort,
+        defaultSort,
         onBind,
         getRowClass: config.getRowClass,
         getRowAttrs: config.getRowAttrs

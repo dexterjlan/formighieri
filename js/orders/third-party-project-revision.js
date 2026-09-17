@@ -255,6 +255,7 @@ async function fetchThirdPartyProjectById(thirdPartyProjectId) {
             projectCharacteristicId,
             thirdPartySubtypeId,
             filePath,
+            projectObservation,
             designerId,
             status,
             sentAt,

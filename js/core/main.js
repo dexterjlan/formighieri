@@ -98,6 +98,9 @@ function initAppEvents() {
     if (typeof bindThirdPartyProjectRevisionEvents === 'function') {
         bindThirdPartyProjectRevisionEvents();
     }
+    if (typeof bindThirdPartyProjectObservationEvents === 'function') {
+        bindThirdPartyProjectObservationEvents();
+    }
     bindPreliminaryDesignEvents();
     bindMeasurementEvents();
     bindOrderProjectMontagemEvents();

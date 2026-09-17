@@ -40,6 +40,7 @@ function getThirdPartyProjectMinimalSelect(options = {}) {
         projectCharacteristicId,
         thirdPartySubtypeId,
         filePath,
+        projectObservation,
         designerId,
         status,
         sentAt,
@@ -66,6 +67,7 @@ function getThirdPartyProjectSelectVariants(options = {}) {
             projectCharacteristicId,
             thirdPartySubtypeId,
             filePath,
+            projectObservation,
             designerId,
             status,
             sentAt,
@@ -787,4 +789,96 @@ function canActThirdPartyProjectAsProjetista(project) {
 function canAssignThirdPartyProjectDesigner() {
     return isAdmin() || (typeof canSeePendenciasGestorProjetosMenu === 'function'
         && canSeePendenciasGestorProjetosMenu());
+}
+
+function isThirdPartyProjectObservationColumnError(error) {
+    const message = String(error?.message || error || '').toLowerCase();
+    return message.includes('projectobservation')
+        || (message.includes('column') && message.includes('thirdpartyproject'));
+}
+
+function buildThirdPartyProjectCompraLookupKey(orderProjectId, thirdPartySubtypeId) {
+    const projectId = Number(orderProjectId);
+    const subtypeId = Number(thirdPartySubtypeId);
+    if (!projectId || !subtypeId) return '';
+    return `${projectId}:${subtypeId}`;
+}
+
+function formatThirdPartyProjectObservationPreview(text, maxLength = 120) {
+    const normalized = String(text || '').trim();
+    if (!normalized) return '—';
+    if (normalized.length <= maxLength) return normalized;
+    return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+async function fetchThirdPartyProjectsByOrderProjectIds(orderProjectIds = []) {
+    const ids = [...new Set((orderProjectIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!ids.length) return [];
+
+    return fetchThirdPartyProjectsWithFallback(
+        select => supabaseClient
+            .from('ThirdPartyProject')
+            .select(select)
+            .in('orderProjectId', ids),
+        {}
+    );
+}
+
+async function buildThirdPartyProjectObservationLookupByOrderProjectIds(orderProjectIds = []) {
+    try {
+        const projects = await fetchThirdPartyProjectsByOrderProjectIds(orderProjectIds);
+        const lookup = {};
+        projects.forEach(project => {
+            const key = buildThirdPartyProjectCompraLookupKey(
+                project.orderProjectId,
+                project.thirdPartySubtypeId
+            );
+            if (key) lookup[key] = project;
+        });
+        return lookup;
+    } catch (error) {
+        if (isThirdPartyProjectObservationColumnError(error)) {
+            console.warn('buildThirdPartyProjectObservationLookupByOrderProjectIds:', error);
+            return {};
+        }
+        throw error;
+    }
+}
+
+function resolveThirdPartyProjectObservationForCompra(compra, purchaseItem, lookup = {}) {
+    const subtypeId = purchaseItem?.thirdPartySubtype?.id || purchaseItem?.thirdPartySubtypeId;
+    const key = buildThirdPartyProjectCompraLookupKey(compra?.orderProjectId, subtypeId);
+    if (!key) return '';
+    return lookup[key]?.projectObservation || '';
+}
+
+async function saveThirdPartyProjectObservation(thirdPartyProjectId, projectObservation) {
+    if (!currentUser) {
+        throw new Error('Faça login para salvar a observação.');
+    }
+
+    const projectId = Number(thirdPartyProjectId);
+    if (!projectId) throw new Error('Projeto inválido.');
+
+    const normalized = String(projectObservation || '').trim();
+    const now = new Date().toISOString();
+    const { data, error } = await supabaseClient
+        .from('ThirdPartyProject')
+        .update({
+            projectObservation: normalized || null,
+            updatedAt: now,
+            updatedById: currentUser?.id || null
+        })
+        .eq('id', projectId)
+        .select('id, projectObservation, orderProjectId, thirdPartySubtypeId')
+        .single();
+
+    if (error) {
+        if (isThirdPartyProjectObservationColumnError(error)) {
+            throw new Error('Execute supabase/feats/third-party-project-observation.sql no SQL Editor do ambiente.');
+        }
+        throw error;
+    }
+
+    return data;
 }

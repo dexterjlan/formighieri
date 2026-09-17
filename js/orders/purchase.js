@@ -215,6 +215,21 @@ async function enrichCompraRecord(record) {
             const purchaseItem = await fetchImplementationPurchaseItemForCompra(record.implementationPurchaseItemId);
             enriched.listaPath = purchaseItem?.folderPath || '';
             enriched.subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
+            enriched.purchaseItem = purchaseItem;
+
+            if (record.orderProjectId && typeof buildThirdPartyProjectObservationLookupByOrderProjectIds === 'function') {
+                const lookup = await buildThirdPartyProjectObservationLookupByOrderProjectIds([record.orderProjectId]);
+                enriched.projectObservation = typeof resolveThirdPartyProjectObservationForCompra === 'function'
+                    ? resolveThirdPartyProjectObservationForCompra(record, purchaseItem, lookup)
+                    : '';
+                const lookupKey = typeof buildThirdPartyProjectCompraLookupKey === 'function'
+                    ? buildThirdPartyProjectCompraLookupKey(
+                        record.orderProjectId,
+                        purchaseItem?.thirdPartySubtype?.id
+                    )
+                    : '';
+                enriched.thirdPartyProjectId = lookupKey ? lookup[lookupKey]?.id || null : null;
+            }
         } catch (error) {
             console.warn('enrichCompraRecord purchase item:', error);
         }
@@ -494,6 +509,15 @@ function populateCompraForm(record) {
     document.getElementById('compra-modal-project-name').textContent = ` ${record?.projectName || '—'}`;
     document.getElementById('compra-modal-tipo').textContent = ` ${tipoLabel}`;
     document.getElementById('compra-modal-lista-path').textContent = ` ${record?.listaPath || '—'}`;
+
+    const projectObservationEl = document.getElementById('compra-modal-project-observation');
+    if (projectObservationEl) {
+        const projectObservation = String(record?.projectObservation || '').trim();
+        projectObservationEl.textContent = projectObservation || '—';
+        projectObservationEl.classList.toggle('text-slate-400', !projectObservation);
+        projectObservationEl.classList.toggle('text-slate-700', Boolean(projectObservation));
+    }
+
     populateCompraStatusSelect(record?.status || getDefaultCompraStatusName());
     document.getElementById('compra-modal-previsao-entrega').value = toCompraDateInputValue(record?.expectedDeliveryAt);
     document.getElementById('compra-modal-observacao').value = record?.note || '';
