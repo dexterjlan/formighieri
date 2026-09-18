@@ -12,8 +12,9 @@
  * Cole no projeto "Notificacoes" e republicar: Nova versão, Executar como: Eu.
  *
  * Pasta prod: FGP / {pedido} / {projeto} / {detalhamento|revisao|requisicao}
- * Pasta dev:  FGP-DEV / {pedido} / {projeto} / ...
- * Detalhamento: PDF/ZIP/RAR. Requisição e revisão: uma imagem por atividade.
+ * Descritivo:  FGP / {pedido} / descritivo (por pedido, sem pasta de projeto)
+ * Pasta dev:  FGP-DEV / ...
+ * Detalhamento: PDF/ZIP/RAR. Descritivo: só PDF. Requisição e revisão: imagem por atividade.
  */
 
 var FGP_DRIVE_ROOT_FOLDER_NAME = 'FGP';
@@ -25,7 +26,8 @@ var FGP_DRIVE_UPLOAD_CACHE_TTL = 3600;
 var FGP_DRIVE_FOLDER_KIND = {
   detailing: 'detalhamento',
   revision: 'revisao',
-  request: 'requisicao'
+  request: 'requisicao',
+  descriptive: 'descritivo'
 };
 
 function handleDrivePostRequest_(body) {
@@ -58,9 +60,16 @@ function isImageDriveFolderKind_(folderKind) {
   return folderKind === 'request' || folderKind === 'revision';
 }
 
+function isOrderLevelDriveFolderKind_(folderKind) {
+  return normalizeDriveFolderKind_(folderKind) === 'descriptive';
+}
+
 function isAllowedDriveUploadFileName_(fileName, folderKind) {
   var lower = String(fileName || '').toLowerCase();
   var kind = String(folderKind || 'detailing').toLowerCase();
+  if (kind === 'descriptive') {
+    return /\.pdf$/.test(lower);
+  }
   if (isImageDriveFolderKind_(kind)) {
     return /\.(jpe?g|png|webp|gif|heic|heif)$/.test(lower);
   }
@@ -120,19 +129,27 @@ function getOrCreateDriveRootFolder_(environment) {
 }
 
 function getDriveFolder_(folderKind, orderCode, projectName, environment) {
+  var kind = normalizeDriveFolderKind_(folderKind);
   var root = getOrCreateDriveRootFolder_(environment);
   var orderFolder = getOrCreateChildFolder_(root, orderCode);
+  if (isOrderLevelDriveFolderKind_(kind)) {
+    return getOrCreateChildFolder_(orderFolder, folderKindToFolderName_(kind));
+  }
   var projectFolder = getOrCreateChildFolder_(orderFolder, projectName);
-  return getOrCreateChildFolder_(projectFolder, folderKindToFolderName_(folderKind));
+  return getOrCreateChildFolder_(projectFolder, folderKindToFolderName_(kind));
 }
 
 function buildDrivePath_(folderKind, orderCode, projectName, environment) {
-  return [
+  var kind = normalizeDriveFolderKind_(folderKind);
+  var parts = [
     getDriveRootFolderName_(environment),
-    sanitizeDriveFolderName_(orderCode),
-    sanitizeDriveFolderName_(projectName),
-    folderKindToFolderName_(folderKind)
-  ].join(' / ');
+    sanitizeDriveFolderName_(orderCode)
+  ];
+  if (!isOrderLevelDriveFolderKind_(kind)) {
+    parts.push(sanitizeDriveFolderName_(projectName));
+  }
+  parts.push(folderKindToFolderName_(kind));
+  return parts.join(' / ');
 }
 
 function getResponseHeader_(response, name) {
@@ -340,9 +357,11 @@ function resolveDriveUploadContext_(body) {
   var folderKind = normalizeDriveFolderKind_(body.folderKind);
   if (!orderCode) throw new Error('Pedido é obrigatório');
   if (!fileName || !isAllowedDriveUploadFileName_(fileName, folderKind)) {
-    throw new Error(isImageDriveFolderKind_(folderKind)
-      ? 'Envie apenas uma imagem (JPEG, PNG, WebP, GIF ou HEIC)'
-      : 'Envie apenas PDF, ZIP ou RAR');
+    throw new Error(folderKind === 'descriptive'
+      ? 'Envie apenas PDF'
+      : (isImageDriveFolderKind_(folderKind)
+        ? 'Envie apenas uma imagem (JPEG, PNG, WebP, GIF ou HEIC)'
+        : 'Envie apenas PDF, ZIP ou RAR'));
   }
   var maxBytes = folderKind === 'request'
     ? (10 * 1024 * 1024)
@@ -355,7 +374,9 @@ function resolveDriveUploadContext_(body) {
         : 'Arquivo passa de 100 MB ou está vazio'));
   }
   var projectName = String(body.projectName || '').trim();
-  if (!projectName) throw new Error('Nome do projeto é obrigatório');
+  if (!isOrderLevelDriveFolderKind_(folderKind) && !projectName) {
+    throw new Error('Nome do projeto é obrigatório');
+  }
   return {
     folderKind: folderKind,
     orderCode: orderCode,

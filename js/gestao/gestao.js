@@ -1072,7 +1072,8 @@ async function saveGestaoProjectDraftAsync() {
             await createThirdPartyProjectsForOrderProjectCharacteristics({
                 orderProjectId: savedProjectId,
                 orderId: orderIdForThirdParty,
-                characteristicIds: thirdPartyCharacteristicChanges.addedThirdPartyCharacteristicIds
+                characteristicIds: thirdPartyCharacteristicChanges.addedThirdPartyCharacteristicIds,
+                designerId: savedProject?.designerId || project.designerId || null
             });
         }
 
@@ -1680,6 +1681,9 @@ function bindGestaoEvents() {
     }
     if (typeof bindGestaoPhasesEvents === 'function') {
         bindGestaoPhasesEvents();
+    }
+    if (typeof bindGestaoOrderDescriptiveEvents === 'function') {
+        bindGestaoOrderDescriptiveEvents();
     }
     if (typeof bindMontagemProgramacaoEvents === 'function') {
         bindMontagemProgramacaoEvents();

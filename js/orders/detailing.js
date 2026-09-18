@@ -296,6 +296,9 @@ async function openDetailingModal(orderProjectId, projectName = '') {
         await loadDetalhamentoHeaderContext();
         toggleModal('detalhamento-modal', true);
         await loadDetalhamentoRequestsList();
+        if (typeof loadDetailingDescriptiveSection === 'function') {
+            await loadDetailingDescriptiveSection();
+        }
         if (typeof loadDetailingDriveFiles === 'function') {
             loadDetailingDriveFiles();
         }
@@ -317,6 +320,9 @@ function closeDetailingModal() {
     detalhamentoRequestsCache = [];
     if (typeof detailingDriveContext !== 'undefined') {
         detailingDriveContext = null;
+    }
+    if (typeof resetDetailingDescriptiveSection === 'function') {
+        resetDetailingDescriptiveSection();
     }
     setDetalhamentoModalLoading(false);
 }

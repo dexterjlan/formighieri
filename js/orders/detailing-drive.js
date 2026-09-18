@@ -1,5 +1,85 @@
 let detailingDriveContext = null;
 let detailingDriveFilesCache = [];
+let detailingDescriptiveFileCache = null;
+
+async function resolveDetailingDescriptiveOrderId() {
+    if (typeof activeDetalhamentoOrderId !== 'undefined' && activeDetalhamentoOrderId) {
+        return Number(activeDetalhamentoOrderId);
+    }
+
+    const projectId = Number(activeDetalhamentoOrderProjectId);
+    if (!projectId) return null;
+
+    const { data, error } = await supabaseClient
+        .from('OrderProject')
+        .select('orderId')
+        .eq('id', projectId)
+        .maybeSingle();
+
+    if (error) {
+        console.warn('resolveDetailingDescriptiveOrderId:', error);
+        return null;
+    }
+
+    return Number(data?.orderId) || null;
+}
+
+function resetDetailingDescriptiveSection() {
+    detailingDescriptiveFileCache = null;
+    const section = document.getElementById('detalhamento-descriptive-section');
+    section?.classList.add('hidden');
+}
+
+async function loadDetailingDescriptiveSection() {
+    const section = document.getElementById('detalhamento-descriptive-section');
+    const nameEl = document.getElementById('detalhamento-descriptive-name');
+    const metaEl = document.getElementById('detalhamento-descriptive-meta');
+    if (!section) return;
+
+    detailingDescriptiveFileCache = null;
+    section.classList.add('hidden');
+
+    const orderId = await resolveDetailingDescriptiveOrderId();
+    if (!orderId || typeof fetchSalesOrderDescriptiveDriveFile !== 'function') {
+        return;
+    }
+
+    try {
+        const file = await fetchSalesOrderDescriptiveDriveFile(orderId);
+        if (!file?.id) return;
+
+        detailingDescriptiveFileCache = file;
+        section.classList.remove('hidden');
+        if (nameEl) {
+            nameEl.textContent = file.fileName || 'Descritivo.pdf';
+            nameEl.title = file.fileName || 'Descritivo.pdf';
+        }
+        if (metaEl) {
+            const size = typeof formatDriveFileSize === 'function'
+                ? formatDriveFileSize(file.fileSizeBytes)
+                : '';
+            const updated = file.updatedAt && typeof formatDetailingDriveDate === 'function'
+                ? formatDetailingDriveDate(file.updatedAt)
+                : '';
+            metaEl.textContent = 'Mesmo arquivo para todos os projetos deste pedido.'
+                + (size || updated ? ` ${[size, updated].filter(Boolean).join(' · ')}` : '');
+        }
+    } catch (error) {
+        console.warn('loadDetailingDescriptiveSection:', error);
+    }
+}
+
+function downloadDetailingDescriptiveFile() {
+    const file = detailingDescriptiveFileCache;
+    const url = typeof resolveDriveFileDownloadUrl === 'function'
+        ? resolveDriveFileDownloadUrl(file)
+        : file?.url;
+    if (!url) {
+        alertAppDialog('Não foi possível gerar o link de download.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
 
 function formatDetailingDriveDate(isoDate) {
     if (!isoDate || typeof formatDate !== 'function') return '';
@@ -211,6 +291,7 @@ async function uploadDetailingDriveFiles(fileList) {
 }
 
 function bindDetailingDriveEvents() {
+    document.getElementById('btn-detalhamento-descriptive-download')?.addEventListener('click', downloadDetailingDescriptiveFile);
     document.getElementById('btn-detalhamento-drive-refresh')?.addEventListener('click', () => {
         loadDetailingDriveFiles();
     });
@@ -230,6 +311,8 @@ function bindDetailingDriveEvents() {
 }
 
 window.loadDetailingDriveFiles = loadDetailingDriveFiles;
+window.loadDetailingDescriptiveSection = loadDetailingDescriptiveSection;
+window.resetDetailingDescriptiveSection = resetDetailingDescriptiveSection;
 window.bindDetailingDriveEvents = bindDetailingDriveEvents;
 window.resolveDetailingDriveContextForRecord = resolveDetailingDriveContextForRecord;
 window.uploadFilesToDetailingDrive = uploadFilesToDetailingDrive;

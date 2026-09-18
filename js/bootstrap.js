@@ -69,6 +69,7 @@ const SCRIPTS = [
     'js/gestao/gestao-project-view.js',
     'js/gestao/gestao-phases.js',
     'js/gestao/gestao-orders.js',
+    'js/gestao/gestao-order-descriptive.js',
     'js/gestao/gestao-import.js',
     'js/gestao/gestao-kanban.js',
     'js/gestao/gestao-order-schedule.js',

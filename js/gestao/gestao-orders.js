@@ -27,6 +27,9 @@ async function openGestaoCreateOrderForm() {
     if (typeof fillArchitectPickerField === 'function') {
         await fillArchitectPickerField('gestao-ord-architect', null);
     }
+    if (typeof resetGestaoOrderDescriptiveSection === 'function') {
+        resetGestaoOrderDescriptiveSection();
+    }
     showGestaoPedidoFormPanel();
 }
 
@@ -85,6 +88,9 @@ async function openGestaoEditOrderForm(orderId) {
             order.architectId || order.architect?.id || null,
             order.architect?.name || ''
         );
+    }
+    if (typeof refreshGestaoOrderDescriptiveSection === 'function') {
+        await refreshGestaoOrderDescriptiveSection();
     }
     showGestaoPedidoFormPanel();
 }

@@ -1,6 +1,5 @@
 const PROJECT_CHARACTERISTIC_NONE_VALUE = 'none';
-const GESTAO_THIRD_PARTY_MAX_PROJECT_STATUS_NAME = 'Em Produção';
-const GESTAO_THIRD_PARTY_IMPLANTACAO_STATUS_ABERTO = 'Aberto';
+const GESTAO_THIRD_PARTY_IMPLANTACAO_STATUS_ENCERRADO = 'Encerrado';
 
 let projectCharacteristicsCache = [];
 let pendingConferenceCharacteristicsConfirm = null;
@@ -260,59 +259,25 @@ function getProjectCharacteristicNameById(characteristicId, characteristics = pr
     return match?.name || `Característica #${characteristicId}`;
 }
 
-async function resolveGestaoProjectStatusForThirdPartyCheck(project = {}) {
-    if (project.projectStatus?.name) return project.projectStatus;
-
-    const statusId = Number(project.statusId);
-    if (!statusId) return null;
-
-    const { data, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id, name, sortOrder')
-        .eq('id', statusId)
-        .maybeSingle();
-
-    if (error) {
-        console.warn('resolveGestaoProjectStatusForThirdPartyCheck:', error);
-        return null;
-    }
-
-    return data;
-}
-
-async function isGestaoProjectStatusWithinEmProducao(project = {}) {
-    const status = await resolveGestaoProjectStatusForThirdPartyCheck(project);
-    if (!status?.name) return true;
-
-    const { data: emProducaoStatus } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id, name, sortOrder')
-        .eq('name', GESTAO_THIRD_PARTY_MAX_PROJECT_STATUS_NAME)
-        .maybeSingle();
-
-    if (emProducaoStatus?.sortOrder != null && status.sortOrder != null) {
-        return Number(status.sortOrder) <= Number(emProducaoStatus.sortOrder);
-    }
-
-    const blockedStatusNames = new Set([
-        'Montagem Interna',
-        'Expedição',
-        'Projeto Substituído'
-    ]);
-
-    return !blockedStatusNames.has(status.name);
-}
-
-async function isGestaoImplantacaoOpenForProject(orderProjectId) {
+async function canAddThirdPartyCharacteristicsForImplantacao(orderProjectId) {
     const normalizedProjectId = Number(orderProjectId);
     if (!normalizedProjectId || typeof fetchImplantacaoByOrderProjectId !== 'function') {
-        return true;
+        return { allowed: true };
     }
 
     const implantacao = await fetchImplantacaoByOrderProjectId(normalizedProjectId);
-    if (!implantacao) return true;
+    if (!implantacao) {
+        return { allowed: true };
+    }
 
-    return implantacao.status === GESTAO_THIRD_PARTY_IMPLANTACAO_STATUS_ABERTO;
+    if (implantacao.status === GESTAO_THIRD_PARTY_IMPLANTACAO_STATUS_ENCERRADO) {
+        return {
+            allowed: false,
+            reason: 'Não é possível adicionar características com projeto de terceiros porque a implantação do projeto está encerrada.'
+        };
+    }
+
+    return { allowed: true };
 }
 
 async function canAddThirdPartyCharacteristicsInGestao(project = {}, characteristicIds = []) {
@@ -327,21 +292,12 @@ async function canAddThirdPartyCharacteristicsInGestao(project = {}, characteris
         return { allowed: true, addedIds: [] };
     }
 
-    const statusAllowed = await isGestaoProjectStatusWithinEmProducao(project);
-    if (!statusAllowed) {
+    const implantacaoCheck = await canAddThirdPartyCharacteristicsForImplantacao(project.id);
+    if (!implantacaoCheck.allowed) {
         return {
             allowed: false,
             addedIds,
-            reason: 'Não é possível adicionar características com projeto de terceiros porque o projeto já está além de "Em Produção".'
-        };
-    }
-
-    const implantacaoOpen = await isGestaoImplantacaoOpenForProject(project.id);
-    if (!implantacaoOpen) {
-        return {
-            allowed: false,
-            addedIds,
-            reason: 'Não é possível adicionar características com projeto de terceiros porque a implantação do projeto não está aberta.'
+            reason: implantacaoCheck.reason
         };
     }
 

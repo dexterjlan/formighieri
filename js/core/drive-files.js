@@ -4,20 +4,23 @@ const DRIVE_FILE_DIRECT_MAX_BYTES = 8 * 1024 * 1024;
 const DRIVE_FILE_FOLDER_KIND = {
     DETAILING: 'detailing',
     REVISION: 'revision',
-    REQUEST: 'request'
+    REQUEST: 'request',
+    DESCRIPTIVE: 'descriptive'
 };
 
 const DRIVE_FILE_ENTITY_TYPE = {
     DETAILING: 'Detailing',
     REVISION_ACTIVITY: 'RevisionActivity',
     ORDER_REQUEST: 'OrderRequest',
-    ORDER_REQUEST_ACTIVITY: 'OrderRequestActivity'
+    ORDER_REQUEST_ACTIVITY: 'OrderRequestActivity',
+    SALES_ORDER: 'SalesOrder'
 };
 
 const DRIVE_FILE_FOLDER_NAMES = {
     [DRIVE_FILE_FOLDER_KIND.DETAILING]: 'detalhamento',
     [DRIVE_FILE_FOLDER_KIND.REVISION]: 'revisao',
-    [DRIVE_FILE_FOLDER_KIND.REQUEST]: 'requisicao'
+    [DRIVE_FILE_FOLDER_KIND.REQUEST]: 'requisicao',
+    [DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE]: 'descritivo'
 };
 
 const DRIVE_FILE_MAX_BYTES = 100 * 1024 * 1024;
@@ -69,6 +72,9 @@ function isImageDriveFolderKind(folderKind) {
 }
 
 function allowedDriveExtensionsForFolderKind(folderKind) {
+    if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE) {
+        return ['pdf'];
+    }
     if (isImageDriveFolderKind(folderKind)) {
         return DRIVE_FILE_IMAGE_EXTENSIONS;
     }
@@ -115,12 +121,57 @@ function sanitizeDriveUploadFileName(fileName, folderKind = DRIVE_FILE_FOLDER_KI
     return `${safe}.bin`;
 }
 
+const DESCRIPTIVE_DRIVE_FILE_NAME_MAX_LENGTH = 80;
+
+function stripDiacriticsForDriveFileName(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+}
+
+function sanitizeDescriptiveClientFileSlug(clientName) {
+    return stripDiacriticsForDriveFileName(clientName)
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^\w.\-]+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+}
+
+function buildDescriptiveDriveFileName(orderCode, clientName, maxLength = DESCRIPTIVE_DRIVE_FILE_NAME_MAX_LENGTH) {
+    const ext = '.pdf';
+    const order = String(orderCode || '').trim().replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_') || 'Pedido';
+    let client = sanitizeDescriptiveClientFileSlug(clientName) || 'Cliente';
+
+    const assemble = (ord, cli) => `Descritivo-${ord}-${cli}${ext}`;
+
+    let ord = order;
+    let cli = client;
+    let name = assemble(ord, cli);
+
+    while (name.length > maxLength && cli.length > 1) {
+        cli = cli.slice(0, -1);
+        name = assemble(ord, cli);
+    }
+    while (name.length > maxLength && ord.length > 1) {
+        ord = ord.slice(0, -1);
+        name = assemble(ord, cli);
+    }
+    if (name.length > maxLength) {
+        name = `${name.slice(0, maxLength - ext.length)}${ext}`;
+    }
+    return name;
+}
+
 function validateDriveUploadFiles(files, folderKind = DRIVE_FILE_FOLDER_KIND.DETAILING) {
     const list = Array.from(files || []);
     const allowed = allowedDriveExtensionsForFolderKind(folderKind);
     const maxBytes = maxDriveUploadBytesForFolderKind(folderKind);
     const invalidType = list.find(file => !allowed.includes(getDriveFileExtension(file?.name)));
     if (invalidType) {
+        if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE) {
+            return `O arquivo "${invalidType.name}" não é permitido. Envie apenas PDF.`;
+        }
         if (isImageDriveFolderKind(folderKind)) {
             return `O arquivo "${invalidType.name}" não é permitido. Use uma imagem (JPEG, PNG, WebP, GIF ou HEIC).`;
         }
@@ -577,6 +628,7 @@ window.DRIVE_FILE_INPUT_ACCEPT = DRIVE_FILE_INPUT_ACCEPT;
 window.DRIVE_FILE_IMAGE_INPUT_ACCEPT = DRIVE_FILE_IMAGE_INPUT_ACCEPT;
 window.isGoogleDriveAppsScriptConfigured = isGoogleDriveAppsScriptConfigured;
 window.buildDriveFolderPath = buildDriveFolderPath;
+window.buildDescriptiveDriveFileName = buildDescriptiveDriveFileName;
 window.formatDriveFileSize = formatDriveFileSize;
 window.validateDriveUploadFiles = validateDriveUploadFiles;
 window.fetchDriveFiles = fetchDriveFiles;
@@ -587,3 +639,17 @@ window.resolveDriveFilePreviewUrl = resolveDriveFilePreviewUrl;
 window.driveFilePreviewImgAttrs = driveFilePreviewImgAttrs;
 window.saveDriveFileUpload = saveDriveFileUpload;
 window.deleteDriveFileRecord = deleteDriveFileRecord;
+window.findDriveFileForEntity = findDriveFileForEntity;
+
+async function fetchSalesOrderDescriptiveDriveFile(orderId) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return null;
+
+    return findDriveFileForEntity({
+        entityType: DRIVE_FILE_ENTITY_TYPE.SALES_ORDER,
+        entityId: normalizedOrderId,
+        folderKind: DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE
+    });
+}
+
+window.fetchSalesOrderDescriptiveDriveFile = fetchSalesOrderDescriptiveDriveFile;

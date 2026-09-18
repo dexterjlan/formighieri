@@ -269,6 +269,31 @@ async function fetchThirdPartyProjectStatusHistory(thirdPartyProjectId) {
     }));
 }
 
+async function fetchOrderProjectDesignerIdsByProjectIds(orderProjectIds = []) {
+    const ids = [...new Set((orderProjectIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!ids.length) return {};
+
+    const { data, error } = await supabaseClient
+        .from('OrderProject')
+        .select('id, designerId')
+        .in('id', ids);
+
+    if (error) {
+        console.warn('fetchOrderProjectDesignerIdsByProjectIds:', error);
+        return {};
+    }
+
+    return Object.fromEntries(
+        (data || []).map(row => [Number(row.id), Number(row.designerId) || null])
+    );
+}
+
+function buildThirdPartyProjectInsertRow(baseRow, designerId = null) {
+    const normalizedDesignerId = Number(designerId) || null;
+    if (!normalizedDesignerId) return baseRow;
+    return { ...baseRow, designerId: normalizedDesignerId };
+}
+
 async function fetchThirdPartySubtypesForCharacteristics(characteristicIds = []) {
     const uniqueIds = [...new Set(characteristicIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return [];
@@ -324,10 +349,12 @@ async function createThirdPartyProjectsForConferenceApproval(conference) {
         existingProjects.map(project => `${project.orderProjectId}-${project.thirdPartySubtypeId}`)
     );
 
+    const designerIdsByProjectId = await fetchOrderProjectDesignerIdsByProjectIds(orderProjectIds);
     const now = new Date().toISOString();
     const rowsToInsert = [];
 
     orderProjectIds.forEach(orderProjectId => {
+        const designerId = designerIdsByProjectId[Number(orderProjectId)] || null;
         (characteristicsMap.get(orderProjectId) || []).forEach(row => {
             const characteristicId = Number(row.characteristicId || row.characteristic?.id);
             const subtype = subtypeByCharacteristicId.get(characteristicId);
@@ -336,7 +363,7 @@ async function createThirdPartyProjectsForConferenceApproval(conference) {
             const key = `${orderProjectId}-${subtype.id}`;
             if (existingKeys.has(key)) return;
 
-            rowsToInsert.push({
+            rowsToInsert.push(buildThirdPartyProjectInsertRow({
                 orderId,
                 orderProjectId,
                 projectCharacteristicId: characteristicId,
@@ -346,7 +373,7 @@ async function createThirdPartyProjectsForConferenceApproval(conference) {
                 createdById: currentUser?.id || null,
                 updatedAt: now,
                 updatedById: currentUser?.id || null
-            });
+            }, designerId));
             existingKeys.add(key);
         });
     });
@@ -391,7 +418,8 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
     const {
         orderProjectId,
         orderId,
-        characteristicIds = []
+        characteristicIds = [],
+        designerId: designerIdOption = null
     } = options;
 
     const normalizedProjectId = Number(orderProjectId);
@@ -400,6 +428,12 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
 
     if (!normalizedProjectId || !normalizedOrderId || !uniqueCharacteristicIds.length) {
         return { created: [], existing: [] };
+    }
+
+    let designerId = Number(designerIdOption) || null;
+    if (!designerId) {
+        const designerIdsByProjectId = await fetchOrderProjectDesignerIdsByProjectIds([normalizedProjectId]);
+        designerId = designerIdsByProjectId[normalizedProjectId] || null;
     }
 
     const subtypes = await fetchThirdPartySubtypesForCharacteristics(uniqueCharacteristicIds);
@@ -426,7 +460,7 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
         const key = `${normalizedProjectId}-${subtype.id}`;
         if (existingKeys.has(key)) return;
 
-        rowsToInsert.push({
+        rowsToInsert.push(buildThirdPartyProjectInsertRow({
             orderId: normalizedOrderId,
             orderProjectId: normalizedProjectId,
             projectCharacteristicId: characteristicId,
@@ -436,7 +470,7 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
             createdById: currentUser?.id || null,
             updatedAt: now,
             updatedById: currentUser?.id || null
-        });
+        }, designerId));
         existingKeys.add(key);
     });
 
