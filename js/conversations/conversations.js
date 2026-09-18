@@ -752,8 +752,16 @@ function buildRequestResponseSection(conv, activities = []) {
             `);
         }
         const responseDate = getResponseDisplayDate(conv);
-        if (responseDate) {
-            sections.push(`<p class="text-[10px] text-slate-500">Respondido em: ${formatDate(responseDate)}</p>`);
+        if (conv.createdAt || responseDate) {
+            const metaHtml = [
+                conv.createdAt
+                    ? `<p class="text-[10px] text-slate-500">Criado em: ${formatDate(conv.createdAt)}</p>`
+                    : '',
+                responseDate
+                    ? `<p class="text-[10px] text-slate-500">Respondido em: ${formatDate(responseDate)}</p>`
+                    : ''
+            ].filter(Boolean).join('');
+            sections.push(`<div class="space-y-0.5 pt-1">${metaHtml}</div>`);
         }
         return sections.join('') || '<p class="text-xs text-slate-400 italic">Requisição encerrada.</p>';
     }
@@ -902,7 +910,7 @@ async function loadConversations(orderId) {
                 : 'Solicitação do Projetista';
 
             const projectLabel = c.orderProject?.name
-                ? `<div class="text-xs font-medium text-violet-700">🏠 Projeto: ${c.orderProject.name}${c.orderProject.environmentType?.name ? ` · ${c.orderProject.environmentType.name}` : ''}</div>`
+                ? `<div class="text-xs font-medium text-violet-700">🏠 Projeto: ${escapeHtml(c.orderProject.name)}</div>`
                 : '';
 
             div.innerHTML = `
