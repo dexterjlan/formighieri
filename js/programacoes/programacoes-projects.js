@@ -52,12 +52,6 @@ function getProgramacoesLockedDesigner(user = currentUser) {
     return user;
 }
 
-function filterProgramacoesQueueForViewer(queueRows = []) {
-    const designer = getProgramacoesLockedDesigner();
-    if (!designer?.id) return queueRows;
-    return queueRows.filter(row => Number(row.orderProject?.designerId) === Number(designer.id));
-}
-
 function formatProgramacoesProductionMonthLabel(productionMonth) {
     if (typeof toProgramacaoProducaoMonthInputValue === 'function'
         && typeof formatProgramacaoProducaoMonthLabel === 'function') {
@@ -200,7 +194,6 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
 
     const canReorder = typeof canReorderProgramacoesProjects === 'function'
         && canReorderProgramacoesProjects();
-    const lockedDesigner = getProgramacoesLockedDesigner();
     const maxSequence = queueRows.reduce((max, row) => Math.max(max, Number(row.sequence) || 0), 0);
 
     const rows = queueRows.map(item => {
@@ -296,11 +289,7 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         {
             key: 'designerName',
             label: 'Projetista',
-            cellClass: 'p-3 text-xs text-slate-700',
-            ...(lockedDesigner ? {
-                filterLocked: true,
-                lockedFilterValue: lockedDesigner.name || ''
-            } : {})
+            cellClass: 'p-3 text-xs text-slate-700'
         },
         {
             key: 'clientDeliveryLabel',
@@ -365,9 +354,7 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
 
     renderPendenciasInteractiveTableScreen(content, {
         title: 'Projetos',
-        subtitle: lockedDesigner
-            ? 'Seus projetos na fila para produção. Quanto mais acima, maior a prioridade.'
-            : 'Prioridade do time de projetos para entregar à produção. Quanto mais acima, maior a prioridade.',
+        subtitle: 'Prioridade do time de projetos para entregar à produção. Quanto mais acima, maior a prioridade.',
         refreshButtonId: 'btn-programacoes-refresh-projects',
         headerActionsHtml: typeof PROGRAMACOES_FULLSCREEN_BUTTON_HTML === 'string'
             ? PROGRAMACOES_FULLSCREEN_BUTTON_HTML
@@ -378,9 +365,7 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         columns,
         disableSort: true,
         minWidth: '76rem',
-        emptyMessage: lockedDesigner
-            ? 'Nenhum projeto seu na fila de programação.'
-            : 'Nenhum projeto na fila de programação.',
+        emptyMessage: 'Nenhum projeto na fila de programação.',
         onBind(tbody) {
             if (typeof syncProgramacoesFullscreenButton === 'function') {
                 syncProgramacoesFullscreenButton();
@@ -488,7 +473,7 @@ async function loadProgramacoesProjects(options = {}) {
         return;
     }
 
-    const queueRows = filterProgramacoesQueueForViewer(result.data || []);
+    const queueRows = result.data || [];
     const projects = queueRows.map(row => row.orderProject);
     const phasesByOrderId = typeof fetchPhasesByOrderIdForPendenciasProjects === 'function'
         ? await fetchPhasesByOrderIdForPendenciasProjects(projects)

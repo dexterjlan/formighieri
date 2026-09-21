@@ -1619,6 +1619,16 @@ async function reloadActivePendenciasGestorFabricaList() {
 
     if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'em-montagem') {
         await loadPendenciasEmMontagem();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'expedicao') {
+        await loadPendenciasExpedicao();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'montagem-externa') {
+        await loadPendenciasMontagemExterna();
     }
 }
 

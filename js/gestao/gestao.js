@@ -802,7 +802,9 @@ function renderGestaoProjectsSummaryList() {
     gestaoOrderProjectsDraft.forEach((project, index) => {
         const statusName = getGestaoProjectStatusName(project);
         const statusClass = getOrderProjectStatusBadgeClass(statusName);
-        const saleValueDisplay = formatSaleValue(project.saleValue);
+        const saleValueDisplay = typeof formatGestaoDisplaySaleValue === 'function'
+            ? formatGestaoDisplaySaleValue(project.saleValue)
+            : formatSaleValue(project.saleValue);
         const phaseDeliveryLabel = isPhasedOrder && typeof getGestaoProjectPhaseDeliveryDisplay === 'function'
             ? getGestaoProjectPhaseDeliveryDisplay(project)
             : '—';
@@ -1392,6 +1394,9 @@ function showGestao() {
 }
 
 function bindGestaoEvents() {
+    if (typeof bindGestaoSaleValueVisibilityToggles === 'function') {
+        bindGestaoSaleValueVisibilityToggles();
+    }
     document.getElementById('btn-gestao')?.addEventListener('click', showGestao);
     document.getElementById('btn-gestao-create-order')?.addEventListener('click', openGestaoCreateOrderForm);
     document.getElementById('btn-gestao-back-list')?.addEventListener('click', async () => {

@@ -336,7 +336,9 @@ function getPendenciasSidebarSections() {
             visible: canSeePendenciasGestorFabricaMenu(),
             items: [
                 { id: 'aguardando-montagem-interna', label: 'Aguar. Mont. Int.' },
-                { id: 'em-montagem', label: 'Em Montagem' }
+                { id: 'em-montagem', label: 'Em Montagem' },
+                { id: 'expedicao', label: 'Expedição' },
+                { id: 'montagem-externa', label: 'Montagem Externa' }
             ]
         },
         {
@@ -656,8 +658,12 @@ async function getPendenciasStatusIdsByNames(names) {
     return ids;
 }
 
+function canSeePendenciasExpedicaoMontagemExternaItems() {
+    return canSeePendenciasGestorProjetosMenu() || canSeePendenciasGestorFabricaMenu();
+}
+
 function canActPendenciasGestorProjetosMontagemExterna() {
-    return isAdmin() || isGestorProjetos();
+    return isAdmin() || isGestorProjetos() || canActPendenciasGestorFabrica();
 }
 
 async function fetchPhasesByOrderIdForPendenciasProjects(projects = []) {
@@ -1007,6 +1013,16 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'em-montagem') {
         loadPendenciasEmMontagem();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'expedicao') {
+        loadPendenciasExpedicao();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'montagem-externa') {
+        loadPendenciasMontagemExterna();
         return;
     }
 

@@ -4,7 +4,7 @@ async function loadPendenciasMontagemExterna() {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando projetos...</p>';
     }
 
-    if (!canSeePendenciasGestorProjetosMenu()) {
+    if (!canSeePendenciasExpedicaoMontagemExternaItems()) {
         renderPendenciasPlaceholder('Montagem Externa', 'Sem permissão para visualizar esta pendência.');
         return;
     }

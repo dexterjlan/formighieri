@@ -37,7 +37,9 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
     },
     'gestor-fabrica': {
         'aguardando-montagem-interna': 'Projetos em produção aguardando início da montagem interna.',
-        'em-montagem': 'Projetos em montagem interna aguardando finalização.'
+        'em-montagem': 'Projetos em montagem interna aguardando finalização.',
+        expedicao: 'Projetos em expedição aguardando início da montagem externa.',
+        'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
     },
     compras: {
         'enviados-compras': 'Solicitações de compra em aberto geradas pela implantação.'
@@ -211,6 +213,14 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             }
             case 'gestor-fabrica:em-montagem': {
                 const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_INTERNA);
+                return error ? null : count;
+            }
+            case 'gestor-fabrica:expedicao': {
+                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EXPEDICAO);
+                return error ? null : count;
+            }
+            case 'gestor-fabrica:montagem-externa': {
+                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);
                 return error ? null : count;
             }
             case 'compras:enviados-compras': {

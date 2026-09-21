@@ -26,6 +26,14 @@ const GESTAO_PIE_PALETTE = [
     '#84cc16', '#0ea5e9', '#7c3aed'
 ];
 
+function formatGestaoRelatorioSaleValue(value) {
+    if (typeof formatGestaoDisplaySaleValue === 'function') {
+        return formatGestaoDisplaySaleValue(value);
+    }
+    if (typeof formatSaleValue === 'function') return formatSaleValue(value);
+    return value ?? '—';
+}
+
 function getGestaoRelatorioProjectLabel(project, options = {}) {
     const includeCode = options.includeProjectCode !== false;
     const code = includeCode && project.projectCode ? `${project.projectCode} · ` : '';
@@ -565,9 +573,7 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
     const statusClass = typeof getOrderProjectStatusBadgeClass === 'function'
         ? getOrderProjectStatusBadgeClass(statusName)
         : 'bg-slate-100 text-slate-700';
-    const saleValue = typeof formatSaleValue === 'function'
-        ? formatSaleValue(getProjectEffectiveSaleValue(project))
-        : (getProjectEffectiveSaleValue(project) ?? '—');
+    const saleValue = formatGestaoRelatorioSaleValue(getProjectEffectiveSaleValue(project));
     const labelPrefix = nested ? '↳ ' : '';
     const cellPadding = nested ? 'p-2 pl-8' : 'p-2 pl-6';
     const rowClass = nested
@@ -606,9 +612,7 @@ function renderGestaoRelatorioPedidosPendentesOrderRow(orderGroup, options = {})
     const deliveryDate = typeof formatGestaoDate === 'function'
         ? formatGestaoDate(orderGroup.clientDeliveryDate)
         : (orderGroup.clientDeliveryDate || '—');
-    const totalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(orderGroup.totalSaleValue)
-        : orderGroup.totalSaleValue;
+    const totalLabel = formatGestaoRelatorioSaleValue(orderGroup.totalSaleValue);
     const projectCount = orderGroup.projectCount ?? (orderGroup.projects || []).length;
     const projectRows = renderGestaoRelatorioPedidosPendentesProjectTreeRows(orderGroup.projectTree, options);
 
@@ -640,9 +644,7 @@ function getGestaoRelatorioPedidosPendentesClientDeliveryDatesLabel(clientGroup)
 }
 
 function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup, options = {}) {
-    const totalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(clientGroup.totalSaleValue)
-        : clientGroup.totalSaleValue;
+    const totalLabel = formatGestaoRelatorioSaleValue(clientGroup.totalSaleValue);
     const orderDatesLabel = getGestaoRelatorioPedidosPendentesClientDeliveryDatesLabel(clientGroup);
 
     return `
@@ -684,9 +686,7 @@ function renderGestaoRelatorioPedidosPendentesGroups(groups, options = {}) {
     }
 
     return groups.map(monthGroup => {
-        const totalLabel = typeof formatSaleValue === 'function'
-            ? formatSaleValue(monthGroup.totalSaleValue)
-            : monthGroup.totalSaleValue;
+        const totalLabel = formatGestaoRelatorioSaleValue(monthGroup.totalSaleValue);
 
         return `
             <div class="collapsible-list-card border border-indigo-100 rounded-lg overflow-hidden bg-indigo-50/20">
@@ -753,9 +753,7 @@ function getGestaoRelatorioFechamentoProducaoTotals(projects) {
 
 function renderGestaoRelatorioFechamentoProducaoTotalsLine(totals = {}) {
     const projectCount = Number(totals.projectCount) || 0;
-    const totalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(totals.totalSaleValue || 0)
-        : (totals.totalSaleValue || 0);
+    const totalLabel = formatGestaoRelatorioSaleValue(totals.totalSaleValue || 0);
 
     return `
         <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 mb-2 rounded-lg border border-emerald-100 bg-emerald-50/60">
@@ -866,9 +864,7 @@ function renderGestaoRelatorioFechamentoProducaoProjectRow(project, options = {}
     const fimMontagem = typeof formatGestaoDate === 'function'
         ? formatGestaoDate(project.internalAssemblyEndDate)
         : (project.internalAssemblyEndDate || '—');
-    const saleValue = typeof formatSaleValue === 'function'
-        ? formatSaleValue(getProjectEffectiveSaleValue(project))
-        : (getProjectEffectiveSaleValue(project) ?? '—');
+    const saleValue = formatGestaoRelatorioSaleValue(getProjectEffectiveSaleValue(project));
 
     return `
         <tr class="border-b border-slate-100 last:border-0">
@@ -881,9 +877,7 @@ function renderGestaoRelatorioFechamentoProducaoProjectRow(project, options = {}
 }
 
 function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options = {}) {
-    const totalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(clientGroup.totalSaleValue)
-        : clientGroup.totalSaleValue;
+    const totalLabel = formatGestaoRelatorioSaleValue(clientGroup.totalSaleValue);
 
     return `
         <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -921,9 +915,7 @@ function renderGestaoRelatorioFechamentoProducaoGroups(groups) {
     }
 
     return groups.map(monthGroup => {
-        const totalLabel = typeof formatSaleValue === 'function'
-            ? formatSaleValue(monthGroup.totalSaleValue)
-            : monthGroup.totalSaleValue;
+        const totalLabel = formatGestaoRelatorioSaleValue(monthGroup.totalSaleValue);
 
         return `
             <div class="collapsible-list-card border border-emerald-100 rounded-lg overflow-hidden bg-emerald-50/20">
@@ -956,17 +948,13 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
         pedidosPendentesContext
     );
     const pedidosPendentesGrandTotal = pedidosPendentesGroups.reduce((sum, group) => sum + group.totalSaleValue, 0);
-    const pedidosPendentesGrandTotalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(pedidosPendentesGrandTotal)
-        : pedidosPendentesGrandTotal;
+    const pedidosPendentesGrandTotalLabel = formatGestaoRelatorioSaleValue(pedidosPendentesGrandTotal);
     const fechamentoProjects = projects.filter(project =>
         getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
     );
     const fechamentoGroups = groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects);
     const fechamentoTotals = getGestaoRelatorioFechamentoProducaoTotals(projects);
-    const fechamentoGrandTotalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(fechamentoTotals.totalSaleValue)
-        : fechamentoTotals.totalSaleValue;
+    const fechamentoGrandTotalLabel = formatGestaoRelatorioSaleValue(fechamentoTotals.totalSaleValue);
 
     content.innerHTML = `
         <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">

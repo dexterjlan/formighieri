@@ -39,7 +39,9 @@ async function getMontagemExternaProjectStatusId() {
 }
 
 function canActIniciarMontagemExterna() {
-    return isAdmin() || isGestorProjetos();
+    return isAdmin()
+        || isGestorProjetos()
+        || (typeof canActPendenciasGestorFabrica === 'function' && canActPendenciasGestorFabrica());
 }
 
 async function persistMontagemInicioProject(entry, montagemInternaStatusId) {
@@ -216,7 +218,7 @@ async function iniciarMontagemExternaForProject(projectId, options = {}) {
     const { onSuccess } = options;
 
     if (!canActIniciarMontagemExterna()) {
-        alertAppDialog('Somente o Gestor de Projetos ou Admin pode iniciar montagem externa.', {
+        alertAppDialog('Somente Gestor de Projetos, Gestor de Fábrica, Administrativo de Fábrica ou Admin pode iniciar montagem externa.', {
             variant: 'warning',
             title: 'Aviso'
         });
@@ -331,7 +333,7 @@ async function finalizeMontagemExternaForProject(projectId, options = {}) {
     const { onSuccess } = options;
 
     if (!canActIniciarMontagemExterna()) {
-        alertAppDialog('Somente o Gestor de Projetos ou Admin pode finalizar montagem externa.', {
+        alertAppDialog('Somente Gestor de Projetos, Gestor de Fábrica, Administrativo de Fábrica ou Admin pode finalizar montagem externa.', {
             variant: 'warning',
             title: 'Aviso'
         });

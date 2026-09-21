@@ -4,7 +4,7 @@ const GESTAO_DASHBOARD_STATUS_FABRICA_END = 'Montagem Interna';
 
 const GESTAO_DASHBOARD_PROJECT_SELECT = `
     id, orderId, projectCode, name, deliveryDate, technicalProjectForecastEndDate, technicalProjectCompletedDate,
-    internalAssemblyEndDate, statusId, designerId, cabinetMakerId, deliveryPhaseId,
+    internalAssemblyEndDate, productionMonth, statusId, designerId, cabinetMakerId, deliveryPhaseId,
     isComplementary, parentProjectId, isReplaced,
     order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
@@ -13,7 +13,7 @@ const GESTAO_DASHBOARD_PROJECT_SELECT = `
 `;
 
 const GESTAO_DASHBOARD_PROJECT_SELECT_FALLBACK = `
-    id, orderId, projectCode, name, deliveryDate, technicalProjectForecastEndDate, statusId, designerId, deliveryPhaseId,
+    id, orderId, projectCode, name, deliveryDate, technicalProjectForecastEndDate, productionMonth, statusId, designerId, deliveryPhaseId,
     isComplementary, parentProjectId, isReplaced,
     order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     designer:appUsers!OrderProject_designerId_fkey(id, name),
@@ -41,7 +41,7 @@ const GESTAO_DASHBOARD_TAB_CONFIG = {
         showClientDeliveryInHeader: true,
         showDeliveryInCard: false,
         showFimMontagem: true,
-        description: 'Projetos sem fim de montagem (Medição Realizada até Montagem Interna) com entrega do pedido até o mês corrente, mais os com fim de montagem no mês.'
+        description: 'Projetos sem fim de montagem (Medição Realizada até Montagem Interna) no mês de programação de produção selecionado, mais os com fim de montagem nesse mês.'
     }
 };
 
@@ -118,8 +118,10 @@ function renderGestaoDashboardStatusLegend(tabId, statuses, projects) {
 
 let gestaoDashboardActiveTab = 'projetos';
 let gestaoDashboardFullscreen = false;
+let gestaoDashboardFabricaMonthKey = getGestaoDashboardCurrentMonthKey();
 let gestaoDashboardCache = {
     projects: [],
+    projectsById: {},
     statuses: [],
     phasesByOrderId: {}
 };
@@ -161,18 +163,71 @@ function getGestaoDashboardFabricaDeliveryDate(project, phasesByOrderId = gestao
     return project.order?.clientDeliveryDate || '';
 }
 
-function getGestaoDashboardCurrentMonthBounds(referenceDate = new Date()) {
+function getGestaoDashboardCurrentMonthKey(referenceDate = new Date()) {
     const year = referenceDate.getFullYear();
-    const month = referenceDate.getMonth();
-    const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    const label = new Date(year, month, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    const month = String(referenceDate.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+function normalizeGestaoDashboardFabricaMonthKey(monthKey) {
+    const currentKey = getGestaoDashboardCurrentMonthKey();
+    const normalized = String(monthKey || '').trim().slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(normalized) || normalized < currentKey) {
+        return currentKey;
+    }
+    return normalized;
+}
+
+function getGestaoDashboardMonthBoundsFromKey(monthKey) {
+    const normalizedKey = normalizeGestaoDashboardFabricaMonthKey(monthKey);
+    const [year, month] = normalizedKey.split('-').map(Number);
+    const start = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const label = new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
     return {
         start,
         end,
-        label: label.charAt(0).toUpperCase() + label.slice(1)
+        label: label.charAt(0).toUpperCase() + label.slice(1),
+        monthKey: normalizedKey
     };
+}
+
+function getGestaoDashboardCurrentMonthBounds(referenceDate = new Date()) {
+    return getGestaoDashboardMonthBoundsFromKey(getGestaoDashboardCurrentMonthKey(referenceDate));
+}
+
+function getGestaoDashboardProductionMonthInputValue(dateStr) {
+    if (typeof toProgramacaoProducaoMonthInputValue === 'function') {
+        return toProgramacaoProducaoMonthInputValue(dateStr);
+    }
+    if (!dateStr) return '';
+    const part = String(dateStr).split('T')[0];
+    const [year, month] = part.split('-');
+    if (!year || !month) return '';
+    return `${year}-${month}`;
+}
+
+function isGestaoDashboardComplementaryProject(project) {
+    return typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project);
+}
+
+function getGestaoDashboardEffectiveProductionMonth(project, projectsById = gestaoDashboardCache.projectsById) {
+    if (!project) return null;
+
+    if (isGestaoDashboardComplementaryProject(project)) {
+        const parentId = Number(project.parentProjectId || project.parentProject?.id);
+        const parent = parentId ? projectsById[parentId] : null;
+        return parent?.productionMonth || project.productionMonth || null;
+    }
+
+    return project.productionMonth || null;
+}
+
+function getGestaoDashboardProjectProductionMonthKey(project, projectsById = gestaoDashboardCache.projectsById) {
+    return getGestaoDashboardProductionMonthInputValue(
+        getGestaoDashboardEffectiveProductionMonth(project, projectsById)
+    );
 }
 
 function normalizeGestaoDashboardDate(dateStr) {
@@ -240,9 +295,10 @@ function filterGestaoDashboardProjetosTab(projects, statuses, monthBounds) {
     });
 }
 
-function filterGestaoDashboardFabricaTab(projects, statuses, monthBounds, phasesByOrderId = {}) {
+function filterGestaoDashboardFabricaTab(projects, statuses, monthBounds, projectsById = {}) {
     const { minSort, maxSort } = getGestaoDashboardRangeBounds(statuses, GESTAO_DASHBOARD_STATUS_FABRICA_END);
     const statusById = Object.fromEntries(statuses.map(status => [status.id, status]));
+    const selectedMonthKey = monthBounds.monthKey || getGestaoDashboardCurrentMonthKey();
 
     return (projects || []).filter(project => {
         if (!isGestaoDashboardActiveProject(project)) return false;
@@ -256,12 +312,10 @@ function filterGestaoDashboardFabricaTab(projects, statuses, monthBounds, phases
 
         const withoutFinishDate = !project.internalAssemblyEndDate;
         const inStatusRange = isGestaoDashboardStatusInRange(project, minSort, maxSort, statusById);
-        const orderDeliveryUntilMonth = isGestaoDashboardDateOnOrBefore(
-            getGestaoDashboardFabricaDeliveryDate(project, phasesByOrderId),
-            monthBounds.end
-        );
+        const productionMonthKey = getGestaoDashboardProjectProductionMonthKey(project, projectsById);
+        const matchesProductionMonth = productionMonthKey === selectedMonthKey;
 
-        return withoutFinishDate && inStatusRange && orderDeliveryUntilMonth;
+        return withoutFinishDate && inStatusRange && matchesProductionMonth;
     });
 }
 
@@ -465,14 +519,19 @@ function renderGestaoDashboardContent() {
     if (!content) return;
 
     const tabConfig = GESTAO_DASHBOARD_TAB_CONFIG[gestaoDashboardActiveTab];
-    const monthBounds = getGestaoDashboardCurrentMonthBounds();
+    const monthBounds = gestaoDashboardActiveTab === 'fabrica'
+        ? getGestaoDashboardMonthBoundsFromKey(gestaoDashboardFabricaMonthKey)
+        : getGestaoDashboardCurrentMonthBounds();
     const statuses = gestaoDashboardCache.statuses || [];
     const allProjects = gestaoDashboardCache.projects || [];
     const phasesByOrderId = gestaoDashboardCache.phasesByOrderId || {};
+    const projectsById = gestaoDashboardCache.projectsById || {};
 
     const filteredProjects = gestaoDashboardActiveTab === 'fabrica'
-        ? filterGestaoDashboardFabricaTab(allProjects, statuses, monthBounds, phasesByOrderId)
+        ? filterGestaoDashboardFabricaTab(allProjects, statuses, monthBounds, projectsById)
         : filterGestaoDashboardProjetosTab(allProjects, statuses, monthBounds);
+
+    syncGestaoDashboardFabricaMonthUi();
 
     const groups = groupGestaoDashboardByClient(filteredProjects, gestaoDashboardActiveTab, phasesByOrderId);
 
@@ -522,6 +581,7 @@ async function fetchGestaoDashboardProjects() {
         || result.error?.message?.includes('isComplementary')
         || result.error?.message?.includes('isReplaced')
         || result.error?.message?.includes('deliveryPhaseId')
+        || result.error?.message?.includes('productionMonth')
         || result.error?.message?.includes('projectStatus')
         || result.error?.message?.includes('designer')) {
         result = await supabaseClient
@@ -577,11 +637,30 @@ async function loadGestaoDashboard() {
 
     gestaoDashboardCache = {
         projects,
+        projectsById: Object.fromEntries(projects.map(project => [Number(project.id), project])),
         statuses,
         phasesByOrderId
     };
 
+    gestaoDashboardFabricaMonthKey = normalizeGestaoDashboardFabricaMonthKey(gestaoDashboardFabricaMonthKey);
     renderGestaoDashboardContent();
+}
+
+function syncGestaoDashboardFabricaMonthUi() {
+    const wrap = document.getElementById('gestao-dashboard-fabrica-month-wrap');
+    const input = document.getElementById('gestao-dashboard-fabrica-month');
+    if (!wrap || !input) return;
+
+    const isFabrica = gestaoDashboardActiveTab === 'fabrica';
+    wrap.classList.toggle('hidden', !isFabrica);
+    if (!isFabrica) return;
+
+    const minKey = getGestaoDashboardCurrentMonthKey();
+    input.min = minKey;
+    gestaoDashboardFabricaMonthKey = normalizeGestaoDashboardFabricaMonthKey(gestaoDashboardFabricaMonthKey);
+    if (input.value !== gestaoDashboardFabricaMonthKey) {
+        input.value = gestaoDashboardFabricaMonthKey;
+    }
 }
 
 function setGestaoDashboardFullscreen(enabled) {
@@ -624,5 +703,12 @@ function bindGestaoDashboardEvents() {
             setGestaoDashboardActiveTab(tabId);
             renderGestaoDashboardContent();
         });
+    });
+
+    document.getElementById('gestao-dashboard-fabrica-month')?.addEventListener('change', event => {
+        gestaoDashboardFabricaMonthKey = normalizeGestaoDashboardFabricaMonthKey(event.target.value);
+        if (gestaoDashboardActiveTab === 'fabrica') {
+            renderGestaoDashboardContent();
+        }
     });
 }

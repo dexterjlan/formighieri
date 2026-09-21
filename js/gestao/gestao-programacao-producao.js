@@ -500,13 +500,17 @@ function filterProgramacaoProducaoSummaryMonthGroups(groups) {
 }
 
 function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel) {
-    const pendingTotalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(monthGroup.totalSaleValue || 0)
-        : (monthGroup.totalSaleValue || 0);
+    const pendingTotalLabel = typeof formatGestaoDisplaySaleValue === 'function'
+        ? formatGestaoDisplaySaleValue(monthGroup.totalSaleValue || 0)
+        : (typeof formatSaleValue === 'function'
+            ? formatSaleValue(monthGroup.totalSaleValue || 0)
+            : (monthGroup.totalSaleValue || 0));
     const fechamento = monthGroup.fechamento;
-    const fechamentoTotalLabel = typeof formatSaleValue === 'function'
-        ? formatSaleValue(fechamento?.totalSaleValue || 0)
-        : (fechamento?.totalSaleValue || 0);
+    const fechamentoTotalLabel = typeof formatGestaoDisplaySaleValue === 'function'
+        ? formatGestaoDisplaySaleValue(fechamento?.totalSaleValue || 0)
+        : (typeof formatSaleValue === 'function'
+            ? formatSaleValue(fechamento?.totalSaleValue || 0)
+            : (fechamento?.totalSaleValue || 0));
     const monthLabel = typeof formatGestaoRelatorioMonthLabel === 'function'
         ? formatGestaoRelatorioMonthLabel(monthGroup.monthKey, emptyMonthLabel)
         : monthGroup.monthKey;
