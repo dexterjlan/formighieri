@@ -580,10 +580,15 @@ async function fetchGestaoOrders(filters = {}) {
     orders = await enrichGestaoOrdersWithProjectStatuses(orders);
 
     if (clientName) {
-        const term = clientName.toLocaleLowerCase('pt-BR');
-        orders = orders.filter(order =>
-            getOrderClientName(order).toLocaleLowerCase('pt-BR').includes(term)
-        );
+        const term = typeof normalizeSearchText === 'function'
+            ? normalizeSearchText(clientName)
+            : clientName.toLocaleLowerCase('pt-BR');
+        orders = orders.filter(order => {
+            const name = typeof normalizeSearchText === 'function'
+                ? normalizeSearchText(getOrderClientName(order))
+                : getOrderClientName(order).toLocaleLowerCase('pt-BR');
+            return name.includes(term);
+        });
     }
 
     return { data: orders, error: null };

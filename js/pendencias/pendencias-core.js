@@ -675,38 +675,53 @@ async function fetchPhasesByOrderIdForPendenciasProjects(projects = []) {
     return fetchGestaoOrderPhasesByOrderIds(orderIds);
 }
 
-function getPendenciasProjectEffectiveDeliveryDate(project, phasesByOrderId = {}) {
+function getPendenciasOrderRecordFromProject(project) {
+    return project?.order || null;
+}
+
+function getPendenciasProjectDeliveryPhase(project, phasesByOrderId = {}) {
     const phases = phasesByOrderId[Number(project?.orderId)] || [];
-    if (phases.length >= 2) {
-        const phaseId = Number(project?.deliveryPhaseId);
-        const phase = phaseId
-            ? phases.find(item => Number(item.id) === phaseId)
-            : phases[0];
-        return phase?.deliveryDate || project?.deliveryDate || null;
+    if (phases.length < 2) return null;
+
+    const phaseId = Number(project?.deliveryPhaseId);
+    if (phaseId) {
+        return phases.find(item => Number(item.id) === phaseId) || null;
     }
 
-    return project?.deliveryDate || null;
+    return phases[0] || null;
+}
+
+function getPendenciasOrderClientDeliveryDate(project) {
+    const order = getPendenciasOrderRecordFromProject(project);
+    return order?.clientDeliveryDate || null;
+}
+
+function getPendenciasProjectEffectiveDeliveryDate(project, phasesByOrderId = {}) {
+    const phase = getPendenciasProjectDeliveryPhase(project, phasesByOrderId);
+    if (phase?.deliveryDate) {
+        return phase.deliveryDate;
+    }
+
+    return getPendenciasOrderClientDeliveryDate(project);
 }
 
 function formatPendenciasProjectDeliveryDate(project, phasesByOrderId = {}) {
-    const phases = phasesByOrderId[Number(project?.orderId)] || [];
-    if (phases.length >= 2) {
-        const phaseId = Number(project?.deliveryPhaseId);
-        const phase = phaseId
-            ? phases.find(item => Number(item.id) === phaseId)
-            : phases[0];
-        if (!phase) return '—';
+    const formatDate = dateValue => (
+        typeof formatPendenciasDeliveryDate === 'function'
+            ? formatPendenciasDeliveryDate(dateValue)
+            : (dateValue || '—')
+    );
 
-        const dateLabel = typeof formatPendenciasDeliveryDate === 'function'
-            ? formatPendenciasDeliveryDate(phase.deliveryDate)
-            : (phase.deliveryDate || '—');
+    const phase = getPendenciasProjectDeliveryPhase(project, phasesByOrderId);
+    if (phase) {
+        const dateLabel = formatDate(
+            phase.deliveryDate || getPendenciasOrderClientDeliveryDate(project)
+        );
         const phaseName = phase.name || 'Fase';
         return `${phaseName}: ${dateLabel}`;
     }
 
-    return typeof formatPendenciasDeliveryDate === 'function'
-        ? formatPendenciasDeliveryDate(project?.deliveryDate)
-        : (project?.deliveryDate || '—');
+    return formatDate(getPendenciasOrderClientDeliveryDate(project));
 }
 
 function sortPendenciasByEffectiveDeliveryDate(projects, phasesByOrderId = {}) {
@@ -774,14 +789,14 @@ async function queryPendenciasProjects(filters = {}) {
     if (result.error?.message && isOrderProjectTechnicalForecastColumnError(result.error.message)) {
         result = await buildQuery(`
             id, orderId, projectCode, name, designerId, statusId, deliveryDate, awaitingConstructionNote,
-            order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
             designer:appUsers!OrderProject_designerId_fkey(id, name),
             projectStatus:OrderProjectStatus(id, name)
         `, true);
         if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
             result = await buildQuery(`
                 id, orderId, projectCode, name, designerId, statusId, deliveryDate, awaitingConstructionNote,
-                order:salesOrders(${getSalesOrderMinimalEmbedSelect()}),
+                order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
                 designer:appUsers!OrderProject_designerId_fkey(id, name),
                 projectStatus:OrderProjectStatus(id, name)
             `, false);

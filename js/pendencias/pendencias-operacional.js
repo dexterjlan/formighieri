@@ -1231,7 +1231,7 @@ function getPendenciasFabricaProjectLabel(project) {
         : (project?.name || 'Projeto');
 }
 
-function renderPendenciasAguardandoMontagemInternaList(projects) {
+function renderPendenciasAguardandoMontagemInternaList(projects, phasesByOrderId = {}) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
@@ -1241,14 +1241,18 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
         ? 'Projetos em produção. Registre marceneiro e início da montagem interna.'
         : 'Visualização dos projetos aguardando início da montagem interna.';
 
-    const rows = (projects || []).map(project => {
+    const sortedProjects = typeof sortPendenciasByEffectiveDeliveryDate === 'function'
+        ? sortPendenciasByEffectiveDeliveryDate(projects, phasesByOrderId)
+        : (projects || []);
+    const rows = sortedProjects.map(project => {
         const inicioValue = project.internalAssemblyStartDate
             ? String(project.internalAssemblyStartDate).split('T')[0]
             : '';
 
         return mapPendenciasInteractiveIdentity(project, {
             projectName: getPendenciasFabricaProjectLabel(project),
-            deliveryDate: formatPendenciasDeliveryDate(project.deliveryDate),
+            deliveryLabel: formatPendenciasProjectDeliveryDate(project, phasesByOrderId),
+            deliveryDate: getPendenciasProjectEffectiveDeliveryDate(project, phasesByOrderId),
             cabinetMakerName: getPendenciasFabricaMarceneiroName(project) || '—',
             cabinetMakerId: project.cabinetMakerId,
             internalAssemblyStartDate: inicioValue
@@ -1267,7 +1271,11 @@ function renderPendenciasAguardandoMontagemInternaList(projects) {
         getRowAttrs: (row) => `data-pendencias-fabrica-project-id="${row.id}"`,
         columns: [
             ...getPendenciasInteractiveIdentityColumns(),
-            getPendenciasInteractiveDateColumn({ key: 'deliveryDate', label: 'Entrega' }),
+            getPendenciasInteractiveDateColumn({
+                key: 'deliveryLabel',
+                label: 'Entrega',
+                sortKey: 'deliveryDate'
+            }),
             {
                 key: 'cabinetMakerName',
                 label: 'Marceneiro',
@@ -1652,7 +1660,8 @@ async function loadPendenciasAguardandoMontagemInterna() {
         return;
     }
 
-    renderPendenciasAguardandoMontagemInternaList(projects);
+    const phasesByOrderId = await fetchPhasesByOrderIdForPendenciasProjects(projects);
+    renderPendenciasAguardandoMontagemInternaList(projects, phasesByOrderId);
 }
 
 async function loadPendenciasEmMontagem() {

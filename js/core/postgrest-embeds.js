@@ -27,7 +27,7 @@ function getPendenciasProjectSelect(options = {}) {
         includeStatus = true,
         includeDesigner = true,
         includeAwaitingConstructionNote = true,
-        orderExtraFields = ''
+        orderExtraFields = 'clientDeliveryDate'
     } = options;
 
     const fields = [
@@ -64,12 +64,13 @@ function getPendenciasFabricaProjectSelect(options = {}) {
         'name',
         'statusId',
         'deliveryDate',
+        'deliveryPhaseId',
         'cabinetMakerId',
         'internalAssemblyStartDate',
         'internalAssemblyEndDate'
     ];
 
-    const embeds = [getOrderSalesOrderEmbed()];
+    const embeds = [getOrderSalesOrderEmbed('clientDeliveryDate')];
     if (includeStatus) embeds.push(ORDER_PROJECT_STATUS_EMBED);
     if (includeCabinetMaker) embeds.push(ORDER_PROJECT_CABINET_MAKER_EMBED);
 

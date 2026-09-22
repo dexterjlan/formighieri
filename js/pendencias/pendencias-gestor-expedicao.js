@@ -25,7 +25,10 @@ function renderPendenciasExpedicaoList(projects, phasesByOrderId = {}) {
     if (!content) return;
 
     const canAct = canActPendenciasGestorProjetosMontagemExterna();
-    const rows = (projects || []).map(project => mapPendenciasInteractiveIdentity(project, {
+    const sortedProjects = typeof sortPendenciasByEffectiveDeliveryDate === 'function'
+        ? sortPendenciasByEffectiveDeliveryDate(projects, phasesByOrderId)
+        : (projects || []);
+    const rows = sortedProjects.map(project => mapPendenciasInteractiveIdentity(project, {
         deliveryLabel: formatPendenciasProjectDeliveryDate(project, phasesByOrderId),
         deliveryDate: typeof getPendenciasProjectEffectiveDeliveryDate === 'function'
             ? getPendenciasProjectEffectiveDeliveryDate(project, phasesByOrderId)
