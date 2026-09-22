@@ -293,6 +293,7 @@ function canActOrderDetailTab(tabKey, user = currentUser) {
 
 function canActOrderProjectNomear(project, user = currentUser) {
     if (!user || !project) return false;
+    if (isAdmin(user)) return true;
     return user.role === 'Projetista'
         && Number(project.designerId) === Number(user.id);
 }

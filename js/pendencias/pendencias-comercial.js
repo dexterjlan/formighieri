@@ -23,7 +23,10 @@ function canAccessPendenciasAprovarConferencia() {
     return canSeePendenciasGestorComercialMenu();
 }
 
-async function fetchPendenciasConferenceByProjectIds(projectIds, conferenceStatus = 'Confirmada') {
+async function fetchPendenciasConferenceByProjectIds(projectIds, conferenceStatuses = ['Confirmada', 'Parcialmente confirmada']) {
+    const allowedStatuses = new Set(
+        Array.isArray(conferenceStatuses) ? conferenceStatuses : [conferenceStatuses]
+    );
     if (!projectIds.length) return {};
 
     let result = await supabaseClient
@@ -74,7 +77,7 @@ async function fetchPendenciasConferenceByProjectIds(projectIds, conferenceStatu
             || conferenceById[row.conferenceId]
             || null;
 
-        if (!conference || conference.status !== conferenceStatus) return;
+        if (!conference || !allowedStatuses.has(conference.status)) return;
 
         const existing = map[projectId];
         const conferenceTime = conference.createdAt ? new Date(conference.createdAt).getTime() : 0;
@@ -106,7 +109,7 @@ async function fetchPendenciasAprovarConferenciaProjects() {
     const projects = sortPendenciasByDeliveryDate(result.data || []);
     const conferenceByProjectId = await fetchPendenciasConferenceByProjectIds(
         projects.map(project => project.id),
-        'Confirmada'
+        ['Confirmada', 'Parcialmente confirmada']
     );
     const conferenceIds = [...new Set(
         Object.values(conferenceByProjectId).map(conference => conference?.id).filter(Boolean)
@@ -229,7 +232,7 @@ async function fetchPendenciasConsultorConferenciaProjects() {
 
     const conferenceByProjectId = await fetchPendenciasConferenceByProjectIds(
         projects.map(project => project.id),
-        'Em andamento'
+        ['Em andamento', 'Parcialmente confirmada']
     );
 
     return { error: null, overviewMode, projects, conferenceByProjectId };

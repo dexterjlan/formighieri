@@ -227,43 +227,6 @@ async function loadOrderThirdPartyProjectsTab(orderId = activeOrderId) {
     return orderThirdPartyProjectsCache;
 }
 
-function openThirdPartyProjectDetailModal(project) {
-    const modal = document.getElementById('third-party-project-detail-modal');
-    if (!modal || !project) return;
-
-    const statusLabel = getThirdPartyProjectStatusLabel(project.status);
-    const statusClass = getThirdPartyProjectStatusBadgeClass(project.status);
-
-    document.getElementById('third-party-project-detail-title').textContent = getThirdPartyProjectLabel(project);
-    document.getElementById('third-party-project-detail-subtitle').textContent =
-        `Pedido ${project.order?.orderCode || '—'} · ${getOrderClientName(project.order) || '—'}`;
-
-    document.getElementById('third-party-project-detail-status').innerHTML =
-        `<span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusLabel)}</span>`;
-
-    document.getElementById('third-party-project-detail-project').textContent =
-        project.orderProject?.name || '—';
-    document.getElementById('third-party-project-detail-subtype').textContent =
-        project.thirdPartySubtype?.name || '—';
-    document.getElementById('third-party-project-detail-characteristic').textContent =
-        project.projectCharacteristic?.name || '—';
-    document.getElementById('third-party-project-detail-designer').textContent =
-        project.designer?.name || 'Sem projetista';
-    document.getElementById('third-party-project-detail-path').textContent =
-        project.filePath || '—';
-    document.getElementById('third-party-project-detail-sent-at').textContent =
-        formatThirdPartyProjectDateTime(project.sentAt);
-    document.getElementById('third-party-project-detail-approved-at').textContent =
-        formatThirdPartyProjectDateTime(project.approvedAt);
-
-    const historyBtn = document.getElementById('btn-third-party-project-detail-history');
-    if (historyBtn) {
-        historyBtn.dataset.thirdPartyProjectId = String(project.id);
-    }
-
-    toggleModal('third-party-project-detail-modal', true);
-}
-
 function showThirdPartyProjectsCreatedModal(createdProjects = []) {
     const listEl = document.getElementById('third-party-projects-created-list');
     if (!listEl) return;
@@ -274,11 +237,15 @@ function showThirdPartyProjectsCreatedModal(createdProjects = []) {
         const projectName = project.orderProject?.name || 'Projeto';
         const subtypeName = project.thirdPartySubtype?.name || 'Terceiro';
         const characteristicName = project.projectCharacteristic?.name || '—';
+        const flowLabel = typeof isThirdPartyProjectCommercialApprovalRequired === 'function'
+            && isThirdPartyProjectCommercialApprovalRequired(project)
+            ? 'aprovação comercial'
+            : 'arquivo no detalhe';
         return `
             <li class="text-xs text-slate-700 border border-slate-200 rounded-lg px-3 py-2 bg-slate-50/60">
                 <span class="font-semibold text-slate-900">${escapeHtml(projectName)}</span>
                 · ${escapeHtml(subtypeName)}
-                <span class="text-slate-500">(${escapeHtml(characteristicName)})</span>
+                <span class="text-slate-500">(${escapeHtml(characteristicName || flowLabel)})</span>
             </li>
         `;
     }).join('');
@@ -287,17 +254,9 @@ function showThirdPartyProjectsCreatedModal(createdProjects = []) {
 }
 
 function bindThirdPartyProjectTabEvents() {
-    document.getElementById('btn-close-third-party-project-detail')?.addEventListener('click', () => {
-        toggleModal('third-party-project-detail-modal', false);
-    });
-    document.getElementById('btn-close-third-party-project-detail-footer')?.addEventListener('click', () => {
-        toggleModal('third-party-project-detail-modal', false);
-    });
-    document.getElementById('btn-third-party-project-detail-history')?.addEventListener('click', () => {
-        const projectId = Number(document.getElementById('btn-third-party-project-detail-history')?.dataset.thirdPartyProjectId);
-        const project = orderThirdPartyProjectsCache.find(item => Number(item.id) === projectId);
-        if (project) openThirdPartyProjectStatusHistoryModal(project);
-    });
+    if (typeof bindThirdPartyProjectDetailModalEvents === 'function') {
+        bindThirdPartyProjectDetailModalEvents();
+    }
 
     document.getElementById('btn-close-third-party-projects-created')?.addEventListener('click', () => {
         toggleModal('third-party-projects-created-modal', false);

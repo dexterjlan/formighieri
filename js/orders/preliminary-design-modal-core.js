@@ -110,11 +110,35 @@ function setAnteprojetoModalFields(conference, options = {}) {
     updateAnteprojetoModalSendControls(conference);
 }
 
+function collectConferenceProjectIdsForConsultorSubmitFromDom() {
+    const sections = Array.from(document.querySelectorAll('#anteprojeto-projects-structure .anteprojeto-project-section'));
+    const pendingSections = sections.filter(section => section.dataset.awaitingConsultorSubmit === '1');
+    if (!pendingSections.length) return [];
+
+    return pendingSections
+        .filter(section => {
+            const checkbox = section.querySelector('.anteprojeto-project-submit-select');
+            if (!checkbox) return true;
+            return checkbox.checked;
+        })
+        .map(section => Number(section.dataset.orderProjectId))
+        .filter(Boolean);
+}
+
 function areAllAnteprojetoModalObservationsReady() {
-    const items = document.querySelectorAll('#anteprojeto-projects-structure .module-observation-item');
+    const submitIds = new Set(collectConferenceProjectIdsForConsultorSubmitFromDom());
+    if (!submitIds.size) return false;
+
+    const items = Array.from(document.querySelectorAll('#anteprojeto-projects-structure .module-observation-item'))
+        .filter(item => {
+            const section = item.closest('.anteprojeto-project-section');
+            const projectId = Number(section?.dataset.orderProjectId);
+            return submitIds.has(projectId);
+        });
+
     if (!items.length) return false;
 
-    const observations = Array.from(items).map(item => {
+    const observations = items.map(item => {
         const disposition = item.querySelector('.anteprojeto-observation-disposition:checked')?.value || null;
         return {
             consultantDisposition: disposition,
@@ -130,7 +154,13 @@ function refreshPreliminaryDesignModalConfirmButton() {
     const btn = document.getElementById('btn-anteprojeto-modal-confirm');
     if (!btn) return;
 
+    const pendingCount = document.querySelectorAll(
+        '#anteprojeto-projects-structure .anteprojeto-project-section[data-awaiting-consultor-submit="1"]'
+    ).length;
     const allReady = areAllAnteprojetoModalObservationsReady();
+    btn.textContent = pendingCount > 1
+        ? 'Enviar projetos selecionados ao gestor'
+        : 'Enviar ao gestor comercial';
     btn.disabled = !allReady;
     btn.classList.toggle('bg-emerald-700', allReady);
     btn.classList.toggle('text-white', allReady);
@@ -302,7 +332,12 @@ async function openPreliminaryDesignModal(conferenceId = null) {
         return;
     }
 
-    const readOnly = isAnteprojetoConferenceConfirmed(conference);
+    const readOnly = Boolean(
+        conference
+        && (conference.status === 'Aprovada'
+            || conference.status === 'Confirmada'
+            || (!canEditAnteprojetoConference(conference) && !canEditAnteprojetoConsultorFields(conference)))
+    );
     const canEditStructure = canEditAnteprojetoConference(conference);
     const canExtendStructure = canExtendAnteprojetoConferenceStructure(conference);
     const canEditConsultor = canEditAnteprojetoConsultorFields(conference);
@@ -349,7 +384,14 @@ async function openPreliminaryDesignModal(conferenceId = null) {
 
     if (conference) {
         title.textContent = readOnly ? 'Conferência de Anteprojeto' : 'Editar Conferência';
-        const modalOptions = { canEditStructure, canExtendStructure, canEditConsultor, readOnly };
+        const consultorSubmitSelectionEnabled = getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference).length > 1;
+        const modalOptions = {
+            canEditStructure,
+            canExtendStructure,
+            canEditConsultor,
+            readOnly,
+            consultorSubmitSelectionEnabled
+        };
         groupConferenceByProjects(conference).forEach(project => {
             addAnteprojetoProjectSection(project, modalOptions);
         });
@@ -554,44 +596,70 @@ async function confirmPreliminaryDesignConference(conferenceId, options = {}) {
     if (!conference) return;
 
     if (!canConfirmAnteprojetoConference(conference)) {
-        alertAppDialog('Somente o consultor do pedido ou Admin podem confirmar a conferência.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente o consultor do pedido ou Admin podem enviar projetos ao gestor.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    const moduleObservations = getConferenceModuleObservations(conference);
-    const validation = validateConsultorObservationDispositions(moduleObservations);
+    const submittingIds = resolveConferenceConsultorSubmitProjectIds(
+        conference,
+        options.orderProjectIds ?? null
+    );
+    const validation = validateConsultorConferenceProjectSubmission(conference, submittingIds, {
+        preferDom: isAnteprojetoModalVisible()
+    });
     if (!validation.valid) {
         alertAppDialog(validation.message, { variant: 'warning', title: 'Aviso' });
         return;
     }
 
+    const conferenceForCharacteristics = filterConferenceByOrderProjectIds(conference, submittingIds);
+
     if (!options.skipCharacteristicsCheck && typeof openProjectCharacteristicsModalForConference === 'function') {
-        await openProjectCharacteristicsModalForConference(conference, () =>
-            confirmPreliminaryDesignConference(conferenceId, { skipCharacteristicsCheck: true })
+        await openProjectCharacteristicsModalForConference(conferenceForCharacteristics, () =>
+            confirmPreliminaryDesignConference(conferenceId, {
+                skipCharacteristicsCheck: true,
+                orderProjectIds: submittingIds
+            })
         );
         return;
     }
 
     const now = new Date().toISOString();
+    const pendingBefore = getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference);
+    const stillPendingAfter = pendingBefore.filter(id => !submittingIds.includes(id));
+    const nextConferenceStatus = stillPendingAfter.length
+        ? ANTEPROJETO_CONFERENCE_STATUS_PARTIAL
+        : 'Confirmada';
 
     try {
-        setAnteprojetoConferenceActionLoading(true, 'Registrando confirmação da conferência...');
+        setAnteprojetoConferenceActionLoading(true, 'Registrando envio ao gestor...');
+
+        const updatePayload = {
+            status: nextConferenceStatus,
+            updatedAt: now,
+            updatedById: currentUser.id
+        };
+        if (nextConferenceStatus === 'Confirmada') {
+            updatePayload.confirmedAt = now;
+            updatePayload.confirmedById = currentUser.id;
+        }
 
         const { error } = await supabaseClient
             .from('PreliminaryDesignConference')
-            .update({
-                status: 'Confirmada',
-                confirmedAt: now,
-                confirmedById: currentUser.id,
-                updatedAt: now,
-                updatedById: currentUser.id
-            })
+            .update(updatePayload)
             .eq('id', conferenceId);
 
-        if (error) throw error;
+        if (error) {
+            if (/AnteprojetoConference_status_check|status_check/i.test(error.message || '')) {
+                throw new Error(
+                    'Execute supabase/feats/add-preliminary-design-conference-partial-status.sql no Supabase para habilitar o envio parcial ao gestor.'
+                );
+            }
+            throw error;
+        }
 
         setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
-        await applyConferenciaRealizadaStatusToProjects(getConferenceOrderProjectIds(conference), {
+        await applyConferenciaRealizadaStatusToProjects(submittingIds, {
             conference,
             orderId: conference.orderId
         });
@@ -599,11 +667,17 @@ async function confirmPreliminaryDesignConference(conferenceId, options = {}) {
         setAnteprojetoConferenceActionLoading(true, 'Atualizando telas...');
         await refreshViewsAfterAnteprojetoConfirmation();
 
-        setAnteprojetoConferenceActionLoading(true, 'Conferência confirmada!', 'success');
+        setAnteprojetoConferenceActionLoading(true, stillPendingAfter.length
+            ? 'Projeto(s) enviado(s) ao gestor!'
+            : 'Conferência confirmada!', 'success');
         await new Promise(resolve => setTimeout(resolve, 900));
 
         if (isAnteprojetoModalVisible()) {
-            closePreliminaryDesignModal();
+            if (stillPendingAfter.length) {
+                await openPreliminaryDesignModal(conferenceId);
+            } else {
+                closePreliminaryDesignModal();
+            }
         }
 
         setAnteprojetoConferenceActionLoading(false);
@@ -621,22 +695,27 @@ async function confirmPreliminaryDesignConferenceFromModal() {
     const conference = anteprojetoConferencesCache.find(c => Number(c.id) === Number(conferenceId));
     if (!conference || !canConfirmAnteprojetoConference(conference)) return;
 
-    if (!areAllAnteprojetoModalObservationsReady()) {
-        alertAppDialog('Classifique todas as observações (Req. Proj., Req. Cons. ou OK) e preencha as respostas obrigatórias antes de confirmar.', { variant: 'warning', title: 'Aviso' });
+    const submittingIds = collectConferenceProjectIdsForConsultorSubmitFromDom();
+    const validation = validateConsultorConferenceProjectSubmission(conference, submittingIds, {
+        preferDom: true
+    });
+    if (!validation.valid) {
+        alertAppDialog(validation.message, { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     if (typeof openProjectCharacteristicsModalForConference === 'function') {
-        const opened = await openProjectCharacteristicsModalForConference(conference, async () => {
-            await executeAnteprojetoConferenceConfirmationFromModal(conferenceId);
+        const conferenceForCharacteristics = filterConferenceByOrderProjectIds(conference, submittingIds);
+        const opened = await openProjectCharacteristicsModalForConference(conferenceForCharacteristics, async () => {
+            await executeAnteprojetoConferenceConfirmationFromModal(conferenceId, submittingIds);
         });
         if (opened) return;
     }
 
-    await executeAnteprojetoConferenceConfirmationFromModal(conferenceId);
+    await executeAnteprojetoConferenceConfirmationFromModal(conferenceId, submittingIds);
 }
 
-async function executeAnteprojetoConferenceConfirmationFromModal(conferenceId) {
+async function executeAnteprojetoConferenceConfirmationFromModal(conferenceId, orderProjectIds = null) {
     const conference = anteprojetoConferencesCache.find(c => Number(c.id) === Number(conferenceId));
     if (!conference) return;
 
@@ -662,7 +741,14 @@ async function executeAnteprojetoConferenceConfirmationFromModal(conferenceId) {
             }
         }
 
-        await confirmPreliminaryDesignConference(conferenceId, { skipCharacteristicsCheck: true });
+        const submittingIds = resolveConferenceConsultorSubmitProjectIds(
+            conference,
+            orderProjectIds ?? collectConferenceProjectIdsForConsultorSubmitFromDom()
+        );
+        await confirmPreliminaryDesignConference(conferenceId, {
+            skipCharacteristicsCheck: true,
+            orderProjectIds: submittingIds
+        });
     } catch (error) {
         setAnteprojetoConferenceActionLoading(true, `Erro ao confirmar conferência: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));

@@ -5,7 +5,8 @@ const DRIVE_FILE_FOLDER_KIND = {
     DETAILING: 'detailing',
     REVISION: 'revision',
     REQUEST: 'request',
-    DESCRIPTIVE: 'descriptive'
+    DESCRIPTIVE: 'descriptive',
+    THIRD_PARTY: 'thirdParty'
 };
 
 const DRIVE_FILE_ENTITY_TYPE = {
@@ -13,14 +14,16 @@ const DRIVE_FILE_ENTITY_TYPE = {
     REVISION_ACTIVITY: 'RevisionActivity',
     ORDER_REQUEST: 'OrderRequest',
     ORDER_REQUEST_ACTIVITY: 'OrderRequestActivity',
-    SALES_ORDER: 'SalesOrder'
+    SALES_ORDER: 'SalesOrder',
+    THIRD_PARTY_PROJECT: 'ThirdPartyProject'
 };
 
 const DRIVE_FILE_FOLDER_NAMES = {
     [DRIVE_FILE_FOLDER_KIND.DETAILING]: 'detalhamento',
     [DRIVE_FILE_FOLDER_KIND.REVISION]: 'revisao',
     [DRIVE_FILE_FOLDER_KIND.REQUEST]: 'requisicao',
-    [DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE]: 'descritivo'
+    [DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE]: 'descritivo',
+    [DRIVE_FILE_FOLDER_KIND.THIRD_PARTY]: 'terceiros'
 };
 
 const DRIVE_FILE_MAX_BYTES = 100 * 1024 * 1024;

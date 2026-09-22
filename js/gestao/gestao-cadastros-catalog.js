@@ -266,6 +266,17 @@ async function addGestaoMontador(event) {
     await loadGestaoMontadoresList();
 }
 
+const GESTAO_CHARACTERISTICS_SAVE_OVERLAY = {
+    overlayId: 'gestao-characteristics-save-loading',
+    messageId: 'gestao-characteristics-save-loading-msg',
+    spinnerId: 'gestao-characteristics-save-loading-spinner'
+};
+
+function setGestaoCharacteristicsSaveLoading(active, message = 'Salvando...') {
+    if (typeof setActionOverlayLoading !== 'function') return;
+    setActionOverlayLoading(GESTAO_CHARACTERISTICS_SAVE_OVERLAY, active, message, 'loading');
+}
+
 async function loadGestaoProjectCharacteristics(activeOnly = false) {
     let query = supabaseClient
         .from('ProjectCharacteristic')
@@ -358,18 +369,24 @@ async function saveGestaoProjectCharacteristicRow(row) {
         return;
     }
 
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('ProjectCharacteristic')
-        .update({ name, sortOrder, isActive, updatedAt: now })
-        .eq('id', characteristicId);
+    setGestaoCharacteristicsSaveLoading(true);
+    void document.getElementById('gestao-characteristics-save-loading')?.offsetWidth;
+    try {
+        const now = new Date().toISOString();
+        const { error } = await supabaseClient
+            .from('ProjectCharacteristic')
+            .update({ name, sortOrder, isActive, updatedAt: now })
+            .eq('id', characteristicId);
 
-    if (error) {
-        alertAppDialog('Erro ao salvar característica: ' + error.message);
-        return;
+        if (error) {
+            alertAppDialog('Erro ao salvar característica: ' + error.message);
+            return;
+        }
+
+        await loadGestaoProjectCharacteristicsList();
+    } finally {
+        setGestaoCharacteristicsSaveLoading(false);
     }
-
-    await loadGestaoProjectCharacteristicsList();
 }
 
 async function deleteGestaoProjectCharacteristicRow(row) {
@@ -439,24 +456,30 @@ async function addGestaoProjectCharacteristic(event) {
         return;
     }
 
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('ProjectCharacteristic')
-        .insert({
-            name,
-            sortOrder,
-            isActive: true,
-            updatedAt: now
-        });
+    setGestaoCharacteristicsSaveLoading(true);
+    void document.getElementById('gestao-characteristics-save-loading')?.offsetWidth;
+    try {
+        const now = new Date().toISOString();
+        const { error } = await supabaseClient
+            .from('ProjectCharacteristic')
+            .insert({
+                name,
+                sortOrder,
+                isActive: true,
+                updatedAt: now
+            });
 
-    if (error) {
-        alertAppDialog('Erro ao adicionar característica: ' + error.message);
-        return;
+        if (error) {
+            alertAppDialog('Erro ao adicionar característica: ' + error.message);
+            return;
+        }
+
+        document.getElementById('gestao-new-characteristic-form')?.reset();
+        document.getElementById('gestao-new-characteristic-sort').value = '0';
+        await loadGestaoProjectCharacteristicsList();
+    } finally {
+        setGestaoCharacteristicsSaveLoading(false);
     }
-
-    document.getElementById('gestao-new-characteristic-form')?.reset();
-    document.getElementById('gestao-new-characteristic-sort').value = '0';
-    await loadGestaoProjectCharacteristicsList();
 }
 
 let gestaoClientesCache = [];

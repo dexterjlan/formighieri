@@ -7,6 +7,7 @@ const COMPRA_TIPO_TINTA = 'Tinta';
 const COMPRA_TIPO_TERCEIRO = 'Terceiro';
 
 let activeCompraRecord = null;
+let activeCompraThirdPartyDriveFile = null;
 let compraStatusesCache = [];
 let compraStatusesActiveOnlyCache = true;
 
@@ -114,11 +115,17 @@ function getCompraPurchaseItemLabel(purchaseItem) {
 }
 
 function getImplantacaoCompraSendItems(purchaseItems = []) {
-    return (purchaseItems || []).filter(item => (
-        Boolean(item?.isChecked)
-        && Boolean(item?.folderPath)
-        && !item?.sentToCommercial
-    ));
+    return (purchaseItems || []).filter(item => {
+        if (!item || item.sentToCommercial) return false;
+        if (typeof canSendImplementationPurchaseItem === 'function') {
+            return canSendImplementationPurchaseItem(item);
+        }
+        if (!item.isChecked) return false;
+        if (item.purchaseType === COMPRA_TIPO_TERCEIRO) {
+            return true;
+        }
+        return Boolean(item.folderPath);
+    });
 }
 
 function toCompraDateInputValue(dateStr) {
@@ -232,6 +239,17 @@ async function enrichCompraRecord(record) {
             }
         } catch (error) {
             console.warn('enrichCompraRecord purchase item:', error);
+        }
+    }
+
+    if (enriched.thirdPartyProjectId
+        && typeof fetchThirdPartyProjectDriveFileForCompra === 'function') {
+        try {
+            enriched.thirdPartyDriveFile = await fetchThirdPartyProjectDriveFileForCompra(
+                enriched.thirdPartyProjectId
+            );
+        } catch (error) {
+            console.warn('enrichCompraRecord thirdPartyDriveFile:', error);
         }
     }
 
@@ -503,6 +521,7 @@ function setCompraModalLoading(active, message = 'Processando...', status = 'loa
 }
 
 function populateCompraForm(record) {
+    activeCompraThirdPartyDriveFile = record?.thirdPartyDriveFile || null;
     const tipoLabel = formatCompraTipoLabel(record?.purchaseType, record?.subtypeName);
     document.getElementById('compra-modal-order-code').textContent = record?.orderCode || '—';
     document.getElementById('compra-modal-client-name').textContent = ` ${record?.clientName || '—'}`;
@@ -528,6 +547,22 @@ function populateCompraForm(record) {
     if (badge) {
         badge.textContent = status;
         badge.className = `text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${getCompraStatusBadgeClass(status)}`;
+    }
+
+    const isTerceiro = record?.purchaseType === COMPRA_TIPO_TERCEIRO;
+    const fileWrap = document.getElementById('compra-modal-third-party-file-wrap');
+    const fileNameEl = document.getElementById('compra-modal-third-party-file-name');
+    const downloadBtn = document.getElementById('btn-compra-third-party-download');
+    const driveFile = record?.thirdPartyDriveFile;
+
+    if (fileWrap) {
+        fileWrap.classList.toggle('hidden', !isTerceiro);
+    }
+    if (fileNameEl) {
+        fileNameEl.textContent = driveFile?.fileName || 'Nenhum arquivo no Drive';
+    }
+    if (downloadBtn) {
+        downloadBtn.disabled = !driveFile?.driveFileId;
     }
 }
 
@@ -560,6 +595,7 @@ function closePurchaseModal() {
     setCompraModalLoading(false);
     toggleModal('compra-modal', false);
     activeCompraRecord = null;
+    activeCompraThirdPartyDriveFile = null;
 }
 window.closePurchaseModal = closePurchaseModal;
 window.openPurchaseModal = openPurchaseModal;
@@ -634,6 +670,17 @@ function bindPurchaseEvents() {
     });
 
     document.getElementById('btn-compra-salvar')?.addEventListener('click', handleCompraSalvar);
+
+    document.getElementById('btn-compra-third-party-download')?.addEventListener('click', () => {
+        const url = typeof resolveDriveFileDownloadUrl === 'function'
+            ? resolveDriveFileDownloadUrl(activeCompraThirdPartyDriveFile)
+            : '';
+        if (!url) {
+            alertAppDialog('Não foi possível gerar o link de download.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
+        window.open(url, '_blank', 'noopener,noreferrer');
+    });
 
     document.getElementById('order-compras-list')?.addEventListener('click', async (event) => {
         const button = event.target.closest('.order-compras-open-btn');

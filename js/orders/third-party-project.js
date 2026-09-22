@@ -25,6 +25,82 @@ function isThirdPartyProjectTableMissingError(error) {
         && message.includes('thirdpartyproject');
 }
 
+function formatThirdPartyProjectMutationError(error) {
+    if (isThirdPartyProjectTableMissingError(error)) {
+        return 'Execute supabase/create-third-party-project.sql no Supabase.';
+    }
+    const message = String(error?.message || '').trim();
+    const normalized = message.toLowerCase();
+    if (normalized.includes('projectcharacteristicid')
+        && normalized.includes('not-null')) {
+        return 'Execute supabase/feats/third-party-project-nullable-characteristic.sql no SQL Editor do ambiente (DEV/produção).';
+    }
+    return message || 'Erro ao gravar projeto de terceiros.';
+}
+
+function isThirdPartyProjectOptionalColumnError(error) {
+    const message = String(error?.message || '').toLowerCase();
+    if (!message.includes('thirdpartyproject') && !message.includes('column')) {
+        return false;
+    }
+    return message.includes('designerid')
+        || message.includes('createdbyid')
+        || message.includes('updatedbyid');
+}
+
+function stripThirdPartyProjectInsertOptionalFields(rows = []) {
+    return rows.map(row => {
+        const next = { ...row };
+        delete next.designerId;
+        delete next.createdById;
+        delete next.updatedById;
+        return next;
+    });
+}
+
+async function insertThirdPartyProjectRows(rowsToInsert = []) {
+    if (!rowsToInsert.length) return [];
+
+    const selectMinimal = `
+        id,
+        orderId,
+        orderProjectId,
+        projectCharacteristicId,
+        thirdPartySubtypeId,
+        status,
+        filePath,
+        thirdPartySubtype:ThirdPartySubtype(id, name),
+        orderProject:OrderProject(id, name, projectCode)
+    `;
+
+    const attempts = [
+        rowsToInsert,
+        stripThirdPartyProjectInsertOptionalFields(rowsToInsert)
+    ];
+
+    let lastError = null;
+    for (const rows of attempts) {
+        const { data, error } = await supabaseClient
+            .from('ThirdPartyProject')
+            .insert(rows)
+            .select(selectMinimal);
+
+        if (!error) {
+            return data || [];
+        }
+
+        lastError = error;
+        if (isThirdPartyProjectTableMissingError(error)) {
+            throw new Error(formatThirdPartyProjectMutationError(error));
+        }
+        if (!isThirdPartyProjectOptionalColumnError(error)) {
+            throw new Error(formatThirdPartyProjectMutationError(error));
+        }
+    }
+
+    throw new Error(formatThirdPartyProjectMutationError(lastError));
+}
+
 function getThirdPartyProjectMinimalSelect(options = {}) {
     const { includeOrder = false } = options;
     const relationEmbed = includeOrder
@@ -233,6 +309,19 @@ async function fetchThirdPartySubtypesWithCharacteristic(activeOnly = true) {
         throw error;
     }
 
+    return (data || []).filter(subtype => Number(subtype.projectCharacteristicId));
+}
+
+async function fetchThirdPartySubtypesByIds(subtypeIds = []) {
+    const uniqueIds = [...new Set(subtypeIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return [];
+
+    const { data, error } = await supabaseClient
+        .from('ThirdPartySubtype')
+        .select('id, name, sortOrder, isActive, projectCharacteristicId')
+        .in('id', uniqueIds);
+
+    if (error) throw error;
     return data || [];
 }
 
@@ -316,9 +405,358 @@ async function fetchThirdPartySubtypesForCharacteristics(characteristicIds = [])
     return data || [];
 }
 
-async function createThirdPartyProjectsForConferenceApproval(conference) {
+function isThirdPartySubtypeCommercialApprovalRequired(subtype) {
+    if (!subtype) return false;
+    const characteristicId = Number(subtype.projectCharacteristicId);
+    return Boolean(characteristicId);
+}
+
+function isThirdPartyProjectCommercialApprovalRequired(project) {
+    if (!project) return false;
+    if (Number(project.projectCharacteristicId)) return true;
+    return isThirdPartySubtypeCommercialApprovalRequired(project.thirdPartySubtype);
+}
+
+async function fetchThirdPartySubtypesWithoutCharacteristic(activeOnly = true) {
+    let query = supabaseClient
+        .from('ThirdPartySubtype')
+        .select('id, name, sortOrder, isActive, projectCharacteristicId')
+        .is('projectCharacteristicId', null)
+        .order('sortOrder', { ascending: true })
+        .order('name', { ascending: true });
+
+    if (activeOnly) {
+        query = query.eq('isActive', true);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        if (error.message?.includes('projectCharacteristicId')) {
+            return [];
+        }
+        throw error;
+    }
+
+    return data || [];
+}
+
+async function createThirdPartyProjectsForProcurementSubtypes(options = {}) {
+    const normalizedOrderId = Number(options.orderId);
+    const normalizedProjectId = Number(options.orderProjectId);
+    if (!normalizedOrderId || !normalizedProjectId) {
+        return { created: [], existing: [] };
+    }
+
+    let designerId = Number(options.designerId) || null;
+    if (!designerId) {
+        const designerIdsByProjectId = await fetchOrderProjectDesignerIdsByProjectIds([normalizedProjectId]);
+        designerId = designerIdsByProjectId[normalizedProjectId] || null;
+    }
+
+    const existingProjects = await fetchThirdPartyProjectsByOrderProjectId(normalizedProjectId);
+    const explicitSubtypeIds = options.thirdPartySubtypeIds;
+    const createAllActive = options.createAllActiveProcurementSubtypes === true;
+
+    let subtypes = await fetchThirdPartySubtypesWithoutCharacteristic(true);
+
+    if (Array.isArray(explicitSubtypeIds)) {
+        const idSet = new Set(explicitSubtypeIds.map(id => Number(id)).filter(Boolean));
+        if (!idSet.size) {
+            return { created: [], existing: existingProjects };
+        }
+        subtypes = subtypes.filter(subtype => idSet.has(Number(subtype.id)));
+    } else if (!createAllActive) {
+        return { created: [], existing: existingProjects };
+    }
+
+    if (!subtypes.length) {
+        return { created: [], existing: existingProjects };
+    }
+
+    const existingKeys = new Set(
+        existingProjects.map(project => `${project.orderProjectId}-${project.thirdPartySubtypeId}`)
+    );
+
+    const now = new Date().toISOString();
+    const rowsToInsert = [];
+
+    subtypes.forEach(subtype => {
+        const key = `${normalizedProjectId}-${subtype.id}`;
+        if (existingKeys.has(key)) return;
+
+        rowsToInsert.push(buildThirdPartyProjectInsertRow({
+            orderId: normalizedOrderId,
+            orderProjectId: normalizedProjectId,
+            projectCharacteristicId: null,
+            thirdPartySubtypeId: subtype.id,
+            status: THIRD_PARTY_PROJECT_STATUS_OPEN,
+            createdAt: now,
+            createdById: currentUser?.id || null,
+            updatedAt: now,
+            updatedById: currentUser?.id || null
+        }, designerId));
+        existingKeys.add(key);
+    });
+
+    if (!rowsToInsert.length) {
+        return { created: [], existing: existingProjects };
+    }
+
+    const created = await insertThirdPartyProjectRows(rowsToInsert);
+    for (const project of created) {
+        await notifyThirdPartyProjectStatusChange(project, null);
+    }
+
+    return { created, existing: existingProjects };
+}
+
+async function createThirdPartyProjectsForSelectedSubtypes(options = {}) {
+    const normalizedOrderId = Number(options.orderId);
+    const normalizedProjectId = Number(options.orderProjectId);
+    const selectedSubtypeIds = [...new Set(
+        (options.thirdPartySubtypeIds || []).map(id => Number(id)).filter(Boolean)
+    )];
+    const reportProgress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
+
+    if (!normalizedOrderId || !normalizedProjectId || !selectedSubtypeIds.length) {
+        return { created: [], existing: [] };
+    }
+
+    reportProgress('Preparando criação dos projetos...');
+
+    let designerId = Number(options.designerId) || null;
+    if (!designerId) {
+        reportProgress('Buscando responsável do ambiente...');
+        const designerIdsByProjectId = await fetchOrderProjectDesignerIdsByProjectIds([normalizedProjectId]);
+        designerId = designerIdsByProjectId[normalizedProjectId] || null;
+    }
+
+    reportProgress('Carregando subtipos selecionados...');
+    const subtypes = await fetchThirdPartySubtypesByIds(selectedSubtypeIds);
+    const subtypeById = new Map(subtypes.map(subtype => [Number(subtype.id), subtype]));
+
+    const procurementSubtypeIds = [];
+    const characteristicIds = [];
+
+    selectedSubtypeIds.forEach(subtypeId => {
+        const subtype = subtypeById.get(subtypeId);
+        if (!subtype) return;
+        const characteristicId = Number(subtype.projectCharacteristicId);
+        if (characteristicId) {
+            characteristicIds.push(characteristicId);
+            return;
+        }
+        if (isThirdPartySubtypeCommercialApprovalRequired(subtype)) {
+            throw new Error(
+                `O subtipo "${subtype.name || 'Terceiro'}" está sem característica vinculada no cadastro.`
+            );
+        }
+        procurementSubtypeIds.push(subtypeId);
+    });
+
+    const created = [];
+    let existing = [];
+
+    if (procurementSubtypeIds.length) {
+        reportProgress('Criando projetos de compras (sem conferência)...');
+        const procurementResult = await createThirdPartyProjectsForProcurementSubtypes({
+            orderId: normalizedOrderId,
+            orderProjectId: normalizedProjectId,
+            designerId,
+            thirdPartySubtypeIds: procurementSubtypeIds
+        });
+        created.push(...(procurementResult.created || []));
+        existing = procurementResult.existing || existing;
+    }
+
+    const uniqueCharacteristicIds = [...new Set(characteristicIds)];
+    if (uniqueCharacteristicIds.length) {
+        reportProgress('Criando projetos com característica (consultor comercial)...');
+        const characteristicResult = await createThirdPartyProjectsForOrderProjectCharacteristics({
+            orderId: normalizedOrderId,
+            orderProjectId: normalizedProjectId,
+            designerId,
+            characteristicIds: uniqueCharacteristicIds,
+            thirdPartySubtypeIds: selectedSubtypeIds
+        });
+        created.push(...(characteristicResult.created || []));
+        if (!existing.length) {
+            existing = characteristicResult.existing || [];
+        }
+    }
+
+    return { created, existing };
+}
+
+async function ensureThirdPartyProjectsForProcurementSubtypes(options = {}) {
+    return createThirdPartyProjectsForProcurementSubtypes({
+        ...options,
+        createAllActiveProcurementSubtypes: true
+    });
+}
+
+function mergeThirdPartySubtypesForApprovalModal(procurementSubtypes = [], existingProjects = []) {
+    const subtypeById = new Map();
+
+    (procurementSubtypes || []).forEach(subtype => {
+        const id = Number(subtype.id);
+        if (id) subtypeById.set(id, subtype);
+    });
+
+    (existingProjects || []).forEach(project => {
+        const subtype = project.thirdPartySubtype;
+        const id = Number(subtype?.id || project.thirdPartySubtypeId);
+        if (!id) return;
+        subtypeById.set(id, {
+            ...subtypeById.get(id),
+            ...subtype,
+            id
+        });
+    });
+
+    return [...subtypeById.values()].sort((a, b) => {
+        const sortDiff = Number(a.sortOrder) - Number(b.sortOrder);
+        if (sortDiff !== 0) return sortDiff;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+    });
+}
+
+async function fetchThirdPartyProcurementSubtypeSelection(orderProjectId) {
+    const normalizedProjectId = Number(orderProjectId);
+    if (!normalizedProjectId) {
+        return { subtypes: [], existingProjects: [], existingSubtypeIds: new Set() };
+    }
+
+    const [procurementSubtypes, characteristicSubtypes, existingProjects] = await Promise.all([
+        fetchThirdPartySubtypesWithoutCharacteristic(true),
+        fetchThirdPartySubtypesWithCharacteristic(true),
+        fetchThirdPartyProjectsByOrderProjectId(normalizedProjectId)
+    ]);
+
+    const existingSubtypeIds = new Set(
+        (existingProjects || []).map(project => Number(project.thirdPartySubtypeId)).filter(Boolean)
+    );
+
+    let subtypes = mergeThirdPartySubtypesForApprovalModal(
+        [...(procurementSubtypes || []), ...(characteristicSubtypes || [])],
+        existingProjects
+    );
+
+    const coveredSubtypeIds = new Set(subtypes.map(subtype => Number(subtype.id)).filter(Boolean));
+    const missingSubtypeIds = [...existingSubtypeIds].filter(id => !coveredSubtypeIds.has(id));
+    if (missingSubtypeIds.length) {
+        const fetchedSubtypes = await fetchThirdPartySubtypesByIds(missingSubtypeIds);
+        subtypes = mergeThirdPartySubtypesForApprovalModal(
+            subtypes,
+            fetchedSubtypes.map(subtype => ({ thirdPartySubtype: subtype }))
+        );
+    }
+
+    return {
+        subtypes,
+        existingProjects: existingProjects || [],
+        existingSubtypeIds
+    };
+}
+
+async function thirdPartyProjectHasDeliverableFile(thirdPartyProjectId) {
+    const projectId = Number(thirdPartyProjectId);
+    if (!projectId) return false;
+
+    if (typeof findDriveFileForEntity === 'function'
+        && typeof DRIVE_FILE_ENTITY_TYPE !== 'undefined'
+        && typeof DRIVE_FILE_FOLDER_KIND !== 'undefined') {
+        try {
+            const driveFile = await findDriveFileForEntity({
+                entityType: DRIVE_FILE_ENTITY_TYPE.THIRD_PARTY_PROJECT,
+                entityId: projectId,
+                folderKind: DRIVE_FILE_FOLDER_KIND.THIRD_PARTY
+            });
+            if (driveFile?.driveFileId) return true;
+        } catch (error) {
+            console.warn('thirdPartyProjectHasDeliverableFile:', error);
+        }
+    }
+
+    const { data, error } = await supabaseClient
+        .from('ThirdPartyProject')
+        .select('filePath')
+        .eq('id', projectId)
+        .maybeSingle();
+
+    if (error) return false;
+    return Boolean(String(data?.filePath || '').trim());
+}
+
+async function markThirdPartyProjectApprovedAfterProcurementUpload(thirdPartyProjectId) {
+    const projectId = Number(thirdPartyProjectId);
+    if (!projectId) return null;
+
+    const { data: current, error: fetchError } = await supabaseClient
+        .from('ThirdPartyProject')
+        .select(`
+            id,
+            orderId,
+            orderProjectId,
+            status,
+            projectCharacteristicId,
+            thirdPartySubtype:ThirdPartySubtype(id, name, projectCharacteristicId)
+        `)
+        .eq('id', projectId)
+        .maybeSingle();
+
+    if (fetchError || !current) {
+        throw fetchError || new Error('Projeto não encontrado.');
+    }
+
+    if (isThirdPartyProjectCommercialApprovalRequired(current)) {
+        return current;
+    }
+
+    if (current.status === THIRD_PARTY_PROJECT_STATUS_APPROVED) {
+        return current;
+    }
+
+    const hasFile = await thirdPartyProjectHasDeliverableFile(projectId);
+    if (!hasFile) {
+        throw new Error('Envie o arquivo antes de concluir.');
+    }
+
+    const now = new Date().toISOString();
+    const previousStatus = current.status;
+    const { data, error } = await supabaseClient
+        .from('ThirdPartyProject')
+        .update({
+            status: THIRD_PARTY_PROJECT_STATUS_APPROVED,
+            approvedAt: now,
+            updatedAt: now,
+            updatedById: currentUser?.id || null
+        })
+        .eq('id', projectId)
+        .select(`
+            id,
+            orderId,
+            orderProjectId,
+            status,
+            approvedAt,
+            thirdPartySubtype:ThirdPartySubtype(id, name),
+            orderProject:OrderProject(id, name, projectCode),
+            order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
+        `)
+        .single();
+
+    if (error) throw error;
+
+    await notifyThirdPartyProjectStatusChange(data, previousStatus);
+    return data;
+}
+
+async function createThirdPartyProjectsForConferenceApproval(conference, orderProjectIdsOverride = null) {
     const orderId = Number(conference?.orderId);
-    const orderProjectIds = getConferenceOrderProjectIds(conference);
+    const orderProjectIds = orderProjectIdsOverride?.length
+        ? [...new Set(orderProjectIdsOverride.map(id => Number(id)).filter(Boolean))]
+        : getConferenceOrderProjectIds(conference);
     if (!orderId || !orderProjectIds.length) {
         return { created: [], existing: [] };
     }
@@ -382,31 +820,7 @@ async function createThirdPartyProjectsForConferenceApproval(conference) {
         return { created: [], existing: existingProjects };
     }
 
-    const { data, error } = await supabaseClient
-        .from('ThirdPartyProject')
-        .insert(rowsToInsert)
-        .select(`
-            id,
-            orderId,
-            orderProjectId,
-            projectCharacteristicId,
-            thirdPartySubtypeId,
-            designerId,
-            status,
-            filePath,
-            projectCharacteristic:ProjectCharacteristic(id, name),
-            thirdPartySubtype:ThirdPartySubtype(id, name),
-            orderProject:OrderProject(id, name, projectCode)
-        `);
-
-    if (error) {
-        if (error.message?.includes('ThirdPartyProject')) {
-            throw new Error('Execute supabase/create-third-party-project.sql no Supabase.');
-        }
-        throw error;
-    }
-
-    const created = data || [];
+    const created = await insertThirdPartyProjectRows(rowsToInsert);
     for (const project of created) {
         await notifyThirdPartyProjectStatusChange(project, null);
     }
@@ -419,6 +833,7 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
         orderProjectId,
         orderId,
         characteristicIds = [],
+        thirdPartySubtypeIds = null,
         designerId: designerIdOption = null
     } = options;
 
@@ -445,6 +860,10 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
         subtypes.map(subtype => [Number(subtype.projectCharacteristicId), subtype])
     );
 
+    const allowedSubtypeIds = Array.isArray(thirdPartySubtypeIds) && thirdPartySubtypeIds.length
+        ? new Set(thirdPartySubtypeIds.map(id => Number(id)).filter(Boolean))
+        : null;
+
     const existingProjects = await fetchThirdPartyProjectsByOrderProjectId(normalizedProjectId);
     const existingKeys = new Set(
         existingProjects.map(project => `${project.orderProjectId}-${project.thirdPartySubtypeId}`)
@@ -456,6 +875,7 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
     uniqueCharacteristicIds.forEach(characteristicId => {
         const subtype = subtypeByCharacteristicId.get(characteristicId);
         if (!subtype) return;
+        if (allowedSubtypeIds && !allowedSubtypeIds.has(Number(subtype.id))) return;
 
         const key = `${normalizedProjectId}-${subtype.id}`;
         if (existingKeys.has(key)) return;
@@ -478,31 +898,7 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
         return { created: [], existing: existingProjects };
     }
 
-    const { data, error } = await supabaseClient
-        .from('ThirdPartyProject')
-        .insert(rowsToInsert)
-        .select(`
-            id,
-            orderId,
-            orderProjectId,
-            projectCharacteristicId,
-            thirdPartySubtypeId,
-            designerId,
-            status,
-            filePath,
-            projectCharacteristic:ProjectCharacteristic(id, name),
-            thirdPartySubtype:ThirdPartySubtype(id, name),
-            orderProject:OrderProject(id, name, projectCode)
-        `);
-
-    if (error) {
-        if (error.message?.includes('ThirdPartyProject')) {
-            throw new Error('Execute supabase/create-third-party-project.sql no Supabase.');
-        }
-        throw error;
-    }
-
-    const created = data || [];
+    const created = await insertThirdPartyProjectRows(rowsToInsert);
     for (const project of created) {
         await notifyThirdPartyProjectStatusChange(project, null);
     }
@@ -668,7 +1064,7 @@ async function saveThirdPartyProjectFilePath(thirdPartyProjectId, filePath) {
     const projectId = Number(thirdPartyProjectId);
     const normalizedPath = String(filePath || '').trim();
     if (!projectId) throw new Error('Projeto inválido.');
-    if (!normalizedPath) throw new Error('Informe o caminho do arquivo.');
+    if (!normalizedPath) throw new Error('Informe o caminho do arquivo ou envie o arquivo pelo Drive.');
 
     const now = new Date().toISOString();
     const { data, error } = await supabaseClient
@@ -711,19 +1107,32 @@ async function sendThirdPartyProject(thirdPartyProjectId) {
 
     const { data: current, error: fetchError } = await supabaseClient
         .from('ThirdPartyProject')
-        .select('id, orderId, orderProjectId, status, filePath, designerId')
+        .select(`
+            id,
+            orderId,
+            orderProjectId,
+            status,
+            filePath,
+            designerId,
+            projectCharacteristicId,
+            thirdPartySubtype:ThirdPartySubtype(id, name, projectCharacteristicId)
+        `)
         .eq('id', projectId)
         .single();
 
     if (fetchError) throw fetchError;
 
+    if (!isThirdPartyProjectCommercialApprovalRequired(current)) {
+        throw new Error('Este subtipo não exige envio ao consultor. Envie o arquivo no detalhe do projeto.');
+    }
+
     if (current.status !== THIRD_PARTY_PROJECT_STATUS_OPEN) {
         throw new Error('Somente projetos com status Aberto podem ser enviados.');
     }
 
-    const filePath = String(current.filePath || '').trim();
-    if (!filePath) {
-        throw new Error('Informe o caminho do arquivo antes de enviar.');
+    const hasFile = await thirdPartyProjectHasDeliverableFile(projectId);
+    if (!hasFile) {
+        throw new Error('Envie o arquivo no detalhe do projeto antes de enviar ao consultor.');
     }
 
     if (!isAdmin() && Number(current.designerId) !== Number(currentUser?.id)) {

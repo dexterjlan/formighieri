@@ -97,10 +97,6 @@ function getImplantacaoTerceiroPurchaseItems() {
     return getImplementationPurchaseItemsByType(IMPLANTACAO_PURCHASE_TYPE_TERCEIRO);
 }
 
-function getImplantacaoTerceirosSharedPath() {
-    return document.getElementById('implantacao-terceiros-path')?.value?.trim() || '';
-}
-
 function getImplantacaoThirdPartyProjectForSubtype(subtypeId) {
     return (activeImplantacaoThirdPartyProjects || []).find(
         project => Number(project.thirdPartySubtypeId) === Number(subtypeId)
@@ -108,7 +104,13 @@ function getImplantacaoThirdPartyProjectForSubtype(subtypeId) {
 }
 
 function isImplantacaoTerceiroSubtypeRequired(subtypeId) {
-    return Boolean(getImplantacaoThirdPartyProjectForSubtype(subtypeId));
+    if (getImplantacaoThirdPartyProjectForSubtype(subtypeId)) {
+        return true;
+    }
+    const subtype = (implantacaoThirdPartySubtypesCache || []).find(
+        item => Number(item.id) === Number(subtypeId)
+    );
+    return Boolean(subtype && !Number(subtype.projectCharacteristicId));
 }
 
 function getImplantacaoTerceiroSubtypeThirdPartyStatusLabel(project) {
@@ -127,10 +129,9 @@ function readImplantacaoStandardChecked(checkboxId, item) {
 }
 
 function readImplantacaoTerceiroSubtypeRowsFromForm() {
-    const sharedPath = getImplantacaoTerceirosSharedPath();
-
-    return (implantacaoThirdPartySubtypesCache || []).map(subtype => {
-        const subtypeId = Number(subtype.id);
+    return getImplantacaoThirdPartyProjectsForDisplay().map(thirdPartyProject => {
+        const subtypeId = Number(thirdPartyProject.thirdPartySubtypeId);
+        const subtype = thirdPartyProject.thirdPartySubtype || {};
         const existing = activeImplementationPurchaseItems.find(item => (
             item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO
             && Number(item.thirdPartySubtypeId) === subtypeId
@@ -145,7 +146,7 @@ function readImplantacaoTerceiroSubtypeRowsFromForm() {
             purchaseType: IMPLANTACAO_PURCHASE_TYPE_TERCEIRO,
             thirdPartySubtypeId: subtypeId,
             thirdPartySubtype: existing.thirdPartySubtype || subtype,
-            folderPath: sharedPath || existing.folderPath || '',
+            folderPath: existing.folderPath || '',
             isChecked: sentToCommercial ? Boolean(existing.isChecked) : Boolean(checkedInput?.checked),
             sentToCommercial,
             sentToCommercialAt: existing.sentToCommercialAt || null
@@ -174,15 +175,8 @@ function readImplementationPurchaseItemsFromForm() {
 }
 
 function getImplementationPurchaseItemsForSave() {
-    const sharedPath = getImplantacaoTerceirosSharedPath();
-
     return readImplementationPurchaseItemsFromForm()
-        .filter(item => item.purchaseType !== IMPLANTACAO_PURCHASE_TYPE_TERCEIRO || item.id)
-        .map(item => (
-            item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO
-                ? { ...item, folderPath: sharedPath || item.folderPath || '' }
-                : item
-        ));
+        .filter(item => item.purchaseType !== IMPLANTACAO_PURCHASE_TYPE_TERCEIRO || item.id);
 }
 
 function readImplantacaoFormValues() {
@@ -225,51 +219,82 @@ function getImplantacaoTerceiroDisplayName(item) {
     return item?.thirdPartySubtype?.name || 'Terceiros';
 }
 
+function getImplantacaoThirdPartySubtypesWithoutProject() {
+    return (implantacaoThirdPartySubtypesCache || []).filter(subtype => (
+        !getImplantacaoThirdPartyProjectForSubtype(subtype.id)
+    ));
+}
+
+function getImplantacaoThirdPartyProjectsForDisplay() {
+    return [...(activeImplantacaoThirdPartyProjects || [])].sort((a, b) => {
+        const sortDiff = Number(a.thirdPartySubtype?.sortOrder) - Number(b.thirdPartySubtype?.sortOrder);
+        if (sortDiff !== 0) return sortDiff;
+        const nameA = a.thirdPartySubtype?.name || '';
+        const nameB = b.thirdPartySubtype?.name || '';
+        return nameA.localeCompare(nameB, 'pt-BR');
+    });
+}
+
+function renderImplantacaoTerceiroCreateControls() {
+    const wrap = document.getElementById('implantacao-terceiros-create-wrap');
+    const select = document.getElementById('implantacao-terceiro-create-subtype');
+    if (!wrap || !select) return;
+
+    const missingSubtypes = getImplantacaoThirdPartySubtypesWithoutProject();
+    if (!missingSubtypes.length) {
+        wrap.classList.add('hidden');
+        select.innerHTML = '';
+        return;
+    }
+
+    wrap.classList.remove('hidden');
+    select.innerHTML = missingSubtypes.map(subtype => (
+        `<option value="${Number(subtype.id)}">${escapeHtml(subtype.name || 'Terceiros')}</option>`
+    )).join('');
+}
+
 function renderImplantacaoTerceiroPurchaseItems() {
     const container = document.getElementById('implantacao-terceiros-items');
     if (!container) return;
 
-    const subtypes = implantacaoThirdPartySubtypesCache || [];
-    if (!subtypes.length) {
-        container.innerHTML = '<p class="text-xs text-slate-400">Nenhum subtipo de terceiro cadastrado.</p>';
+    renderImplantacaoTerceiroCreateControls();
+
+    const projects = getImplantacaoThirdPartyProjectsForDisplay();
+    if (!projects.length) {
+        container.innerHTML = '<p class="text-xs text-slate-400">Nenhum projeto de terceiros neste ambiente.</p>';
         return;
     }
 
-    container.innerHTML = subtypes.map(subtype => {
-        const subtypeId = Number(subtype.id);
+    container.innerHTML = projects.map(thirdPartyProject => {
+        const subtypeId = Number(thirdPartyProject.thirdPartySubtypeId);
+        const subtype = thirdPartyProject.thirdPartySubtype || {};
         const existing = getImplantacaoTerceiroPurchaseItems().find(
             item => Number(item.thirdPartySubtypeId) === subtypeId
         ) || {};
         const sentToCommercial = Boolean(existing.sentToCommercial);
-        const thirdPartyProject = getImplantacaoThirdPartyProjectForSubtype(subtypeId);
-        const isRequired = Boolean(thirdPartyProject);
-        const isApproved = !thirdPartyProject
-            || thirdPartyProject.status === THIRD_PARTY_PROJECT_STATUS_APPROVED;
+        const isRequired = isImplantacaoTerceiroSubtypeRequired(subtypeId);
+        const isApproved = thirdPartyProject.status === THIRD_PARTY_PROJECT_STATUS_APPROVED;
         const label = escapeHtml(subtype.name || 'Terceiros');
         const requiredMarker = isRequired
             ? '<span class="project-characteristic-third-party-marker" title="Projeto de terceiros vinculado — obrigatório para enviar às compras após aprovação do consultor">*</span>'
             : '';
-        const statusLabel = thirdPartyProject && !isApproved
-            ? `<span class="text-[10px] text-amber-700 font-medium">${escapeHtml(getImplantacaoTerceiroSubtypeThirdPartyStatusLabel(thirdPartyProject))}</span>`
-            : '';
-        const approvedLabel = thirdPartyProject && isApproved
-            ? '<span class="text-[10px] text-emerald-700 font-medium">Aprovado</span>'
-            : '';
+        const statusClass = isApproved ? 'text-emerald-700' : 'text-amber-700';
+        const statusHtml = `<span class="text-[10px] font-medium ${statusClass}">${escapeHtml(getImplantacaoTerceiroSubtypeThirdPartyStatusLabel(thirdPartyProject))}</span>`;
+        const checkboxDisabled = sentToCommercial;
 
         return `
             <div class="implantacao-terceiro-item flex items-start gap-3" data-subtype-id="${subtypeId}" data-item-id="${existing.id || ''}">
                 <input type="checkbox" class="implantacao-terceiro-checked mt-1 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
-                    ${existing.isChecked ? 'checked' : ''} ${sentToCommercial ? 'disabled' : ''}>
+                    ${existing.isChecked ? 'checked' : ''} ${checkboxDisabled ? 'disabled' : ''}>
                 <div class="flex-1 space-y-1 min-w-0">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <span class="text-xs font-semibold text-slate-700">${label}${requiredMarker}</span>
-                        <div class="flex items-center gap-2 shrink-0">
-                            ${statusLabel}
-                            ${approvedLabel}
-                            <label class="inline-flex items-center gap-2 text-xs text-slate-600 cursor-default">
+                        <div class="flex flex-wrap items-center gap-2 shrink-0 text-xs text-slate-600">
+                            ${statusHtml}
+                            <label class="inline-flex items-center gap-2 cursor-default">
                                 <input type="checkbox" class="implantacao-terceiro-enviado-comercial rounded border-slate-300 text-amber-600 cursor-not-allowed" disabled
                                     ${sentToCommercial ? 'checked' : ''}>
-                                <span>Enviado para comercial</span>
+                                <span>Enviado compras</span>
                                 <span class="implantacao-terceiro-enviado-date text-slate-400">${sentToCommercial && existing.sentToCommercialAt ? `· ${escapeHtml(formatImplantacaoComercialDate(existing.sentToCommercialAt))}` : ''}</span>
                             </label>
                         </div>
@@ -312,13 +337,6 @@ function populateImplantacaoForm(record) {
     document.getElementById('implantacao-projeto-checked').checked = Boolean(record?.isProjectChecked);
     document.getElementById('implantacao-wps-op-code').value = record?.wpsOpCode || '';
 
-    const terceiroItems = getImplantacaoTerceiroPurchaseItems();
-    const sharedTerceiroPath = terceiroItems.find(item => item.folderPath)?.folderPath || '';
-    const terceirosPathInput = document.getElementById('implantacao-terceiros-path');
-    if (terceirosPathInput) {
-        terceirosPathInput.value = sharedTerceiroPath;
-    }
-
     populateImplantacaoStandardPurchaseFields();
     renderImplantacaoTerceiroPurchaseItems();
 
@@ -359,9 +377,6 @@ function setImplantacaoFormDisabled(disabled) {
 
     document.getElementById('implantacao-wps-op-code')?.toggleAttribute('disabled', disabled);
 
-    const terceiroSent = getImplantacaoTerceiroPurchaseItems().some(item => item.sentToCommercial);
-    document.getElementById('implantacao-terceiros-path')?.toggleAttribute('disabled', disabled || terceiroSent);
-
     document.querySelectorAll('.implantacao-terceiro-item').forEach(row => {
         const subtypeId = Number(row.dataset.subtypeId);
         const existing = getImplantacaoTerceiroPurchaseItems().find(
@@ -374,15 +389,20 @@ function setImplantacaoFormDisabled(disabled) {
         if (checkedEl) checkedEl.disabled = locked;
     });
 
+    const createSelect = document.getElementById('implantacao-terceiro-create-subtype');
+    const createBtn = document.getElementById('btn-implantacao-terceiro-create');
+    if (createSelect) createSelect.disabled = disabled;
+    if (createBtn) createBtn.disabled = disabled || !getImplantacaoThirdPartySubtypesWithoutProject().length;
+
     setImplantacaoComercialFieldsDisabled();
 }
 
 function canSendImplantacaoTerceiroItem(item) {
-    const sharedPath = getImplantacaoTerceirosSharedPath() || item?.folderPath || '';
-    if (!item?.isChecked || !sharedPath || item?.sentToCommercial) return false;
+    if (!item?.isChecked || item?.sentToCommercial) return false;
 
     const thirdPartyProject = getImplantacaoThirdPartyProjectForSubtype(item.thirdPartySubtypeId);
-    if (thirdPartyProject && thirdPartyProject.status !== THIRD_PARTY_PROJECT_STATUS_APPROVED) {
+    if (!thirdPartyProject) return false;
+    if (thirdPartyProject.status !== THIRD_PARTY_PROJECT_STATUS_APPROVED) {
         return false;
     }
 
@@ -1065,6 +1085,68 @@ async function handleImplantacaoEnviarProducao() {
     }
 }
 
+async function createImplantacaoThirdPartyProjectForSubtype(subtypeId) {
+    const normalizedSubtypeId = Number(subtypeId);
+    if (!normalizedSubtypeId || !activeImplantacaoOrderProjectId) return;
+
+    if (!canActImplantacao(activeImplantacaoRecord)) {
+        alertAppDialog('Sem permissão para criar projeto de terceiros.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (getImplantacaoThirdPartyProjectForSubtype(normalizedSubtypeId)) {
+        renderImplantacaoTerceiroPurchaseItems();
+        return;
+    }
+
+    try {
+        setImplantacaoModalLoading(true, 'Criando projeto de terceiros...');
+
+        const { data: orderProject, error: orderProjectError } = await supabaseClient
+            .from('OrderProject')
+            .select('id, orderId, designerId')
+            .eq('id', activeImplantacaoOrderProjectId)
+            .maybeSingle();
+
+        if (orderProjectError || !orderProject) {
+            throw new Error('Ambiente do pedido não encontrado.');
+        }
+
+        if (typeof createThirdPartyProjectsForSelectedSubtypes !== 'function') {
+            throw new Error('Criação de projetos de terceiros indisponível.');
+        }
+
+        const result = await createThirdPartyProjectsForSelectedSubtypes({
+            orderId: orderProject.orderId,
+            orderProjectId: orderProject.id,
+            designerId: orderProject.designerId,
+            thirdPartySubtypeIds: [normalizedSubtypeId]
+        });
+
+        if (typeof fetchThirdPartyProjectsByOrderProjectId === 'function') {
+            activeImplantacaoThirdPartyProjects = await fetchThirdPartyProjectsByOrderProjectId(
+                activeImplantacaoOrderProjectId
+            );
+        }
+
+        renderImplantacaoTerceiroPurchaseItems();
+        updateImplantacaoActionButtons(activeImplantacaoRecord);
+
+        const createdCount = result?.created?.length || 0;
+        setImplantacaoModalLoading(
+            true,
+            createdCount ? 'Projeto de terceiros criado.' : 'Projeto de terceiros já existia.',
+            'success'
+        );
+        await waitImplantacaoStatus(900);
+    } catch (error) {
+        setImplantacaoModalLoading(true, error.message || 'Erro ao criar projeto.', 'error');
+        await waitImplantacaoStatus(2200);
+    } finally {
+        setImplantacaoModalLoading(false);
+    }
+}
+
 async function handleImplantacaoEnviarCompras() {
     if (!activeImplantacaoRecord?.id) return;
 
@@ -1083,7 +1165,7 @@ async function handleImplantacaoEnviarCompras() {
             return;
         }
 
-        alertAppDialog('Marque e preencha o caminho de pelo menos um item para enviar às compras.');
+        alertAppDialog('Marque ao menos um item válido para enviar às compras (listas com caminho ou terceiros com projeto aprovado).');
         return;
     }
 
@@ -1104,11 +1186,15 @@ async function handleImplantacaoEnviarCompras() {
 
         const purchaseItemsForCompras = await getImplementationPurchaseItemsForComprasSend(formValues);
 
-        await createComprasRecordsFromImplantacaoSend({
+        const createdPurchases = await createComprasRecordsFromImplantacaoSend({
             implementationId: activeImplantacaoRecord.id,
             orderProjectId: activeImplantacaoOrderProjectId,
             purchaseItems: purchaseItemsForCompras
         });
+
+        if (!createdPurchases.length && purchaseItemsForCompras.length) {
+            throw new Error('Não foi possível gerar a solicitação de compra. Tente salvar e enviar novamente.');
+        }
 
         const updatedPurchaseItems = activeImplementationPurchaseItems.map(item => {
             if (!purchaseItemsForCompras.some(row => Number(row.id) === Number(item.id))) {
@@ -1229,7 +1315,6 @@ function bindImplementationEvents() {
         'implantacao-compras-path',
         'implantacao-ferragens-path',
         'implantacao-tintas-path',
-        'implantacao-terceiros-path',
         'implantacao-wps-op-code'
     ].forEach(id => {
         document.getElementById(id)?.addEventListener('input', () => {
@@ -1252,6 +1337,16 @@ function bindImplementationEvents() {
         if (event.target.closest('.implantacao-terceiro-checked')) {
             updateImplantacaoActionButtons();
         }
+    });
+
+    document.getElementById('btn-implantacao-terceiro-create')?.addEventListener('click', () => {
+        const select = document.getElementById('implantacao-terceiro-create-subtype');
+        const subtypeId = Number(select?.value);
+        if (!subtypeId) {
+            alertAppDialog('Selecione um subtipo para criar o projeto.');
+            return;
+        }
+        createImplantacaoThirdPartyProjectForSubtype(subtypeId);
     });
 
     document.getElementById('btn-implantacao-enviar-producao')

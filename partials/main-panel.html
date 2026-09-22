@@ -1927,7 +1927,13 @@
                             <h3 class="font-bold text-sm text-slate-900">Características</h3>
                             <p class="text-xs text-slate-400 mt-0.5">Flags de projeto usadas pelo consultor após a conferência.</p>
                         </div>
-                        <div class="p-4 md:p-5 space-y-4">
+                        <div class="relative p-4 md:p-5 space-y-4">
+                            <div id="gestao-characteristics-save-loading"
+                                class="hidden absolute inset-0 bg-white/90 flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                                <div id="gestao-characteristics-save-loading-spinner"
+                                    class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
+                                <p id="gestao-characteristics-save-loading-msg" class="text-sm text-slate-700 font-medium">Salvando...</p>
+                            </div>
                             <form id="gestao-new-characteristic-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
                                 <div class="flex-1 min-w-[180px]">
                                     <label class="block text-[10px] font-semibold text-slate-500 mb-1">Nova característica</label>
@@ -1966,7 +1972,13 @@
                             <h3 class="font-bold text-sm text-slate-900">Subtipos de Terceiros</h3>
                             <p class="text-xs text-slate-400 mt-0.5">Cadastre os subtipos usados na implantação e vincule à característica de projeto quando o fluxo de projetos de terceiros se aplicar.</p>
                         </div>
-                        <div class="p-4 md:p-5 space-y-4">
+                        <div class="relative p-4 md:p-5 space-y-4">
+                            <div id="gestao-third-party-subtypes-save-loading"
+                                class="hidden absolute inset-0 bg-white/90 flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                                <div id="gestao-third-party-subtypes-save-loading-spinner"
+                                    class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
+                                <p id="gestao-third-party-subtypes-save-loading-msg" class="text-sm text-slate-700 font-medium">Salvando...</p>
+                            </div>
                             <p id="gestao-third-party-subtypes-sql-hint" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                                 Execute <code>supabase/create-third-party-subtype-characteristic-link.sql</code> no Supabase para habilitar o vínculo com características.
                             </p>

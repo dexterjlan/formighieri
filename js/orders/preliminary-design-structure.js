@@ -68,15 +68,39 @@ async function addAnteprojetoProjectSection(project = {}, options = {}) {
     const { canEditStructure = true, canExtendStructure = true, canEditConsultor = false, readOnly = false } = options;
     const structureDisabled = readOnly || !canEditStructure;
     const extendDisabled = readOnly || !canExtendStructure;
+    const projectStatusName = project.projectStatusName || '';
+    const sentToManager = projectStatusName === ORDER_PROJECT_STATUS_CONFERENCIA_REALIZADA;
+    const awaitingConsultorSubmit = !sentToManager && (
+        !projectStatusName || projectStatusName === ORDER_PROJECT_STATUS_CONFERENCIA_ENVIADA
+    );
+    const showSubmitSelect = canEditConsultor && awaitingConsultorSubmit && Boolean(options.consultorSubmitSelectionEnabled);
+    const sectionReadOnlyConsultor = readOnly || sentToManager;
+    const sectionOptions = {
+        ...options,
+        readOnly: sectionReadOnlyConsultor || readOnly,
+        canEditConsultor: canEditConsultor && !sentToManager
+    };
 
     const section = document.createElement('div');
     section.className = 'anteprojeto-project-section border border-sky-200 rounded-xl bg-sky-50/30 overflow-hidden';
     section.dataset.orderProjectId = String(project.orderProjectId);
     section.dataset.projectLabel = project.label || 'Projeto';
+    if (awaitingConsultorSubmit) {
+        section.dataset.awaitingConsultorSubmit = '1';
+    }
 
     section.innerHTML = `
         <div class="flex justify-between items-center gap-2 px-4 py-2.5 bg-sky-100/50 border-b border-sky-200">
-            <span class="text-xs font-bold text-slate-800">🏠 ${escapeHtml(project.label || 'Projeto')}</span>
+            <div class="flex items-center gap-2 min-w-0">
+                ${showSubmitSelect
+                    ? `<input type="checkbox" class="anteprojeto-project-submit-select h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" checked
+                        title="Incluir este projeto no envio ao gestor">`
+                    : ''}
+                <span class="text-xs font-bold text-slate-800 truncate">🏠 ${escapeHtml(project.label || 'Projeto')}</span>
+                ${sentToManager
+                    ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold shrink-0">Aguardando gestor</span>'
+                    : ''}
+            </div>
             ${extendDisabled
                 ? ''
                 : '<button type="button" class="anteprojeto-remove-project-btn text-xs text-red-600 hover:text-red-800 font-medium">Remover projeto</button>'}
@@ -109,10 +133,19 @@ async function addAnteprojetoProjectSection(project = {}, options = {}) {
         section.remove();
         updateAnteprojetoProjectsEmptyState();
         refreshAnteprojetoAddProjectSelect();
+        if (typeof refreshPreliminaryDesignModalConfirmButton === 'function') {
+            refreshPreliminaryDesignModalConfirmButton();
+        }
+    });
+
+    section.querySelector('.anteprojeto-project-submit-select')?.addEventListener('change', () => {
+        if (typeof refreshPreliminaryDesignModalConfirmButton === 'function') {
+            refreshPreliminaryDesignModalConfirmButton();
+        }
     });
 
     container.appendChild(section);
-    (project.modules || []).forEach(module => addAnteprojetoModuleCard(section, module, options));
+    (project.modules || []).forEach(module => addAnteprojetoModuleCard(section, module, sectionOptions));
 
     updateAnteprojetoProjectsEmptyState();
     refreshAnteprojetoAddProjectSelect();
@@ -140,6 +173,9 @@ function groupConferenceByProjects(conference) {
     return (conference?.conferenceProjects || []).map(project => ({
         orderProjectId: Number(project.orderProjectId),
         label: project.orderProject?.name || 'Projeto',
+        projectStatusName: typeof getOrderProjectStatusNameFromConferenceProject === 'function'
+            ? getOrderProjectStatusNameFromConferenceProject(project)
+            : (project.orderProject?.projectStatus?.name || ''),
         modules: (project.modules || [])
             .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.id - b.id))
             .map(module => ({

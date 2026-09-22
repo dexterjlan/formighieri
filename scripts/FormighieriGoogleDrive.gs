@@ -27,7 +27,8 @@ var FGP_DRIVE_FOLDER_KIND = {
   detailing: 'detalhamento',
   revision: 'revisao',
   request: 'requisicao',
-  descriptive: 'descritivo'
+  descriptive: 'descritivo',
+  thirdParty: 'terceiros'
 };
 
 function handleDrivePostRequest_(body) {

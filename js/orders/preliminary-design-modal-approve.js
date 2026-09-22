@@ -165,6 +165,7 @@ async function fetchAnteprojetoApprovalDeliveryContext(conference) {
         }
     }
 
+    const awaitingManagerIds = new Set(getConferenceOrderProjectIdsAwaitingManagerApproval(conference));
     let projects = (conference.conferenceProjects || [])
         .map(entry => ({
             id: Number(entry.orderProjectId),
@@ -173,7 +174,7 @@ async function fetchAnteprojetoApprovalDeliveryContext(conference) {
             deliveryPhaseId: entry.orderProject?.deliveryPhaseId ?? null,
             approvalNetworkPath: entry.orderProject?.approvalNetworkPath || ''
         }))
-        .filter(project => project.id);
+        .filter(project => project.id && awaitingManagerIds.has(project.id));
 
     const missingIds = projects.map(project => project.id);
 
@@ -329,6 +330,10 @@ async function showPreliminaryDesignApproveDeliveryModal(conferenceId) {
     pendingAnteprojetoApproveConferenceId = normalizedId;
 
     const context = await fetchAnteprojetoApprovalDeliveryContext(conference);
+    if (!context.projects?.length) {
+        alertAppDialog('Não há projetos aguardando aprovação nesta conferência.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
     anteprojetoApproveDeliveryContext = context;
 
     const contextEl = document.getElementById('anteprojeto-approve-modal-context');
@@ -622,18 +627,30 @@ async function approvePreliminaryDesignConference(conferenceId) {
         return;
     }
 
+    const approvedProjectIds = getConferenceOrderProjectIdsAwaitingManagerApproval(conference);
+    if (!approvedProjectIds.length) {
+        alertAppDialog('Não há projetos aguardando aprovação nesta conferência.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const conferenceForApproval = filterConferenceByOrderProjectIds(conference, approvedProjectIds);
+
     try {
         setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
-        await applyAguardandoProjetoTecnicoStatusToProjects(getConferenceOrderProjectIds(conference));
+        await applyAguardandoProjetoTecnicoStatusToProjects(approvedProjectIds);
 
         const now = new Date().toISOString();
+        const markConferenceApproved = await conferenceProjectsAreAllPastManagerApprovalGate(conference);
         let updatePayload = {
-            status: 'Aprovada',
-            approvedAt: now,
-            approvedById: currentUser.id,
             updatedAt: now,
             updatedById: currentUser.id
         };
+
+        if (markConferenceApproved) {
+            updatePayload.status = 'Aprovada';
+            updatePayload.approvedAt = now;
+            updatePayload.approvedById = currentUser.id;
+        }
 
         setAnteprojetoConferenceActionLoading(true, 'Registrando aprovação da conferência...');
 
@@ -643,14 +660,16 @@ async function approvePreliminaryDesignConference(conferenceId) {
             .eq('id', conferenceId);
 
         if (conferenceError?.message?.includes('approvedAt') || conferenceError?.message?.includes('Aprovada')) {
-            updatePayload = {
-                status: 'Aprovada',
+            const fallbackPayload = {
                 updatedAt: now,
                 updatedById: currentUser.id
             };
+            if (markConferenceApproved) {
+                fallbackPayload.status = 'Aprovada';
+            }
             ({ error: conferenceError } = await supabaseClient
                 .from('PreliminaryDesignConference')
-                .update(updatePayload)
+                .update(fallbackPayload)
                 .eq('id', conferenceId));
         }
 
@@ -658,14 +677,17 @@ async function approvePreliminaryDesignConference(conferenceId) {
 
         if (typeof createConferenceOrderRequestsFromApproval === 'function') {
             setAnteprojetoConferenceActionLoading(true, 'Criando requisições da conferência...');
-            await createConferenceOrderRequestsFromApproval(conference, currentUser.id);
+            await createConferenceOrderRequestsFromApproval(conferenceForApproval, currentUser.id);
         }
 
         let thirdPartyCreationResult = { created: [] };
         if (typeof createThirdPartyProjectsForConferenceApproval === 'function') {
             setAnteprojetoConferenceActionLoading(true, 'Criando projetos de terceiros...');
             try {
-                thirdPartyCreationResult = await createThirdPartyProjectsForConferenceApproval(conference);
+                thirdPartyCreationResult = await createThirdPartyProjectsForConferenceApproval(
+                    conferenceForApproval,
+                    approvedProjectIds
+                );
             } catch (creationError) {
                 console.error('createThirdPartyProjectsForConferenceApproval:', creationError);
                 alertAppDialog(
@@ -679,7 +701,7 @@ async function approvePreliminaryDesignConference(conferenceId) {
             setAnteprojetoConferenceActionLoading(true, 'Enviando e-mail de notificação...');
             await notifyConferenciaAprovadaEmail({
                 orderId: conference.orderId,
-                orderProjectIds: getConferenceOrderProjectIds(conference),
+                orderProjectIds: approvedProjectIds,
                 networkPath: conference?.networkPath || ''
             });
         }

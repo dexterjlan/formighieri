@@ -103,12 +103,159 @@ function isAnteprojetoConferenceConfirmed(conference) {
     return conference?.status === 'Confirmada' || conference?.status === 'Aprovada';
 }
 
+function isAnteprojetoConferencePartiallyConfirmed(conference) {
+    return conference?.status === ANTEPROJETO_CONFERENCE_STATUS_PARTIAL;
+}
+
+function getOrderProjectStatusNameFromConferenceProject(conferenceProject) {
+    const embedded = conferenceProject?.orderProject?.projectStatus?.name;
+    if (embedded) return embedded;
+    if (typeof getProjectStatusName === 'function' && conferenceProject?.orderProject) {
+        return getProjectStatusName(conferenceProject.orderProject) || '';
+    }
+    return '';
+}
+
+function isConferenceProjectAwaitingConsultorSubmit(conferenceProject) {
+    const statusName = getOrderProjectStatusNameFromConferenceProject(conferenceProject);
+    return !statusName || statusName === ORDER_PROJECT_STATUS_CONFERENCIA_ENVIADA;
+}
+
+function isConferenceProjectAwaitingManagerApproval(conferenceProject) {
+    return getOrderProjectStatusNameFromConferenceProject(conferenceProject) === ORDER_PROJECT_STATUS_CONFERENCIA_REALIZADA;
+}
+
+function getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference) {
+    return [...new Set(
+        (conference?.conferenceProjects || [])
+            .filter(isConferenceProjectAwaitingConsultorSubmit)
+            .map(project => Number(project.orderProjectId))
+            .filter(Boolean)
+    )];
+}
+
+function getConferenceOrderProjectIdsAwaitingManagerApproval(conference) {
+    return [...new Set(
+        (conference?.conferenceProjects || [])
+            .filter(isConferenceProjectAwaitingManagerApproval)
+            .map(project => Number(project.orderProjectId))
+            .filter(Boolean)
+    )];
+}
+
+function conferenceHasProjectsAwaitingManagerApproval(conference) {
+    return getConferenceOrderProjectIdsAwaitingManagerApproval(conference).length > 0;
+}
+
+function getConferenceModuleObservationsForProjects(conference, orderProjectIds) {
+    const idSet = new Set((orderProjectIds || []).map(id => Number(id)).filter(Boolean));
+    if (!idSet.size) return [];
+    return getConferenceProjectObservations(conference).filter(obs => idSet.has(Number(obs.orderProjectId)));
+}
+
+function filterConferenceByOrderProjectIds(conference, orderProjectIds) {
+    if (!conference) return conference;
+    const idSet = new Set((orderProjectIds || []).map(id => Number(id)).filter(Boolean));
+    return {
+        ...conference,
+        conferenceProjects: (conference.conferenceProjects || []).filter(project =>
+            idSet.has(Number(project.orderProjectId))
+        )
+    };
+}
+
+function resolveConferenceConsultorSubmitProjectIds(conference, requestedIds = null) {
+    const pending = getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference);
+    if (!pending.length) return [];
+
+    const normalizedRequested = requestedIds == null
+        ? pending
+        : [...new Set((requestedIds || []).map(id => Number(id)).filter(Boolean))];
+
+    return normalizedRequested.filter(id => pending.includes(id));
+}
+
+function collectAnteprojetoCardSubmitProjectIds(scopeEl) {
+    if (!scopeEl) return [];
+    const pendingNodes = scopeEl.querySelectorAll('[data-awaiting-consultor-submit="1"]');
+    if (!pendingNodes.length) return [];
+
+    const selectedFromCheckbox = [...scopeEl.querySelectorAll('.anteprojeto-card-project-submit-select')]
+        .filter(input => input.checked)
+        .map(input => Number(input.dataset.orderProjectId))
+        .filter(Boolean);
+
+    if (selectedFromCheckbox.length) return selectedFromCheckbox;
+
+    if (pendingNodes.length === 1) {
+        return [Number(pendingNodes[0].dataset.orderProjectId)].filter(Boolean);
+    }
+
+    return [];
+}
+
+function collectConsultorObservationDispositionsFromDom(orderProjectIds, rootSelector = '#anteprojeto-projects-structure') {
+    const idSet = new Set((orderProjectIds || []).map(id => Number(id)).filter(Boolean));
+    if (!idSet.size) return [];
+
+    const root = document.querySelector(rootSelector);
+    if (!root) return [];
+
+    return Array.from(root.querySelectorAll('.module-observation-item'))
+        .filter(item => {
+            const section = item.closest('.anteprojeto-project-section');
+            const projectId = Number(section?.dataset.orderProjectId);
+            return idSet.has(projectId);
+        })
+        .map(item => {
+            const disposition = item.querySelector('.anteprojeto-observation-disposition:checked')?.value || null;
+            return {
+                consultantDisposition: disposition,
+                consultantChecked: disposition === ANTEPROJETO_DISPOSITION_OK,
+                consultantResponse: item.querySelector('.anteprojeto-observation-response')?.value.trim() || ''
+            };
+        });
+}
+
+function validateConsultorConferenceProjectSubmission(conference, orderProjectIds, options = {}) {
+    const submittingIds = resolveConferenceConsultorSubmitProjectIds(conference, orderProjectIds);
+    if (!submittingIds.length) {
+        return {
+            valid: false,
+            message: 'Selecione ao menos um projeto pendente para enviar ao gestor comercial.'
+        };
+    }
+
+    const preferDom = Boolean(options.preferDom);
+    const domObservations = preferDom
+        ? collectConsultorObservationDispositionsFromDom(submittingIds)
+        : [];
+
+    const moduleObservations = domObservations.length
+        ? domObservations
+        : getConferenceModuleObservationsForProjects(conference, submittingIds);
+
+    if (!moduleObservations.length) {
+        return {
+            valid: false,
+            message: 'Os projetos selecionados não possuem observações para classificar.'
+        };
+    }
+
+    return validateConsultorObservationDispositions(moduleObservations);
+}
+
 function isAnteprojetoConferenceApproved(conference) {
     return conference?.status === 'Aprovada';
 }
 
 const ANTEPROJETO_CONFERENCE_STATUS_DRAFT = 'Rascunho';
 const ANTEPROJETO_CONFERENCE_STATUS_IN_PROGRESS = 'Em andamento';
+const ANTEPROJETO_CONFERENCE_STATUS_PARTIAL = 'Parcialmente confirmada';
+
+const ANTEPROJETO_CONFERENCE_STATUSES_AWAITING_MANAGER = ['Confirmada', ANTEPROJETO_CONFERENCE_STATUS_PARTIAL];
+const ORDER_PROJECT_STATUS_CONFERENCIA_ENVIADA = 'Conferência Enviada';
+const ORDER_PROJECT_STATUS_CONFERENCIA_REALIZADA = 'Conferência Realizada';
 
 function isAnteprojetoConferenceDraft(conference) {
     if (!conference) return true;
@@ -148,29 +295,30 @@ function canSendAnteprojetoConference(conference) {
 }
 
 function canEditAnteprojetoConsultorFields(conference) {
-    if (!conference || isAnteprojetoConferenceConfirmed(conference) || isAnteprojetoConferenceDraft(conference)) {
+    if (!conference || isAnteprojetoConferenceDraft(conference)) return false;
+    if (conference.status === 'Confirmada' || conference.status === 'Aprovada') return false;
+    if (conference.status !== ANTEPROJETO_CONFERENCE_STATUS_IN_PROGRESS
+        && conference.status !== ANTEPROJETO_CONFERENCE_STATUS_PARTIAL) {
         return false;
     }
+    if (!getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference).length) return false;
     return isAdminOrOrderConsultorForOrder(conference.orderId || activeOrderId);
 }
 
 function canConfirmAnteprojetoConference(conference) {
-    if (!conference || isAnteprojetoConferenceConfirmed(conference) || isAnteprojetoConferenceDraft(conference)) {
-        return false;
-    }
-    return isAdminOrOrderConsultorForOrder(conference.orderId || activeOrderId);
+    return canEditAnteprojetoConsultorFields(conference);
 }
 
 function canApproveAnteprojetoConference(conference) {
-    if (!conference || conference.status !== 'Confirmada') return false;
+    if (!conference) return false;
+    if (!ANTEPROJETO_CONFERENCE_STATUSES_AWAITING_MANAGER.includes(conference.status)) return false;
+    if (!conferenceHasProjectsAwaitingManagerApproval(conference)) return false;
     if (currentUser?.role === 'Admin') return true;
     return isGestorComercial();
 }
 
 function canReturnPreliminaryDesignConferenceToConsultor(conference) {
-    if (!conference || conference.status !== 'Confirmada') return false;
-    if (currentUser?.role === 'Admin') return true;
-    return isGestorComercial();
+    return canApproveAnteprojetoConference(conference);
 }
 
 function getConferenceModules(conference) {
@@ -354,6 +502,50 @@ async function getAguardandoProjetoTecnicoStatusId() {
         .maybeSingle();
 
     return fallback?.id || null;
+}
+
+async function fetchOrderProjectStatusNamesByIds(projectIds) {
+    const uniqueIds = [...new Set(projectIds.map(id => Number(id)).filter(Boolean))];
+    if (!uniqueIds.length) return {};
+
+    const { data, error } = await supabaseClient
+        .from('OrderProject')
+        .select('id, projectStatus:OrderProjectStatus(name)')
+        .in('id', uniqueIds);
+
+    if (error?.message?.includes('OrderProjectStatus') || error?.message?.includes('statusId')) {
+        const fallback = await supabaseClient
+            .from('OrderProject')
+            .select('id, statusId')
+            .in('id', uniqueIds);
+        if (fallback.error) throw fallback.error;
+        const statusIds = [...new Set((fallback.data || []).map(row => row.statusId).filter(Boolean))];
+        const { data: statuses } = statusIds.length
+            ? await supabaseClient.from('OrderProjectStatus').select('id, name').in('id', statusIds)
+            : { data: [] };
+        const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status.name]));
+        return Object.fromEntries((fallback.data || []).map(row => [
+            Number(row.id),
+            statusById[row.statusId] || ''
+        ]));
+    }
+
+    if (error) throw error;
+
+    return Object.fromEntries((data || []).map(row => [
+        Number(row.id),
+        row.projectStatus?.name || ''
+    ]));
+}
+
+async function conferenceProjectsAreAllPastManagerApprovalGate(conference) {
+    const ids = getConferenceOrderProjectIds(conference);
+    const namesById = await fetchOrderProjectStatusNamesByIds(ids);
+    return ids.every(id => {
+        const name = namesById[id] || '';
+        return name !== ORDER_PROJECT_STATUS_CONFERENCIA_ENVIADA
+            && name !== ORDER_PROJECT_STATUS_CONFERENCIA_REALIZADA;
+    });
 }
 
 async function applyAguardandoProjetoTecnicoStatusToProjects(orderProjectIds) {

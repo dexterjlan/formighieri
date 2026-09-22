@@ -1130,15 +1130,16 @@ async function submitCommercialApprovalFromPendencias(projectId) {
         return;
     }
 
-    const confirmed = await confirmAppDialog(
-        'O projeto será enviado para análise do consultor do pedido.',
-        {
-            title: `Enviar "${enrichedProject.name}" para aprovação?`,
-            confirmLabel: 'Enviar para aprovação'
+    if (typeof runThirdPartyProcurementGateBeforeCommercialApproval === 'function') {
+        const procurementConfirmed = await runThirdPartyProcurementGateBeforeCommercialApproval({
+            id: enrichedProject.id,
+            orderId: enrichedProject.orderId,
+            designerId: enrichedProject.designerId,
+            name: enrichedProject.name
+        });
+        if (!procurementConfirmed) {
+            return;
         }
-    );
-    if (!confirmed) {
-        return;
     }
 
     const caminhoSaved = await ensureProjectsCaminhoRedeAprovacao([{
@@ -1872,6 +1873,10 @@ function setApproveButtonLoading(approvalId, isLoading, message = 'Aprovando...'
 }
 
 function bindCommercialApprovalEvents() {
+    if (typeof bindThirdPartyProcurementApprovalModalEvents === 'function') {
+        bindThirdPartyProcurementApprovalModalEvents();
+    }
+
     document.getElementById('aprovacao-caminho-form')?.addEventListener('submit', async function (e) {
         e.preventDefault();
         const path = document.getElementById('aprovacao-caminho-input')?.value || '';
@@ -1941,6 +1946,20 @@ function bindCommercialApprovalEvents() {
             const selectedProjects = selectedProjectIds
                 .map(projectId => projects.find(item => Number(item.id) === Number(projectId)))
                 .filter(Boolean);
+
+            if (typeof runThirdPartyProcurementGateBeforeCommercialApproval === 'function') {
+                for (const project of selectedProjects) {
+                    const procurementConfirmed = await runThirdPartyProcurementGateBeforeCommercialApproval({
+                        id: project.id,
+                        orderId: activeOrderId,
+                        designerId: project.designerId,
+                        name: project.name
+                    });
+                    if (!procurementConfirmed) {
+                        return;
+                    }
+                }
+            }
 
             const caminhoSaved = await ensureProjectsCaminhoRedeAprovacao(selectedProjects);
             if (!caminhoSaved) return;

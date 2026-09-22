@@ -43,17 +43,20 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const classifiedCount = moduleObservations.filter(obs => normalizeConsultorDisposition(obs)).length;
     const canEdit = canEditAnteprojetoConference(conference) || canEditAnteprojetoConsultorFields(conference);
     const canConfirm = canConfirmAnteprojetoConference(conference);
-    const canOpen = confirmed || canEdit;
-    const allClassified = moduleObservations.length > 0
-        && validateConsultorObservationDispositions(moduleObservations).valid;
+    const canOpen = confirmed || canEdit || canConfirm || isAnteprojetoConferencePartiallyConfirmed(conference);
+    const pendingSubmitIds = getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference);
+    const pendingSubmitCount = pendingSubmitIds.length;
     const projetistaName = projetistaNames[conference.designerId] || '-';
+    const isPartial = isAnteprojetoConferencePartiallyConfirmed(conference);
     const statusClass = approved
         ? 'bg-indigo-100 text-indigo-800'
         : confirmed
             ? 'bg-emerald-100 text-emerald-800'
-            : isDraft
-                ? 'bg-amber-100 text-amber-800'
-                : 'bg-sky-100 text-sky-800';
+            : isPartial
+                ? 'bg-teal-100 text-teal-800'
+                : isDraft
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-sky-100 text-sky-800';
     const sketchUpPath = getConferenceSketchUpPath(conference);
     const conferenceObservation = conference.conferenceObservation || '';
     const managerObservation = conference.managerObservation || '';
@@ -109,16 +112,29 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     (conference.conferenceProjects || []).forEach(project => {
         const projectName = project.orderProject?.name || 'Projeto';
         const modules = project.modules || [];
+        const projectId = Number(project.orderProjectId);
+        const awaitingSubmit = isConferenceProjectAwaitingConsultorSubmit(project);
+        const sentToManager = isConferenceProjectAwaitingManagerApproval(project);
 
         const projectNode = document.createElement('div');
         projectNode.className = 'anteprojeto-tree-node';
+        if (awaitingSubmit) {
+            projectNode.dataset.awaitingConsultorSubmit = '1';
+            projectNode.dataset.orderProjectId = String(projectId);
+        }
 
         const projectRow = document.createElement('div');
         projectRow.className = 'anteprojeto-tree-row flex items-center gap-2 py-1.5';
         projectRow.innerHTML = `
             <button type="button" class="anteprojeto-tree-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                 aria-label="Expandir">▶</button>
+            ${canConfirm && awaitingSubmit && pendingSubmitCount > 1
+                ? `<input type="checkbox" class="anteprojeto-card-project-submit-select h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" data-order-project-id="${projectId}" checked>`
+                : ''}
             <span class="text-xs font-semibold text-slate-800">🏠 ${escapeHtml(projectName)}</span>
+            ${sentToManager
+                ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold">Aguardando gestor</span>'
+                : ''}
             <span class="text-[10px] text-slate-400">${modules.length} módulo${modules.length === 1 ? '' : 's'}</span>
         `;
 
@@ -181,18 +197,31 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     if (canConfirm) {
         const confirmWrap = document.createElement('div');
         confirmWrap.className = 'flex flex-col items-end gap-1.5 pt-2 border-t border-slate-100';
+        confirmWrap.dataset.conferenceId = String(conference.id);
+        const confirmLabel = pendingSubmitCount > 1
+            ? 'Enviar projetos selecionados ao gestor'
+            : 'Enviar ao gestor comercial';
         confirmWrap.innerHTML = `
             <p class="text-[10px] text-slate-500 text-right leading-relaxed max-w-md">
                 <span class="text-red-500">*</span>
-                O botão Confirmar Conferência só é liberado após selecionar Req. Proj., Req. Cons. ou OK em cada observação.
-                Se marcar Req. Proj. ou Req. Cons., a resposta do consultor deve estar preenchida.
+                ${pendingSubmitCount > 1
+                    ? 'Marque os projetos a enviar e classifique todas as observações deles.'
+                    : 'Classifique Req. Proj., Req. Cons. ou OK em cada observação antes de enviar ao gestor.'}
             </p>
-            <button type="button" onclick="confirmAnteprojetoConference(${conference.id})"
-                class="text-xs px-3 py-1.5 rounded-lg font-medium ${allClassified ? 'bg-emerald-700 text-white hover:bg-emerald-800' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}"
-                ${allClassified ? '' : 'disabled'}>
-                Confirmar Conferência
+            <button type="button" class="anteprojeto-card-confirm-btn text-xs px-3 py-1.5 rounded-lg font-medium bg-emerald-700 text-white hover:bg-emerald-800">
+                ${confirmLabel}
             </button>
         `;
+        const confirmBtn = confirmWrap.querySelector('.anteprojeto-card-confirm-btn');
+        confirmBtn?.addEventListener('click', () => {
+            const selectedIds = collectAnteprojetoCardSubmitProjectIds(body);
+            const validation = validateConsultorConferenceProjectSubmission(conference, selectedIds);
+            if (!validation.valid) {
+                alertAppDialog(validation.message, { variant: 'warning', title: 'Aviso' });
+                return;
+            }
+            confirmAnteprojetoConference(conference.id, { orderProjectIds: selectedIds });
+        });
         body.appendChild(confirmWrap);
     }
 

@@ -183,7 +183,7 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
     const project = result.data;
 
     if (!canActOrderProjectNomear(project)) {
-        alertAppDialog('Somente o projetista responsável pode confirmar o projeto como nomeado.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente o projetista responsável ou o administrador pode confirmar o projeto como nomeado.', { variant: 'warning', title: 'Aviso' });
         return false;
     }
 

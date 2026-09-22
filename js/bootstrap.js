@@ -139,6 +139,8 @@ const SCRIPTS = [
     'js/orders/third-party-project-revision-attachments.js',
     'js/orders/third-party-project-revision.js',
     'js/orders/third-party-project-tab.js',
+    'js/orders/third-party-project-drive-detail.js',
+    'js/orders/third-party-procurement-approval-modal.js',
     'js/orders/third-party-project-observation.js',
     'js/orders/preliminary-design.js',
     'js/orders/preliminary-design-structure.js',

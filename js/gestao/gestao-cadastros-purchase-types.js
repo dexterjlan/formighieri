@@ -1,3 +1,14 @@
+const GESTAO_THIRD_PARTY_SUBTYPES_SAVE_OVERLAY = {
+    overlayId: 'gestao-third-party-subtypes-save-loading',
+    messageId: 'gestao-third-party-subtypes-save-loading-msg',
+    spinnerId: 'gestao-third-party-subtypes-save-loading-spinner'
+};
+
+function setGestaoThirdPartySubtypesSaveLoading(active, message = 'Salvando...') {
+    if (typeof setActionOverlayLoading !== 'function') return;
+    setActionOverlayLoading(GESTAO_THIRD_PARTY_SUBTYPES_SAVE_OVERLAY, active, message, 'loading');
+}
+
 let gestaoThirdPartySubtypesCache = [];
 let gestaoThirdPartySubtypeCharacteristicEnabled = true;
 
@@ -160,27 +171,33 @@ async function saveGestaoThirdPartySubtypeRow(row) {
         return;
     }
 
-    const now = new Date().toISOString();
-    const payload = { name, sortOrder, isActive, updatedAt: now };
-    if (gestaoThirdPartySubtypeCharacteristicEnabled) {
-        payload.projectCharacteristicId = projectCharacteristicId;
-    }
+    setGestaoThirdPartySubtypesSaveLoading(true);
+    void document.getElementById('gestao-third-party-subtypes-save-loading')?.offsetWidth;
+    try {
+        const now = new Date().toISOString();
+        const payload = { name, sortOrder, isActive, updatedAt: now };
+        if (gestaoThirdPartySubtypeCharacteristicEnabled) {
+            payload.projectCharacteristicId = projectCharacteristicId;
+        }
 
-    const { error } = await supabaseClient
-        .from('ThirdPartySubtype')
-        .update(payload)
-        .eq('id', subtypeId);
+        const { error } = await supabaseClient
+            .from('ThirdPartySubtype')
+            .update(payload)
+            .eq('id', subtypeId);
 
-    if (error) {
-        if (error.message?.includes('projectCharacteristicId')) {
-            alertAppDialog('Execute supabase/create-third-party-subtype-characteristic-link.sql no Supabase para salvar a característica.');
+        if (error) {
+            if (error.message?.includes('projectCharacteristicId')) {
+                alertAppDialog('Execute supabase/create-third-party-subtype-characteristic-link.sql no Supabase para salvar a característica.');
+                return;
+            }
+            alertAppDialog('Erro ao salvar subtipo: ' + error.message);
             return;
         }
-        alertAppDialog('Erro ao salvar subtipo: ' + error.message);
-        return;
-    }
 
-    await loadGestaoThirdPartySubtypesList();
+        await loadGestaoThirdPartySubtypesList();
+    } finally {
+        setGestaoThirdPartySubtypesSaveLoading(false);
+    }
 }
 
 async function deleteGestaoThirdPartySubtypeRow(row) {
@@ -252,33 +269,39 @@ async function addGestaoThirdPartySubtype(event) {
         return;
     }
 
-    const now = new Date().toISOString();
-    const payload = {
-        name,
-        sortOrder,
-        isActive: true,
-        updatedAt: now
-    };
-    if (gestaoThirdPartySubtypeCharacteristicEnabled && projectCharacteristicId) {
-        payload.projectCharacteristicId = projectCharacteristicId;
-    }
+    setGestaoThirdPartySubtypesSaveLoading(true);
+    void document.getElementById('gestao-third-party-subtypes-save-loading')?.offsetWidth;
+    try {
+        const now = new Date().toISOString();
+        const payload = {
+            name,
+            sortOrder,
+            isActive: true,
+            updatedAt: now
+        };
+        if (gestaoThirdPartySubtypeCharacteristicEnabled && projectCharacteristicId) {
+            payload.projectCharacteristicId = projectCharacteristicId;
+        }
 
-    const { error } = await supabaseClient
-        .from('ThirdPartySubtype')
-        .insert(payload);
+        const { error } = await supabaseClient
+            .from('ThirdPartySubtype')
+            .insert(payload);
 
-    if (error) {
-        if (error.message?.includes('projectCharacteristicId')) {
-            alertAppDialog('Execute supabase/create-third-party-subtype-characteristic-link.sql no Supabase para vincular características.');
+        if (error) {
+            if (error.message?.includes('projectCharacteristicId')) {
+                alertAppDialog('Execute supabase/create-third-party-subtype-characteristic-link.sql no Supabase para vincular características.');
+                return;
+            }
+            alertAppDialog('Erro ao adicionar subtipo: ' + error.message);
             return;
         }
-        alertAppDialog('Erro ao adicionar subtipo: ' + error.message);
-        return;
-    }
 
-    document.getElementById('gestao-new-third-party-subtype-form')?.reset();
-    document.getElementById('gestao-new-third-party-subtype-sort').value = '0';
-    await loadGestaoThirdPartySubtypesList();
+        document.getElementById('gestao-new-third-party-subtype-form')?.reset();
+        document.getElementById('gestao-new-third-party-subtype-sort').value = '0';
+        await loadGestaoThirdPartySubtypesList();
+    } finally {
+        setGestaoThirdPartySubtypesSaveLoading(false);
+    }
 }
 
 let gestaoCompraStatusesCache = [];

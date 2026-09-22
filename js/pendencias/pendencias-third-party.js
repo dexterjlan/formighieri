@@ -12,7 +12,6 @@ function mapPendenciasThirdPartyInteractiveRow(project, extras = {}) {
         projectName: project.orderProject?.name || 'Projeto',
         characteristicName: project.projectCharacteristic?.name || '—',
         subtypeName: project.thirdPartySubtype?.name || '—',
-        filePath: project.filePath || '',
         designerName: project.designer?.name || '—',
         project,
         ...extras
@@ -65,41 +64,12 @@ function renderPendenciasThirdPartyGestorActionButton(project) {
     `;
 }
 
-function renderPendenciasThirdPartyProjetistaPathInput(project) {
-    const canAct = canActThirdPartyProjectAsProjetista(project);
-    const isOpen = project.status === THIRD_PARTY_PROJECT_STATUS_OPEN;
-    const pathDisabled = !canAct || !isOpen;
-
-    return `
-        <input type="text"
-            class="pendencias-third-party-path-input w-full min-w-[12rem] px-2 py-1.5 text-xs font-mono border border-slate-200 rounded-lg focus:outline-none focus:border-violet-600"
-            value="${escapeHtml(project.filePath || '')}"
-            placeholder="Caminho do arquivo"
-            data-third-party-project-id="${project.id}"
-            ${pathDisabled ? 'disabled' : ''}>
-    `;
-}
-
 function renderPendenciasThirdPartyProjetistaActions(project) {
     const canAct = canActThirdPartyProjectAsProjetista(project);
-    const isOpen = project.status === THIRD_PARTY_PROJECT_STATUS_OPEN;
     const isInReview = project.status === THIRD_PARTY_PROJECT_STATUS_IN_REVIEW;
 
     let actionButtons = '';
-    if (canAct && isOpen) {
-        actionButtons = `
-            <button type="button"
-                class="pendencias-third-party-save-path-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium"
-                data-third-party-project-id="${project.id}">
-                Salvar caminho
-            </button>
-            <button type="button"
-                class="pendencias-third-party-send-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-2.5 py-1 rounded-lg font-medium"
-                data-third-party-project-id="${project.id}">
-                Enviar
-            </button>
-        `;
-    } else if (canAct && isInReview) {
+    if (canAct && isInReview) {
         actionButtons = `
             <button type="button"
                 class="pendencias-third-party-revision-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-2.5 py-1 rounded-lg font-medium"
@@ -174,24 +144,6 @@ function bindPendenciasThirdPartyGestorActions(content) {
 }
 
 function bindPendenciasThirdPartyProjetistaActions(content) {
-    content.querySelectorAll('.pendencias-third-party-save-path-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const projectId = Number(button.dataset.thirdPartyProjectId);
-            const row = button.closest('tr');
-            const filePath = row?.querySelector('.pendencias-third-party-path-input')?.value || '';
-            await salvarPendenciaThirdPartyProjectPath(projectId, filePath);
-        });
-    });
-
-    content.querySelectorAll('.pendencias-third-party-send-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const projectId = Number(button.dataset.thirdPartyProjectId);
-            const row = button.closest('tr');
-            const filePath = row?.querySelector('.pendencias-third-party-path-input')?.value || '';
-            await enviarPendenciaThirdPartyProject(projectId, filePath);
-        });
-    });
-
     content.querySelectorAll('.pendencias-third-party-history-btn').forEach(button => {
         button.addEventListener('click', () => {
             const projectId = Number(button.dataset.thirdPartyProjectId);
@@ -264,47 +216,6 @@ async function associarPendenciaThirdPartyProjectProjetista(thirdPartyProjectId,
         await loadPendenciasThirdPartySemProjetista();
     } catch (error) {
         alertAppDialog('Erro ao associar projetista: ' + error.message);
-    } finally {
-        setPendenciasActionLoading(false);
-    }
-}
-
-async function salvarPendenciaThirdPartyProjectPath(thirdPartyProjectId, filePath) {
-    const project = pendenciasThirdPartyProjectsCache.find(item => Number(item.id) === Number(thirdPartyProjectId));
-    if (!canActThirdPartyProjectAsProjetista(project)) {
-        alertAppDialog('Você não tem permissão para editar este projeto.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
-
-    try {
-        setPendenciasActionLoading(true, 'Salvando caminho...');
-        await saveThirdPartyProjectFilePath(thirdPartyProjectId, filePath);
-        await loadPendenciasThirdPartyProjetista();
-    } catch (error) {
-        alertAppDialog('Erro ao salvar caminho: ' + error.message);
-    } finally {
-        setPendenciasActionLoading(false);
-    }
-}
-
-async function enviarPendenciaThirdPartyProject(thirdPartyProjectId, filePath) {
-    const project = pendenciasThirdPartyProjectsCache.find(item => Number(item.id) === Number(thirdPartyProjectId));
-    if (!canActThirdPartyProjectAsProjetista(project)) {
-        alertAppDialog('Você não tem permissão para enviar este projeto.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
-
-    if (!(await confirmAppDialog('Enviar este projeto de terceiros para revisão do consultor?'))) return;
-
-    try {
-        setPendenciasActionLoading(true, 'Enviando projeto...');
-        if (filePath && filePath !== project.filePath) {
-            await saveThirdPartyProjectFilePath(thirdPartyProjectId, filePath);
-        }
-        await sendThirdPartyProject(thirdPartyProjectId);
-        await loadPendenciasThirdPartyProjetista();
-    } catch (error) {
-        alertAppDialog('Erro ao enviar projeto: ' + error.message);
     } finally {
         setPendenciasActionLoading(false);
     }
@@ -421,18 +332,6 @@ function renderPendenciasThirdPartyProjetistaList(projects, overviewMode = false
                 filterable: true,
                 cellClass: 'p-3 text-xs text-slate-600'
             },
-            {
-                key: 'filePath',
-                label: 'Caminho do arquivo',
-                type: 'action',
-                sortable: true,
-                filterable: true,
-                thClass: 'min-w-[12rem]',
-                cellClass: 'p-3',
-                getSortValue: (row) => row.filePath || '',
-                getFilterValue: (row) => row.filePath || '',
-                render: (row) => renderPendenciasThirdPartyProjetistaPathInput(row.project)
-            },
             getPendenciasInteractiveActionColumn({
                 label: 'Ações',
                 thClass: 'w-56',
@@ -468,8 +367,7 @@ function renderPendenciasThirdPartyConsultorList(projects, overviewMode = false)
     if (!content) return;
 
     const rows = (projects || []).map(project => mapPendenciasThirdPartyInteractiveRow(project, {
-        designerName: project.designer?.name || 'Sem projetista',
-        filePath: project.filePath || '—'
+        designerName: project.designer?.name || 'Sem projetista'
     }));
 
     renderPendenciasInteractiveTableScreen(content, {
@@ -491,11 +389,6 @@ function renderPendenciasThirdPartyConsultorList(projects, overviewMode = false)
                 sortable: true,
                 filterable: true,
                 cellClass: 'p-3 text-xs text-slate-600'
-            },
-            {
-                key: 'filePath',
-                label: 'Caminho',
-                cellClass: 'p-3 text-xs font-mono text-slate-600 break-all'
             },
             getPendenciasInteractiveActionColumn({
                 label: 'Ações',
