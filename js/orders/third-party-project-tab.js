@@ -240,7 +240,7 @@ function showThirdPartyProjectsCreatedModal(createdProjects = []) {
         const flowLabel = typeof isThirdPartyProjectCommercialApprovalRequired === 'function'
             && isThirdPartyProjectCommercialApprovalRequired(project)
             ? 'aprovação comercial'
-            : 'arquivo no detalhe';
+            : 'consultor ou conclusão direta';
         return `
             <li class="text-xs text-slate-700 border border-slate-200 rounded-lg px-3 py-2 bg-slate-50/60">
                 <span class="font-semibold text-slate-900">${escapeHtml(projectName)}</span>

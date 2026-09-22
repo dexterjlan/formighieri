@@ -442,6 +442,44 @@ function resolveDriveFileDownloadUrl(file) {
     return String(file?.url || '');
 }
 
+/** ID do arquivo a partir de driveFileId ou URL salva (uc, file/d, etc.). */
+function extractGoogleDriveFileId(source) {
+    const fromField = String(
+        source && typeof source === 'object' ? source.driveFileId : ''
+    ).trim();
+    if (fromField) return fromField;
+
+    const url = String(
+        source && typeof source === 'object' ? source.url : source
+    ).trim();
+    if (!url) return '';
+
+    const fromQuery = url.match(/[?&]id=([^&]+)/i);
+    if (fromQuery) return decodeURIComponent(fromQuery[1]);
+
+    const fromPath = url.match(/\/file\/d\/([^/?#]+)/i);
+    if (fromPath) return decodeURIComponent(fromPath[1]);
+
+    return '';
+}
+
+/** Abrir PDF no navegador (preview do Drive — evita download forçado do uc?export=view). */
+function resolveDriveFilePdfBrowserOpenUrl(file) {
+    const driveFileId = extractGoogleDriveFileId(file);
+    if (driveFileId) {
+        return `https://drive.google.com/file/d/${encodeURIComponent(driveFileId)}/preview`;
+    }
+    const stored = String(file?.url || '').trim();
+    if (!stored) return '';
+    if (/\/file\/d\/[^/?#]+\/preview/i.test(stored)) return stored;
+    const pathMatch = stored.match(/^(https:\/\/drive\.google\.com\/file\/d\/[^/?#]+)/i);
+    if (pathMatch) return `${pathMatch[1]}/preview`;
+    if (/\/file\/d\/[^/?#]+\/view/i.test(stored)) {
+        return stored.replace(/\/view(\?.*)?$/i, '/preview');
+    }
+    return stored;
+}
+
 function driveFileGoogleusercontentUrl(driveFileId, size = '') {
     const id = encodeURIComponent(String(driveFileId || '').trim());
     if (!id) return '';
@@ -777,6 +815,8 @@ window.validateDriveUploadFiles = validateDriveUploadFiles;
 window.fetchDriveFiles = fetchDriveFiles;
 window.fetchDriveFilesByEntityIds = fetchDriveFilesByEntityIds;
 window.resolveDriveFileDownloadUrl = resolveDriveFileDownloadUrl;
+window.extractGoogleDriveFileId = extractGoogleDriveFileId;
+window.resolveDriveFilePdfBrowserOpenUrl = resolveDriveFilePdfBrowserOpenUrl;
 window.resolveDriveFileModel3dUrl = resolveDriveFileModel3dUrl;
 window.fetchView3dModelBlobFromDriveFile = fetchView3dModelBlobFromDriveFile;
 window.revokeView3dModelBlobUrl = revokeView3dModelBlobUrl;

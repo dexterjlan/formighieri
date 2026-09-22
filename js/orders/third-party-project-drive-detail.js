@@ -150,16 +150,22 @@ function renderThirdPartyProjectDetailDriveSection(project, driveFile) {
     const showUpload = canAct && (isOpen || project?.status === THIRD_PARTY_PROJECT_STATUS_IN_REVIEW);
     uploadWrap?.classList.toggle('hidden', !showUpload);
 
+    const hasDeliverable = Boolean(driveFile?.driveFileId || legacyPath);
+    const canSendToConsultor = canAct && isOpen && hasDeliverable;
+    const canFinishWithoutCommercial = canAct
+        && isOpen
+        && hasDeliverable
+        && !requiresCommercial;
+
     if (sendBtn) {
-        sendBtn.classList.toggle('hidden', !requiresCommercial);
-        sendBtn.disabled = !canAct || !isOpen || (!driveFile?.driveFileId && !legacyPath);
+        sendBtn.classList.remove('hidden');
+        sendBtn.disabled = !canSendToConsultor;
     }
 
     if (finishBtn) {
         finishBtn.classList.toggle('hidden', requiresCommercial);
-        finishBtn.disabled = !canAct
-            || project?.status === THIRD_PARTY_PROJECT_STATUS_APPROVED
-            || (!driveFile?.driveFileId && !legacyPath);
+        finishBtn.disabled = !canFinishWithoutCommercial
+            || project?.status === THIRD_PARTY_PROJECT_STATUS_APPROVED;
     }
 }
 
@@ -212,7 +218,7 @@ function renderThirdPartyProjectDetailModalFields(project) {
     if (flowHint) {
         flowHint.textContent = requiresCommercial
             ? 'Este subtipo exige aprovação do consultor após o envio do arquivo.'
-            : 'Este subtipo não exige aprovação comercial: envie o arquivo e conclua no detalhe.';
+            : 'Com arquivo enviado, você pode mandar ao consultor para aprovação ou concluir direto (sem passar pelo comercial).';
     }
 
     document.getElementById('third-party-project-detail-project').textContent =

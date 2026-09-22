@@ -984,11 +984,19 @@
                             <span class="font-semibold">Arquivo terceiros:</span>
                             <span id="compra-modal-third-party-file-name" class="text-slate-600"> —</span>
                         </p>
-                        <button type="button" id="btn-compra-third-party-download"
-                            class="mt-2 text-xs bg-white border border-indigo-200 text-indigo-800 px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-50 disabled:opacity-50"
-                            disabled>
-                            Baixar projeto de terceiros
-                        </button>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <button type="button" id="btn-compra-third-party-open"
+                                class="text-xs bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50"
+                                disabled
+                                title="Abre o PDF no visualizador do navegador (Chrome, etc.)">
+                                Abrir PDF
+                            </button>
+                            <button type="button" id="btn-compra-third-party-download"
+                                class="text-xs bg-white border border-indigo-200 text-indigo-800 px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-50 disabled:opacity-50"
+                                disabled>
+                                Baixar PDF
+                            </button>
+                        </div>
                     </div>
                 </div>
 

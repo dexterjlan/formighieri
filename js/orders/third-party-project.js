@@ -1122,10 +1122,6 @@ async function sendThirdPartyProject(thirdPartyProjectId) {
 
     if (fetchError) throw fetchError;
 
-    if (!isThirdPartyProjectCommercialApprovalRequired(current)) {
-        throw new Error('Este subtipo não exige envio ao consultor. Envie o arquivo no detalhe do projeto.');
-    }
-
     if (current.status !== THIRD_PARTY_PROJECT_STATUS_OPEN) {
         throw new Error('Somente projetos com status Aberto podem ser enviados.');
     }

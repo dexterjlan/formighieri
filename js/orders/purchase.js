@@ -552,8 +552,12 @@ function populateCompraForm(record) {
     const isTerceiro = record?.purchaseType === COMPRA_TIPO_TERCEIRO;
     const fileWrap = document.getElementById('compra-modal-third-party-file-wrap');
     const fileNameEl = document.getElementById('compra-modal-third-party-file-name');
+    const openBtn = document.getElementById('btn-compra-third-party-open');
     const downloadBtn = document.getElementById('btn-compra-third-party-download');
     const driveFile = record?.thirdPartyDriveFile;
+    const hasThirdPartyDriveFile = Boolean(
+        driveFile?.driveFileId || String(driveFile?.url || '').trim()
+    );
 
     if (fileWrap) {
         fileWrap.classList.toggle('hidden', !isTerceiro);
@@ -561,8 +565,73 @@ function populateCompraForm(record) {
     if (fileNameEl) {
         fileNameEl.textContent = driveFile?.fileName || 'Nenhum arquivo no Drive';
     }
+    if (openBtn) {
+        openBtn.disabled = !hasThirdPartyDriveFile;
+    }
     if (downloadBtn) {
-        downloadBtn.disabled = !driveFile?.driveFileId;
+        downloadBtn.disabled = !hasThirdPartyDriveFile;
+    }
+}
+
+function resolveCompraThirdPartyPdfDriveFileId(file) {
+    if (typeof extractGoogleDriveFileId === 'function') {
+        return extractGoogleDriveFileId(file);
+    }
+    const driveFileId = String(file?.driveFileId || '').trim();
+    if (driveFileId) return driveFileId;
+    const stored = String(file?.url || '').trim();
+    const match = stored.match(/[?&]id=([^&]+)/i);
+    return match ? decodeURIComponent(match[1]) : '';
+}
+
+function resolveCompraThirdPartyPdfDownloadUrl(file) {
+    const driveFileId = resolveCompraThirdPartyPdfDriveFileId(file);
+    if (driveFileId) {
+        return `https://drive.google.com/uc?export=download&confirm=t&id=${encodeURIComponent(driveFileId)}`;
+    }
+    const stored = String(file?.url || '').trim();
+    if (stored) return stored;
+    return typeof resolveDriveFileDownloadUrl === 'function'
+        ? resolveDriveFileDownloadUrl(file)
+        : '';
+}
+
+/** Visualizar no navegador (navegação — não usa fetch; Drive API exige Bearer no XHR). */
+function resolveCompraThirdPartyPdfInlineOpenUrl(file) {
+    if (typeof resolveDriveFilePdfBrowserOpenUrl === 'function') {
+        return resolveDriveFilePdfBrowserOpenUrl(file);
+    }
+    const driveFileId = resolveCompraThirdPartyPdfDriveFileId(file);
+    if (driveFileId) {
+        return `https://drive.google.com/file/d/${encodeURIComponent(driveFileId)}/preview`;
+    }
+    return String(file?.url || '').trim();
+}
+
+function openCompraThirdPartyDriveUrlInNewTab(url) {
+    const href = String(url || '').trim();
+    if (!href) return false;
+    const link = document.createElement('a');
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return true;
+}
+
+function openCompraThirdPartyDriveFileInNewTab() {
+    const inlineOpenUrl = resolveCompraThirdPartyPdfInlineOpenUrl(activeCompraThirdPartyDriveFile);
+    if (!openCompraThirdPartyDriveUrlInNewTab(inlineOpenUrl)) {
+        alertAppDialog('Não foi possível abrir o PDF.', { variant: 'warning', title: 'Aviso' });
+    }
+}
+
+function downloadCompraThirdPartyDriveFile() {
+    const url = resolveCompraThirdPartyPdfDownloadUrl(activeCompraThirdPartyDriveFile);
+    if (!openCompraThirdPartyDriveUrlInNewTab(url)) {
+        alertAppDialog('Não foi possível gerar o link de download.', { variant: 'warning', title: 'Aviso' });
     }
 }
 
@@ -671,16 +740,8 @@ function bindPurchaseEvents() {
 
     document.getElementById('btn-compra-salvar')?.addEventListener('click', handleCompraSalvar);
 
-    document.getElementById('btn-compra-third-party-download')?.addEventListener('click', () => {
-        const url = typeof resolveDriveFileDownloadUrl === 'function'
-            ? resolveDriveFileDownloadUrl(activeCompraThirdPartyDriveFile)
-            : '';
-        if (!url) {
-            alertAppDialog('Não foi possível gerar o link de download.', { variant: 'warning', title: 'Aviso' });
-            return;
-        }
-        window.open(url, '_blank', 'noopener,noreferrer');
-    });
+    document.getElementById('btn-compra-third-party-open')?.addEventListener('click', openCompraThirdPartyDriveFileInNewTab);
+    document.getElementById('btn-compra-third-party-download')?.addEventListener('click', downloadCompraThirdPartyDriveFile);
 
     document.getElementById('order-compras-list')?.addEventListener('click', async (event) => {
         const button = event.target.closest('.order-compras-open-btn');
