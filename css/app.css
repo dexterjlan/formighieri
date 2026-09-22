@@ -5695,6 +5695,19 @@ body.montagem-prog-resizing {
 }
 
 /* Visualizador 3D (Three.js) */
+.view3d-viewer-dialog {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.view3d-viewer-toolbar {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.view3d-viewer-toolbar button {
+    flex-shrink: 0;
+}
+
 .view3d-measure-label {
     padding: 0.2rem 0.45rem;
     border-radius: 0.375rem;

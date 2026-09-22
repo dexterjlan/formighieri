@@ -27,7 +27,6 @@ class View3dThreeViewer {
         this.hostEl = hostEl;
         this.animationId = null;
         this.model = null;
-        this.wireframeEnabled = false;
         this.xrayEnabled = false;
         this.measureEnabled = false;
         this.measurePickPoints = [];
@@ -61,6 +60,17 @@ class View3dThreeViewer {
         this.controls.dampingFactor = 0.08;
         this.controls.minDistance = 0.05;
         this.controls.maxDistance = 500;
+        this.navigationMode = 'orbit';
+        this.setNavigationMode('orbit');
+        this.controls.addEventListener('start', () => {
+            if (this.measureEnabled) return;
+            if (this.navigationMode === 'pan') {
+                this.renderer.domElement.style.cursor = 'grabbing';
+            }
+        });
+        this.controls.addEventListener('end', () => {
+            this.updateNavigationCursor();
+        });
 
         const ambient = new THREE.AmbientLight(0xffffff, 0.5);
         this.scene.add(ambient);
@@ -188,26 +198,9 @@ class View3dThreeViewer {
                 material.transparent = saved.transparent;
                 material.opacity = saved.opacity;
                 material.depthWrite = saved.depthWrite;
-                material.wireframe = this.wireframeEnabled ? true : saved.wireframe;
+                material.wireframe = saved.wireframe;
             });
         });
-    }
-
-    setWireframe(enabled) {
-        this.wireframeEnabled = Boolean(enabled);
-        if (!this.model) return;
-        this.model.traverse(child => {
-            if (!child.isMesh || !child.material) return;
-            const materials = Array.isArray(child.material) ? child.material : [child.material];
-            materials.forEach(material => {
-                material.wireframe = this.wireframeEnabled;
-            });
-        });
-    }
-
-    toggleWireframe() {
-        this.setWireframe(!this.wireframeEnabled);
-        return this.wireframeEnabled;
     }
 
     setXray(enabled) {
@@ -229,9 +222,6 @@ class View3dThreeViewer {
         }
 
         this.applyMaterialStateFromSnapshot();
-        if (this.wireframeEnabled) {
-            this.setWireframe(true);
-        }
     }
 
     toggleXray() {
@@ -239,13 +229,47 @@ class View3dThreeViewer {
         return this.xrayEnabled;
     }
 
+    updateNavigationCursor() {
+        if (this.measureEnabled) {
+            this.renderer.domElement.style.cursor = 'crosshair';
+            return;
+        }
+        if (this.navigationMode === 'pan') {
+            this.renderer.domElement.style.cursor = 'grab';
+            return;
+        }
+        this.renderer.domElement.style.cursor = 'default';
+    }
+
+    setNavigationMode(mode) {
+        const next = mode === 'pan' ? 'pan' : 'orbit';
+        this.navigationMode = next;
+
+        if (next === 'pan') {
+            this.controls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+            this.controls.mouseButtons.RIGHT = THREE.MOUSE.ROTATE;
+            this.controls.touches.ONE = THREE.TOUCH.PAN;
+            this.controls.touches.TWO = THREE.TOUCH.DOLLY_ROTATE;
+        } else {
+            this.controls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+            this.controls.mouseButtons.MIDDLE = THREE.MOUSE.DOLLY;
+            this.controls.mouseButtons.RIGHT = THREE.MOUSE.PAN;
+            this.controls.touches.ONE = THREE.TOUCH.ROTATE;
+            this.controls.touches.TWO = THREE.TOUCH.DOLLY_PAN;
+        }
+
+        this.updateNavigationCursor();
+        return this.navigationMode;
+    }
+
     setMeasureMode(enabled) {
         this.measureEnabled = Boolean(enabled);
         this.controls.enabled = !this.measureEnabled;
-        this.renderer.domElement.style.cursor = this.measureEnabled ? 'crosshair' : '';
         if (!this.measureEnabled) {
             this.measurePickPoints = [];
         }
+        this.updateNavigationCursor();
         return this.measureEnabled;
     }
 
@@ -329,7 +353,6 @@ class View3dThreeViewer {
                     this.model = gltf.scene;
                     this.scene.add(this.model);
                     this.snapshotModelMaterials();
-                    this.setWireframe(this.wireframeEnabled);
                     this.setXray(this.xrayEnabled);
                     this.centerAndFrameModel(this.model);
                     resolve();
