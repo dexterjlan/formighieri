@@ -6,7 +6,8 @@ const DRIVE_FILE_FOLDER_KIND = {
     REVISION: 'revision',
     REQUEST: 'request',
     DESCRIPTIVE: 'descriptive',
-    THIRD_PARTY: 'thirdParty'
+    THIRD_PARTY: 'thirdParty',
+    MODEL_3D: 'model3d'
 };
 
 const DRIVE_FILE_ENTITY_TYPE = {
@@ -15,7 +16,8 @@ const DRIVE_FILE_ENTITY_TYPE = {
     ORDER_REQUEST: 'OrderRequest',
     ORDER_REQUEST_ACTIVITY: 'OrderRequestActivity',
     SALES_ORDER: 'SalesOrder',
-    THIRD_PARTY_PROJECT: 'ThirdPartyProject'
+    THIRD_PARTY_PROJECT: 'ThirdPartyProject',
+    ORDER_PROJECT: 'OrderProject'
 };
 
 const DRIVE_FILE_FOLDER_NAMES = {
@@ -23,8 +25,12 @@ const DRIVE_FILE_FOLDER_NAMES = {
     [DRIVE_FILE_FOLDER_KIND.REVISION]: 'revisao',
     [DRIVE_FILE_FOLDER_KIND.REQUEST]: 'requisicao',
     [DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE]: 'descritivo',
-    [DRIVE_FILE_FOLDER_KIND.THIRD_PARTY]: 'terceiros'
+    [DRIVE_FILE_FOLDER_KIND.THIRD_PARTY]: 'terceiros',
+    [DRIVE_FILE_FOLDER_KIND.MODEL_3D]: '3d'
 };
+
+const DRIVE_FILE_MODEL_3D_EXTENSIONS = ['glb', 'gltf'];
+const DRIVE_FILE_MODEL_3D_INPUT_ACCEPT = '.glb,.gltf,model/gltf-binary,model/gltf+json';
 
 const DRIVE_FILE_MAX_BYTES = 100 * 1024 * 1024;
 const DRIVE_FILE_DOCUMENT_EXTENSIONS = ['pdf', 'zip', 'rar'];
@@ -35,6 +41,9 @@ const DRIVE_FILE_IMAGE_INPUT_ACCEPT = 'image/*';
 const DRIVE_FILE_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const DRIVE_FILE_REVISION_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 
+const ORDER_PROJECT_MODEL_3D_BUCKET = 'order-project-model3d';
+const ORDER_PROJECT_MODEL_3D_SIGNED_URL_TTL = 3600;
+
 const DRIVE_FILE_SELECT = [
     'id',
     'driveFileId',
@@ -43,6 +52,7 @@ const DRIVE_FILE_SELECT = [
     'mimeType',
     'fileSizeBytes',
     'url',
+    'viewerStoragePath',
     'ingestStatus',
     'ingestError',
     'folderKind',
@@ -78,6 +88,9 @@ function allowedDriveExtensionsForFolderKind(folderKind) {
     if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE) {
         return ['pdf'];
     }
+    if (folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D) {
+        return DRIVE_FILE_MODEL_3D_EXTENSIONS;
+    }
     if (isImageDriveFolderKind(folderKind)) {
         return DRIVE_FILE_IMAGE_EXTENSIONS;
     }
@@ -109,7 +122,99 @@ function mimeTypeForDriveUpload(fileName, mimeType) {
     if (ext === 'heic') return 'image/heic';
     if (ext === 'heif') return 'image/heif';
     if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+    if (ext === 'glb') return 'model/gltf-binary';
+    if (ext === 'gltf') return 'model/gltf+json';
     return String(mimeType || 'application/octet-stream');
+}
+
+function resolveDriveFileModel3dUrl(file) {
+    const driveFileId = String(file?.driveFileId || '').trim();
+    if (driveFileId) {
+        return `https://drive.google.com/uc?export=download&confirm=t&id=${encodeURIComponent(driveFileId)}`;
+    }
+    return resolveDriveFileDownloadUrl(file);
+}
+
+function getOrderProjectModel3dStorageEnvPrefix() {
+    return window.FORMIGHIERI_APP_ENV === 'prod' ? 'prod' : 'dev';
+}
+
+function buildOrderProjectModel3dViewerStoragePath(orderProjectId, fileName) {
+    const env = getOrderProjectModel3dStorageEnvPrefix();
+    const ext = getDriveFileExtension(fileName);
+    const safeExt = DRIVE_FILE_MODEL_3D_EXTENSIONS.includes(ext) ? ext : 'glb';
+    return `${env}/order-projects/${Number(orderProjectId)}/model.${safeExt}`;
+}
+
+async function mirrorModel3dViewerStorage(file, fileName, mimeType, driveFileRowId, orderProjectId) {
+    const projectId = Number(orderProjectId);
+    const rowId = Number(driveFileRowId);
+    if (!projectId || !rowId) return null;
+
+    const storagePath = buildOrderProjectModel3dViewerStoragePath(projectId, fileName);
+    const { error: uploadError } = await supabaseClient.storage
+        .from(ORDER_PROJECT_MODEL_3D_BUCKET)
+        .upload(storagePath, file, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: mimeType || 'application/octet-stream'
+        });
+    if (uploadError) throw uploadError;
+
+    const { error: updateError } = await supabaseClient
+        .from('DriveFile')
+        .update({
+            viewerStoragePath: storagePath,
+            updatedAt: new Date().toISOString()
+        })
+        .eq('id', rowId);
+    if (updateError) throw updateError;
+    return storagePath;
+}
+
+function resolveModel3dViewerStoragePath(file) {
+    const explicit = String(file?.viewerStoragePath || '').trim();
+    if (explicit) return explicit;
+    const orderProjectId = Number(file?.orderProjectId);
+    const fileName = file?.fileName;
+    if (!orderProjectId || !fileName) return '';
+    return buildOrderProjectModel3dViewerStoragePath(orderProjectId, fileName);
+}
+
+async function fetchView3dModelBlobFromDriveFile(file) {
+    const storagePath = resolveModel3dViewerStoragePath(file);
+    if (!storagePath) {
+        throw new Error(
+            'Visualização indisponível. Um admin deve enviar o modelo novamente na tela 3D.'
+        );
+    }
+
+    const { data, error } = await supabaseClient.storage
+        .from(ORDER_PROJECT_MODEL_3D_BUCKET)
+        .createSignedUrl(storagePath, ORDER_PROJECT_MODEL_3D_SIGNED_URL_TTL);
+    if (error || !data?.signedUrl) {
+        throw new Error(error?.message || 'Não foi possível abrir o modelo (Storage).');
+    }
+
+    const response = await fetch(data.signedUrl);
+    if (!response.ok) {
+        throw new Error(`Falha ao baixar o modelo (HTTP ${response.status}).`);
+    }
+    const blob = await response.blob();
+    if (!blob.size) {
+        throw new Error('Arquivo 3D vazio. Envie o modelo novamente.');
+    }
+    return URL.createObjectURL(blob);
+}
+
+function revokeView3dModelBlobUrl(viewer) {
+    if (!viewer) return;
+    const blobUrl = String(viewer.dataset.blobUrl || '').trim();
+    if (!blobUrl) return;
+    try {
+        URL.revokeObjectURL(blobUrl);
+    } catch (_) { /* ignore */ }
+    delete viewer.dataset.blobUrl;
 }
 
 function sanitizeDriveUploadFileName(fileName, folderKind = DRIVE_FILE_FOLDER_KIND.DETAILING) {
@@ -177,6 +282,9 @@ function validateDriveUploadFiles(files, folderKind = DRIVE_FILE_FOLDER_KIND.DET
         }
         if (isImageDriveFolderKind(folderKind)) {
             return `O arquivo "${invalidType.name}" não é permitido. Use uma imagem (JPEG, PNG, WebP, GIF ou HEIC).`;
+        }
+        if (folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D) {
+            return `O arquivo "${invalidType.name}" não é permitido. Envie apenas GLB ou GLTF.`;
         }
         return `O arquivo "${invalidType.name}" não é permitido. Envie apenas PDF, ZIP ou RAR.`;
     }
@@ -508,6 +616,14 @@ async function upsertPendingDriveFile(fileName, mimeType, fileSizeBytes, context
     return { row: data, previousDriveFileId: existing?.driveFileId || null };
 }
 
+async function finalizeDriveFileUploadRow(row, storageMirrorPromise, folderKind) {
+    if (folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D && storageMirrorPromise) {
+        await storageMirrorPromise;
+        return fetchDriveFileRow(row.id);
+    }
+    return row;
+}
+
 async function saveDriveFileUpload(file, context = {}, onProgress) {
     const fileName = sanitizeDriveUploadFileName(
         context.fileName || file.name,
@@ -532,6 +648,19 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
         previousDriveFileId
     };
 
+    const storageMirrorPromise = context.folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D
+        ? mirrorModel3dViewerStorage(
+            file,
+            fileName,
+            mimeType,
+            row.id,
+            context.orderProjectId
+        ).catch(mirrorError => {
+            console.warn('mirrorModel3dViewerStorage:', mirrorError);
+            return null;
+        })
+        : null;
+
     if (typeof onProgress === 'function') onProgress(0, fileSizeBytes);
 
     if (fileSizeBytes <= DRIVE_FILE_DIRECT_MAX_BYTES) {
@@ -547,7 +676,7 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
             90000
         );
         if (typeof onProgress === 'function') onProgress(fileSizeBytes, fileSizeBytes);
-        return ready;
+        return finalizeDriveFileUploadRow(ready, storageMirrorPromise, context.folderKind);
     }
 
     const uploadId = newDriveUploadId();
@@ -583,7 +712,7 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
         );
         if (updated.ingestStatus === 'ready') {
             if (typeof onProgress === 'function') onProgress(fileSizeBytes, fileSizeBytes);
-            return updated;
+            return finalizeDriveFileUploadRow(updated, storageMirrorPromise, context.folderKind);
         }
         offset = expectedOffset;
     }
@@ -594,7 +723,7 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
         30000
     );
     if (typeof onProgress === 'function') onProgress(fileSizeBytes, fileSizeBytes);
-    return ready;
+    return finalizeDriveFileUploadRow(ready, storageMirrorPromise, context.folderKind);
 }
 
 async function deleteDriveFileRecord(file) {
@@ -610,6 +739,17 @@ async function deleteDriveFileRecord(file) {
             });
         } catch (error) {
             console.warn('deleteDriveFileRecord drive_delete:', error);
+        }
+    }
+
+    const viewerPath = String(file.viewerStoragePath || '').trim();
+    if (viewerPath) {
+        try {
+            await supabaseClient.storage
+                .from(ORDER_PROJECT_MODEL_3D_BUCKET)
+                .remove([viewerPath]);
+        } catch (storageError) {
+            console.warn('deleteDriveFileRecord model3d storage:', storageError);
         }
     }
 
@@ -637,6 +777,9 @@ window.validateDriveUploadFiles = validateDriveUploadFiles;
 window.fetchDriveFiles = fetchDriveFiles;
 window.fetchDriveFilesByEntityIds = fetchDriveFilesByEntityIds;
 window.resolveDriveFileDownloadUrl = resolveDriveFileDownloadUrl;
+window.resolveDriveFileModel3dUrl = resolveDriveFileModel3dUrl;
+window.fetchView3dModelBlobFromDriveFile = fetchView3dModelBlobFromDriveFile;
+window.revokeView3dModelBlobUrl = revokeView3dModelBlobUrl;
 window.resolveDriveFileViewUrl = resolveDriveFileViewUrl;
 window.resolveDriveFilePreviewUrl = resolveDriveFilePreviewUrl;
 window.driveFilePreviewImgAttrs = driveFilePreviewImgAttrs;

@@ -28,7 +28,8 @@ var FGP_DRIVE_FOLDER_KIND = {
   revision: 'revisao',
   request: 'requisicao',
   descriptive: 'descritivo',
-  thirdParty: 'terceiros'
+  thirdParty: 'terceiros',
+  model3d: '3d'
 };
 
 function handleDrivePostRequest_(body) {
@@ -54,7 +55,38 @@ function handleDrivePostRequest_(body) {
 
 function handleDriveGetRequest_(e) {
   var params = (e && e.parameter) || {};
+  var action = String(params.action || '');
+  if (action === 'drive_model') {
+    return streamDriveModelBlob_(params);
+  }
   return jsonResponse_({ ok: false, error: 'Use POST drive_upload / drive_start / drive_chunk.' });
+}
+
+/**
+ * GET ?action=drive_model&secret=...&driveFileId=...
+ * Stream GLB/GLTF para o model-viewer (evita CORS / página HTML do Drive).
+ */
+function streamDriveModelBlob_(params) {
+  if (String(params.secret || '') !== getNotificationScriptSecret_()) {
+    return jsonResponse_({ ok: false, error: 'Unauthorized' });
+  }
+  var driveFileId = String(params.driveFileId || '').trim();
+  if (!driveFileId) {
+    return jsonResponse_({ ok: false, error: 'driveFileId obrigatório' });
+  }
+  try {
+    var file = DriveApp.getFileById(driveFileId);
+    var blob = file.getBlob();
+    var lower = String(file.getName() || '').toLowerCase();
+    if (/\.glb$/.test(lower)) {
+      blob = blob.setContentType('model/gltf-binary');
+    } else if (/\.gltf$/.test(lower)) {
+      blob = blob.setContentType('model/gltf+json');
+    }
+    return blob;
+  } catch (err) {
+    return jsonResponse_({ ok: false, error: String(err) });
+  }
 }
 
 function isImageDriveFolderKind_(folderKind) {
@@ -74,6 +106,12 @@ function isAllowedDriveUploadFileName_(fileName, folderKind) {
   if (isImageDriveFolderKind_(kind)) {
     return /\.(jpe?g|png|webp|gif|heic|heif)$/.test(lower);
   }
+  if (kind === 'model3d') {
+    return /\.(glb|gltf)$/.test(lower);
+  }
+  if (kind === 'thirdparty') {
+    return /\.pdf$/.test(lower);
+  }
   return /\.pdf$/.test(lower) || /\.zip$/.test(lower) || /\.rar$/.test(lower);
 }
 
@@ -88,6 +126,8 @@ function mimeTypeForDriveUpload_(fileName, mimeType) {
   if (/\.heic$/.test(lower)) return 'image/heic';
   if (/\.heif$/.test(lower)) return 'image/heif';
   if (/\.jpe?g$/.test(lower)) return 'image/jpeg';
+  if (/\.glb$/.test(lower)) return 'model/gltf-binary';
+  if (/\.gltf$/.test(lower)) return 'model/gltf+json';
   return String(mimeType || 'application/octet-stream');
 }
 
@@ -360,9 +400,11 @@ function resolveDriveUploadContext_(body) {
   if (!fileName || !isAllowedDriveUploadFileName_(fileName, folderKind)) {
     throw new Error(folderKind === 'descriptive'
       ? 'Envie apenas PDF'
-      : (isImageDriveFolderKind_(folderKind)
-        ? 'Envie apenas uma imagem (JPEG, PNG, WebP, GIF ou HEIC)'
-        : 'Envie apenas PDF, ZIP ou RAR'));
+      : (folderKind === 'model3d'
+        ? 'Envie apenas GLB ou GLTF'
+        : (isImageDriveFolderKind_(folderKind)
+          ? 'Envie apenas uma imagem (JPEG, PNG, WebP, GIF ou HEIC)'
+          : 'Envie apenas PDF, ZIP ou RAR')));
   }
   var maxBytes = folderKind === 'request'
     ? (10 * 1024 * 1024)

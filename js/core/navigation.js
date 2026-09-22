@@ -309,6 +309,12 @@ async function restoreAppNavState() {
             case 'pesquisas':
                 await restorePesquisasView(state);
                 return true;
+            case 'view3d':
+                if (typeof restoreView3dView === 'function') {
+                    await restoreView3dView(state);
+                    return true;
+                }
+                return false;
             case 'calendar':
                 if (typeof showCalendar === 'function') {
                     await showCalendar();
@@ -408,6 +414,7 @@ function updateAdminNav() {
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
     if (typeof updatePesquisasNav === 'function') updatePesquisasNav();
+    if (typeof updateView3dNav === 'function') updateView3dNav();
     if (typeof updateProgramacoesNav === 'function') updateProgramacoesNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
     if (typeof updateCalendarGoogleSyncControls === 'function') updateCalendarGoogleSyncControls();
@@ -431,6 +438,7 @@ function updateMainNavActive(activeView) {
         gestao: document.getElementById('btn-gestao'),
         pendencias: document.getElementById('btn-pendencias'),
         pesquisas: document.getElementById('btn-pesquisas'),
+        view3d: document.getElementById('btn-view3d'),
         settings: document.getElementById('btn-system-settings')
     };
 
@@ -462,6 +470,7 @@ function hideSubViews() {
     document.getElementById("programacoes-view")?.classList.add("hidden");
     document.getElementById("pendencias-view").classList.add("hidden");
     document.getElementById("pesquisas-view")?.classList.add("hidden");
+    document.getElementById("view3d-view")?.classList.add("hidden");
 }
 
 function showDashboard() {

@@ -2872,3 +2872,50 @@
             </div>
         </div>
     </div>
+
+    <!-- MODAL: VISUALIZADOR 3D -->
+    <div id="view3d-viewer-modal"
+        class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[120]">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div class="p-4 border-b border-slate-100 flex items-start justify-between gap-3 shrink-0">
+                <div class="min-w-0">
+                    <h3 id="view3d-viewer-title" class="font-bold text-sm text-slate-900 truncate">Modelo 3D</h3>
+                    <p id="view3d-viewer-hint" class="text-xs text-slate-400 mt-0.5 truncate"></p>
+                </div>
+                <button type="button" id="btn-view3d-viewer-close"
+                    class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg font-medium shrink-0">
+                    Fechar
+                </button>
+            </div>
+            <div id="view3d-three-shell" class="flex-1 min-h-[50vh] bg-slate-900 relative flex flex-col">
+                <div id="view3d-three-canvas-host" class="flex-1 min-h-[45vh] relative"></div>
+                <div id="view3d-three-overlay"
+                    class="hidden absolute inset-0 flex items-center justify-center bg-slate-900/70 z-10 pointer-events-none">
+                    <p class="text-sm text-white font-medium">Carregando modelo...</p>
+                </div>
+                <div class="shrink-0 flex flex-wrap gap-2 p-2 border-t border-slate-700/80 bg-slate-900">
+                    <button type="button" id="btn-view3d-reset-camera"
+                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600">
+                        Reset câmera
+                    </button>
+                    <button type="button" id="btn-view3d-toggle-wireframe"
+                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600">
+                        Wireframe
+                    </button>
+                    <button type="button" id="btn-view3d-toggle-xray"
+                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600">
+                        X-ray
+                    </button>
+                    <button type="button" id="btn-view3d-toggle-measure"
+                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="Clique em dois pontos do modelo para medir">
+                        Medir
+                    </button>
+                    <button type="button" id="btn-view3d-clear-measures"
+                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600">
+                        Limpar medidas
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>

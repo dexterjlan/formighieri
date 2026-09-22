@@ -22,6 +22,8 @@
                     class="text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg">Início</button>
                 <button type="button" id="btn-back-dashboard"
                     class="text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Pedidos</button>
+                <button type="button" id="btn-view3d"
+                    class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">3D</button>
                 <button type="button" id="btn-conversations-query"
                     class="hidden text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">Consulta Requisições</button>
                 <button type="button" id="btn-approvals-query"
@@ -2869,6 +2871,60 @@
                         <p class="text-xs text-slate-400 text-center py-10">Selecione um item no menu.</p>
                     </div>
                 </div>
+            </div>
+        </main>
+
+        <!-- TELA: 3D -->
+        <main id="view3d-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6">
+            <div class="max-w-6xl mx-auto space-y-4 relative">
+                <div id="view3d-loading"
+                    class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
+                    <div class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
+                    <p id="view3d-loading-msg" class="text-sm text-slate-700 font-medium">Carregando...</p>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                        <h2 class="font-bold text-sm text-slate-900">Visualização 3D</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">Busque pelo pedido ou cliente e abra o modelo GLB/GLTF de cada projeto.</p>
+                    </div>
+                    <form id="view3d-filter-form" class="p-4 border-b border-slate-100 flex flex-wrap gap-3 items-end">
+                        <div class="flex-1 min-w-[140px]">
+                            <label for="view3d-filter-order" class="block text-[10px] font-semibold text-slate-500 mb-1 uppercase">Pedido</label>
+                            <input type="text" id="view3d-filter-order" placeholder="Ex.: PV-1234"
+                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                        </div>
+                        <div class="flex-1 min-w-[180px]">
+                            <label for="view3d-filter-client" class="block text-[10px] font-semibold text-slate-500 mb-1 uppercase">Cliente</label>
+                            <input type="text" id="view3d-filter-client" placeholder="Nome do cliente"
+                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                        </div>
+                        <button type="submit" id="btn-view3d-search"
+                            class="text-sm bg-indigo-700 text-white hover:bg-indigo-800 px-4 py-2 rounded-lg font-medium">
+                            Buscar
+                        </button>
+                    </form>
+                    <p id="view3d-upload-hint" class="hidden text-xs text-slate-500 px-4 pt-3">
+                        Como administrador, você pode enviar ou substituir o arquivo .glb ou .gltf de cada projeto (armazenado no Drive).
+                    </p>
+                    <p id="view3d-results-empty" class="text-xs text-slate-400 text-center py-12 px-4">
+                        Informe pedido ou cliente e clique em Buscar.
+                    </p>
+                    <div id="view3d-results-table-wrap" class="hidden overflow-x-auto">
+                        <table class="w-full text-sm min-w-[640px]">
+                            <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
+                                <tr>
+                                    <th class="text-left p-3 font-semibold w-28">Pedido</th>
+                                    <th class="text-left p-3 font-semibold">Cliente</th>
+                                    <th class="text-left p-3 font-semibold">Projeto</th>
+                                    <th class="text-left p-3 font-semibold">Arquivo 3D</th>
+                                    <th class="text-right p-3 font-semibold w-44">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="view3d-results-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <input type="file" id="view3d-upload-input" class="hidden" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
             </div>
         </main>
 

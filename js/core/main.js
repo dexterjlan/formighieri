@@ -120,6 +120,7 @@ function initAppEvents() {
     bindPendenciasEvents();
     if (typeof bindProgramacoesEvents === 'function') bindProgramacoesEvents();
     bindPesquisasEvents();
+    if (typeof bindView3dEvents === 'function') bindView3dEvents();
     bindUsersAdminEvents();
     if (typeof bindUserImpersonationEvents === 'function') {
         bindUserImpersonationEvents();

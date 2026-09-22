@@ -128,6 +128,7 @@ const SCRIPTS = [
     'js/pesquisas/pesquisas-requests-query.js',
     'js/pesquisas/pesquisas-purchases-query.js',
     'js/pesquisas/pesquisas-detailing-query.js',
+    'js/view3d/view3d.js',
     'js/admin/system-settings.js',
     'js/admin/import-pedido-settings.js',
     'js/admin/addr-label-settings.js',
