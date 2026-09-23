@@ -59,6 +59,7 @@ const SCRIPTS = [
     'js/comercial/comercial.js',
     'js/comercial/comercial-funnel.js',
     'js/comercial/comercial-deal-panel.js',
+    'js/comercial/comercial-deal-celebration.js',
     'js/comercial/comercial-activities.js',
     'js/comercial/comercial-today.js',
     'js/comercial/comercial-panel.js',

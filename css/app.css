@@ -5795,3 +5795,123 @@ body.view3d-viewer-modal-open {
     white-space: nowrap;
     transform: translate(-50%, -120%);
 }
+
+/* Celebração — negócio ganho (funil comercial) */
+.deal-won-celebration {
+    position: fixed;
+    inset: 0;
+    z-index: 8500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+        max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    pointer-events: auto;
+}
+
+.deal-won-celebration.hidden {
+    display: none;
+}
+
+.deal-won-celebration__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: rgb(15 23 42 / 0.55);
+    backdrop-filter: blur(4px);
+    cursor: pointer;
+}
+
+.deal-won-celebration__lottie {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.deal-won-celebration__lottie svg {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.deal-won-celebration__card {
+    position: relative;
+    z-index: 1;
+    width: min(92vw, 26rem);
+    text-align: center;
+    padding: 1.75rem 1.5rem 1.5rem;
+    border-radius: 1rem;
+    background: linear-gradient(165deg, #fffef9 0%, #f4f6f1 55%, #ebe8df 100%);
+    border: 1px solid var(--fm-border, #c8d0c0);
+    box-shadow:
+        0 24px 48px rgb(31 42 30 / 0.22),
+        0 0 0 1px rgb(255 255 255 / 0.6) inset;
+    animation: deal-won-celebration-card-in 0.45s ease-out both;
+}
+
+.deal-won-celebration__kicker {
+    margin: 0 0 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #b45309;
+}
+
+.deal-won-celebration__title {
+    margin: 0 0 1.25rem;
+    font-family: "Cormorant Garamond", Georgia, serif;
+    font-size: clamp(1.35rem, 4.5vw, 1.75rem);
+    font-weight: 700;
+    line-height: 1.25;
+    color: #1f2a1e;
+    word-break: break-word;
+}
+
+.deal-won-celebration__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.5rem;
+    padding: 0.5rem 1.25rem;
+    border-radius: 0.625rem;
+    border: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(180deg, #d97706 0%, #b45309 100%);
+    box-shadow: 0 2px 8px rgb(180 83 9 / 0.35);
+    cursor: pointer;
+}
+
+.deal-won-celebration__close:hover {
+    filter: brightness(1.05);
+}
+
+.deal-won-celebration__close:focus-visible {
+    outline: 2px solid #fbbf24;
+    outline-offset: 2px;
+}
+
+@keyframes deal-won-celebration-card-in {
+    from {
+        opacity: 0;
+        transform: scale(0.92) translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+body.deal-won-celebration-open {
+    overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .deal-won-celebration__card {
+        animation: none;
+    }
+}

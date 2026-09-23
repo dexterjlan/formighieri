@@ -50,6 +50,18 @@
 
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
     <div id="app-root"></div>
+    <div id="deal-won-celebration" class="deal-won-celebration hidden" role="dialog" aria-modal="true"
+        aria-labelledby="deal-won-celebration-title" aria-hidden="true">
+        <button type="button" id="deal-won-celebration-backdrop" class="deal-won-celebration__backdrop"
+            aria-label="Fechar celebração"></button>
+        <div id="deal-won-celebration-lottie" class="deal-won-celebration__lottie" aria-hidden="true"></div>
+        <div class="deal-won-celebration__card">
+            <p class="deal-won-celebration__kicker">Negócio ganho!</p>
+            <h2 id="deal-won-celebration-title" class="deal-won-celebration__title"></h2>
+            <button type="button" id="deal-won-celebration-close"
+                class="deal-won-celebration__close">Continuar</button>
+        </div>
+    </div>
     <div id="app-session-loading"
         class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-6"
         style="z-index: 9999;"

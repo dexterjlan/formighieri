@@ -220,6 +220,42 @@ class View3dThreeViewer {
         this.applyZoomStep(1 / 0.82);
     }
 
+    /** Captura a vista atual do WebGL (sem overlays HTML de medida). */
+    captureScreenshotDataUrl() {
+        this.controls.update();
+        this.renderer.render(this.scene, this.camera);
+        try {
+            return this.renderer.domElement.toDataURL('image/png');
+        } catch (error) {
+            throw new Error('Não foi possível capturar a imagem (canvas).');
+        }
+    }
+
+    buildScreenshotFileName(title = 'modelo-3d') {
+        const base = String(title || 'modelo-3d')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\w.\-() ]+/g, '_')
+            .replace(/\s+/g, '_')
+            .replace(/_+/g, '_')
+            .slice(0, 80) || 'modelo-3d';
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        return `${base}_${stamp}.png`;
+    }
+
+    downloadScreenshot(title = 'Modelo 3D') {
+        const dataUrl = this.captureScreenshotDataUrl();
+        const fileName = this.buildScreenshotFileName(title);
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = fileName;
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return fileName;
+    }
+
     applyMaterialStateFromSnapshot() {
         if (!this.model) return;
         this.model.traverse(child => {

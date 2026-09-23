@@ -257,8 +257,14 @@ async function winComercialDeal() {
         alertAppDialog('Não foi possível ganhar o negócio: ' + error.message);
         return;
     }
+    const dealTitle = document.getElementById('comercial-deal-title')?.value?.trim()
+        || document.getElementById('comercial-deal-title-label')?.textContent?.trim()
+        || '';
     closeComercialDealPanel();
     await refreshComercialView();
+    if (typeof playDealWonCelebration === 'function') {
+        playDealWonCelebration({ title: dealTitle });
+    }
 }
 
 async function loseComercialDeal() {

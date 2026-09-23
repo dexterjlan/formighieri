@@ -48,8 +48,26 @@ async function ensureView3dThreeModule() {
             const script = document.createElement('script');
             script.type = 'module';
             script.src = `js/view3d/view3d-three-viewer.js?v=${version}`;
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error('Não foi possível carregar o visualizador Three.js.'));
+            script.addEventListener('error', () => {
+                reject(new Error('Não foi possível carregar o visualizador Three.js.'));
+            }, { once: true });
+            window.addEventListener('error', event => {
+                if (event.filename && String(event.filename).includes('view3d-three-viewer.js')) {
+                    const detail = event.error?.message || event.message || '';
+                    reject(new Error(
+                        detail
+                            ? `Visualizador 3D: ${detail}`
+                            : 'Não foi possível carregar o visualizador Three.js.'
+                    ));
+                }
+            }, { once: true });
+            script.onload = () => {
+                if (window.View3dThreeViewer) {
+                    resolve();
+                    return;
+                }
+                reject(new Error('Visualizador Three.js indisponível.'));
+            };
             document.head.appendChild(script);
         });
     }
@@ -481,6 +499,17 @@ function bindView3dEvents() {
     });
     document.getElementById('btn-view3d-reset-camera')?.addEventListener('click', () => {
         view3dThreeViewer?.resetCamera();
+    });
+    document.getElementById('btn-view3d-screenshot')?.addEventListener('click', () => {
+        const title = document.getElementById('view3d-viewer-title')?.textContent?.trim() || 'Modelo 3D';
+        try {
+            view3dThreeViewer?.downloadScreenshot(title);
+        } catch (error) {
+            alertAppDialog(error.message || 'Não foi possível capturar a tela.', {
+                variant: 'warning',
+                title: 'Captura'
+            });
+        }
     });
     document.getElementById('btn-view3d-toggle-xray')?.addEventListener('click', event => {
         const enabled = view3dThreeViewer?.toggleXray();
