@@ -15,6 +15,18 @@ function scheduleView3dViewerResize() {
     });
 }
 
+function setView3dMobileBodyScrollLock(locked) {
+    if (window.matchMedia('(min-width: 768px)').matches) return;
+    document.body.classList.toggle('view3d-viewer-modal-open', Boolean(locked));
+}
+
+function bindView3dVisualViewportResize() {
+    if (bindView3dVisualViewportResize.bound) return;
+    bindView3dVisualViewportResize.bound = true;
+    window.visualViewport?.addEventListener('resize', scheduleView3dViewerResize);
+    window.visualViewport?.addEventListener('scroll', scheduleView3dViewerResize);
+}
+
 function disposeView3dThreeSession() {
     if (view3dThreeViewer) {
         view3dThreeViewer.dispose();
@@ -282,6 +294,7 @@ async function openView3dViewerModal(file, title = 'Modelo 3D') {
 
     disposeView3dThreeSession();
     toggleModal('view3d-viewer-modal', true);
+    setView3dMobileBodyScrollLock(true);
     setView3dThreeOverlay(true);
 
     try {
@@ -298,9 +311,16 @@ async function openView3dViewerModal(file, title = 'Modelo 3D') {
 
         setView3dNavigationToolbar('orbit');
         if (hintEl) {
-            hintEl.textContent = file?.fileName
-                ? `Arquivo: ${file.fileName} — Orbitar/Mão na barra; scroll ou pinça para zoom`
-                : 'Orbitar/Mão na barra; scroll ou pinça para zoom';
+            const narrow = window.matchMedia('(max-width: 767px)').matches;
+            if (narrow) {
+                hintEl.textContent = file?.fileName
+                    ? `${file.fileName} · pinça ou ícones à direita`
+                    : 'Pinça ou ícones à direita';
+            } else {
+                hintEl.textContent = file?.fileName
+                    ? `Arquivo: ${file.fileName} — Ícones à direita; scroll ou pinça para zoom`
+                    : 'Use os ícones à direita; scroll ou pinça para zoom';
+            }
         }
     } catch (loadError) {
         console.error('openView3dViewerModal:', loadError);
@@ -318,6 +338,7 @@ function closeView3dViewerModal() {
         toggleView3dToolbarActive(document.getElementById(id), false);
     });
     setView3dNavigationToolbar('orbit');
+    setView3dMobileBodyScrollLock(false);
     toggleModal('view3d-viewer-modal', false);
 }
 
@@ -415,6 +436,7 @@ async function restoreView3dView() {
 }
 
 function bindView3dEvents() {
+    bindView3dVisualViewportResize();
     window.addEventListener('resize', () => {
         const modal = document.getElementById('view3d-viewer-modal');
         if (modal && !modal.classList.contains('hidden')) {
@@ -448,6 +470,14 @@ function bindView3dEvents() {
         exitView3dMeasureModeForNavigation();
         view3dThreeViewer?.setNavigationMode('pan');
         setView3dNavigationToolbar('pan');
+    });
+    document.getElementById('btn-view3d-zoom-in')?.addEventListener('click', () => {
+        exitView3dMeasureModeForNavigation();
+        view3dThreeViewer?.zoomIn();
+    });
+    document.getElementById('btn-view3d-zoom-out')?.addEventListener('click', () => {
+        exitView3dMeasureModeForNavigation();
+        view3dThreeViewer?.zoomOut();
     });
     document.getElementById('btn-view3d-reset-camera')?.addEventListener('click', () => {
         view3dThreeViewer?.resetCamera();

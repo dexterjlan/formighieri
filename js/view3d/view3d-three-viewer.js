@@ -46,7 +46,11 @@ class View3dThreeViewer {
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1;
         this.renderer.shadowMap.enabled = true;
-        this.hostEl.appendChild(this.renderer.domElement);
+        const canvas = this.renderer.domElement;
+        canvas.style.display = 'block';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        this.hostEl.appendChild(canvas);
 
         this.labelRenderer = new CSS2DRenderer();
         this.labelRenderer.domElement.className = 'view3d-three-label-layer';
@@ -118,6 +122,7 @@ class View3dThreeViewer {
         if (!width || !height) return;
         this.camera.aspect = width / height;
         this.camera.updateProjectionMatrix();
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.setSize(width, height, false);
         this.labelRenderer.setSize(width, height);
     }
@@ -163,7 +168,10 @@ class View3dThreeViewer {
 
         const maxDim = Math.max(size.x, size.y, size.z, 0.001);
         const fovRad = this.camera.fov * (Math.PI / 180);
-        const distance = (maxDim / (2 * Math.tan(fovRad / 2))) * 1.35;
+        const aspect = Math.max(this.camera.aspect || 1, 0.25);
+        const fitHeightDistance = maxDim / (2 * Math.tan(fovRad / 2));
+        const fitWidthDistance = fitHeightDistance / aspect;
+        const distance = Math.max(fitHeightDistance, fitWidthDistance) * 1.35;
 
         this.camera.position.set(distance * 0.65, distance * 0.42, distance);
         this.camera.near = Math.max(maxDim / 200, 0.01);
@@ -183,6 +191,33 @@ class View3dThreeViewer {
         this.camera.position.copy(this.defaultCameraPosition);
         this.controls.target.copy(this.defaultTarget);
         this.controls.update();
+    }
+
+    /** Aproximar / afastar mantendo o ponto de órbita (equivalente ao scroll). */
+    applyZoomStep(scaleFactor) {
+        const factor = Number(scaleFactor);
+        if (!Number.isFinite(factor) || factor <= 0) return;
+
+        const offset = new THREE.Vector3().subVectors(this.camera.position, this.controls.target);
+        const distance = offset.length();
+        if (!distance) return;
+
+        const nextDistance = THREE.MathUtils.clamp(
+            distance * factor,
+            this.controls.minDistance,
+            this.controls.maxDistance
+        );
+        offset.setLength(nextDistance);
+        this.camera.position.copy(this.controls.target).add(offset);
+        this.controls.update();
+    }
+
+    zoomIn() {
+        this.applyZoomStep(0.82);
+    }
+
+    zoomOut() {
+        this.applyZoomStep(1 / 0.82);
     }
 
     applyMaterialStateFromSnapshot() {

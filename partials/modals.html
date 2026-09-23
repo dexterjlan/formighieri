@@ -2883,55 +2883,117 @@
 
     <!-- MODAL: VISUALIZADOR 3D -->
     <div id="view3d-viewer-modal"
-        class="hidden fixed inset-0 z-[120] flex flex-col bg-slate-900/60 backdrop-blur-sm md:items-center md:justify-center md:p-4">
+        class="hidden fixed inset-0 z-[120] flex flex-col bg-slate-900 md:items-center md:justify-center md:bg-slate-900/60 md:backdrop-blur-sm md:p-4">
         <div
-            class="view3d-viewer-dialog bg-white w-full flex flex-col min-h-0 overflow-hidden h-[100dvh] max-h-[100dvh] md:h-[min(92vh,52rem)] md:max-w-[min(96vw,80rem)] md:rounded-2xl md:shadow-xl">
-            <div class="p-3 md:p-4 border-b border-slate-100 flex items-start justify-between gap-3 shrink-0">
-                <div class="min-w-0">
-                    <h3 id="view3d-viewer-title" class="font-bold text-sm text-slate-900 truncate">Modelo 3D</h3>
-                    <p id="view3d-viewer-hint" class="text-xs text-slate-400 mt-0.5 line-clamp-2 md:truncate"></p>
+            class="view3d-viewer-dialog bg-white w-full flex flex-col min-h-0 overflow-hidden h-[100dvh] max-h-[100dvh] md:h-[92vh] md:max-h-[92vh] md:w-[min(96vw,88rem)] md:max-w-[min(96vw,88rem)] md:rounded-2xl md:shadow-xl">
+            <div class="view3d-viewer-header p-2.5 md:p-4 border-b border-slate-100 flex items-center justify-between gap-2 shrink-0">
+                <div class="min-w-0 flex-1 pr-1">
+                    <h3 id="view3d-viewer-title" class="font-bold text-sm text-slate-900 truncate leading-tight">Modelo 3D</h3>
+                    <p id="view3d-viewer-hint" class="text-[11px] md:text-xs text-slate-400 mt-0.5 line-clamp-1 md:line-clamp-2 md:truncate"></p>
                 </div>
                 <button type="button" id="btn-view3d-viewer-close"
-                    class="text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg font-medium shrink-0">
+                    class="view3d-viewer-close-btn text-xs bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-2 rounded-lg font-medium shrink-0 min-h-[2.75rem] md:min-h-0 md:py-1.5">
                     Fechar
                 </button>
             </div>
-            <div id="view3d-three-shell" class="flex-1 min-h-0 bg-slate-900 relative flex flex-col">
-                <div id="view3d-three-canvas-host" class="flex-1 min-h-0 relative">
+            <div id="view3d-three-shell" class="flex-1 min-h-0 bg-slate-900 relative">
+                <div id="view3d-three-canvas-host" class="absolute inset-0">
                     <div id="view3d-three-overlay"
                         class="hidden absolute inset-0 flex items-center justify-center bg-slate-900/70 z-10 pointer-events-none">
                         <p class="text-sm text-white font-medium">Carregando modelo...</p>
                     </div>
                 </div>
                 <div
-                    class="view3d-viewer-toolbar shrink-0 flex gap-2 p-2 border-t border-slate-700/80 bg-slate-900 overflow-x-auto items-center">
+                    class="view3d-viewer-toolbar absolute z-20 flex flex-col gap-1 p-1.5 rounded-xl border border-slate-600/80 bg-slate-900/90 backdrop-blur-sm shadow-lg overflow-y-auto">
                     <button type="button" id="btn-view3d-nav-orbit"
-                        class="text-xs bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium border border-indigo-500"
-                        title="Orbitar ao arrastar (estilo SketchUp)">
-                        Orbitar
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-indigo-700 text-white px-2 py-1.5 rounded-lg font-medium border border-indigo-500"
+                        title="Orbitar ao arrastar" aria-label="Orbitar">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 3l7.5 4.5v9L12 21l-7.5-4.5v-9L12 3z"></path>
+                            <path d="M12 12l7.5-4.5"></path>
+                            <path d="M12 12v9"></path>
+                            <path d="M12 12L4.5 7.5"></path>
+                        </svg>
                     </button>
                     <button type="button" id="btn-view3d-nav-pan"
-                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600"
-                        title="Mão: arrastar para deslocar a vista">
-                        Mão
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-2 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="Mão: arrastar para deslocar a vista" aria-label="Mão (deslocar)">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M18 11V6a2 2 0 1 0-4 0"></path>
+                            <path d="M14 10V5a2 2 0 1 0-4 0v2"></path>
+                            <path d="M10 10.5V5a2 2 0 1 0-4 0v8.5"></path>
+                            <path d="M18 8a2.5 2.5 0 1 1 0 5"></path>
+                            <path d="M6 18v-1.5a4 4 0 0 1 4-4h1"></path>
+                        </svg>
                     </button>
-                    <span class="w-px h-6 bg-slate-600 shrink-0 self-center" aria-hidden="true"></span>
+                    <span class="view3d-toolbar-separator" aria-hidden="true"></span>
+                    <button type="button" id="btn-view3d-zoom-in"
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-2 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="Aumentar zoom" aria-label="Aumentar zoom">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="M21 21l-4.3-4.3"></path>
+                            <path d="M11 8v6"></path>
+                            <path d="M8 11h6"></path>
+                        </svg>
+                    </button>
+                    <button type="button" id="btn-view3d-zoom-out"
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-2 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="Diminuir zoom" aria-label="Diminuir zoom">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="11" cy="11" r="7"></circle>
+                            <path d="M21 21l-4.3-4.3"></path>
+                            <path d="M8 11h6"></path>
+                        </svg>
+                    </button>
                     <button type="button" id="btn-view3d-reset-camera"
-                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600">
-                        Reset câmera
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-2 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="Reset câmera" aria-label="Reset câmera">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 12a9 9 0 1 0 3 6.7"></path>
+                            <polyline points="3 3 3 9 9 9"></polyline>
+                            <circle cx="12" cy="12" r="2"></circle>
+                        </svg>
                     </button>
+                    <span class="view3d-toolbar-separator" aria-hidden="true"></span>
                     <button type="button" id="btn-view3d-toggle-xray"
-                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600">
-                        X-ray
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-2 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="X-ray (transparência)" aria-label="X-ray">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M12 3v18"></path>
+                            <path d="M3 12h18"></path>
+                            <circle cx="12" cy="12" r="4"></circle>
+                        </svg>
                     </button>
                     <button type="button" id="btn-view3d-toggle-measure"
-                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600"
-                        title="Clique em dois pontos do modelo para medir">
-                        Medir
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-2 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="Medir: clique em dois pontos" aria-label="Medir">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M4 8v12"></path>
+                            <path d="M4 8l16-4v12"></path>
+                            <path d="M8 14v2"></path>
+                            <path d="M12 13v2"></path>
+                            <path d="M16 12v2"></path>
+                        </svg>
                     </button>
                     <button type="button" id="btn-view3d-clear-measures"
-                        class="text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-3 py-1.5 rounded-lg font-medium border border-slate-600">
-                        Limpar medidas
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-2 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="Limpar medidas" aria-label="Limpar medidas">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 6h18"></path>
+                            <path d="M8 6V4h8v2"></path>
+                            <path d="M7 6l1 14h8l1-14"></path>
+                            <path d="M10 11v6"></path>
+                            <path d="M14 11v6"></path>
+                        </svg>
                     </button>
                 </div>
             </div>

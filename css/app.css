@@ -5696,16 +5696,92 @@ body.montagem-prog-resizing {
 
 /* Visualizador 3D (Three.js) */
 .view3d-viewer-dialog {
+    padding-top: env(safe-area-inset-top, 0);
+    padding-right: env(safe-area-inset-right, 0);
     padding-bottom: env(safe-area-inset-bottom, 0);
+    padding-left: env(safe-area-inset-left, 0);
+}
+
+@supports (height: 100dvh) {
+    .view3d-viewer-dialog {
+        height: 100dvh;
+        max-height: 100dvh;
+    }
+}
+
+@supports (-webkit-touch-callout: none) {
+    .view3d-viewer-dialog {
+        min-height: -webkit-fill-available;
+    }
+}
+
+.view3d-viewer-toolbar {
+    top: max(0.5rem, env(safe-area-inset-top, 0));
+    right: max(0.5rem, env(safe-area-inset-right, 0));
+    max-height: calc(
+        100% - env(safe-area-inset-top, 0) - env(safe-area-inset-bottom, 0) - 0.75rem
+    );
 }
 
 .view3d-viewer-toolbar {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: thin;
+    min-width: 2.75rem;
 }
 
 .view3d-viewer-toolbar button {
     flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.view3d-viewer-toolbar-btn--icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    touch-action: manipulation;
+}
+
+.view3d-toolbar-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+    .view3d-viewer-toolbar-btn--icon {
+        min-width: 2.75rem;
+        min-height: 2.125rem;
+    }
+
+    .view3d-toolbar-icon {
+        width: 1.125rem;
+        height: 1.125rem;
+    }
+}
+
+.view3d-toolbar-separator {
+    display: block;
+    height: 1px;
+    width: 100%;
+    background: rgb(71 85 105 / 0.9);
+    margin: 0.125rem 0;
+}
+
+body.view3d-viewer-modal-open {
+    overflow: hidden;
+    overscroll-behavior: none;
+}
+
+#view3d-three-canvas-host {
+    touch-action: none;
+}
+
+#view3d-three-canvas-host canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
 }
 
 .view3d-measure-label {
