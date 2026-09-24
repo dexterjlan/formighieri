@@ -181,7 +181,7 @@ function resolveModel3dViewerStoragePath(file) {
     return buildOrderProjectModel3dViewerStoragePath(orderProjectId, fileName);
 }
 
-async function fetchView3dModelBlobFromDriveFile(file) {
+async function fetchView3dModelArrayBufferFromDriveFile(file) {
     const storagePath = resolveModel3dViewerStoragePath(file);
     if (!storagePath) {
         throw new Error(
@@ -200,10 +200,16 @@ async function fetchView3dModelBlobFromDriveFile(file) {
     if (!response.ok) {
         throw new Error(`Falha ao baixar o modelo (HTTP ${response.status}).`);
     }
-    const blob = await response.blob();
-    if (!blob.size) {
+    const arrayBuffer = await response.arrayBuffer();
+    if (!arrayBuffer?.byteLength) {
         throw new Error('Arquivo 3D vazio. Envie o modelo novamente.');
     }
+    return arrayBuffer;
+}
+
+async function fetchView3dModelBlobFromDriveFile(file) {
+    const arrayBuffer = await fetchView3dModelArrayBufferFromDriveFile(file);
+    const blob = new Blob([arrayBuffer], { type: 'model/gltf-binary' });
     return URL.createObjectURL(blob);
 }
 
@@ -818,6 +824,7 @@ window.resolveDriveFileDownloadUrl = resolveDriveFileDownloadUrl;
 window.extractGoogleDriveFileId = extractGoogleDriveFileId;
 window.resolveDriveFilePdfBrowserOpenUrl = resolveDriveFilePdfBrowserOpenUrl;
 window.resolveDriveFileModel3dUrl = resolveDriveFileModel3dUrl;
+window.fetchView3dModelArrayBufferFromDriveFile = fetchView3dModelArrayBufferFromDriveFile;
 window.fetchView3dModelBlobFromDriveFile = fetchView3dModelBlobFromDriveFile;
 window.revokeView3dModelBlobUrl = revokeView3dModelBlobUrl;
 window.resolveDriveFileViewUrl = resolveDriveFileViewUrl;

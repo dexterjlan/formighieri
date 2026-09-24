@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
 function formatView3dDistance(distance) {
@@ -43,7 +42,8 @@ class View3dThreeViewer {
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        // Alinhado ao glTF Viewer com environment = none (sem IBL de estúdio).
+        this.renderer.toneMapping = THREE.LinearToneMapping;
         this.renderer.toneMappingExposure = 1;
         this.renderer.shadowMap.enabled = true;
         const canvas = this.renderer.domElement;
@@ -76,10 +76,10 @@ class View3dThreeViewer {
             this.updateNavigationCursor();
         });
 
-        const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+        const ambient = new THREE.AmbientLight(0xffffff, 0.3);
         this.scene.add(ambient);
 
-        const keyLight = new THREE.DirectionalLight(0xffffff, 1.15);
+        const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
         keyLight.position.set(5, 10, 7);
         keyLight.castShadow = true;
         this.scene.add(keyLight);
@@ -88,9 +88,7 @@ class View3dThreeViewer {
         fillLight.position.set(-4, 2, -3);
         this.scene.add(fillLight);
 
-        const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-        this.scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
-        pmremGenerator.dispose();
+        this.scene.environment = null;
 
         this.measureGroup = new THREE.Group();
         this.measureGroup.name = 'view3d-measurements';
@@ -415,6 +413,21 @@ class View3dThreeViewer {
         }
     }
 
+    stripModelImageBasedLighting(root) {
+        if (!root) return;
+        root.traverse(node => {
+            if (!node.isMesh || !node.material) return;
+            const materials = Array.isArray(node.material) ? node.material : [node.material];
+            materials.forEach(material => {
+                material.envMap = null;
+                if (typeof material.envMapIntensity === 'number') {
+                    material.envMapIntensity = 0;
+                }
+                material.needsUpdate = true;
+            });
+        });
+    }
+
     loadFromUrl(url) {
         return new Promise((resolve, reject) => {
             this.clearModel();
@@ -422,6 +435,7 @@ class View3dThreeViewer {
                 url,
                 gltf => {
                     this.model = gltf.scene;
+                    this.stripModelImageBasedLighting(this.model);
                     this.scene.add(this.model);
                     this.snapshotModelMaterials();
                     this.setXray(this.xrayEnabled);
