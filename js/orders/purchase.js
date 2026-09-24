@@ -198,6 +198,56 @@ async function fetchImplementationPurchaseItemForCompra(implementationPurchaseIt
     return data;
 }
 
+function unwrapAppUserEmbed(embed) {
+    if (!embed) return null;
+    return Array.isArray(embed) ? embed[0] : embed;
+}
+
+function resolveImplementationPpcpDisplayName(implementation) {
+    if (!implementation) return '';
+    const createdBy = unwrapAppUserEmbed(implementation.createdBy);
+    const designer = unwrapAppUserEmbed(implementation.designer);
+    return String(createdBy?.name || designer?.name || '').trim();
+}
+
+function resolveThirdPartyProjectDesignerDisplayName(thirdPartyProject) {
+    const designer = unwrapAppUserEmbed(thirdPartyProject?.designer);
+    return String(designer?.name || '').trim();
+}
+
+async function fetchImplementationForCompraContext({ implementationId, orderProjectId } = {}) {
+    const normalizedImplementationId = Number(implementationId);
+    const normalizedOrderProjectId = Number(orderProjectId);
+    if (!normalizedImplementationId && !normalizedOrderProjectId) return null;
+
+    const selectWithUsers = 'id, orderProjectId, designerId, createdById, designer:appUsers!Implementation_designerId_fkey(id, name), createdBy:appUsers!createdById(id, name)';
+    const selectCreatedByOnly = 'id, orderProjectId, createdById, createdBy:appUsers!createdById(id, name)';
+    const selectBare = 'id, orderProjectId, designerId, createdById';
+
+    const runQuery = async (select) => {
+        let query = supabaseClient.from('Implementation').select(select);
+        if (normalizedImplementationId) {
+            query = query.eq('id', normalizedImplementationId);
+        } else {
+            query = query.eq('orderProjectId', normalizedOrderProjectId);
+        }
+        return query.maybeSingle();
+    };
+
+    let result = await runQuery(selectWithUsers);
+    if (result.error?.message?.includes('designerId')) {
+        result = await runQuery(selectCreatedByOnly);
+    } else if (result.error?.message?.includes('designer') || result.error?.message?.includes('createdBy')) {
+        result = await runQuery(selectBare);
+    }
+
+    if (result.error) {
+        console.warn('fetchImplementationForCompraContext:', result.error);
+        return null;
+    }
+    return result.data;
+}
+
 async function enrichCompraRecord(record) {
     if (!record) return record;
 
@@ -214,6 +264,18 @@ async function enrichCompraRecord(record) {
             };
         } catch (error) {
             console.warn('enrichCompraRecord:', error);
+        }
+    }
+
+    if (record.implementationId || record.orderProjectId) {
+        try {
+            const implementation = await fetchImplementationForCompraContext({
+                implementationId: record.implementationId,
+                orderProjectId: record.orderProjectId
+            });
+            enriched.ppcpName = resolveImplementationPpcpDisplayName(implementation);
+        } catch (error) {
+            console.warn('enrichCompraRecord implementation:', error);
         }
     }
 
@@ -235,7 +297,9 @@ async function enrichCompraRecord(record) {
                         purchaseItem?.thirdPartySubtype?.id
                     )
                     : '';
-                enriched.thirdPartyProjectId = lookupKey ? lookup[lookupKey]?.id || null : null;
+                const thirdPartyProject = lookupKey ? lookup[lookupKey] : null;
+                enriched.thirdPartyProjectId = thirdPartyProject?.id || null;
+                enriched.thirdPartyDesignerName = resolveThirdPartyProjectDesignerDisplayName(thirdPartyProject);
             }
         } catch (error) {
             console.warn('enrichCompraRecord purchase item:', error);
@@ -526,7 +590,20 @@ function populateCompraForm(record) {
     document.getElementById('compra-modal-order-code').textContent = record?.orderCode || '—';
     document.getElementById('compra-modal-client-name').textContent = ` ${record?.clientName || '—'}`;
     document.getElementById('compra-modal-project-name').textContent = ` ${record?.projectName || '—'}`;
+    const ppcpNameEl = document.getElementById('compra-modal-ppcp-name');
+    if (ppcpNameEl) {
+        const ppcpName = String(record?.ppcpName || '').trim();
+        ppcpNameEl.textContent = ` ${ppcpName || '—'}`;
+    }
     document.getElementById('compra-modal-tipo').textContent = ` ${tipoLabel}`;
+    const isTerceiro = record?.purchaseType === COMPRA_TIPO_TERCEIRO;
+    const thirdPartyDesignerWrap = document.getElementById('compra-modal-third-party-designer-wrap');
+    const thirdPartyDesignerNameEl = document.getElementById('compra-modal-third-party-designer-name');
+    if (thirdPartyDesignerWrap && thirdPartyDesignerNameEl) {
+        thirdPartyDesignerWrap.classList.toggle('hidden', !isTerceiro);
+        const designerName = String(record?.thirdPartyDesignerName || '').trim();
+        thirdPartyDesignerNameEl.textContent = ` ${designerName || '—'}`;
+    }
     document.getElementById('compra-modal-lista-path').textContent = ` ${record?.listaPath || '—'}`;
 
     const projectObservationEl = document.getElementById('compra-modal-project-observation');
@@ -549,7 +626,6 @@ function populateCompraForm(record) {
         badge.className = `text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${getCompraStatusBadgeClass(status)}`;
     }
 
-    const isTerceiro = record?.purchaseType === COMPRA_TIPO_TERCEIRO;
     const fileWrap = document.getElementById('compra-modal-third-party-file-wrap');
     const fileNameEl = document.getElementById('compra-modal-third-party-file-name');
     const openBtn = document.getElementById('btn-compra-third-party-open');
