@@ -72,16 +72,31 @@ async function queryAppUserById(userId) {
 
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, calendarColor')
         .eq('id', normalizedId)
         .maybeSingle();
 
     if (result.error?.message?.includes('calendarColor')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty')
             .eq('id', normalizedId)
             .maybeSingle();
+    }
+
+    if (result.error?.message?.includes('isInstaller')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty, calendarColor')
+            .eq('id', normalizedId)
+            .maybeSingle();
+        if (result.error?.message?.includes('calendarColor')) {
+            result = await supabaseClient
+                .from('appUsers')
+                .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty')
+                .eq('id', normalizedId)
+                .maybeSingle();
+        }
     }
 
     if (result.error?.message?.includes('isFactoryAdministrative') || result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isThirdParty')) {
@@ -114,6 +129,12 @@ function applyImpersonatedUserUi() {
 
 function openImpersonatedUserHome() {
     if (typeof clearAppNavState === 'function') clearAppNavState();
+
+    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()
+        && typeof showView3d === 'function') {
+        showView3d();
+        return;
+    }
 
     if (typeof isThirdParty === 'function' && isThirdParty()
         && typeof canAccessPendencias === 'function' && canAccessPendencias()

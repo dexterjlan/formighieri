@@ -134,9 +134,12 @@ async function restoreProgramacoesView(state = {}) {
 
 function updateProgramacoesNav() {
     const btn = document.getElementById('btn-programacoes');
-    if (btn) {
-        btn.classList.toggle('hidden', !canAccessProgramacoes());
+    if (!btn) return;
+    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) {
+        btn.classList.add('hidden');
+        return;
     }
+    btn.classList.toggle('hidden', !canAccessProgramacoes());
 }
 
 const PROGRAMACOES_ACTION_OVERLAY = typeof createModalOverlayConfig === 'function'

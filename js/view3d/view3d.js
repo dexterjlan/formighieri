@@ -78,6 +78,8 @@ async function ensureView3dThreeModule() {
 }
 
 function canAccessView3d(user = currentUser) {
+    if (!user) return false;
+    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess(user)) return true;
     return typeof canAccessOrdersDashboard === 'function'
         ? canAccessOrdersDashboard(user)
         : Boolean(user);
@@ -86,6 +88,10 @@ function canAccessView3d(user = currentUser) {
 function updateView3dNav() {
     const btn = document.getElementById('btn-view3d');
     if (!btn) return;
+    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) {
+        btn.classList.remove('hidden');
+        return;
+    }
     btn.classList.toggle('hidden', !canAccessView3d());
 }
 

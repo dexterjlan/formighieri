@@ -130,6 +130,12 @@ async function renderWelcomeFlowchart() {
 }
 
 function showWelcome() {
+    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()
+        && typeof showView3d === 'function') {
+        showView3d();
+        return;
+    }
+
     if (typeof isThirdParty === 'function' && isThirdParty()
         && typeof canAccessPendencias === 'function' && canAccessPendencias()
         && typeof showPendencias === 'function') {

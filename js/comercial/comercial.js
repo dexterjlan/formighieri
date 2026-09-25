@@ -23,6 +23,7 @@ let comercialStagesCache = [];
 let comercialDealsCache = [];
 let comercialConsultantsCache = [];
 let comercialActiveTab = 'board';
+let comercialActiveSection = 'funnel';
 let comercialOwnerFilter = 'mine';
 let comercialConsultantUserId = '';
 
@@ -288,17 +289,111 @@ function filterComercialBoardDeals(deals) {
     });
 }
 
-async function showComercial(tab = comercialActiveTab) {
+function normalizeShowComercialArgs(sectionOrTab, tab) {
+    if (sectionOrTab === 'funnel' || sectionOrTab === 'commissions') {
+        return {
+            section: sectionOrTab,
+            tab: tab || comercialActiveTab || 'board'
+        };
+    }
+    return {
+        section: comercialActiveSection || 'funnel',
+        tab: sectionOrTab || comercialActiveTab || 'board'
+    };
+}
+
+function updateComercialSidebarButtons() {
+    const activeClasses = 'comercial-sidebar-btn w-full text-left text-xs px-3 py-2 rounded-lg font-medium bg-indigo-600 text-white';
+    const idleClasses = 'comercial-sidebar-btn w-full text-left text-xs px-3 py-2 rounded-lg font-medium text-slate-600 hover:bg-slate-100';
+    const funnelBtn = document.getElementById('comercial-section-funnel');
+    const commissionsBtn = document.getElementById('comercial-section-commissions');
+    if (funnelBtn) {
+        funnelBtn.className = comercialActiveSection === 'funnel' ? activeClasses : idleClasses;
+    }
+    if (commissionsBtn) {
+        commissionsBtn.className = comercialActiveSection === 'commissions' ? activeClasses : idleClasses;
+    }
+}
+
+function updateComercialSectionNav() {
+    updateComercialSidebarButtons();
+
+    const mainTitle = document.getElementById('comercial-main-title');
+    const subtitle = document.getElementById('comercial-view-subtitle');
+    if (comercialActiveSection === 'commissions') {
+        if (mainTitle) mainTitle.textContent = 'Comissões';
+        if (subtitle) {
+            subtitle.textContent = 'Meta do mês, faixas de comissão e histórico do ano (somente leitura).';
+        }
+    } else {
+        if (mainTitle) mainTitle.textContent = 'Funil de Vendas';
+        if (subtitle) {
+            subtitle.textContent = 'Comece o dia em Hoje — negócio aberto precisa de próxima ação.';
+        }
+    }
+
+    document.getElementById('comercial-funnel-section')?.classList.toggle('hidden', comercialActiveSection !== 'funnel');
+    document.getElementById('comercial-commissions-section')?.classList.toggle('hidden', comercialActiveSection !== 'commissions');
+    document.getElementById('comercial-funnel-toolbar')?.classList.toggle('hidden', comercialActiveSection !== 'funnel');
+    document.getElementById('comercial-filters')?.classList.toggle('hidden', comercialActiveSection !== 'funnel');
+    document.getElementById('btn-comercial-new-deal')?.classList.toggle('hidden', comercialActiveSection !== 'funnel');
+}
+
+function setComercialSection(section, options = {}) {
+    const nextSection = section === 'commissions' ? 'commissions' : 'funnel';
+    comercialActiveSection = nextSection;
+    updateComercialSectionNav();
+
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({
+            view: 'comercial',
+            comercialSection: comercialActiveSection,
+            comercialTab: comercialActiveTab
+        });
+    }
+
+    if (nextSection === 'commissions') {
+        if (typeof loadComercialCommissionsView === 'function') {
+            loadComercialCommissionsView();
+        }
+        return;
+    }
+
+    if (!options.skipLoad) {
+        setComercialTab(comercialActiveTab, { skipLoad: false });
+    }
+}
+
+async function showComercial(sectionOrTab = comercialActiveTab, tab) {
     if (!canAccessComercial()) {
         if (typeof showWelcome === 'function') showWelcome();
         return;
     }
 
+    const { section, tab: nextTab } = normalizeShowComercialArgs(sectionOrTab, tab);
+    comercialActiveSection = section;
+    comercialActiveTab = nextTab;
+
     hideSubViews();
     document.getElementById('comercial-view')?.classList.remove('hidden');
     if (typeof updateMainNavActive === 'function') updateMainNavActive('comercial');
     if (typeof updateAdminNav === 'function') updateAdminNav();
-    if (typeof saveAppNavState === 'function') saveAppNavState({ view: 'comercial', comercialTab: tab });
+    updateComercialSectionNav();
+
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({
+            view: 'comercial',
+            comercialSection: comercialActiveSection,
+            comercialTab: comercialActiveTab
+        });
+    }
+
+    if (comercialActiveSection === 'commissions') {
+        if (typeof loadComercialCommissionsView === 'function') {
+            await loadComercialCommissionsView();
+        }
+        return;
+    }
 
     const ownerWrap = document.getElementById('comercial-filter-owner-wrap');
     ownerWrap?.classList.toggle('hidden', !canSeeAllDeals());
@@ -308,7 +403,7 @@ async function showComercial(tab = comercialActiveTab) {
 
     await loadComercialStages(true);
     await loadComercialConsultants();
-    setComercialTab(tab, { skipLoad: false });
+    setComercialTab(comercialActiveTab, { skipLoad: false });
 }
 
 function setComercialTab(tab, options = {}) {
@@ -328,7 +423,11 @@ function setComercialTab(tab, options = {}) {
     });
 
     if (typeof saveAppNavState === 'function') {
-        saveAppNavState({ view: 'comercial', comercialTab: comercialActiveTab });
+        saveAppNavState({
+            view: 'comercial',
+            comercialSection: comercialActiveSection,
+            comercialTab: comercialActiveTab
+        });
     }
 
     if (options.skipLoad) return;
@@ -340,6 +439,10 @@ function setComercialTab(tab, options = {}) {
 
 async function refreshComercialView() {
     if (document.getElementById('comercial-view')?.classList.contains('hidden')) return;
+    if (comercialActiveSection === 'commissions') {
+        if (typeof loadComercialCommissionsView === 'function') await loadComercialCommissionsView();
+        return;
+    }
     if (comercialActiveTab === 'panel' && typeof loadComercialPanel === 'function') await loadComercialPanel();
     else if (comercialActiveTab === 'board') await loadComercialBoard();
     else if (comercialActiveTab === 'today') await loadComercialToday();
@@ -437,7 +540,9 @@ async function loadWonDealsForOrderForm(clientId, currentOrderId = null) {
 }
 
 function bindComercialEvents() {
-    document.getElementById('btn-comercial')?.addEventListener('click', () => showComercial('board'));
+    document.getElementById('btn-comercial')?.addEventListener('click', () => showComercial('funnel', 'board'));
+    document.getElementById('comercial-section-funnel')?.addEventListener('click', () => setComercialSection('funnel'));
+    if (typeof bindComercialCommissionsEvents === 'function') bindComercialCommissionsEvents();
     document.getElementById('comercial-tab-board')?.addEventListener('click', () => setComercialTab('board'));
     document.getElementById('comercial-tab-today')?.addEventListener('click', () => setComercialTab('today'));
     document.getElementById('comercial-tab-won')?.addEventListener('click', () => setComercialTab('won'));

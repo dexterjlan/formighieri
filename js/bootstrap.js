@@ -57,6 +57,7 @@ const SCRIPTS = [
     'js/core/drive-files.js',
     'js/core/welcome.js',
     'js/comercial/comercial.js',
+    'js/comercial/comercial-commissions.js',
     'js/comercial/comercial-funnel.js',
     'js/comercial/comercial-deal-panel.js',
     'js/comercial/comercial-deal-celebration.js',

@@ -280,6 +280,14 @@ async function restoreAppNavState() {
             return true;
         }
 
+        if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) {
+            if (typeof showView3d === 'function') {
+                showView3d();
+                return true;
+            }
+            return false;
+        }
+
         const legacyViewMap = {
             'programacao-projetos': 'project-scheduling'
         };
@@ -323,7 +331,8 @@ async function restoreAppNavState() {
                 return false;
             case 'comercial':
                 if (typeof showComercial === 'function') {
-                    await showComercial(state.comercialTab || 'board');
+                    const section = state.comercialSection || 'funnel';
+                    await showComercial(section, state.comercialTab || 'board');
                     return true;
                 }
                 return false;
@@ -384,7 +393,10 @@ async function showMainPanel() {
     const skipRestore = typeof isImpersonating === 'function' && isImpersonating();
     const restored = skipRestore ? false : await restoreAppNavState();
     if (!restored) {
-        if (typeof isThirdParty === 'function' && isThirdParty()
+        if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()
+            && typeof showView3d === 'function') {
+            showView3d();
+        } else if (typeof isThirdParty === 'function' && isThirdParty()
             && typeof canAccessPendencias === 'function' && canAccessPendencias()
             && typeof showPendencias === 'function') {
             showPendencias();
@@ -397,7 +409,42 @@ async function showMainPanel() {
     appShellReady = true;
 }
 
+const INSTALLER_HIDDEN_MAIN_NAV_IDS = [
+    'btn-inicio',
+    'btn-back-dashboard',
+    'btn-conversations-query',
+    'btn-approvals-query',
+    'btn-calendario',
+    'btn-comercial',
+    'btn-kanban',
+    'btn-programacoes',
+    'btn-project-scheduling',
+    'btn-programacao-montagem',
+    'btn-pendencias',
+    'btn-pesquisas',
+    'btn-gestao',
+    'btn-system-settings'
+];
+
+function applyInstallerOnlyMainNav() {
+    const installerOnly = typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess();
+    document.body.classList.toggle('installer-only-nav', installerOnly);
+    if (!installerOnly) return false;
+
+    INSTALLER_HIDDEN_MAIN_NAV_IDS.forEach(id => {
+        document.getElementById(id)?.classList.add('hidden');
+    });
+    document.getElementById('btn-view3d')?.classList.remove('hidden');
+    document.getElementById('btn-logout')?.classList.remove('hidden');
+    if (typeof updateView3dNav === 'function') updateView3dNav();
+    return true;
+}
+
 function updateAdminNav() {
+    if (applyInstallerOnlyMainNav()) return;
+
+    document.body.classList.remove('installer-only-nav');
+
     const thirdParty = typeof isThirdParty === 'function' && isThirdParty();
     document.getElementById("btn-inicio")?.classList.toggle("hidden", thirdParty);
     document.getElementById("btn-back-dashboard")?.classList.toggle("hidden", thirdParty);

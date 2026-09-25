@@ -1,9 +1,15 @@
 let gestaoMontadorIsActiveColumnAvailable = true;
+let gestaoMontadorLoginEmailColumnAvailable = true;
+
+function normalizeGestaoMontadorLoginEmail(value) {
+    const email = String(value || '').trim().toLowerCase();
+    return email || null;
+}
 
 async function loadGestaoMontadores(activeOnly = false) {
     let query = supabaseClient
         .from('Installer')
-        .select('id, name, isActive')
+        .select('id, name, isActive, loginEmail')
         .order('name', { ascending: true });
 
     if (activeOnly) {
@@ -12,17 +18,34 @@ async function loadGestaoMontadores(activeOnly = false) {
 
     let { data, error } = await query;
 
+    if (error?.message?.includes('loginEmail')) {
+        gestaoMontadorLoginEmailColumnAvailable = false;
+        const fallback = await supabaseClient
+            .from('Installer')
+            .select('id, name, isActive')
+            .order('name', { ascending: true });
+        data = fallback.data;
+        error = fallback.error;
+    }
+
     if (error?.message?.includes('isActive')) {
         gestaoMontadorIsActiveColumnAvailable = false;
         const fallback = await supabaseClient
             .from('Installer')
-            .select('id, name')
+            .select(gestaoMontadorLoginEmailColumnAvailable ? 'id, name, loginEmail' : 'id, name')
             .order('name', { ascending: true });
 
         data = (fallback.data || []).map(row => ({ ...row, isActive: true }));
         error = fallback.error;
     } else if (!error) {
         gestaoMontadorIsActiveColumnAvailable = true;
+    }
+
+    if (!error && gestaoMontadorLoginEmailColumnAvailable && data?.length) {
+        data = data.map(row => ({
+            ...row,
+            loginEmail: row.loginEmail ?? null
+        }));
     }
 
     if (error) {
@@ -48,7 +71,7 @@ async function loadGestaoMontadoresList() {
     if (!montadores.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="4" class="p-6 text-center text-xs text-amber-700">
+                <td colspan="5" class="p-6 text-center text-xs text-amber-700">
                     Nenhum montador cadastrado. Consulte <code>PENDING-PROD-SQL.md</code> ou <code>supabase/schema/</code>.
                 </td>
             </tr>
@@ -65,6 +88,12 @@ async function loadGestaoMontadoresList() {
             <td class="p-3">
                 <input type="text" class="gestao-montador-name w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
                     value="${escapeHtml(montador.name)}" required>
+            </td>
+            <td class="p-3">
+                <input type="email" class="gestao-montador-login-email w-full min-w-[160px] px-2 py-1.5 text-sm border border-slate-200 rounded-lg font-mono text-xs"
+                    value="${escapeHtml(montador.loginEmail || '')}"
+                    placeholder="login@formighierimadeiras.com.br"
+                    autocomplete="off">
             </td>
             <td class="p-3 text-center">
                 <input type="checkbox" class="gestao-montador-active h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
@@ -108,10 +137,15 @@ function setGestaoMontadorSaveButtonState(button, state = 'idle') {
     button.textContent = button.dataset.originalLabel || 'Salvar';
 }
 
-async function persistGestaoMontadorRow(montadorId, name, isActive) {
-    const payload = gestaoMontadorIsActiveColumnAvailable
-        ? { name, isActive }
-        : { name };
+async function persistGestaoMontadorRow(montadorId, name, isActive, loginEmail) {
+    const payload = {};
+    payload.name = name;
+    if (gestaoMontadorIsActiveColumnAvailable) {
+        payload.isActive = isActive;
+    }
+    if (gestaoMontadorLoginEmailColumnAvailable) {
+        payload.loginEmail = loginEmail;
+    }
 
     let { data, error } = await supabaseClient
         .from('Installer')
@@ -120,17 +154,34 @@ async function persistGestaoMontadorRow(montadorId, name, isActive) {
         .select('id')
         .maybeSingle();
 
-    if (error?.message?.includes('isActive')) {
-        gestaoMontadorIsActiveColumnAvailable = false;
+    if (error?.message?.includes('loginEmail')) {
+        gestaoMontadorLoginEmailColumnAvailable = false;
+        delete payload.loginEmail;
         ({ data, error } = await supabaseClient
             .from('Installer')
-            .update({ name })
+            .update(payload)
             .eq('id', montadorId)
             .select('id')
             .maybeSingle());
     }
 
-    return { data, error, isActiveUnsupported: !gestaoMontadorIsActiveColumnAvailable };
+    if (error?.message?.includes('isActive')) {
+        gestaoMontadorIsActiveColumnAvailable = false;
+        delete payload.isActive;
+        ({ data, error } = await supabaseClient
+            .from('Installer')
+            .update({ name, ...(gestaoMontadorLoginEmailColumnAvailable ? { loginEmail } : {}) })
+            .eq('id', montadorId)
+            .select('id')
+            .maybeSingle());
+    }
+
+    return {
+        data,
+        error,
+        isActiveUnsupported: !gestaoMontadorIsActiveColumnAvailable,
+        loginEmailUnsupported: !gestaoMontadorLoginEmailColumnAvailable
+    };
 }
 
 async function saveGestaoMontadorRow(row, button = null) {
@@ -146,6 +197,9 @@ async function saveGestaoMontadorRow(row, button = null) {
 
     const montadorId = Number(row.dataset.montadorId);
     const name = row.querySelector('.gestao-montador-name')?.value.trim();
+    const loginEmail = normalizeGestaoMontadorLoginEmail(
+        row.querySelector('.gestao-montador-login-email')?.value
+    );
     const isActive = Boolean(row.querySelector('.gestao-montador-active')?.checked);
 
     if (!montadorId) {
@@ -161,7 +215,12 @@ async function saveGestaoMontadorRow(row, button = null) {
     setGestaoMontadorSaveButtonState(button, 'saving');
 
     try {
-        const { data, error, isActiveUnsupported } = await persistGestaoMontadorRow(montadorId, name, isActive);
+        const { data, error, isActiveUnsupported, loginEmailUnsupported } = await persistGestaoMontadorRow(
+            montadorId,
+            name,
+            isActive,
+            loginEmail
+        );
 
         if (error) {
             alertAppDialog('Erro ao salvar montador: ' + error.message);
@@ -179,11 +238,17 @@ async function saveGestaoMontadorRow(row, button = null) {
         if (cachedMontador) {
             cachedMontador.name = name;
             cachedMontador.isActive = isActive;
+            cachedMontador.loginEmail = loginEmail;
         }
 
         setGestaoMontadorSaveButtonState(button, 'saved');
 
-        if (isActiveUnsupported) {
+        if (loginEmailUnsupported) {
+            alertAppDialog(
+                'Nome salvo, mas o campo e-mail de login ainda não existe no banco. Execute supabase/feats/installer-login-email-and-app-user-flag.sql no Supabase.',
+                { variant: 'warning', title: 'Aviso' }
+            );
+        } else if (isActiveUnsupported) {
             alertAppDialog(
                 'Nome salvo, mas o campo Ativo ainda não existe no banco. Execute supabase/alter-montador-is-active.sql no Supabase.',
                 { variant: 'warning', title: 'Aviso' }
@@ -241,20 +306,38 @@ async function addGestaoMontador(event) {
     if (!canAccessGestao()) return;
 
     const name = document.getElementById('gestao-new-montador-name')?.value.trim();
+    const loginEmail = normalizeGestaoMontadorLoginEmail(
+        document.getElementById('gestao-new-montador-login-email')?.value
+    );
 
     if (!name) {
         alertAppDialog('Informe o nome do montador.');
         return;
     }
 
+    const insertPayload = { name, isActive: true };
+    if (gestaoMontadorLoginEmailColumnAvailable && loginEmail) {
+        insertPayload.loginEmail = loginEmail;
+    }
+
     let { error } = await supabaseClient
         .from('Installer')
-        .insert({ name, isActive: true });
+        .insert(insertPayload);
 
-    if (error?.message?.includes('isActive')) {
+    if (error?.message?.includes('loginEmail')) {
+        gestaoMontadorLoginEmailColumnAvailable = false;
+        delete insertPayload.loginEmail;
         ({ error } = await supabaseClient
             .from('Installer')
-            .insert({ name }));
+            .insert(insertPayload));
+    }
+
+    if (error?.message?.includes('isActive')) {
+        gestaoMontadorIsActiveColumnAvailable = false;
+        delete insertPayload.isActive;
+        ({ error } = await supabaseClient
+            .from('Installer')
+            .insert(insertPayload));
     }
 
     if (error) {

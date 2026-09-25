@@ -2999,6 +2999,15 @@ body.programacoes-fullscreen-active {
     background: rgb(71 85 105);
 }
 
+body.installer-only-nav #app-header-nav button:not(#btn-view3d):not(#btn-logout) {
+    display: none !important;
+}
+
+body.installer-only-nav #btn-view3d,
+body.installer-only-nav #btn-logout {
+    display: inline-flex !important;
+}
+
 .app-header-nav {
     display: flex;
     flex-wrap: wrap;

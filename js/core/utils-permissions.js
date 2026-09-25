@@ -60,7 +60,8 @@ function normalizeAppUserProfile(profile) {
         isFactoryAdministrative: Boolean(profile.isFactoryAdministrative),
         isDetailing: Boolean(profile.isDetailing),
         isReviewer: Boolean(profile.isReviewer ?? profile.isProjectLeader),
-        isThirdParty: Boolean(profile.isThirdParty)
+        isThirdParty: Boolean(profile.isThirdParty),
+        isInstaller: Boolean(profile.isInstaller)
     };
 }
 
@@ -129,6 +130,15 @@ function isMarceneiro(user = currentUser) {
     return isFabricaRole(user);
 }
 
+function isInstallerProfile(user = currentUser) {
+    return isFabricaRole(user) && Boolean(user?.isInstaller);
+}
+
+/** Montador Fábrica: único menu permitido é 3D. */
+function hasInstallerOnlyAccess(user = currentUser) {
+    return isInstallerProfile(user);
+}
+
 function isCompras(user = currentUser) {
     return user?.role === 'Compras';
 }
@@ -158,12 +168,14 @@ function canActCompraModal(user = currentUser) {
 }
 
 function canSeeQueryNav(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
     if (isThirdParty(user)) return false;
     if (typeof QUERY_NAV_ENABLED !== 'undefined' && !QUERY_NAV_ENABLED) return false;
     return !isMarceneiro(user) && !isCompras(user);
 }
 
 function canAccessGestao(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
     if (!user || isThirdParty(user)) return false;
     return user.role === 'Admin'
         || isGestorComercial(user)
@@ -180,10 +192,12 @@ function canAccessMontagemProgramacao(user = currentUser) {
 }
 
 function canViewKanban(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
     return Boolean(user) && !isThirdParty(user);
 }
 
 function canViewProjectScheduling(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
     return Boolean(user) && !isThirdParty(user);
 }
 
@@ -192,6 +206,7 @@ function canViewProjectSchedulingOld(user = currentUser) {
 }
 
 function canAccessProgramacoes(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
     return Boolean(user) && !isThirdParty(user);
 }
 
@@ -208,6 +223,7 @@ function canEditProjectScheduling(user = currentUser) {
 }
 
 function canViewProgramacaoMontagem(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
     return Boolean(user) && !isThirdParty(user);
 }
 
@@ -216,6 +232,7 @@ function canEditProgramacaoMontagem(user = currentUser) {
 }
 
 function canAccessCalendar(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
     if (!user || isThirdParty(user)) return false;
     return isAdmin(user)
         || user.role === 'Consultor'
@@ -226,6 +243,7 @@ function canAccessCalendar(user = currentUser) {
 }
 
 function canAccessComercial(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
     if (!user || isThirdParty(user)) return false;
     return isAdmin(user)
         || user.role === 'Consultor'
@@ -238,7 +256,9 @@ function canSeeAllDeals(user = currentUser) {
 }
 
 function canAccessOrdersDashboard(user = currentUser) {
-    return Boolean(user) && !isThirdParty(user);
+    if (!user || isThirdParty(user)) return false;
+    if (hasInstallerOnlyAccess(user)) return false;
+    return true;
 }
 
 function canAccessGoogleCalendar(user = currentUser) {
