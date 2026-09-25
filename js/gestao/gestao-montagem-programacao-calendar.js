@@ -101,6 +101,12 @@ function assignMontagemProgLanes(programacoes, weekStartKey) {
         lanes.push([]);
     }
 
+    const hasEmptyLane = lanes.some(lane => !lane.length);
+    const occupiedLaneCount = lanes.filter(lane => lane.length > 0).length;
+    if (!hasEmptyLane && occupiedLaneCount >= MONTAGEM_PROG_MIN_LANES) {
+        lanes.push([]);
+    }
+
     return lanes;
 }
 

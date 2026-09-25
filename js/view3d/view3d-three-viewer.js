@@ -14,6 +14,14 @@ function formatView3dDistance(distance) {
     return `${mm.toFixed(0)} mm`;
 }
 
+/** Ângulo mínimo (graus) para desenhar aresta; reduz linhas em triangulação suave. */
+const VIEW3D_EDGE_THRESHOLD_DEGREES = 18;
+
+/** glTF Viewer: environment none, linear, exposure 0.5 (2^0.5), ambiente 0.5, direct 2.5. */
+const VIEW3D_GLTF_VIEWER_EXPOSURE_LOG2 = 0.5;
+const VIEW3D_GLTF_VIEWER_AMBIENT_INTENSITY = 0.5;
+const VIEW3D_GLTF_VIEWER_DIRECT_INTENSITY = 2.5;
+
 /**
  * Visualizador GLB/GLTF (Three.js) — piloto tela 3D.
  */
@@ -27,6 +35,8 @@ class View3dThreeViewer {
         this.animationId = null;
         this.model = null;
         this.xrayEnabled = false;
+        this.edgesEnabled = true;
+        this.edgeLineMaterial = null;
         this.measureEnabled = false;
         this.measurePickPoints = [];
         this.materialSnapshots = new Map();
@@ -34,18 +44,18 @@ class View3dThreeViewer {
         this.defaultTarget = new THREE.Vector3();
 
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x0f172a);
+        this.scene.background = new THREE.Color(0x191919);
 
-        this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 5000);
+        this.camera = new THREE.PerspectiveCamera(60, 1, 0.01, 5000);
         this.camera.position.set(2.5, 1.8, 3.5);
 
         this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-        // Alinhado ao glTF Viewer com environment = none (sem IBL de estúdio).
+        // glTF Viewer: linear, exposure 0.5 → toneMappingExposure = 2^0.5
         this.renderer.toneMapping = THREE.LinearToneMapping;
-        this.renderer.toneMappingExposure = 1;
-        this.renderer.shadowMap.enabled = true;
+        this.renderer.toneMappingExposure = Math.pow(2, VIEW3D_GLTF_VIEWER_EXPOSURE_LOG2);
+        this.renderer.shadowMap.enabled = false;
         const canvas = this.renderer.domElement;
         canvas.style.display = 'block';
         canvas.style.width = '100%';
@@ -61,6 +71,7 @@ class View3dThreeViewer {
 
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
+        this.controls.screenSpacePanning = true;
         this.controls.dampingFactor = 0.08;
         this.controls.minDistance = 0.05;
         this.controls.maxDistance = 500;
@@ -76,17 +87,19 @@ class View3dThreeViewer {
             this.updateNavigationCursor();
         });
 
-        const ambient = new THREE.AmbientLight(0xffffff, 0.3);
-        this.scene.add(ambient);
+        this.ambientLight = new THREE.AmbientLight(0xffffff, VIEW3D_GLTF_VIEWER_AMBIENT_INTENSITY);
+        this.ambientLight.name = 'view3d_ambient_light';
 
-        const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
-        keyLight.position.set(5, 10, 7);
-        keyLight.castShadow = true;
-        this.scene.add(keyLight);
+        this.keyLight = new THREE.DirectionalLight(0xffffff, VIEW3D_GLTF_VIEWER_DIRECT_INTENSITY);
+        this.keyLight.name = 'view3d_main_light';
+        this.keyLight.position.set(0.5, 0, 0.866);
+        this.keyLight.castShadow = false;
 
-        const fillLight = new THREE.DirectionalLight(0xffffff, 0.35);
-        fillLight.position.set(-4, 2, -3);
-        this.scene.add(fillLight);
+        this.camera.add(this.ambientLight);
+        this.camera.add(this.keyLight);
+        // Luzes na câmera só entram no render se a câmera estiver na cena.
+        this.scene.add(this.keyLight.target);
+        this.scene.add(this.camera);
 
         this.scene.environment = null;
 
@@ -125,6 +138,29 @@ class View3dThreeViewer {
         this.labelRenderer.setSize(width, height);
     }
 
+    stripModelImageBasedLighting(root) {
+        if (!root) return;
+        root.traverse(node => {
+            if (!node.isMesh || !node.material) return;
+            const materials = Array.isArray(node.material) ? node.material : [node.material];
+            materials.forEach(material => {
+                material.envMap = null;
+                if (typeof material.envMapIntensity === 'number') {
+                    material.envMapIntensity = 0;
+                }
+                material.needsUpdate = true;
+            });
+        });
+    }
+
+    /** Ambiente + direcional na câmera (glTF Viewer). Sempre ativos: exports SketchUp costumam declarar luzes que o Three não ilumina como no site. */
+    applyGltfViewerDefaultLights() {
+        this.ambientLight.visible = true;
+        this.keyLight.visible = true;
+        this.ambientLight.intensity = VIEW3D_GLTF_VIEWER_AMBIENT_INTENSITY;
+        this.keyLight.intensity = VIEW3D_GLTF_VIEWER_DIRECT_INTENSITY;
+    }
+
     snapshotModelMaterials() {
         this.materialSnapshots.clear();
         if (!this.model) return;
@@ -140,8 +176,63 @@ class View3dThreeViewer {
         });
     }
 
+    removeEdgeOverlays() {
+        if (!this.model) return;
+        this.model.traverse(node => {
+            const edgeChildren = node.children.filter(child => child.userData?.view3dEdgeOverlay);
+            edgeChildren.forEach(child => {
+                node.remove(child);
+                child.geometry?.dispose();
+            });
+        });
+    }
+
+    ensureEdgeLineMaterial() {
+        if (this.edgeLineMaterial) return this.edgeLineMaterial;
+        this.edgeLineMaterial = new THREE.LineBasicMaterial({
+            color: 0x475569,
+            transparent: true,
+            opacity: 0.92,
+            depthTest: true
+        });
+        return this.edgeLineMaterial;
+    }
+
+    addEdgeOverlays() {
+        if (!this.model) return;
+        this.removeEdgeOverlays();
+        const lineMaterial = this.ensureEdgeLineMaterial();
+        this.model.traverse(child => {
+            if (!child.isMesh || !child.geometry) return;
+            if (child.userData?.view3dEdgeOverlay) return;
+            const edgesGeometry = new THREE.EdgesGeometry(child.geometry, VIEW3D_EDGE_THRESHOLD_DEGREES);
+            const lines = new THREE.LineSegments(edgesGeometry, lineMaterial);
+            lines.userData.view3dEdgeOverlay = true;
+            lines.frustumCulled = child.frustumCulled;
+            child.add(lines);
+        });
+    }
+
+    setEdgesVisible(enabled) {
+        this.edgesEnabled = Boolean(enabled);
+        if (!this.model) return;
+        if (this.edgesEnabled) {
+            this.addEdgeOverlays();
+            return;
+        }
+        this.removeEdgeOverlays();
+    }
+
+    toggleEdges() {
+        this.setEdgesVisible(!this.edgesEnabled);
+        return this.edgesEnabled;
+    }
+
     clearModel() {
         this.clearMeasurements();
+        this.removeEdgeOverlays();
+        this.edgeLineMaterial?.dispose();
+        this.edgeLineMaterial = null;
         this.materialSnapshots.clear();
         if (!this.model) return;
         this.scene.remove(this.model);
@@ -413,21 +504,6 @@ class View3dThreeViewer {
         }
     }
 
-    stripModelImageBasedLighting(root) {
-        if (!root) return;
-        root.traverse(node => {
-            if (!node.isMesh || !node.material) return;
-            const materials = Array.isArray(node.material) ? node.material : [node.material];
-            materials.forEach(material => {
-                material.envMap = null;
-                if (typeof material.envMapIntensity === 'number') {
-                    material.envMapIntensity = 0;
-                }
-                material.needsUpdate = true;
-            });
-        });
-    }
-
     loadFromUrl(url) {
         return new Promise((resolve, reject) => {
             this.clearModel();
@@ -437,8 +513,10 @@ class View3dThreeViewer {
                     this.model = gltf.scene;
                     this.stripModelImageBasedLighting(this.model);
                     this.scene.add(this.model);
+                    this.applyGltfViewerDefaultLights();
                     this.snapshotModelMaterials();
                     this.setXray(this.xrayEnabled);
+                    this.setEdgesVisible(this.edgesEnabled);
                     this.centerAndFrameModel(this.model);
                     resolve();
                 },

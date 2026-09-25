@@ -42,6 +42,11 @@ function disposeView3dThreeSession() {
 
 async function ensureView3dThreeModule() {
     if (window.View3dThreeViewer) return;
+    if (!document.querySelector('script[type="importmap"]')) {
+        throw new Error(
+            'Three.js não configurado (import map). Use a página principal com servidor local (ex.: npx serve).'
+        );
+    }
     if (!view3dThreeModulePromise) {
         view3dThreeModulePromise = new Promise((resolve, reject) => {
             const version = typeof APP_CACHE_VERSION !== 'undefined' ? APP_CACHE_VERSION : '';
@@ -49,10 +54,12 @@ async function ensureView3dThreeModule() {
             script.type = 'module';
             script.src = `js/view3d/view3d-three-viewer.js?v=${version}`;
             script.addEventListener('error', () => {
-                reject(new Error('Não foi possível carregar o visualizador Three.js.'));
+                view3dThreeModulePromise = null;
+                reject(new Error('Não foi possível carregar o visualizador Three.js (rede ou CDN).'));
             }, { once: true });
             window.addEventListener('error', event => {
                 if (event.filename && String(event.filename).includes('view3d-three-viewer.js')) {
+                    view3dThreeModulePromise = null;
                     const detail = event.error?.message || event.message || '';
                     reject(new Error(
                         detail
@@ -66,12 +73,18 @@ async function ensureView3dThreeModule() {
                     resolve();
                     return;
                 }
+                view3dThreeModulePromise = null;
                 reject(new Error('Visualizador Three.js indisponível.'));
             };
             document.head.appendChild(script);
         });
     }
-    await view3dThreeModulePromise;
+    try {
+        await view3dThreeModulePromise;
+    } catch (error) {
+        view3dThreeModulePromise = null;
+        throw error;
+    }
     if (!window.View3dThreeViewer) {
         throw new Error('Visualizador Three.js indisponível.');
     }
@@ -334,6 +347,7 @@ async function openView3dViewerModal(file, title = 'Modelo 3D') {
         scheduleView3dViewerResize();
 
         setView3dNavigationToolbar('orbit');
+        toggleView3dToolbarActive(document.getElementById('btn-view3d-toggle-edges'), view3dThreeViewer?.edgesEnabled);
         if (hintEl) {
             const narrow = window.matchMedia('(max-width: 767px)').matches;
             if (narrow) {
@@ -358,7 +372,7 @@ async function openView3dViewerModal(file, title = 'Modelo 3D') {
 function closeView3dViewerModal() {
     disposeView3dThreeSession();
     setView3dThreeOverlay(false);
-    ['btn-view3d-toggle-xray', 'btn-view3d-toggle-measure'].forEach(id => {
+    ['btn-view3d-toggle-xray', 'btn-view3d-toggle-edges'].forEach(id => {
         toggleView3dToolbarActive(document.getElementById(id), false);
     });
     setView3dNavigationToolbar('orbit');
@@ -503,9 +517,6 @@ function bindView3dEvents() {
         exitView3dMeasureModeForNavigation();
         view3dThreeViewer?.zoomOut();
     });
-    document.getElementById('btn-view3d-reset-camera')?.addEventListener('click', () => {
-        view3dThreeViewer?.resetCamera();
-    });
     document.getElementById('btn-view3d-screenshot')?.addEventListener('click', () => {
         const title = document.getElementById('view3d-viewer-title')?.textContent?.trim() || 'Modelo 3D';
         try {
@@ -517,20 +528,13 @@ function bindView3dEvents() {
             });
         }
     });
+    document.getElementById('btn-view3d-toggle-edges')?.addEventListener('click', event => {
+        const enabled = view3dThreeViewer?.toggleEdges();
+        toggleView3dToolbarActive(event.currentTarget, enabled);
+    });
     document.getElementById('btn-view3d-toggle-xray')?.addEventListener('click', event => {
         const enabled = view3dThreeViewer?.toggleXray();
         toggleView3dToolbarActive(event.currentTarget, enabled);
-    });
-    document.getElementById('btn-view3d-toggle-measure')?.addEventListener('click', event => {
-        const enabled = view3dThreeViewer?.toggleMeasureMode();
-        toggleView3dToolbarActive(event.currentTarget, enabled);
-        const hintEl = document.getElementById('view3d-viewer-hint');
-        if (hintEl && enabled) {
-            hintEl.textContent = 'Medição: clique no 1º ponto e depois no 2º (orbitar desligado até desativar Medir)';
-        }
-    });
-    document.getElementById('btn-view3d-clear-measures')?.addEventListener('click', () => {
-        view3dThreeViewer?.clearMeasurements();
     });
 }
 
@@ -554,7 +558,6 @@ function setView3dNavigationToolbar(mode) {
 function exitView3dMeasureModeForNavigation() {
     if (!view3dThreeViewer?.measureEnabled) return;
     view3dThreeViewer.setMeasureMode(false);
-    toggleView3dToolbarActive(document.getElementById('btn-view3d-toggle-measure'), false);
 }
 
 window.canAccessView3d = canAccessView3d;
