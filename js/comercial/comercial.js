@@ -61,6 +61,12 @@ function canEditComercialDeal(deal) {
     return Number(deal?.ownerUserId) === Number(currentUser?.id);
 }
 
+/** Exclusão de negócio — admin ou gestor comercial. */
+function canDeleteComercialDeal(user = currentUser) {
+    if (!canAccessComercial(user)) return false;
+    return isAdmin(user) || isGestorComercial(user);
+}
+
 function getDealActivities(deal) {
     const list = deal?.activities || deal?.DealActivity || [];
     return Array.isArray(list) ? list : [];

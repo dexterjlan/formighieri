@@ -107,6 +107,7 @@ async function openComercialDealPanel(dealId) {
         extras?.classList.remove('hidden');
         document.getElementById('comercial-deal-win')?.classList.toggle('hidden', deal.status !== 'open' || !canEdit);
         document.getElementById('comercial-deal-lose')?.classList.toggle('hidden', deal.status !== 'open' || !canEdit);
+        document.getElementById('comercial-deal-delete')?.classList.toggle('hidden', !canDeleteComercialDeal());
         const lostBanner = document.getElementById('comercial-deal-lost-banner');
         if (lostBanner) {
             const showLost = deal.status === 'lost' && deal.lostReason;
@@ -120,6 +121,7 @@ async function openComercialDealPanel(dealId) {
         setComercialDealClient(null);
         document.getElementById('comercial-deal-win')?.classList.add('hidden');
         document.getElementById('comercial-deal-lose')?.classList.add('hidden');
+        document.getElementById('comercial-deal-delete')?.classList.add('hidden');
     }
 
     overlay.classList.remove('hidden');
@@ -297,6 +299,51 @@ async function confirmLostComercialDeal() {
     await persistLostComercialDeal(dealId, lostReason);
 }
 
+async function deleteComercialDeal() {
+    if (!canDeleteComercialDeal()) return;
+
+    const dealId = Number(document.getElementById('comercial-deal-id')?.value);
+    if (!dealId) return;
+
+    let deal = comercialDealsCache.find(item => Number(item.id) === dealId);
+    if (!deal) {
+        const { data, error } = await supabaseClient
+            .from('Deal')
+            .select('id, title, status, orderId')
+            .eq('id', dealId)
+            .maybeSingle();
+        if (error || !data) {
+            alertAppDialog('Negócio não encontrado.');
+            return;
+        }
+        deal = data;
+    }
+
+    const title = document.getElementById('comercial-deal-title')?.value?.trim()
+        || deal.title
+        || 'este negócio';
+    const orderHint = deal.orderId
+        ? ' O vínculo com o pedido será removido.'
+        : '';
+    if (!(await confirmAppDialog(
+        `Excluir o negócio "${title}"? Atividades e notas serão removidas.${orderHint} Esta ação não pode ser desfeita.`,
+        { variant: 'warning', title: 'Excluir negócio' }
+    ))) {
+        return;
+    }
+
+    const { error } = await supabaseClient.from('Deal').delete().eq('id', dealId);
+    if (error) {
+        alertAppDialog('Não foi possível excluir o negócio: ' + error.message);
+        return;
+    }
+
+    closeComercialDealPanel();
+    if (typeof refreshComercialView === 'function') {
+        await refreshComercialView();
+    }
+}
+
 async function persistLostComercialDeal(dealId, lostReason) {
     const { error } = await supabaseClient.from('Deal').update({
         status: 'lost',
@@ -368,6 +415,7 @@ function bindComercialDealPanelEvents() {
     document.getElementById('comercial-deal-form')?.addEventListener('submit', saveComercialDeal);
     document.getElementById('comercial-deal-win')?.addEventListener('click', winComercialDeal);
     document.getElementById('comercial-deal-lose')?.addEventListener('click', loseComercialDeal);
+    document.getElementById('comercial-deal-delete')?.addEventListener('click', deleteComercialDeal);
     document.getElementById('deal-lost-reason-confirm')?.addEventListener('click', confirmLostComercialDeal);
     document.getElementById('comercial-note-form')?.addEventListener('submit', saveComercialNote);
     const openClientPicker = () => {
