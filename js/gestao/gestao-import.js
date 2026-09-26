@@ -1,5 +1,7 @@
 const GESTAO_IMPORT_TEMPLATE_FILENAME = 'fgp-importacao-pedidos-projetos.xlsx';
 const GESTAO_IMPORT_SHEET_NAME = 'Importacao';
+/** Importação cria projetos sempre com este status FGP (não há coluna de status na planilha). */
+const GESTAO_IMPORT_PROJECT_STATUS_NAME = 'Vendido';
 
 const gestaoImportClienteIdByName = new Map();
 
@@ -12,13 +14,13 @@ const GESTAO_IMPORT_COLUMNS = [
     { key: 'architectPhone', header: 'arquiteto_telefone', label: 'Telefone do arquiteto', required: false },
     { key: 'architectEmail', header: 'arquiteto_email', label: 'E-mail do arquiteto', required: false },
     { key: 'clientDeliveryDate', header: 'entrega_cliente', label: 'Entrega no cliente', required: false },
+    { key: 'addrPostalCode', header: 'endereco_cep', label: 'CEP do endereço do pedido', required: false },
+    { key: 'addrNumber', header: 'endereco_numero', label: 'Número do endereço', required: false },
+    { key: 'addrComplement', header: 'endereco_complemento', label: 'Complemento do endereço', required: false },
     { key: 'projectCode', header: 'codigo_projeto', label: 'Código do projeto', required: true },
     { key: 'projectName', header: 'nome_projeto', label: 'Nome do projeto', required: true },
     { key: 'environmentName', header: 'ambiente', label: 'Ambiente', required: true },
-    { key: 'saleValue', header: 'valor_venda', label: 'Valor de venda', required: false },
-    { key: 'deliveryDate', header: 'entrega_projeto', label: 'Entrega do projeto', required: false },
-    { key: 'statusName', header: 'status_projeto', label: 'Status do projeto (WPS)', required: false },
-    { key: 'designerName', header: 'projetista', label: 'Projetista', required: false }
+    { key: 'saleValue', header: 'valor_venda', label: 'Valor de venda', required: false }
 ];
 
 const GESTAO_IMPORT_HEADER_ALIASES = {
@@ -43,6 +45,14 @@ const GESTAO_IMPORT_HEADER_ALIASES = {
     email_arquiteto: 'architectEmail',
     entrega_cliente: 'clientDeliveryDate',
     data_entrega_cliente: 'clientDeliveryDate',
+    endereco_cep: 'addrPostalCode',
+    cep: 'addrPostalCode',
+    cep_pedido: 'addrPostalCode',
+    pedido_cep: 'addrPostalCode',
+    endereco_numero: 'addrNumber',
+    numero_endereco: 'addrNumber',
+    endereco_complemento: 'addrComplement',
+    complemento_endereco: 'addrComplement',
     codigo_projeto: 'projectCode',
     project_code: 'projectCode',
     nome_projeto: 'projectName',
@@ -51,42 +61,225 @@ const GESTAO_IMPORT_HEADER_ALIASES = {
     ambiente: 'environmentName',
     environment: 'environmentName',
     valor_venda: 'saleValue',
-    sale_value: 'saleValue',
-    entrega_projeto: 'deliveryDate',
-    data_entrega_projeto: 'deliveryDate',
-    status_projeto: 'statusName',
-    status: 'statusName',
-    projetista: 'designerName',
-    designer: 'designerName',
-    data_medicao: 'measurementDate',
-    medicao_data: 'measurementDate',
-    data_de_medicao: 'measurementDate',
-    dt_medicao: 'measurementDate',
-    data_planta_levantada: 'floorPlanRaisedDate',
-    planta_levantada_data: 'floorPlanRaisedDate',
-    data_inicio_montagem_interna: 'internalAssemblyStartDate',
-    inicio_montagem_interna: 'internalAssemblyStartDate',
-    data_fim_montagem_interna: 'internalAssemblyEndDate',
-    fim_montagem_interna: 'internalAssemblyEndDate',
-    marceneiro: 'marceneiroName',
-    marceneiro_wps: 'marceneiroName'
+    sale_value: 'saleValue'
 };
 
-const GESTAO_IMPORT_PROJECT_DATE_COLUMNS = [
-    { key: 'measurementDate', header: 'data_medicao', label: 'Data da medição do projeto' },
-    { key: 'floorPlanRaisedDate', header: 'data_planta_levantada', label: 'Data da planta levantada' },
-    { key: 'internalAssemblyStartDate', header: 'data_inicio_montagem_interna', label: 'Início da montagem interna' },
-    { key: 'internalAssemblyEndDate', header: 'data_fim_montagem_interna', label: 'Fim da montagem interna' },
-    { key: 'marceneiroName', header: 'marceneiro', label: 'Marceneiro (WPS)' }
-];
+const gestaoImportViaCepCache = new Map();
+let gestaoImportDefaultAddrLabelIdPromise = null;
+
+function gestaoImportDigitsOnlyPostalCode(value) {
+    if (typeof digitsOnlyPostalCode === 'function') {
+        return digitsOnlyPostalCode(value);
+    }
+    return String(value ?? '').replace(/\D/g, '').slice(0, 8);
+}
+
+function normalizeGestaoImportAddrToken(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function normalizeGestaoImportAddrState(value) {
+    if (typeof normalizeAddrState === 'function') {
+        return normalizeAddrState(value);
+    }
+    return String(value || '').trim().toUpperCase().slice(0, 2);
+}
+
+function gestaoImportOrderHasAddrFields(order) {
+    return Boolean(gestaoImportDigitsOnlyPostalCode(order?.addrPostalCode));
+}
+
+function gestaoImportOrderAddrKey(order) {
+    const postalCode = gestaoImportDigitsOnlyPostalCode(order?.addrPostalCode);
+    if (!postalCode) return '';
+    return [
+        postalCode,
+        normalizeGestaoImportAddrToken(order?.addrNumber),
+        normalizeGestaoImportAddrToken(order?.addrComplement)
+    ].join('|');
+}
+
+async function fetchGestaoImportAddrFromViaCep(postalCode) {
+    const cep = gestaoImportDigitsOnlyPostalCode(postalCode);
+    if (cep.length !== 8) {
+        return { error: 'CEP inválido (informe 8 dígitos).' };
+    }
+    if (gestaoImportViaCepCache.has(cep)) {
+        return gestaoImportViaCepCache.get(cep);
+    }
+
+    try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        if (!response.ok) {
+            const result = { error: 'Não foi possível consultar o CEP.' };
+            gestaoImportViaCepCache.set(cep, result);
+            return result;
+        }
+        const data = await response.json();
+        if (data?.erro) {
+            const result = { error: 'CEP não encontrado.' };
+            gestaoImportViaCepCache.set(cep, result);
+            return result;
+        }
+        const result = {
+            postalCode: cep,
+            street: String(data.logradouro || '').trim(),
+            neighborhood: String(data.bairro || '').trim(),
+            city: String(data.localidade || '').trim(),
+            state: normalizeGestaoImportAddrState(data.uf)
+        };
+        gestaoImportViaCepCache.set(cep, result);
+        return result;
+    } catch (error) {
+        console.warn('fetchGestaoImportAddrFromViaCep:', error);
+        const result = { error: 'Não foi possível consultar o CEP.' };
+        gestaoImportViaCepCache.set(cep, result);
+        return result;
+    }
+}
+
+async function getGestaoImportDefaultAddrLabelId() {
+    if (!gestaoImportDefaultAddrLabelIdPromise) {
+        gestaoImportDefaultAddrLabelIdPromise = (async () => {
+            if (typeof loadAddrLabels === 'function') {
+                const labels = await loadAddrLabels(true);
+                const firstId = labels?.[0]?.id;
+                if (firstId) return Number(firstId);
+            }
+            const { data, error } = await supabaseClient
+                .from('addrlabel')
+                .select('id')
+                .eq('isActive', true)
+                .order('sortOrder', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+            if (error) {
+                console.warn('getGestaoImportDefaultAddrLabelId:', error);
+                return null;
+            }
+            return data?.id ? Number(data.id) : null;
+        })();
+    }
+    return gestaoImportDefaultAddrLabelIdPromise;
+}
+
+async function findGestaoImportExistingClientAddrId(clientId, postalCode, number, complement) {
+    const { data, error } = await supabaseClient
+        .from('addr')
+        .select('id, postalCode, number, complement')
+        .eq('ownerType', 'client')
+        .eq('ownerId', clientId)
+        .eq('isActive', true);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    const targetNumber = normalizeGestaoImportAddrToken(number);
+    const targetComplement = normalizeGestaoImportAddrToken(complement);
+    const cep = gestaoImportDigitsOnlyPostalCode(postalCode);
+
+    const match = (data || []).find(row =>
+        gestaoImportDigitsOnlyPostalCode(row.postalCode) === cep
+        && normalizeGestaoImportAddrToken(row.number) === targetNumber
+        && normalizeGestaoImportAddrToken(row.complement) === targetComplement
+    );
+
+    return match?.id ? Number(match.id) : null;
+}
+
+async function resolveGestaoImportOrderAddrId(clientId, order) {
+    if (!gestaoImportOrderHasAddrFields(order)) {
+        return { addrId: null };
+    }
+
+    const postalCode = gestaoImportDigitsOnlyPostalCode(order.addrPostalCode);
+    const number = String(order.addrNumber || '').trim();
+    const complement = String(order.addrComplement || '').trim();
+
+    const existingId = await findGestaoImportExistingClientAddrId(clientId, postalCode, number, complement);
+    if (existingId) {
+        return { addrId: existingId };
+    }
+
+    const viaCep = await fetchGestaoImportAddrFromViaCep(postalCode);
+    if (viaCep.error) {
+        return { error: viaCep.error };
+    }
+    if (!viaCep.street || !viaCep.city || viaCep.state.length !== 2) {
+        return { error: 'CEP sem logradouro/cidade/UF completos na consulta.' };
+    }
+
+    const labelId = await getGestaoImportDefaultAddrLabelId();
+    if (!labelId) {
+        return { error: 'Cadastre ao menos um label de endereço ativo (Gestão → Endereços).' };
+    }
+
+    const now = new Date().toISOString();
+    const payload = {
+        ownerType: 'client',
+        ownerId: clientId,
+        labelId,
+        nickname: null,
+        postalCode: viaCep.postalCode,
+        street: viaCep.street,
+        number: number || null,
+        complement: complement || null,
+        neighborhood: viaCep.neighborhood || null,
+        city: viaCep.city,
+        state: viaCep.state,
+        country: 'BR',
+        notes: null,
+        isPrimary: false,
+        isActive: true,
+        createdAt: now,
+        createdById: currentUser?.id || null,
+        updatedAt: now,
+        updatedById: currentUser?.id || null
+    };
+
+    const { data, error } = await supabaseClient
+        .from('addr')
+        .insert(payload)
+        .select('id')
+        .single();
+
+    if (error) {
+        return { error: error.message };
+    }
+
+    return { addrId: data?.id ? Number(data.id) : null };
+}
+
+async function persistGestaoImportOrderAddrId(orderId, clientId, order, now) {
+    const addrResult = await resolveGestaoImportOrderAddrId(clientId, order);
+    if (addrResult.error) {
+        return { error: `Pedido ${order.orderCode}: ${addrResult.error}` };
+    }
+    if (!addrResult.addrId) {
+        return { ok: true };
+    }
+
+    let { error } = await supabaseClient
+        .from('salesOrders')
+        .update({
+            addrId: addrResult.addrId,
+            updatedById: currentUser.id,
+            updatedAt: now
+        })
+        .eq('id', orderId);
+
+    if (error?.message?.includes('addrId')) {
+        return { ok: true };
+    }
+    if (error) {
+        return { error: `Pedido ${order.orderCode}: não foi possível vincular o endereço — ${error.message}` };
+    }
+    return { ok: true, addrId: addrResult.addrId };
+}
 
 async function insertGestaoImportProjectRecord(orderId, project, timestamps) {
     const { createdAt, updatedAt } = timestamps;
-    const montagemFields = {
-        internalAssemblyStartDate: project.internalAssemblyStartDate || undefined,
-        internalAssemblyEndDate: project.internalAssemblyEndDate || undefined,
-        cabinetMakerId: project.cabinetMakerId || undefined
-    };
     const payloadVariants = [
         {
             orderId,
@@ -94,10 +287,7 @@ async function insertGestaoImportProjectRecord(orderId, project, timestamps) {
             name: project.name,
             environmentTypeId: project.environmentTypeId,
             saleValue: project.saleValue,
-            deliveryDate: project.deliveryDate,
             statusId: project.statusId,
-            designerId: project.designerId,
-            ...montagemFields,
             createdAt,
             createdById: currentUser.id,
             updatedById: currentUser.id,
@@ -108,9 +298,7 @@ async function insertGestaoImportProjectRecord(orderId, project, timestamps) {
             projectCode: project.projectCode,
             name: project.name,
             environmentTypeId: project.environmentTypeId,
-            deliveryDate: project.deliveryDate,
             statusId: project.statusId,
-            designerId: project.designerId,
             createdAt,
             createdById: currentUser.id,
             updatedById: currentUser.id,
@@ -152,168 +340,11 @@ async function insertGestaoImportProjectRecord(orderId, project, timestamps) {
     throw lastError || new Error('Não foi possível inserir o projeto.');
 }
 
-async function applyGestaoImportProjectMontagemFields(projectId, project, now) {
-    if (!project.internalAssemblyStartDate && !project.internalAssemblyEndDate && !project.cabinetMakerId) return;
-
-    const montagemPayload = {
-        updatedById: currentUser.id,
-        updatedAt: now
-    };
-
-    if (project.internalAssemblyStartDate) montagemPayload.internalAssemblyStartDate = project.internalAssemblyStartDate;
-    if (project.internalAssemblyEndDate) montagemPayload.internalAssemblyEndDate = project.internalAssemblyEndDate;
-    if (project.cabinetMakerId) montagemPayload.cabinetMakerId = project.cabinetMakerId;
-
-    const { error } = await supabaseClient
-        .from('OrderProject')
-        .update(montagemPayload)
-        .eq('id', projectId);
-
-    if (error && !error.message?.includes('MontagemInterna')
-        && !error.message?.includes('internalAssemblyStartDate')
-        && !error.message?.includes('cabinetMakerId')) {
-        throw error;
-    }
-}
-
 async function insertGestaoImportProject(orderId, project, now) {
-    const projectId = await insertGestaoImportProjectRecord(orderId, project, {
+    return insertGestaoImportProjectRecord(orderId, project, {
         createdAt: now,
         updatedAt: now
     });
-
-    await applyGestaoImportProjectMontagemFields(projectId, project, now);
-
-    return projectId;
-}
-
-async function getGestaoImportProjectStatusIdByName(statusName) {
-    const { data, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .maybeSingle();
-
-    if (error) {
-        console.error('getGestaoImportProjectStatusIdByName:', error);
-        return null;
-    }
-
-    return data?.id || null;
-}
-
-async function applyGestaoImportMeasurementProjectStatuses(entries, now) {
-    const plantaProjectIds = entries
-        .filter(entry => entry.floorPlanRaisedDate)
-        .map(entry => Number(entry.projectId))
-        .filter(Boolean);
-    const medicaoProjectIds = entries
-        .filter(entry => entry.measurementDate && !entry.floorPlanRaisedDate)
-        .map(entry => Number(entry.projectId))
-        .filter(Boolean);
-
-    const updates = [];
-
-    if (plantaProjectIds.length) {
-        const statusId = await getGestaoImportProjectStatusIdByName('Planta Levantada');
-        if (statusId) updates.push({ projectIds: plantaProjectIds, statusId });
-    }
-
-    if (medicaoProjectIds.length) {
-        const statusId = await getGestaoImportProjectStatusIdByName('Medição Realizada');
-        if (statusId) updates.push({ projectIds: medicaoProjectIds, statusId });
-    }
-
-    for (const update of updates) {
-        const uniqueIds = [...new Set(update.projectIds)];
-        if (!uniqueIds.length) continue;
-
-        const { error } = await supabaseClient
-            .from('OrderProject')
-            .update({
-                statusId: update.statusId,
-                updatedById: currentUser.id,
-                updatedAt: now
-            })
-            .in('id', uniqueIds);
-
-        if (error) throw error;
-    }
-}
-
-async function insertGestaoImportMeasurementProject(measurementId, entry) {
-    const measurementDate = entry.measurementDate || entry.floorPlanRaisedDate;
-    if (!measurementDate) return false;
-
-    const payload = {
-        measurementId,
-        orderProjectId: entry.projectId,
-        measurementDate,
-        isFloorPlanRaised: Boolean(entry.floorPlanRaisedDate),
-        floorPlanRaisedDate: entry.floorPlanRaisedDate || null
-    };
-
-    let insertResult = await supabaseClient.from('MeasurementProject').insert(payload);
-
-    if (insertResult.error?.message?.includes('isFloorPlanRaised')) {
-        insertResult = await supabaseClient.from('MeasurementProject').insert({
-            measurementId,
-            orderProjectId: entry.projectId,
-            measurementDate
-        });
-    }
-
-    if (insertResult.error) throw insertResult.error;
-    return true;
-}
-
-async function createGestaoImportMedicaoForOrder(orderId, measurementProjects, now) {
-    const entries = measurementProjects.filter(entry =>
-        entry.projectId && (entry.measurementDate || entry.floorPlanRaisedDate)
-    );
-    if (!entries.length) return 0;
-
-    const projectIds = entries.map(entry => Number(entry.projectId)).filter(Boolean);
-    const { data: existingLinks, error: linksError } = await supabaseClient
-        .from('MeasurementProject')
-        .select('orderProjectId')
-        .in('orderProjectId', projectIds);
-
-    if (linksError && !linksError.message?.includes('MeasurementProject')) {
-        throw linksError;
-    }
-
-    const linkedProjectIds = new Set(
-        (existingLinks || []).map(row => Number(row.orderProjectId)).filter(Boolean)
-    );
-    const pendingEntries = entries.filter(entry => !linkedProjectIds.has(Number(entry.projectId)));
-    if (!pendingEntries.length) return 0;
-
-    const { data: medicao, error } = await supabaseClient
-        .from('Measurement')
-        .insert({
-            orderId,
-            observation: 'Importado via planilha',
-            createdById: currentUser.id,
-            updatedById: currentUser.id,
-            updatedAt: now
-        })
-        .select('id')
-        .single();
-
-    if (error) throw error;
-
-    let insertedCount = 0;
-
-    for (const entry of pendingEntries) {
-        const inserted = await insertGestaoImportMeasurementProject(medicao.id, entry);
-        if (inserted) insertedCount += 1;
-    }
-
-    if (!insertedCount) return 0;
-
-    await applyGestaoImportMeasurementProjectStatuses(pendingEntries, now);
-    return insertedCount;
 }
 
 let gestaoImportSelectedFile = null;
@@ -431,17 +462,12 @@ function parseGestaoImportSaleValue(value) {
 
 function getGestaoImportExampleRow(consultantName = '') {
     const environment = gestaoEnvironmentTypesCache[0]?.name || 'Cozinha';
-    const status = gestaoProjectStatusesCache.find(item => item.name === 'Vendido')?.name
-        || gestaoProjectStatusesCache[0]?.name
-        || 'Vendido';
     const consultantSelect = document.getElementById('gestao-ord-consultant');
     const selectedConsultantOption = consultantSelect?.selectedOptions?.[0]
         || consultantSelect?.querySelector('option[value]:not([value=""])');
     const consultant = consultantName
         || selectedConsultantOption?.textContent?.trim()
         || 'Nome do Consultor';
-    const designer = gestaoProjetistasCache[0]?.name || '';
-
     return {
         orderCode: '123456',
         saleDate: '2026-01-10',
@@ -451,32 +477,20 @@ function getGestaoImportExampleRow(consultantName = '') {
         architectPhone: '11999999999',
         architectEmail: 'arquiteto@exemplo.com',
         clientDeliveryDate: '2026-08-15',
+        addrPostalCode: '01310-100',
+        addrNumber: '1000',
+        addrComplement: 'Apto 12',
         projectCode: '101',
         projectName: 'Cozinha Principal',
         environmentName: environment,
-        saleValue: '15000,00',
-        deliveryDate: '2026-07-20',
-        statusName: status,
-        designerName: designer
+        saleValue: '15000,00'
     };
 }
 
 function buildGestaoImportTemplateRows(consultantName = '') {
-    const projectDateColumns = GESTAO_IMPORT_PROJECT_DATE_COLUMNS;
-    const headers = [
-        ...GESTAO_IMPORT_COLUMNS.map(column => column.header),
-        ...projectDateColumns.map(column => column.header)
-    ];
+    const headers = GESTAO_IMPORT_COLUMNS.map(column => column.header);
     const example = getGestaoImportExampleRow(consultantName);
-    const exampleRow = [
-        ...GESTAO_IMPORT_COLUMNS.map(column => example[column.key] ?? ''),
-        '2026-02-05',
-        '',
-        '',
-        '',
-        ''
-    ];
-
+    const exampleRow = GESTAO_IMPORT_COLUMNS.map(column => example[column.key] ?? '');
     return [headers, exampleRow];
 }
 
@@ -495,30 +509,16 @@ async function downloadGestaoImportTemplate() {
             .eq('isActive', true)
             .order('name', { ascending: true });
 
-        const { data: statusWpsList } = await supabaseClient
-            .from('importStatusWPS')
-            .select('statusWps, statusFgp')
-            .order('statusWps', { ascending: true });
-
         const { data: consultorWpsList } = await supabaseClient
             .from('importConsultorWPS')
             .select('consultantWps, consultantFgp')
             .order('consultantWps', { ascending: true });
 
-        const { data: marceneiroWpsList } = await supabaseClient
-            .from('importMarceneiroWPS')
-            .select('cabinetMakerWps, cabinetMakerFgp')
-            .order('cabinetMakerWps', { ascending: true });
-
         const importSheet = XLSX.utils.aoa_to_sheet(
             buildGestaoImportTemplateRows(consultants?.[0]?.name || '')
         );
-        importSheet['!cols'] = [
-            ...GESTAO_IMPORT_COLUMNS.map(() => ({ wch: 18 })),
-            ...GESTAO_IMPORT_PROJECT_DATE_COLUMNS.map(() => ({ wch: 22 }))
-        ];
+        importSheet['!cols'] = GESTAO_IMPORT_COLUMNS.map(() => ({ wch: 18 }));
 
-        const projectDateColumns = GESTAO_IMPORT_PROJECT_DATE_COLUMNS;
         const referenceRows = [
             ['Campo', 'Obrigatório', 'Descrição'],
             ...GESTAO_IMPORT_COLUMNS.map(column => [
@@ -527,9 +527,10 @@ async function downloadGestaoImportTemplate() {
                 column.label
             ]),
             [],
-            ['Datas de projeto', 'Não', 'Opcional — medição, planta levantada e montagem interna.'],
-            ['Coluna', 'Descrição'],
-            ...projectDateColumns.map(column => [column.header, column.label]),
+            ['Endereço do pedido', 'Não', 'Opcional — CEP consulta logradouro/bairro/cidade/UF (ViaCEP); informe número e complemento.'],
+            ['endereco_cep', '8 dígitos'],
+            ['endereco_numero', 'Número'],
+            ['endereco_complemento', 'Complemento'],
             [],
             ['Ambientes cadastrados', '', ''],
             ['Nome'],
@@ -537,29 +538,13 @@ async function downloadGestaoImportTemplate() {
                 ? gestaoEnvironmentTypesCache.map(item => [item.name])
                 : [['(nenhum cadastrado)']]),
             [],
-            ['Status WPS → FGP (status_projeto na planilha)', '', ''],
-            ['statusWps', 'statusFgp'],
-            ...((statusWpsList || []).length
-                ? statusWpsList.map(item => [item.statusWps, item.statusFgp])
-                : [['(execute create-import-wps-mappings.sql)']]),
+            [`Status dos projetos importados`, 'Sim', `Sempre "${GESTAO_IMPORT_PROJECT_STATUS_NAME}" (FGP).`],
             [],
             ['Consultor WPS → FGP (consultor na planilha)', '', ''],
             ['consultantWps', 'consultantFgp'],
             ...((consultorWpsList || []).length
                 ? consultorWpsList.map(item => [item.consultantWps, item.consultantFgp])
                 : [['(execute create-import-wps-mappings.sql)']]),
-            [],
-            ['Marceneiro WPS → FGP (marceneiro na planilha)', '', ''],
-            ['cabinetMakerWps', 'cabinetMakerFgp'],
-            ...((marceneiroWpsList || []).length
-                ? marceneiroWpsList.map(item => [item.cabinetMakerWps, item.cabinetMakerFgp])
-                : [['(execute create-import-wps-mappings.sql)']]),
-            [],
-            ['Projetistas (ativos)', '', ''],
-            ['Nome'],
-            ...(gestaoProjetistasCache.length
-                ? gestaoProjetistasCache.map(item => [item.name])
-                : [['(opcional)']])
         ];
 
         const referencesSheet = XLSX.utils.aoa_to_sheet(referenceRows);
@@ -599,16 +584,11 @@ function mapGestaoImportRow(rawRow, rowNumber) {
     mapped.architectEmail = String(mapped.architectEmail || '').trim();
     mapped.projectName = String(mapped.projectName || '').trim();
     mapped.environmentName = String(mapped.environmentName || '').trim();
-    mapped.statusName = String(mapped.statusName || '').trim();
-    mapped.designerName = String(mapped.designerName || '').trim();
     mapped.saleDate = parseGestaoImportDate(mapped.saleDate);
     mapped.clientDeliveryDate = parseGestaoImportDate(mapped.clientDeliveryDate);
-    mapped.deliveryDate = parseGestaoImportDate(mapped.deliveryDate);
-    mapped.measurementDate = parseGestaoImportDate(mapped.measurementDate);
-    mapped.floorPlanRaisedDate = parseGestaoImportDate(mapped.floorPlanRaisedDate);
-    mapped.internalAssemblyStartDate = parseGestaoImportDate(mapped.internalAssemblyStartDate);
-    mapped.internalAssemblyEndDate = parseGestaoImportDate(mapped.internalAssemblyEndDate);
-    mapped.marceneiroName = String(mapped.marceneiroName || '').trim();
+    mapped.addrPostalCode = gestaoImportDigitsOnlyPostalCode(mapped.addrPostalCode);
+    mapped.addrNumber = String(mapped.addrNumber || '').trim();
+    mapped.addrComplement = String(mapped.addrComplement || '').trim();
     mapped.saleValue = parseGestaoImportSaleValue(mapped.saleValue);
 
     if (!mapped.orderCode) mapped.errors.push('Código do pedido é obrigatório.');
@@ -623,14 +603,20 @@ function mapGestaoImportRow(rawRow, rowNumber) {
     if (Number.isNaN(mapped.saleValue)) {
         mapped.errors.push('Valor de venda inválido.');
     }
+    const hasAddrNumberOrComplement = mapped.addrNumber || mapped.addrComplement;
+    if (hasAddrNumberOrComplement && mapped.addrPostalCode.length !== 8) {
+        mapped.errors.push('Informe um CEP válido (8 dígitos) em "endereco_cep".');
+    }
+    if (mapped.addrPostalCode && mapped.addrPostalCode.length !== 8) {
+        mapped.errors.push('CEP inválido em "endereco_cep" (use 8 dígitos).');
+    }
 
-    ['saleDate', 'clientDeliveryDate', 'measurementDate', 'floorPlanRaisedDate', 'internalAssemblyStartDate', 'internalAssemblyEndDate'].forEach(field => {
+    ['saleDate', 'clientDeliveryDate'].forEach(field => {
         if (mapped[field] === null && rawRow && Object.keys(rawRow).some(key => {
             const alias = GESTAO_IMPORT_HEADER_ALIASES[normalizeGestaoImportHeader(key)];
             return alias === field && rawRow[key] !== null && rawRow[key] !== undefined && rawRow[key] !== '';
         })) {
-            const fieldHeader = [...GESTAO_IMPORT_COLUMNS, ...GESTAO_IMPORT_PROJECT_DATE_COLUMNS]
-                .find(column => column.key === field)?.header || field;
+            const fieldHeader = GESTAO_IMPORT_COLUMNS.find(column => column.key === field)?.header || field;
             mapped.errors.push(`Data inválida em "${fieldHeader}".`);
         }
     });
@@ -695,6 +681,10 @@ function groupGestaoImportRowsByOrder(rows) {
                 saleDatesSeen: row.saleDate ? new Set([row.saleDate]) : new Set(),
                 clientDeliveryDate: row.clientDeliveryDate || null,
                 clientDeliveryDatesSeen: row.clientDeliveryDate ? new Set([row.clientDeliveryDate]) : new Set(),
+                addrPostalCode: '',
+                addrNumber: '',
+                addrComplement: '',
+                _addrKey: '',
                 projects: [],
                 rowNumbers: []
             });
@@ -728,6 +718,22 @@ function groupGestaoImportRowsByOrder(rows) {
             order.clientDeliveryDatesSeen.add(row.clientDeliveryDate);
             order.clientDeliveryDate = pickLatestIsoDate(order.clientDeliveryDate, row.clientDeliveryDate);
         }
+        if (gestaoImportDigitsOnlyPostalCode(row.addrPostalCode) || row.addrNumber || row.addrComplement) {
+            const rowKey = gestaoImportOrderAddrKey({
+                addrPostalCode: row.addrPostalCode,
+                addrNumber: row.addrNumber,
+                addrComplement: row.addrComplement
+            });
+            if (!order._addrKey && rowKey) {
+                order.addrPostalCode = gestaoImportDigitsOnlyPostalCode(row.addrPostalCode);
+                order.addrNumber = String(row.addrNumber || '').trim();
+                order.addrComplement = String(row.addrComplement || '').trim();
+                order._addrKey = rowKey;
+            } else if (rowKey && order._addrKey && rowKey !== order._addrKey) {
+                row.errors.push(`Endereço diverge do pedido ${key} (linha ${order.rowNumbers[0]}).`);
+                return;
+            }
+        }
 
         if (order.projects.some(project => project.projectCode === row.projectCode)) {
             row.errors.push(`Código de projeto duplicado (${row.projectCode}) no pedido ${key}.`);
@@ -742,23 +748,8 @@ function groupGestaoImportRowsByOrder(rows) {
 }
 
 async function loadGestaoImportWpsMappings() {
-    const statusWpsToFgp = {};
     const consultorWpsToFgp = {};
-    const marceneiroWpsToFgp = {};
     let consultorWpsRows = [];
-
-    const statusResult = await supabaseClient
-        .from('importStatusWPS')
-        .select('statusWps, statusFgp');
-
-    if (!statusResult.error) {
-        (statusResult.data || []).forEach(row => {
-            const key = String(row.statusWps || '').trim().toLowerCase();
-            if (key) statusWpsToFgp[key] = String(row.statusFgp || '').trim();
-        });
-    } else if (!statusResult.error.message?.includes('importStatusWPS')) {
-        console.error('loadGestaoImportWpsMappings status:', statusResult.error);
-    }
 
     const consultorResult = await supabaseClient
         .from('importConsultorWPS')
@@ -774,20 +765,7 @@ async function loadGestaoImportWpsMappings() {
         console.error('loadGestaoImportWpsMappings consultor:', consultorResult.error);
     }
 
-    const marceneiroResult = await supabaseClient
-        .from('importMarceneiroWPS')
-        .select('cabinetMakerWps, cabinetMakerFgp');
-
-    if (!marceneiroResult.error) {
-        (marceneiroResult.data || []).forEach(row => {
-            const key = String(row.cabinetMakerWps || '').trim().toLowerCase();
-            if (key) marceneiroWpsToFgp[key] = String(row.cabinetMakerFgp || '').trim();
-        });
-    } else if (!marceneiroResult.error.message?.includes('importMarceneiroWPS')) {
-        console.error('loadGestaoImportWpsMappings marceneiro:', marceneiroResult.error);
-    }
-
-    return { statusWpsToFgp, consultorWpsToFgp, marceneiroWpsToFgp, consultorWpsRows };
+    return { consultorWpsToFgp, consultorWpsRows };
 }
 
 function buildGestaoImportConsultantResolver(consultants, consultorWpsToFgp, consultorWpsRows = []) {
@@ -841,32 +819,21 @@ function mapGestaoImportConsultorWpsToFgp(consultorWps, lookups) {
     return resolveGestaoImportConsultantName(consultorWps, lookups);
 }
 
-function mapGestaoImportStatusWpsToFgp(statusWps, lookups) {
-    const raw = String(statusWps || '').trim();
-    const key = raw.toLowerCase();
-
-    if (!key) return 'Vendido';
-    if (lookups.statusWpsToFgp?.[key]) return lookups.statusWpsToFgp[key];
-    if (lookups.statusByName?.[key]) return raw;
-
-    return null;
-}
-
-function mapGestaoImportMarceneiroWpsToFgp(marceneiroWps, lookups) {
-    const raw = String(marceneiroWps || '').trim();
-    const key = raw.toLowerCase();
-
-    if (!key) return null;
-    if (lookups.marceneiroWpsToFgp?.[key]) return lookups.marceneiroWpsToFgp[key];
-    if (lookups.marceneiroByName?.[key]) return raw;
-
-    return null;
+function getGestaoImportSoldProjectStatusId(lookups) {
+    const statusKey = GESTAO_IMPORT_PROJECT_STATUS_NAME.toLowerCase();
+    const statusId = lookups.statusByName?.[statusKey]
+        || (typeof getDefaultProjectStatusId === 'function' ? getDefaultProjectStatusId() : null);
+    if (!statusId) {
+        return {
+            error: `Status "${GESTAO_IMPORT_PROJECT_STATUS_NAME}" não encontrado no cadastro de status de projeto.`
+        };
+    }
+    return { statusId };
 }
 
 async function loadGestaoImportLookups() {
     await loadGestaoFormOptions();
     await loadGestaoConsultants();
-    await loadMarceneiros(true);
 
     const { data: consultants } = await supabaseClient
         .from('appUsers')
@@ -895,28 +862,20 @@ async function loadGestaoImportLookups() {
                 .filter(status => status.isActive !== false)
                 .map(status => [status.name.trim().toLowerCase(), status.id])
         ),
-        designerByName: Object.fromEntries(
-            gestaoProjetistasCache.map(item => [item.name.trim().toLowerCase(), item.id])
-        ),
-        marceneiroByName: Object.fromEntries(
-            cabinetMakersCache
-                .filter(cabinetMaker => cabinetMaker.isActive !== false)
-                .map(cabinetMaker => [cabinetMaker.name.trim().toLowerCase(), cabinetMaker.id])
-        ),
         clientByName: Object.fromEntries(
             (clientes || [])
                 .filter(cliente => cliente.isActive !== false)
                 .map(cliente => [cliente.name.trim().toLowerCase(), cliente.id])
         ),
         ...consultantResolver,
-        statusWpsToFgp: wpsMappings.statusWpsToFgp,
-        consultorWpsToFgp: wpsMappings.consultorWpsToFgp,
-        marceneiroWpsToFgp: wpsMappings.marceneiroWpsToFgp
+        consultorWpsToFgp: wpsMappings.consultorWpsToFgp
     };
 }
 
 function resetGestaoImportClienteCache() {
     gestaoImportClienteIdByName.clear();
+    gestaoImportViaCepCache.clear();
+    gestaoImportDefaultAddrLabelIdPromise = null;
 }
 
 async function resolveGestaoImportClienteId(clientName, lookups = null) {
@@ -980,40 +939,11 @@ function resolveGestaoImportProject(row, lookups) {
         return { error: `Ambiente "${row.environmentName}" não encontrado.` };
     }
 
-    const statusWps = (row.statusName || 'Vendido').trim();
-    const statusFgp = mapGestaoImportStatusWpsToFgp(statusWps, lookups);
-    if (!statusFgp) {
-        return { error: `Status WPS "${statusWps}" não mapeado em importStatusWPS.` };
+    const statusResult = getGestaoImportSoldProjectStatusId(lookups);
+    if (statusResult.error) {
+        return { error: statusResult.error };
     }
-
-    const statusKey = statusFgp.toLowerCase();
-    const statusId = lookups.statusByName[statusKey] || getDefaultProjectStatusId();
-    if (!statusId) {
-        return { error: `Status FGP "${statusFgp}" (WPS: "${statusWps}") não encontrado.` };
-    }
-
-    let designerId = null;
-    if (row.designerName) {
-        designerId = lookups.designerByName[row.designerName.trim().toLowerCase()] || null;
-        if (!designerId) {
-            return { error: `Projetista "${row.designerName}" não encontrado.` };
-        }
-    }
-
-    let cabinetMakerId = null;
-    if (row.marceneiroName) {
-        const marceneiroFgp = mapGestaoImportMarceneiroWpsToFgp(row.marceneiroName, lookups);
-        if (!marceneiroFgp) {
-            return { error: `Marceneiro WPS "${row.marceneiroName}" não mapeado em importMarceneiroWPS.` };
-        }
-
-        cabinetMakerId = lookups.marceneiroByName[marceneiroFgp.trim().toLowerCase()] || null;
-        if (!cabinetMakerId) {
-            return {
-                error: `Marceneiro FGP "${marceneiroFgp}" (WPS: "${row.marceneiroName}") não cadastrado ou inativo.`
-            };
-        }
-    }
+    const statusId = statusResult.statusId;
 
     return {
         project: {
@@ -1021,14 +951,7 @@ function resolveGestaoImportProject(row, lookups) {
             name: row.projectName,
             environmentTypeId,
             saleValue: row.saleValue,
-            deliveryDate: row.deliveryDate,
-            statusId,
-            designerId,
-            measurementDate: row.measurementDate,
-            floorPlanRaisedDate: row.floorPlanRaisedDate,
-            internalAssemblyStartDate: row.internalAssemblyStartDate,
-            internalAssemblyEndDate: row.internalAssemblyEndDate,
-            cabinetMakerId
+            statusId
         }
     };
 }
@@ -1074,12 +997,18 @@ async function createGestaoImportOrder(order, lookups, now) {
             return { ok: false, message: clientResult.error };
         }
 
+        const addrResult = await resolveGestaoImportOrderAddrId(clientResult.clientId, order);
+        if (addrResult.error) {
+            return { ok: false, message: `Pedido ${order.orderCode}: ${addrResult.error}` };
+        }
+
         const orderPayload = {
             orderCode: order.orderCode,
             clientId: clientResult.clientId,
             consultantUserId: consultantResult.consultantUserId,
             saleDate: order.saleDate || undefined,
             clientDeliveryDate: order.clientDeliveryDate || undefined,
+            addrId: addrResult.addrId || undefined,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -1093,8 +1022,9 @@ async function createGestaoImportOrder(order, lookups, now) {
 
         if (error?.message?.includes('saleDate')
             || error?.message?.includes('clientDeliveryDate')
-            || error?.message?.includes('updatedAt')) {
-            const { saleDate: _s, clientDeliveryDate: _d, updatedAt: _u, ...fallback } = orderPayload;
+            || error?.message?.includes('updatedAt')
+            || error?.message?.includes('addrId')) {
+            const { saleDate: _s, clientDeliveryDate: _d, updatedAt: _u, addrId: _a, ...fallback } = orderPayload;
             ({ data: created, error } = await supabaseClient
                 .from('salesOrders')
                 .insert(fallback)
@@ -1109,6 +1039,24 @@ async function createGestaoImportOrder(order, lookups, now) {
         orderId = created.id;
         createdNewOrder = true;
         orderClientId = clientResult.clientId;
+
+        if (addrResult.addrId) {
+            const persistAddr = await persistGestaoImportOrderAddrId(orderId, clientResult.clientId, order, now);
+            if (persistAddr.error) {
+                await supabaseClient.from('salesOrders').delete().eq('id', orderId);
+                return { ok: false, message: persistAddr.error };
+            }
+        }
+    }
+
+    if (existingOrder && gestaoImportOrderHasAddrFields(order)) {
+        const clientId = orderClientId || (await resolveGestaoImportClienteIdForOrder(order, lookups))?.clientId;
+        if (clientId) {
+            const persistAddr = await persistGestaoImportOrderAddrId(orderId, clientId, order, now);
+            if (persistAddr.error) {
+                return { ok: false, message: persistAddr.error };
+            }
+        }
     }
 
     if (order.architectName && typeof resolveOrCreateArchitectId === 'function') {
@@ -1177,34 +1125,8 @@ async function createGestaoImportOrder(order, lookups, now) {
         };
     }
 
-    let medicaoCount = 0;
-
-    try {
-        const measurementProjects = importedProjects
-            .filter(({ project }) => project.measurementDate || project.floorPlanRaisedDate)
-            .map(({ projectId, project }) => ({
-                projectId,
-                measurementDate: project.measurementDate,
-                floorPlanRaisedDate: project.floorPlanRaisedDate
-            }));
-
-        if (measurementProjects.length) {
-            medicaoCount = await createGestaoImportMedicaoForOrder(orderId, measurementProjects, now);
-        }
-    } catch (medicaoError) {
-        if (createdNewOrder) {
-            await supabaseClient.from('salesOrders').delete().eq('id', orderId);
-            return { ok: false, message: `Pedido ${order.orderCode}: ${medicaoError.message}` };
-        }
-
-        projectErrors.push(`Pedido ${order.orderCode}: medição não criada — ${medicaoError.message}`);
-    }
-
     const actionLabel = existingOrder ? 'adicionado(s)' : 'importado(s)';
     let successMessage = `Pedido ${order.orderCode}: ${importedProjects.length} projeto(s) ${actionLabel}.`;
-    if (medicaoCount > 0) {
-        successMessage += ` ${medicaoCount} medição(ões) registrada(s).`;
-    }
     if (typeof tryLinkUniqueWonDealForClient === 'function' && orderClientId) {
         await tryLinkUniqueWonDealForClient(orderId, orderClientId);
     }
@@ -1317,6 +1239,10 @@ function validateGestaoImportOrder(order, lookups, context) {
 
     if (order.architectName) {
         notes.push(`Pedido ${order.orderCode}: arquiteto "${order.architectName}" será cadastrado (se novo) e vinculado ao pedido.`);
+    }
+
+    if (gestaoImportOrderHasAddrFields(order)) {
+        notes.push(`Pedido ${order.orderCode}: endereço (CEP ${order.addrPostalCode}) será consultado e vinculado ao pedido.`);
     }
 
     const existingProjectCodes = existingOrder

@@ -954,11 +954,11 @@
                                     <li>A coluna <span class="font-mono text-[10px]">data_venda</span> é obrigatória para pedidos novos. Se o mesmo pedido tiver datas diferentes em várias linhas, será usada a <strong>maior data</strong>.</li>
                                     <li>Se o mesmo pedido tiver <span class="font-mono text-[10px]">entrega_cliente</span> diferente em várias linhas, será usada a <strong>maior data</strong>.</li>
                                     <li>Se o pedido já existir, apenas os projetos novos serão criados; projeto duplicado gera erro.</li>
-                                    <li>Opcional: <span class="font-mono text-[10px]">data_medicao</span> cria a entidade de medição do pedido; <span class="font-mono text-[10px]">data_planta_levantada</span> vincula planta levantada.</li>
+                                    <li>Opcional: <span class="font-mono text-[10px]">endereco_cep</span> (8 dígitos — o sistema consulta logradouro, bairro, cidade e UF), <span class="font-mono text-[10px]">endereco_numero</span> e <span class="font-mono text-[10px]">endereco_complemento</span> vinculam o endereço ao pedido (cadastra no cliente se necessário).</li>
                                     <li>Opcional: <span class="font-mono text-[10px]">arquiteto</span>, <span class="font-mono text-[10px]">arquiteto_telefone</span> e <span class="font-mono text-[10px]">arquiteto_email</span> cadastram o arquiteto (se novo) e vinculam ao pedido — inclusive em pedidos já existentes.</li>
-                                    <li>Opcional: <span class="font-mono text-[10px]">data_inicio_montagem_interna</span>, <span class="font-mono text-[10px]">data_fim_montagem_interna</span> e <span class="font-mono text-[10px]">marceneiro</span> (nome WPS).</li>
-                                    <li><span class="font-mono text-[10px]">consultor</span>, <span class="font-mono text-[10px]">status_projeto</span> e <span class="font-mono text-[10px]">marceneiro</span> usam nomes WPS; o sistema converte via tabelas <span class="font-mono text-[10px]">importConsultorWPS</span>, <span class="font-mono text-[10px]">importStatusWPS</span> e <span class="font-mono text-[10px]">importMarceneiroWPS</span>.</li>
-                                    <li>Use os nomes cadastrados no sistema para ambiente e projetista.</li>
+                                    <li>Todos os projetos importados entram com status <strong>Vendido</strong> (não há coluna de status na planilha).</li>
+                                    <li><span class="font-mono text-[10px]">consultor</span> usa nome WPS; o sistema converte via <span class="font-mono text-[10px]">importConsultorWPS</span>.</li>
+                                    <li>Use o nome cadastrado no sistema para <span class="font-mono text-[10px]">ambiente</span>.</li>
                                     <li>Salve o arquivo, selecione-o abaixo, clique em <strong>Validar arquivo</strong> e só então importe.</li>
                                 </ol>
                                 <button type="button" id="btn-gestao-import-template"
