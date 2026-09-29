@@ -3,33 +3,33 @@ let appDialogResolver = null;
 const APP_DIALOG_VARIANTS = {
     confirm: {
         icon: '?',
-        iconBg: 'bg-slate-100 text-slate-600',
-        confirmClass: 'bg-slate-900 hover:bg-slate-800'
+        iconBg: 'fm-dialog-icon fm-dialog-icon--neutral',
+        confirmClass: 'fm-btn fm-btn--primary fm-btn--block'
     },
     warning: {
         icon: '!',
-        iconBg: 'bg-amber-100 text-amber-700',
-        confirmClass: 'bg-amber-600 hover:bg-amber-700'
+        iconBg: 'fm-dialog-icon fm-dialog-icon--warning',
+        confirmClass: 'fm-btn fm-btn--primary fm-btn--block'
     },
     danger: {
         icon: '!',
-        iconBg: 'bg-red-100 text-red-600',
-        confirmClass: 'bg-red-600 hover:bg-red-700'
+        iconBg: 'fm-dialog-icon fm-dialog-icon--danger',
+        confirmClass: 'fm-btn fm-btn--danger fm-btn--block'
     },
     success: {
         icon: '✓',
-        iconBg: 'bg-emerald-100 text-emerald-700',
-        confirmClass: 'bg-emerald-700 hover:bg-emerald-800'
+        iconBg: 'fm-dialog-icon fm-dialog-icon--success',
+        confirmClass: 'fm-btn fm-btn--primary fm-btn--block'
     },
     info: {
         icon: 'i',
-        iconBg: 'bg-blue-100 text-blue-700',
-        confirmClass: 'bg-slate-900 hover:bg-slate-800'
+        iconBg: 'fm-dialog-icon fm-dialog-icon--neutral',
+        confirmClass: 'fm-btn fm-btn--primary fm-btn--block'
     },
     error: {
         icon: '!',
-        iconBg: 'bg-red-100 text-red-600',
-        confirmClass: 'bg-red-600 hover:bg-red-700'
+        iconBg: 'fm-dialog-icon fm-dialog-icon--danger',
+        confirmClass: 'fm-btn fm-btn--danger fm-btn--block'
     }
 };
 
@@ -42,13 +42,13 @@ function applyAppDialogVariant(variant, showIcon = false) {
     if (iconWrap && icon) {
         iconWrap.classList.toggle('hidden', !showIcon);
         if (showIcon) {
-            icon.className = `w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold ${config.iconBg}`;
+            icon.className = config.iconBg;
             icon.textContent = config.icon;
         }
     }
 
     if (confirmBtn) {
-        confirmBtn.className = `flex-1 py-2 rounded-lg text-xs font-semibold text-white transition-colors ${config.confirmClass}`;
+        confirmBtn.className = config.confirmClass;
     }
 }
 
@@ -108,6 +108,7 @@ function showAppDialog(options = {}) {
         showInput = false,
         inputPlaceholder = '',
         inputValue = '',
+        confirmClass = '',
         focusCancel = variant === 'danger'
     } = options;
 
@@ -147,6 +148,7 @@ function showAppDialog(options = {}) {
         }
 
         applyAppDialogVariant(variant, showIcon);
+        if (confirmClass) confirmBtn.className = confirmClass;
 
         modal.classList.remove('hidden');
         document.addEventListener('keydown', handleAppDialogKeydown);

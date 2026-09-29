@@ -234,18 +234,20 @@ async function saveGestaoMarceneiroRow(row) {
         return;
     }
 
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('CabinetMaker')
-        .update({ name, sortOrder, isActive, updatedAt: now })
-        .eq('id', cabinetMakerId);
+    await withGestaoCadastroSaveOverlay(row, async () => {
+        const now = new Date().toISOString();
+        const { error } = await supabaseClient
+            .from('CabinetMaker')
+            .update({ name, sortOrder, isActive, updatedAt: now })
+            .eq('id', cabinetMakerId);
 
-    if (error) {
-        alertAppDialog('Erro ao salvar marceneiro: ' + error.message);
-        return;
-    }
+        if (error) {
+            alertAppDialog('Erro ao salvar marceneiro: ' + error.message);
+            return;
+        }
 
-    await loadGestaoMarceneirosList();
+        await loadGestaoMarceneirosList();
+    });
 }
 
 async function deleteGestaoMarceneiroRow(row) {
@@ -300,23 +302,25 @@ async function addGestaoMarceneiro(event) {
         return;
     }
 
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('CabinetMaker')
-        .insert({
-            name,
-            sortOrder,
-            isActive: true,
-            updatedAt: now
-        });
+    await withGestaoCadastroSaveOverlay(document.getElementById('gestao-marceneiros-panel'), async () => {
+        const now = new Date().toISOString();
+        const { error } = await supabaseClient
+            .from('CabinetMaker')
+            .insert({
+                name,
+                sortOrder,
+                isActive: true,
+                updatedAt: now
+            });
 
-    if (error) {
-        alertAppDialog('Erro ao adicionar marceneiro: ' + error.message);
-        return;
-    }
+        if (error) {
+            alertAppDialog('Erro ao adicionar marceneiro: ' + error.message);
+            return;
+        }
 
-    document.getElementById('gestao-new-marceneiro-form')?.reset();
-    document.getElementById('gestao-new-marceneiro-sort').value = '0';
-    await loadGestaoMarceneirosList();
+        document.getElementById('gestao-new-marceneiro-form')?.reset();
+        document.getElementById('gestao-new-marceneiro-sort').value = '0';
+        await loadGestaoMarceneirosList();
+    });
 }
 

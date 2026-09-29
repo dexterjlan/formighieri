@@ -1134,6 +1134,7 @@ async function saveGestaoOrder(event) {
 
     const now = new Date().toISOString();
 
+    await withGestaoCadastroSaveOverlay(document.getElementById('gestao-pedido-form-panel'), async () => {
     try {
         let orderId = resolveGestaoOrderIdForSave();
         if (isEditingOrder && !orderId) {
@@ -1316,4 +1317,5 @@ async function saveGestaoOrder(event) {
             : '';
         alertAppDialog('Erro ao salvar pedido: ' + error.message + sqlHint);
     }
+    });
 }

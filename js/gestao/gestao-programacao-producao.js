@@ -486,8 +486,20 @@ function getProgramacaoProducaoCurrentMonthKey() {
     return `${now.getFullYear()}-${month}`;
 }
 
+function getProgramacaoProducaoPreviousMonthKey(monthKey) {
+    const [year, month] = String(monthKey || '').split('-').map(Number);
+    if (!year || !month) return '';
+    const date = new Date(year, month - 2, 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function programacaoProducaoMonthGroupHasContent(monthGroup) {
+    return Boolean(monthGroup?.projectCount || monthGroup?.fechamento?.projectCount);
+}
+
 function filterProgramacaoProducaoSummaryMonthGroups(groups) {
     const currentMonthKey = getProgramacaoProducaoCurrentMonthKey();
+    const previousMonthKey = getProgramacaoProducaoPreviousMonthKey(currentMonthKey);
 
     return (groups || []).filter(monthGroup => {
         const monthKey = monthGroup.monthKey;
@@ -495,6 +507,7 @@ function filterProgramacaoProducaoSummaryMonthGroups(groups) {
             return Boolean(monthGroup.projectCount);
         }
         if (monthKey >= currentMonthKey) return true;
+        if (monthKey === previousMonthKey) return programacaoProducaoMonthGroupHasContent(monthGroup);
         return Boolean(monthGroup.projectCount);
     });
 }
@@ -771,14 +784,13 @@ async function loadProgramacaoProducao() {
 }
 
 function showGestaoProgramacaoProducaoPanel() {
-    if (!canAccessGestao()) {
+    if (typeof canViewProgramacaoProducao === 'function' ? !canViewProgramacaoProducao() : !canAccessGestao()) {
         alertAppDialog('Sem permissão para acessar a programação de produção.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
     hideAllGestaoPanels();
     document.getElementById('gestao-programacao-producao-panel')?.classList.remove('hidden');
-    setGestaoNavActive('programacao-producao');
     loadProgramacaoProducao();
 }
 
@@ -1107,7 +1119,8 @@ async function exportProgramacaoProducaoMonthToExcel(monthKey, button) {
 
 function bindProgramacaoProducaoEvents() {
     document.getElementById('gestao-nav-programacao-producao')?.addEventListener('click', () => {
-        showGestaoProgramacaoProducaoPanel();
+        if (typeof showProgramacaoProducaoView === 'function') showProgramacaoProducaoView();
+        else showGestaoProgramacaoProducaoPanel();
     });
 
     document.getElementById('btn-programacao-producao-refresh')?.addEventListener('click', loadProgramacaoProducao);

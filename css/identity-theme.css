@@ -363,27 +363,10 @@ html[data-theme="formighieri-sage"] .text-slate-400 {
     color: var(--fm-ink-muted) !important;
 }
 
-/* ── Botões primários (substitui indigo/violet/slate escuro) ── */
-html[data-theme="formighieri-sage"] .bg-indigo-700,
-html[data-theme="formighieri-sage"] .bg-violet-700,
-html[data-theme="formighieri-sage"] .bg-slate-900 {
+/* Botões, modais e overlays: css/fm-components.css */
+
+html[data-theme="formighieri-sage"] .bg-slate-900:not(button):not(a) {
     background-color: var(--fm-sage-deep) !important;
-}
-
-html[data-theme="formighieri-sage"] .hover\:bg-indigo-800:hover,
-html[data-theme="formighieri-sage"] .hover\:bg-violet-800:hover,
-html[data-theme="formighieri-sage"] .hover\:bg-slate-800:hover {
-    background-color: var(--fm-ink) !important;
-}
-
-html[data-theme="formighieri-sage"] .bg-amber-600,
-html[data-theme="formighieri-sage"] .bg-teal-700 {
-    background-color: var(--fm-accent) !important;
-}
-
-html[data-theme="formighieri-sage"] .hover\:bg-amber-700:hover,
-html[data-theme="formighieri-sage"] .hover\:bg-teal-800:hover {
-    background-color: var(--fm-accent-hover) !important;
 }
 
 html[data-theme="formighieri-sage"] .border-indigo-200,
@@ -403,9 +386,3 @@ html[data-theme="formighieri-sage"] .text-violet-900 {
     color: var(--fm-ink) !important;
 }
 
-/* ── Modais ── */
-html[data-theme="formighieri-sage"] .fixed.inset-0.bg-slate-900\/50,
-html[data-theme="formighieri-sage"] .fixed.inset-0.bg-slate-900\/40 {
-    background-color: var(--fm-overlay) !important;
-    backdrop-filter: blur(4px);
-}

@@ -404,7 +404,10 @@ function renderOrdersList() {
         ));
     }
     if (filter) {
-        orders = orders.filter(o => normalizeSearchText(getOrderClientName(o)).includes(filter));
+        orders = orders.filter(o =>
+            normalizeSearchText(getOrderClientName(o)).includes(filter)
+            || normalizeSearchText(o.orderCode).includes(filter)
+        );
     }
 
     orders.sort((a, b) => {

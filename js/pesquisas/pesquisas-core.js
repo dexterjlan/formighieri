@@ -16,12 +16,11 @@ function renderPesquisasSidebar() {
     const nav = document.getElementById('pesquisas-sidebar-nav');
     if (!nav) return;
 
+    const markSelection = !document.getElementById('pesquisas-view')?.classList.contains('hidden');
     nav.innerHTML = PESQUISAS_SECTIONS.map(section => `
         <button type="button"
-            class="pesquisas-nav-btn w-full text-left text-xs px-3 py-2 rounded-lg font-medium mb-1 ${
-                pesquisasActiveSection === section.id
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-slate-600 hover:bg-slate-100'
+            class="app-nav-item app-nav-item--nested pesquisas-nav-btn ${
+                markSelection && pesquisasActiveSection === section.id ? 'is-active' : ''
             }"
             data-pesquisas-section="${section.id}">
             ${escapeHtml(section.label)}
@@ -69,8 +68,17 @@ async function loadPesquisasContent() {
     }
 }
 
+function ensurePesquisasViewVisible() {
+    const view = document.getElementById('pesquisas-view');
+    if (!view?.classList.contains('hidden')) return;
+    if (typeof hideSubViews === 'function') hideSubViews();
+    view.classList.remove('hidden');
+    if (typeof updateMainNavActive === 'function') updateMainNavActive('pesquisas');
+}
+
 function selectPesquisasSection(sectionId) {
     if (!PESQUISAS_SECTIONS.some(section => section.id === sectionId)) return;
+    ensurePesquisasViewVisible();
     pesquisasActiveSection = sectionId;
     renderPesquisasSidebar();
     loadPesquisasContent();
@@ -100,7 +108,9 @@ function updatePesquisasNav() {
         btn.classList.add('hidden');
         return;
     }
-    btn.classList.toggle('hidden', !canAccessPesquisas());
+    const canAccess = canAccessPesquisas();
+    btn.classList.toggle('hidden', !canAccess);
+    if (canAccess) renderPesquisasSidebar();
 }
 
 function renderPesquisasError(content, title, message) {
@@ -286,7 +296,18 @@ function renderPesquisasInteractiveTableScreen(content, config = {}) {
 }
 
 function bindPesquisasEvents() {
-    document.getElementById('btn-pesquisas')?.addEventListener('click', showPesquisas);
+    document.getElementById('btn-pesquisas')?.addEventListener('click', event => {
+        const details = event.currentTarget;
+        if (event.target.closest('#pesquisas-sidebar-nav')) return;
+        if (!event.target.closest('summary')) return;
+        event.preventDefault();
+        if (details.open) {
+            details.open = false;
+            return;
+        }
+        details.open = true;
+        showPesquisas();
+    });
     document.getElementById('pesquisas-sidebar-nav')?.addEventListener('click', event => {
         const btn = event.target.closest('[data-pesquisas-section]');
         if (!btn) return;

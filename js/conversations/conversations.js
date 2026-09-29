@@ -1,7 +1,7 @@
 let convOrderProjectsCache = [];
 let convModalContext = getDefaultConvModalContext();
 
-const CONV_PROJECT_STATUS_END = 'Projeto Técnico';
+const CONV_PROJECT_STATUS_END = 'Em Produção';
 
 function getDefaultConvModalContext() {
     return {
@@ -401,7 +401,7 @@ async function loadConvOrderProjects(selectedId) {
             ? 'Nenhum projeto cadastrado no pedido'
             : !assignedCount
                 ? 'Nenhum projeto associado a você neste pedido'
-                : 'Nenhum projeto elegível (status até Projeto Técnico)';
+                : 'Nenhum projeto elegível (status até Em Produção)';
         select.innerHTML += `<option value="" disabled>${emptyLabel}</option>`;
         return;
     }
@@ -622,9 +622,10 @@ function setupConvModalFieldLocks(conv) {
     const lockDetailingFields = !isEdit && isConvModalDetailingContext();
 
     const hasProject = Boolean(conv?.orderProjectId);
+    const lockSelectedProject = !isEdit && Boolean(convModalContext.lockOrderProjectId);
     setConvFieldDisabled(
         document.getElementById('conv-order-project'),
-        (isEdit && hasProject) || lockDetailingFields
+        (isEdit && hasProject) || lockDetailingFields || lockSelectedProject
     );
 
     if (isEdit || currentUser?.role === 'Projetista' || lockDetailingFields) {
@@ -827,7 +828,10 @@ window.editConversation = editConversation;
 window.viewConversationDetails = viewConversationDetails;
 window.fetchEligibleOrdersForCurrentDesignerRequest = fetchEligibleOrdersForCurrentDesignerRequest;
 
-async function loadConversations(orderId) {
+async function loadConversations(orderId, options = {}) {
+    const listElementId = options.listElementId || 'conversations-list';
+    const orderProjectId = options.orderProjectId || null;
+    const isOrderTab = listElementId === 'conversations-list';
     await ensureSystemSettingsLoaded();
 
     try {
@@ -856,17 +860,22 @@ async function loadConversations(orderId) {
 
         const consultantName = getOrderConsultantNameFromRecord(orderInfo) || getOrderConsultantName(orderId) || '-';
 
-        const list = document.getElementById("conversations-list");
+        const list = document.getElementById(listElementId);
+        const visibleConvs = orderProjectId
+            ? (convs || []).filter(item => Number(item.orderProjectId || item.orderProject?.id) === Number(orderProjectId))
+            : (convs || []);
 
-        if (error || !convs || convs.length === 0) {
-            conversationsCache = [];
+        if (!list) return;
+
+        if (error || !visibleConvs.length) {
+            if (isOrderTab) conversationsCache = [];
             list.innerHTML = '<p class="text-xs text-slate-400 text-center py-6 bg-white rounded-xl border border-slate-200 shadow-sm">Nenhuma requisição técnica para este pedido.</p>';
-            updateOrderTabCounts(undefined, undefined, undefined, 0);
+            if (isOrderTab) updateOrderTabCounts(undefined, undefined, undefined, 0);
             return;
         }
 
-        conversationsCache = convs;
-        updateOrderTabCounts(undefined, undefined, undefined, convs.length);
+        conversationsCache = visibleConvs;
+        if (isOrderTab) updateOrderTabCounts(undefined, undefined, undefined, visibleConvs.length);
 
         const designerIds = [...new Set(conversationsCache.map(c => c.designerId).filter(Boolean))];
         let projetistaNames = {};
@@ -897,7 +906,7 @@ async function loadConversations(orderId) {
 
         list.innerHTML = "";
 
-        sortOrderRequests(conversationsCache).forEach(c => {
+        sortOrderRequests(visibleConvs).forEach(c => {
             const status = normalizeRequestStatus(c);
             const canEdit = canEditConversation(c);
             const statusClass = getRequestStatusBadgeClass(status);
@@ -956,7 +965,7 @@ async function loadConversations(orderId) {
 
         bindCollapsibleListCardToggles(list);
     } finally {
-        if (typeof refreshOrdersListSummary === 'function') {
+        if (isOrderTab && typeof refreshOrdersListSummary === 'function') {
             await refreshOrdersListSummary();
         }
     }

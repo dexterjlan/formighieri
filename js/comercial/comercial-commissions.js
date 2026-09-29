@@ -252,6 +252,6 @@ async function loadComercialCommissionsView() {
 
 function bindComercialCommissionsEvents() {
     document.getElementById('comercial-section-commissions')?.addEventListener('click', () => {
-        if (typeof setComercialSection === 'function') setComercialSection('commissions');
+        if (typeof showComercial === 'function') showComercial('commissions');
     });
 }

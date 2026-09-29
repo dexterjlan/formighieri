@@ -389,20 +389,22 @@ async function saveContactManagerRow(card) {
         alertAppDialog(validated.error);
         return;
     }
-    const { error } = await persistContact({
-        ownerType: contactManagerOwner.type,
-        ownerId: contactManagerOwner.id,
-        name,
-        phone: validated.phone,
-        landlinePhone: validated.landlinePhone,
-        email: validated.email,
-        isPrimary: Boolean(card.querySelector('.contact-row-primary')?.checked)
-    }, contactId);
-    if (error) {
-        alertAppDialog('Erro ao salvar contato: ' + error.message);
-        return;
-    }
-    await renderContactManagerList();
+    await withGestaoCadastroSaveOverlay(document.getElementById('contact-manager-modal'), async () => {
+        const { error } = await persistContact({
+            ownerType: contactManagerOwner.type,
+            ownerId: contactManagerOwner.id,
+            name,
+            phone: validated.phone,
+            landlinePhone: validated.landlinePhone,
+            email: validated.email,
+            isPrimary: Boolean(card.querySelector('.contact-row-primary')?.checked)
+        }, contactId);
+        if (error) {
+            alertAppDialog('Erro ao salvar contato: ' + error.message);
+            return;
+        }
+        await renderContactManagerList();
+    });
 }
 
 async function deleteContactManagerRow(card) {

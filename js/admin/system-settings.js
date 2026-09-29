@@ -296,7 +296,16 @@ function bindSettingsCadastroNavEvents() {
 }
 
 function bindSystemSettingsEvents() {
-    document.getElementById('btn-system-settings')?.addEventListener('click', () => showSystemSettings());
+    document.getElementById('btn-system-settings')?.addEventListener('click', event => {
+        const details = event.currentTarget;
+        if (event.target.closest('#settings-sidebar-nav')) return;
+        if (details?.tagName === 'DETAILS' && details.open && event.target.closest('summary')) return;
+        if (event.target.closest('summary')) event.preventDefault();
+        showSystemSettings();
+    });
+    document.getElementById('settings-nav-cadastros-toggle')?.addEventListener('click', () => {
+        document.getElementById('settings-nav-cadastros-items')?.classList.toggle('hidden');
+    });
     document.getElementById('system-settings-form')?.addEventListener('submit', async function (e) {
         e.preventDefault();
         saveSystemSettings();

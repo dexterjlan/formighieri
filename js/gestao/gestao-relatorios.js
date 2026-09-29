@@ -1,5 +1,6 @@
 const GESTAO_RELATORIO_PEDIDOS_PENDENTES_END = 'Montagem Interna';
 const GESTAO_RELATORIO_EXPEDICAO_STATUS = 'Expedição';
+const GESTAO_RELATORIO_STATUS_CHART_EXCLUDED = ['Expedição', 'Entregue'];
 
 const GESTAO_RELATORIO_PROJECT_SELECT = `
     id, orderId, projectCode, name, saleValue, deliveryDate, internalAssemblyEndDate, productionMonth, statusId,
@@ -205,14 +206,18 @@ async function enrichGestaoRelatorioProjectsWithSubstituicaoValues(projects) {
     });
 }
 
+function isGestaoRelatorioStatusChartExcluded(statusName) {
+    return GESTAO_RELATORIO_STATUS_CHART_EXCLUDED.includes(statusName);
+}
+
 function buildGestaoRelatorioStatusCounts(projects, statuses) {
     const activeStatuses = (statuses || [])
-        .filter(status => status.isActive !== false && status.name !== GESTAO_RELATORIO_EXPEDICAO_STATUS)
+        .filter(status => status.isActive !== false && !isGestaoRelatorioStatusChartExcluded(status.name))
         .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || String(a.name).localeCompare(String(b.name), 'pt-BR'));
 
     const countByStatusId = {};
     (projects || []).forEach(project => {
-        if (getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS) return;
+        if (isGestaoRelatorioStatusChartExcluded(getGestaoRelatorioStatusName(project))) return;
 
         const statusId = project.statusId;
         if (!statusId) return;
@@ -223,7 +228,7 @@ function buildGestaoRelatorioStatusCounts(projects, statuses) {
     const extras = {};
 
     (projects || []).forEach(project => {
-        if (getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS) return;
+        if (isGestaoRelatorioStatusChartExcluded(getGestaoRelatorioStatusName(project))) return;
         if (!project.statusId || knownIds.has(project.statusId)) return;
         const name = getGestaoRelatorioStatusName(project) || 'Sem status';
         extras[name] = (extras[name] || 0) + 1;
@@ -740,10 +745,25 @@ function getGestaoRelatorioFechamentoProducaoProjectMonthKey(project) {
     return getGestaoRelatorioMonthKey(project?.internalAssemblyEndDate || project?.productionMonth);
 }
 
+function isGestaoRelatorioFechamentoProducaoProject(project, statuses = []) {
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+        return false;
+    }
+
+    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+    const expedicao = (statuses || []).find(status => status.name === GESTAO_RELATORIO_EXPEDICAO_STATUS);
+    const minSort = expedicao?.sortOrder != null ? Number(expedicao.sortOrder) : null;
+    const sortOrder = getGestaoRelatorioStatusSortOrder(project, statusById);
+
+    if (minSort == null || sortOrder === 9999) {
+        return getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS;
+    }
+
+    return sortOrder >= minSort;
+}
+
 function getGestaoRelatorioFechamentoProducaoTotals(projects) {
-    const fechamentoProjects = (projects || []).filter(project =>
-        getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
-    );
+    const fechamentoProjects = projects || [];
 
     return {
         projectCount: fechamentoProjects.length,
@@ -759,7 +779,7 @@ function renderGestaoRelatorioFechamentoProducaoTotalsLine(totals = {}) {
         <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 mb-2 rounded-lg border border-emerald-100 bg-emerald-50/60">
             <div class="min-w-0">
                 <span class="text-xs font-semibold text-slate-800">Já produzidos</span>
-                <p class="text-[10px] text-slate-400 mt-0.5">Mesmo total do relatório Fechamento Produção (projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)}).</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">Mesmo total do relatório Fechamento Produção (projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} ou status posteriores, pelo fim da montagem interna).</p>
             </div>
             <div class="flex items-center gap-3 shrink-0">
                 <span class="text-[10px] text-slate-500">${projectCount} projeto${projectCount === 1 ? '' : 's'}</span>
@@ -770,6 +790,9 @@ function renderGestaoRelatorioFechamentoProducaoTotalsLine(totals = {}) {
 }
 
 async function loadGestaoRelatorioFechamentoProducaoProjects() {
+    const statuses = typeof loadGestaoProjectStatuses === 'function'
+        ? await loadGestaoProjectStatuses(true)
+        : [];
     const { data: projects, error } = await fetchGestaoRelatorioProjects();
     if (error) throw error;
 
@@ -779,7 +802,7 @@ async function loadGestaoRelatorioFechamentoProducaoProjects() {
     }
 
     return enrichedProjects.filter(project =>
-        getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
+        isGestaoRelatorioFechamentoProducaoProject(project, statuses)
     );
 }
 
@@ -911,7 +934,7 @@ function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options
 
 function renderGestaoRelatorioFechamentoProducaoGroups(groups) {
     if (!groups.length) {
-        return '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto em expedição para fechamento.</p>';
+        return '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto em expedição ou status posterior para fechamento.</p>';
     }
 
     return groups.map(monthGroup => {
@@ -950,17 +973,17 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
     const pedidosPendentesGrandTotal = pedidosPendentesGroups.reduce((sum, group) => sum + group.totalSaleValue, 0);
     const pedidosPendentesGrandTotalLabel = formatGestaoRelatorioSaleValue(pedidosPendentesGrandTotal);
     const fechamentoProjects = projects.filter(project =>
-        getGestaoRelatorioStatusName(project) === GESTAO_RELATORIO_EXPEDICAO_STATUS
+        isGestaoRelatorioFechamentoProducaoProject(project, statuses)
     );
     const fechamentoGroups = groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects);
-    const fechamentoTotals = getGestaoRelatorioFechamentoProducaoTotals(projects);
+    const fechamentoTotals = getGestaoRelatorioFechamentoProducaoTotals(fechamentoProjects);
     const fechamentoGrandTotalLabel = formatGestaoRelatorioSaleValue(fechamentoTotals.totalSaleValue);
 
     content.innerHTML = `
         <section class="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
                 <h4 class="text-sm font-bold text-slate-900">Projetos por status</h4>
-                <p class="text-xs text-slate-400 mt-0.5">Distribuição atual de todos os projetos.</p>
+                <p class="text-xs text-slate-400 mt-0.5">Distribuição atual dos projetos, sem os status Expedição e Entregue.</p>
             </div>
             <div class="p-4">${renderGestaoRelatorioPieChart(statusCounts)}</div>
         </section>
@@ -984,7 +1007,7 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Fechamento Produção</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} agrupados pelo mês do fim da montagem interna e, dentro de cada mês, por cliente.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} ou em status posteriores, agrupados pelo mês do fim da montagem interna e, dentro de cada mês, por cliente.</p>
                 </div>
                 <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg">
                     Total: ${escapeHtml(fechamentoGrandTotalLabel)}

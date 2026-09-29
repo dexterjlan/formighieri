@@ -1180,6 +1180,27 @@ async function handleImplantacaoEnviarCompras() {
         return;
     }
 
+    if (typeof openRequisicoesPurchaseFromImplementation === 'function') {
+        const purchaseItemsForCompras = await getImplementationPurchaseItemsForComprasSend(formValues);
+        const { data: orderProject, error: orderProjectError } = await supabaseClient
+            .from('OrderProject')
+            .select('orderId')
+            .eq('id', activeImplantacaoOrderProjectId)
+            .maybeSingle();
+        if (orderProjectError) throw orderProjectError;
+
+        openRequisicoesPurchaseFromImplementation({
+            implementationId: activeImplantacaoRecord.id,
+            orderProjectId: activeImplantacaoOrderProjectId,
+            orderId: orderProject?.orderId || null,
+            purchaseItems: purchaseItemsForCompras,
+            allPurchaseItems: getImplementationPurchaseItemsForSave(),
+            formValues
+        });
+        closeImplantacaoModal();
+        return;
+    }
+
     try {
         setImplantacaoModalLoading(true, 'Registrando solicitações de compra...');
         const now = new Date().toISOString();
@@ -1244,6 +1265,55 @@ async function handleImplantacaoEnviarCompras() {
         setImplantacaoModalLoading(true, `Erro ao enviar: ${error.message}`, 'error');
         await waitImplantacaoStatus(2500);
         setImplantacaoModalLoading(false);
+    }
+}
+
+async function continueImplantacaoPurchaseRequest(draft, extras = {}) {
+    if (!draft?.implementationId || !draft?.orderProjectId) {
+        throw new Error('Implantação não encontrada para enviar às compras.');
+    }
+
+    const now = new Date().toISOString();
+    const purchaseItemsForCompras = draft.purchaseItems || [];
+    const createdPurchases = await createComprasRecordsFromImplantacaoSend({
+        implementationId: draft.implementationId,
+        orderProjectId: draft.orderProjectId,
+        purchaseItems: purchaseItemsForCompras,
+        forcePurchaseType: 'Implantação',
+        requestOrigin: 'implementation',
+        purchaseReasonId: extras.purchaseReasonId || null,
+        observation: extras.observation || null,
+        attachmentPath: extras.attachmentPath || null,
+        attachmentFileName: extras.attachmentFileName || null,
+        thirdPartySubtypeId: extras.thirdPartySubtypeId || null
+    });
+
+    if (!createdPurchases.length && purchaseItemsForCompras.length) {
+        throw new Error('Não foi possível gerar a solicitação de compra.');
+    }
+
+    const sentIds = new Set(purchaseItemsForCompras.map(item => Number(item.id)));
+    const updatedPurchaseItems = (draft.allPurchaseItems || []).map(item => {
+        if (!sentIds.has(Number(item.id))) return item;
+        return { ...item, sentToCommercial: true, sentToCommercialAt: now };
+    });
+    await saveImplementationPurchaseItems(updatedPurchaseItems, draft.implementationId);
+
+    const payload = buildImplantacaoUpdatePayload(draft.formValues || {}, { purchasesSentAt: now });
+    const { error } = await supabaseClient
+        .from('Implementation')
+        .update(payload)
+        .eq('id', draft.implementationId);
+    if (error) throw error;
+
+    if (typeof refreshImplantacaoRelatedViews === 'function') {
+        await refreshImplantacaoRelatedViews(draft.orderProjectId);
+    }
+    if (purchaseItemsForCompras.length && typeof notifyCompraLiberacaoEmails === 'function') {
+        await notifyCompraLiberacaoEmails({
+            items: purchaseItemsForCompras,
+            orderProjectId: draft.orderProjectId
+        });
     }
 }
 
