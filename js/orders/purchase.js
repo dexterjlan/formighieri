@@ -100,7 +100,34 @@ async function ensureCompraStatusesLoaded(activeOnly = true) {
 window.loadPurchaseStatuses = loadPurchaseStatuses;
 window.loadCompraStatuses = loadPurchaseStatuses;
 
-function formatCompraTipoLabel(purchaseType, subtypeName = '') {
+function normalizeCompraMotivoLabel(value) {
+    return String(value || '').trim().toLocaleLowerCase('pt-BR');
+}
+
+function isCompraImplantacaoMotivo(record) {
+    const reason = normalizeCompraMotivoLabel(record?.reasonName);
+    const type = normalizeCompraMotivoLabel(record?.purchaseType);
+    const origin = String(record?.requestOrigin || '').trim();
+    return reason === 'implantação'
+        || reason === 'implantacao'
+        || type === 'implantação'
+        || type === 'implantacao'
+        || origin === 'implementation';
+}
+
+function formatCompraModalTipoLabel(record) {
+    const purchaseType = record?.purchaseType;
+    if (purchaseType === 'Lista de Material') return COMPRA_TIPO_MATERIAL;
+    return purchaseType || '—';
+}
+
+function formatCompraTipoLabel(purchaseType, subtypeName = '', sourceType = '') {
+    if (purchaseType === 'Implantação') {
+        const detail = sourceType && sourceType !== 'Implantação'
+            ? formatCompraTipoLabel(sourceType, subtypeName)
+            : '';
+        return detail && detail !== '—' ? `Implantação — ${detail}` : 'Implantação';
+    }
     if (purchaseType === 'Lista de Material') return COMPRA_TIPO_MATERIAL;
     if (purchaseType === COMPRA_TIPO_TERCEIRO && subtypeName) {
         return `Terceiro — ${subtypeName}`;
@@ -181,8 +208,36 @@ async function fetchOrderProjectCodesForCompra(orderProjectId) {
         orderCode,
         projectCode,
         clientName: getOrderClientName(result.data?.order) || '',
-        projectName: result.data?.name || ''
+        projectName: result.data?.name || '',
+        designerName: ''
     };
+}
+
+async function fetchOrderProjectDesignerName(orderProjectId) {
+    if (!orderProjectId) return '';
+
+    const result = await supabaseClient
+        .from('OrderProject')
+        .select('designerId, designer:appUsers!OrderProject_designerId_fkey(id, name)')
+        .eq('id', orderProjectId)
+        .maybeSingle();
+
+    if (result.error) return '';
+    return String(unwrapAppUserEmbed(result.data?.designer)?.name || '').trim();
+}
+
+async function fetchCompraLookupName(table, id) {
+    const normalizedId = Number(id);
+    if (!normalizedId) return '';
+
+    const { data, error } = await supabaseClient
+        .from(table)
+        .select('id, name')
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (error) return '';
+    return String(data?.name || '').trim();
 }
 
 async function fetchImplementationPurchaseItemForCompra(implementationPurchaseItemId) {
@@ -260,11 +315,24 @@ async function enrichCompraRecord(record) {
                 ...enriched,
                 orderCode: context.orderCode,
                 clientName: context.clientName,
-                projectName: context.projectName
+                projectName: context.projectName,
+                designerName: await fetchOrderProjectDesignerName(record.orderProjectId)
             };
         } catch (error) {
             console.warn('enrichCompraRecord:', error);
         }
+    }
+
+    if (record.purchaseReasonId) {
+        enriched.reasonName = await fetchCompraLookupName('PurchaseReason', record.purchaseReasonId);
+    }
+
+    if (record.createdById) {
+        enriched.requesterName = await fetchCompraLookupName('appUsers', record.createdById);
+    }
+
+    if (!enriched.subtypeName && record.thirdPartySubtypeId) {
+        enriched.subtypeName = await fetchCompraLookupName('ThirdPartySubtype', record.thirdPartySubtypeId);
     }
 
     if (record.implementationId || record.orderProjectId) {
@@ -332,30 +400,103 @@ async function createComprasRecordsFromImplantacaoSend(options = {}) {
 
     await fetchOrderProjectCodesForCompra(orderProjectId);
     const now = new Date().toISOString();
+    const forceType = options.forcePurchaseType || null;
     const rows = items.map(item => ({
         implementationId,
         implementationPurchaseItemId: item.id,
         orderProjectId,
-        purchaseType: item.purchaseType,
+        purchaseType: forceType || item.purchaseType,
+        fallbackPurchaseType: item.purchaseType,
         status: getDefaultCompraStatusName(),
         createdById: currentUser?.id || null,
         updatedById: currentUser?.id || null,
-        updatedAt: now
+        updatedAt: now,
+        requestOrigin: options.requestOrigin || (forceType === 'Implantação' ? 'implementation' : null),
+        purchaseReasonId: options.purchaseReasonId || null,
+        thirdPartySubtypeId: item.thirdPartySubtypeId || options.thirdPartySubtypeId || null,
+        requestObservation: options.observation || null,
+        attachmentPath: options.attachmentPath || null,
+        attachmentFileName: options.attachmentFileName || null
     }));
 
-    const { data, error } = await supabaseClient
-        .from('Purchase')
-        .insert(rows)
-        .select('*');
+    return insertPurchaseRows(rows);
+}
 
-    if (error) {
-        if (error.message?.includes('Purchase') || error.message?.includes('does not exist')) {
-            throw new Error('Tabela Purchase não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.');
+const PURCHASE_OPTIONAL_INSERT_COLUMNS = [
+    'requestOrigin',
+    'purchaseReasonId',
+    'thirdPartySubtypeId',
+    'requestObservation',
+    'attachmentPath',
+    'attachmentFileName',
+    'fallbackPurchaseType'
+];
+
+async function insertPurchaseRows(rows) {
+    const fallbackTypes = rows.map(row => row.fallbackPurchaseType || row.purchaseType);
+    let pending = rows.map(row => {
+        const copy = { ...row };
+        delete copy.fallbackPurchaseType;
+        return copy;
+    });
+    let result = await supabaseClient.from('Purchase').insert(pending).select('*');
+
+    if (result.error?.message?.includes('Purchase_purchaseType_check')) {
+        pending = pending.map((row, index) => ({
+            ...row,
+            purchaseType: fallbackTypes[index] || row.purchaseType
+        }));
+        result = await supabaseClient.from('Purchase').insert(stripPurchaseOptionalColumns(pending)).select('*');
+        if (result.error) {
+            throw new Error(`${result.error.message} Execute supabase/feats/add-purchase-request-reasons.sql no Supabase SQL Editor.`);
         }
-        throw error;
+        return result.data || [];
     }
 
-    return data || [];
+    if (result.error && PURCHASE_OPTIONAL_INSERT_COLUMNS.some(column => result.error.message?.includes(column))) {
+        result = await supabaseClient.from('Purchase').insert(stripPurchaseOptionalColumns(pending)).select('*');
+    }
+
+    if (result.error) {
+        if (result.error.message?.includes('implementationId')) {
+            throw new Error('A compra manual ainda exige a implantação no banco. Execute supabase/feats/add-purchase-request-reasons.sql no Supabase SQL Editor.');
+        }
+        if (result.error.message?.includes('Purchase') || result.error.message?.includes('does not exist')) {
+            throw new Error('Tabela Purchase não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.');
+        }
+        throw result.error;
+    }
+
+    return result.data || [];
+}
+
+function stripPurchaseOptionalColumns(rows) {
+    return rows.map(row => {
+        const copy = { ...row };
+        PURCHASE_OPTIONAL_INSERT_COLUMNS.forEach(column => delete copy[column]);
+        return copy;
+    });
+}
+
+async function createManualPurchaseRequest(payload) {
+    await ensureCompraStatusesLoaded();
+    const now = new Date().toISOString();
+    return insertPurchaseRows([{
+        implementationId: null,
+        orderProjectId: payload.orderProjectId,
+        purchaseType: payload.purchaseType,
+        fallbackPurchaseType: payload.purchaseType,
+        status: getDefaultCompraStatusName(),
+        createdById: currentUser?.id || null,
+        updatedById: currentUser?.id || null,
+        updatedAt: now,
+        requestOrigin: 'manual',
+        purchaseReasonId: payload.purchaseReasonId || null,
+        thirdPartySubtypeId: payload.thirdPartySubtypeId || null,
+        requestObservation: payload.observation || null,
+        attachmentPath: payload.attachmentPath || null,
+        attachmentFileName: payload.attachmentFileName || null
+    }]);
 }
 
 function formatCompraDisplayDate(dateStr) {
@@ -428,7 +569,7 @@ async function fetchOrderComprasItems(orderId) {
             ...compra,
             projectName: projectsById[compra.orderProjectId]?.name || '',
             subtypeName,
-            tipoLabel: formatCompraTipoLabel(compra.purchaseType, subtypeName)
+            tipoLabel: formatCompraTipoLabel(compra.purchaseType, subtypeName, purchaseItem?.purchaseType)
         };
     });
 }
@@ -584,27 +725,67 @@ function setCompraModalLoading(active, message = 'Processando...', status = 'loa
     setCompraFormDisabled(active ? true : !canActCompraModal());
 }
 
+function setCompraSummaryText(elementId, value, fallback = '—') {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    const text = String(value || '').trim();
+    element.textContent = ` ${text || fallback}`;
+}
+
+function setCompraSummaryRowVisible(wrapId, visible) {
+    document.getElementById(wrapId)?.classList.toggle('hidden', !visible);
+}
+
 function populateCompraForm(record) {
     activeCompraThirdPartyDriveFile = record?.thirdPartyDriveFile || null;
-    const tipoLabel = formatCompraTipoLabel(record?.purchaseType, record?.subtypeName);
+    const fromImplementation = isCompraImplantacaoMotivo(record);
+    const designerName = String(record?.designerName || record?.thirdPartyDesignerName || '').trim();
+    const subtypeName = String(record?.subtypeName || '').trim();
+    const path = String(record?.listaPath || '').trim();
+    const attachmentName = String(record?.attachmentFileName || '').trim();
+    const attachmentPath = String(record?.attachmentPath || '').trim();
+    const reasonLabel = String(record?.reasonName || '').trim()
+        || (fromImplementation ? 'Implantação' : '');
+    const requestObservation = String(record?.requestObservation || '').trim();
+
+    const titleEl = document.getElementById('compra-modal-title');
+    if (titleEl) {
+        titleEl.textContent = reasonLabel ? `Compra - ${reasonLabel}` : 'Compra';
+    }
+
     document.getElementById('compra-modal-order-code').textContent = record?.orderCode || '—';
-    document.getElementById('compra-modal-client-name').textContent = ` ${record?.clientName || '—'}`;
-    document.getElementById('compra-modal-project-name').textContent = ` ${record?.projectName || '—'}`;
-    const ppcpNameEl = document.getElementById('compra-modal-ppcp-name');
-    if (ppcpNameEl) {
-        const ppcpName = String(record?.ppcpName || '').trim();
-        ppcpNameEl.textContent = ` ${ppcpName || '—'}`;
+    setCompraSummaryText('compra-modal-client-name', record?.clientName);
+    setCompraSummaryText('compra-modal-project-name', record?.projectName);
+    setCompraSummaryText('compra-modal-designer-name', designerName);
+    setCompraSummaryRowVisible('compra-modal-designer-wrap', Boolean(designerName));
+    setCompraSummaryText('compra-modal-tipo', formatCompraModalTipoLabel(record), '');
+    setCompraSummaryText('compra-modal-subtype', subtypeName);
+    setCompraSummaryRowVisible('compra-modal-subtype-wrap', Boolean(subtypeName));
+    setCompraSummaryText('compra-modal-ppcp-name', record?.ppcpName);
+    setCompraSummaryRowVisible('compra-modal-ppcp-wrap', fromImplementation);
+    setCompraSummaryText('compra-modal-requester-name', record?.requesterName);
+    setCompraSummaryRowVisible('compra-modal-requester-wrap', !fromImplementation);
+    setCompraSummaryText('compra-modal-lista-path', path);
+    setCompraSummaryRowVisible('compra-modal-path-wrap', Boolean(path));
+    setCompraSummaryText('compra-modal-attachment-name', attachmentName);
+    setCompraSummaryRowVisible('compra-modal-attachment-wrap', Boolean(attachmentPath || attachmentName));
+    const canOpenAttachment = Boolean(attachmentPath);
+    document.getElementById('btn-compra-attachment-open')?.toggleAttribute('disabled', !canOpenAttachment);
+    document.getElementById('btn-compra-attachment-download')?.toggleAttribute('disabled', !canOpenAttachment);
+
+    const isTerceiro = record?.purchaseType === COMPRA_TIPO_TERCEIRO
+        || record?.purchaseItem?.purchaseType === COMPRA_TIPO_TERCEIRO;
+
+    const requestObservationEl = document.getElementById('compra-modal-request-observation');
+    const requestObservationWrap = document.getElementById('compra-modal-request-observation-wrap');
+    if (requestObservationWrap) {
+        requestObservationWrap.classList.toggle('hidden', fromImplementation);
     }
-    document.getElementById('compra-modal-tipo').textContent = ` ${tipoLabel}`;
-    const isTerceiro = record?.purchaseType === COMPRA_TIPO_TERCEIRO;
-    const thirdPartyDesignerWrap = document.getElementById('compra-modal-third-party-designer-wrap');
-    const thirdPartyDesignerNameEl = document.getElementById('compra-modal-third-party-designer-name');
-    if (thirdPartyDesignerWrap && thirdPartyDesignerNameEl) {
-        thirdPartyDesignerWrap.classList.toggle('hidden', !isTerceiro);
-        const designerName = String(record?.thirdPartyDesignerName || '').trim();
-        thirdPartyDesignerNameEl.textContent = ` ${designerName || '—'}`;
+    if (requestObservationEl) {
+        requestObservationEl.textContent = requestObservation || '—';
+        requestObservationEl.classList.toggle('text-slate-400', !requestObservation);
+        requestObservationEl.classList.toggle('text-slate-700', Boolean(requestObservation));
     }
-    document.getElementById('compra-modal-lista-path').textContent = ` ${record?.listaPath || '—'}`;
 
     const projectObservationEl = document.getElementById('compra-modal-project-observation');
     if (projectObservationEl) {
@@ -636,7 +817,7 @@ function populateCompraForm(record) {
     );
 
     if (fileWrap) {
-        fileWrap.classList.toggle('hidden', !isTerceiro);
+        fileWrap.classList.toggle('hidden', !isTerceiro || !hasThirdPartyDriveFile);
     }
     if (fileNameEl) {
         fileNameEl.textContent = driveFile?.fileName || 'Nenhum arquivo no Drive';
@@ -647,6 +828,43 @@ function populateCompraForm(record) {
     if (downloadBtn) {
         downloadBtn.disabled = !hasThirdPartyDriveFile;
     }
+}
+
+const COMPRA_REQUEST_FILES_BUCKET = 'purchase-request-files';
+const COMPRA_REQUEST_FILE_URL_TTL = 60 * 60;
+
+async function createCompraRequestFileSignedUrl(download) {
+    const path = String(activeCompraRecord?.attachmentPath || '').trim();
+    if (!path) {
+        alertAppDialog('Esta compra não tem arquivo.');
+        return '';
+    }
+
+    const options = download
+        ? { download: activeCompraRecord?.attachmentFileName || true }
+        : undefined;
+    const { data, error } = await supabaseClient.storage
+        .from(COMPRA_REQUEST_FILES_BUCKET)
+        .createSignedUrl(path, COMPRA_REQUEST_FILE_URL_TTL, options);
+
+    if (error || !data?.signedUrl) {
+        alertAppDialog(error?.message || 'Não foi possível abrir o arquivo.');
+        return '';
+    }
+
+    return data.signedUrl;
+}
+
+async function openCompraRequestFile() {
+    const url = await createCompraRequestFileSignedUrl(false);
+    if (!url) return;
+    openCompraThirdPartyDriveUrlInNewTab(url);
+}
+
+async function downloadCompraRequestFile() {
+    const url = await createCompraRequestFileSignedUrl(true);
+    if (!url) return;
+    openCompraThirdPartyDriveUrlInNewTab(url);
 }
 
 function resolveCompraThirdPartyPdfDriveFileId(file) {
@@ -775,8 +993,20 @@ async function handleCompraSalvar() {
             ...data,
             clientName: activeCompraRecord?.clientName,
             projectName: activeCompraRecord?.projectName,
+            designerName: activeCompraRecord?.designerName,
+            reasonName: activeCompraRecord?.reasonName,
+            requesterName: activeCompraRecord?.requesterName,
+            ppcpName: activeCompraRecord?.ppcpName,
             listaPath: activeCompraRecord?.listaPath,
-            subtypeName: activeCompraRecord?.subtypeName
+            subtypeName: activeCompraRecord?.subtypeName,
+            thirdPartyDesignerName: activeCompraRecord?.thirdPartyDesignerName,
+            thirdPartyDriveFile: activeCompraRecord?.thirdPartyDriveFile,
+            purchaseItem: activeCompraRecord?.purchaseItem,
+            projectObservation: activeCompraRecord?.projectObservation,
+            requestOrigin: activeCompraRecord?.requestOrigin,
+            requestObservation: data.requestObservation ?? activeCompraRecord?.requestObservation,
+            attachmentPath: data.attachmentPath ?? activeCompraRecord?.attachmentPath,
+            attachmentFileName: data.attachmentFileName ?? activeCompraRecord?.attachmentFileName
         };
         populateCompraForm(activeCompraRecord);
 
@@ -818,6 +1048,8 @@ function bindPurchaseEvents() {
 
     document.getElementById('btn-compra-third-party-open')?.addEventListener('click', openCompraThirdPartyDriveFileInNewTab);
     document.getElementById('btn-compra-third-party-download')?.addEventListener('click', downloadCompraThirdPartyDriveFile);
+    document.getElementById('btn-compra-attachment-open')?.addEventListener('click', openCompraRequestFile);
+    document.getElementById('btn-compra-attachment-download')?.addEventListener('click', downloadCompraRequestFile);
 
     document.getElementById('order-compras-list')?.addEventListener('click', async (event) => {
         const button = event.target.closest('.order-compras-open-btn');

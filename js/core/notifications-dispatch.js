@@ -285,6 +285,57 @@ async function notifyOrderRequestEmail(eventType, requestData) {
     }
 }
 
+async function notifyRequisicoesPurchaseEmail(details = {}) {
+    if (!NOTIFICATIONS_ENABLED || !details.orderProjectId) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyRequisicoesPurchaseEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const [context, recipients] = await Promise.all([
+            fetchCompraLiberacaoNotificationContext(details.orderProjectId),
+            fetchActiveComprasRecipientEmails()
+        ]);
+        const subtypeName = details.subtypeName || '';
+        const purchaseType = details.purchaseType || '—';
+        const tipoLabel = typeof formatCompraTipoLabel === 'function'
+            ? formatCompraTipoLabel(purchaseType, subtypeName)
+            : purchaseType;
+        const payload = {
+            eventTitle: 'Requisição de Compra',
+            orderCode: context.orderCode || '—',
+            projectName: details.projectName || context.projectName || '—',
+            clientName: context.clientName || '—',
+            consultantName: context.consultantName || '—',
+            projetistaName: context.projetistaName || '—',
+            purchaseType: tipoLabel,
+            reasonName: details.reasonName || '',
+            observation: details.observation || '',
+            attachmentFileName: details.attachmentFileName || '',
+            actedByName: currentUser?.name || '—',
+            actedByRole: currentUser?.role || '—'
+        };
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: recipients.join(', '),
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject: buildRequisicoesPurchaseEmailSubject(
+                purchaseType,
+                payload.clientName,
+                payload.orderCode,
+                subtypeName
+            ),
+            message_body: buildRequisicoesPurchaseEmailBody(payload),
+            message_html: buildRequisicoesPurchaseEmailHtml(payload)
+        }, { context: 'requisicoes-purchase' });
+    } catch (err) {
+        console.warn('notifyRequisicoesPurchaseEmail:', err);
+    }
+}
+
 async function notifyCompraLiberacaoEmails(options = {}) {
     const { items = [], formValues = {}, orderProjectId } = options;
     if (!NOTIFICATIONS_ENABLED || !items.length || !orderProjectId) return;

@@ -1,14 +1,3 @@
-const GESTAO_THIRD_PARTY_SUBTYPES_SAVE_OVERLAY = {
-    overlayId: 'gestao-third-party-subtypes-save-loading',
-    messageId: 'gestao-third-party-subtypes-save-loading-msg',
-    spinnerId: 'gestao-third-party-subtypes-save-loading-spinner'
-};
-
-function setGestaoThirdPartySubtypesSaveLoading(active, message = 'Salvando...') {
-    if (typeof setActionOverlayLoading !== 'function') return;
-    setActionOverlayLoading(GESTAO_THIRD_PARTY_SUBTYPES_SAVE_OVERLAY, active, message, 'loading');
-}
-
 let gestaoThirdPartySubtypesCache = [];
 let gestaoThirdPartySubtypeCharacteristicEnabled = true;
 
@@ -171,9 +160,7 @@ async function saveGestaoThirdPartySubtypeRow(row) {
         return;
     }
 
-    setGestaoThirdPartySubtypesSaveLoading(true);
-    void document.getElementById('gestao-third-party-subtypes-save-loading')?.offsetWidth;
-    try {
+    await withGestaoCadastroSaveOverlay(row, async () => {
         const now = new Date().toISOString();
         const payload = { name, sortOrder, isActive, updatedAt: now };
         if (gestaoThirdPartySubtypeCharacteristicEnabled) {
@@ -195,9 +182,7 @@ async function saveGestaoThirdPartySubtypeRow(row) {
         }
 
         await loadGestaoThirdPartySubtypesList();
-    } finally {
-        setGestaoThirdPartySubtypesSaveLoading(false);
-    }
+    });
 }
 
 async function deleteGestaoThirdPartySubtypeRow(row) {
@@ -269,9 +254,7 @@ async function addGestaoThirdPartySubtype(event) {
         return;
     }
 
-    setGestaoThirdPartySubtypesSaveLoading(true);
-    void document.getElementById('gestao-third-party-subtypes-save-loading')?.offsetWidth;
-    try {
+    await withGestaoCadastroSaveOverlay(document.getElementById('gestao-third-party-subtypes-panel'), async () => {
         const now = new Date().toISOString();
         const payload = {
             name,
@@ -299,9 +282,7 @@ async function addGestaoThirdPartySubtype(event) {
         document.getElementById('gestao-new-third-party-subtype-form')?.reset();
         document.getElementById('gestao-new-third-party-subtype-sort').value = '0';
         await loadGestaoThirdPartySubtypesList();
-    } finally {
-        setGestaoThirdPartySubtypesSaveLoading(false);
-    }
+    });
 }
 
 let gestaoCompraStatusesCache = [];

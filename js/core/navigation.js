@@ -203,7 +203,8 @@ async function restoreGestaoView(state) {
             else if (typeof showGestaoMontagemProgramacaoPanel === 'function') showGestaoMontagemProgramacaoPanel();
         },
         'programacao-producao': () => {
-            if (typeof showGestaoProgramacaoProducaoPanel === 'function') showGestaoProgramacaoProducaoPanel();
+            if (typeof showProgramacaoProducaoView === 'function') showProgramacaoProducaoView();
+            else if (typeof showGestaoProgramacaoProducaoPanel === 'function') showGestaoProgramacaoProducaoPanel();
         }
     };
 
@@ -336,6 +337,12 @@ async function restoreAppNavState() {
                     return true;
                 }
                 return false;
+            case 'requisicoes':
+                if (typeof restoreRequisicoesView === 'function') {
+                    await restoreRequisicoesView(state);
+                    return true;
+                }
+                return false;
             case 'programacoes':
                 if (typeof restoreProgramacoesView === 'function') {
                     await restoreProgramacoesView(state);
@@ -362,6 +369,12 @@ async function restoreAppNavState() {
             case 'programacao-montagem':
                 if (typeof showProgramacaoMontagemView === 'function') {
                     await showProgramacaoMontagemView();
+                    return true;
+                }
+                return false;
+            case 'programacao-producao':
+                if (typeof showProgramacaoProducaoView === 'function') {
+                    await showProgramacaoProducaoView();
                     return true;
                 }
                 return false;
@@ -418,6 +431,7 @@ const INSTALLER_HIDDEN_MAIN_NAV_IDS = [
     'btn-comercial',
     'btn-kanban',
     'btn-programacoes',
+    'btn-requisicoes',
     'btn-project-scheduling',
     'btn-programacao-montagem',
     'btn-pendencias',
@@ -456,19 +470,18 @@ function updateAdminNav() {
     document.getElementById("btn-comercial")?.classList.toggle("hidden", typeof canAccessComercial === 'function' ? !canAccessComercial() : true);
     document.getElementById("btn-kanban")?.classList.toggle("hidden", typeof canViewKanban === 'function' ? !canViewKanban() : true);
     document.getElementById("btn-programacoes")?.classList.toggle("hidden", typeof canAccessProgramacoes === 'function' ? !canAccessProgramacoes() : true);
-    document.getElementById("btn-project-scheduling")?.classList.toggle("hidden", typeof canViewProjectSchedulingOld === 'function' ? !canViewProjectSchedulingOld() : !isAdmin());
+    document.getElementById("btn-requisicoes")?.classList.toggle("hidden", typeof canAccessRequisicoes === 'function' ? !canAccessRequisicoes() : true);
+    document.getElementById("btn-project-scheduling")?.classList.add("hidden");
     document.getElementById("btn-programacao-montagem")?.classList.toggle("hidden", !canViewProgramacaoMontagem());
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
     if (typeof updatePendenciasNav === 'function') updatePendenciasNav();
     if (typeof updatePesquisasNav === 'function') updatePesquisasNav();
     if (typeof updateView3dNav === 'function') updateView3dNav();
     if (typeof updateProgramacoesNav === 'function') updateProgramacoesNav();
+    if (typeof updateRequisicoesNav === 'function') updateRequisicoesNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
     if (typeof updateCalendarGoogleSyncControls === 'function') updateCalendarGoogleSyncControls();
 }
-
-const MAIN_NAV_ACTIVE_CLASS = 'text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg';
-const MAIN_NAV_INACTIVE_CLASS = 'text-xs bg-slate-800 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg';
 
 function updateMainNavActive(activeView) {
     const buttons = {
@@ -480,6 +493,7 @@ function updateMainNavActive(activeView) {
         comercial: document.getElementById('btn-comercial'),
         kanban: document.getElementById('btn-kanban'),
         programacoes: document.getElementById('btn-programacoes'),
+        requisicoes: document.getElementById('btn-requisicoes'),
         'project-scheduling': document.getElementById('btn-project-scheduling'),
         'programacao-montagem': document.getElementById('btn-programacao-montagem'),
         gestao: document.getElementById('btn-gestao'),
@@ -491,8 +505,44 @@ function updateMainNavActive(activeView) {
 
     Object.entries(buttons).forEach(([key, btn]) => {
         if (!btn) return;
-        btn.className = key === activeView ? MAIN_NAV_ACTIVE_CLASS : MAIN_NAV_INACTIVE_CLASS;
+        const isGroup = btn.tagName === 'DETAILS';
+        const item = isGroup ? (btn.querySelector(':scope > summary') || btn) : btn;
+        item.classList.add('app-nav-item');
+        const active = key === activeView;
+        const groupActive = active || (key === 'programacoes' && (
+            activeView === 'programacao-montagem' || activeView === 'programacao-producao'
+        ));
+        item.classList.toggle('is-active', isGroup ? groupActive : active);
+        if (isGroup) btn.open = groupActive;
     });
+    clearInactiveSubnavSelection(activeView);
+}
+
+function clearInactiveSubnavSelection(activeView) {
+    if (activeView !== 'comercial') {
+        document.querySelectorAll('#comercial-sidebar-nav .is-active').forEach(el => el.classList.remove('is-active'));
+    }
+    if (activeView !== 'gestao') {
+        document.querySelectorAll('#gestao-sidebar-nav .is-active').forEach(el => el.classList.remove('is-active'));
+    }
+    if (activeView !== 'pendencias') {
+        document.querySelectorAll('#pendencias-sidebar-nav .is-active, #pendencias-sidebar-nav .is-selected').forEach(el => {
+            el.classList.remove('is-active', 'is-selected');
+        });
+    }
+    if (activeView !== 'pesquisas') {
+        document.querySelectorAll('#pesquisas-sidebar-nav .is-active').forEach(el => el.classList.remove('is-active'));
+    }
+    if (activeView !== 'programacoes') {
+        document.querySelectorAll('#programacoes-sidebar-nav .is-active').forEach(el => {
+            if (activeView === 'programacao-montagem' && el.id === 'btn-programacao-montagem') return;
+            if (activeView === 'programacao-producao' && el.id === 'btn-programacao-producao') return;
+            el.classList.remove('is-active');
+        });
+    }
+    if (activeView !== 'settings') {
+        document.querySelectorAll('#settings-sidebar-nav .is-active').forEach(el => el.classList.remove('is-active'));
+    }
 }
 
 function hideSubViews() {
@@ -515,6 +565,7 @@ function hideSubViews() {
     document.getElementById("comercial-view")?.classList.add("hidden");
     document.getElementById("gestao-view").classList.add("hidden");
     document.getElementById("programacoes-view")?.classList.add("hidden");
+    document.getElementById("requisicoes-view")?.classList.add("hidden");
     document.getElementById("pendencias-view").classList.add("hidden");
     document.getElementById("pesquisas-view")?.classList.add("hidden");
     document.getElementById("view3d-view")?.classList.add("hidden");
@@ -587,8 +638,5 @@ function bindNavigationEvents() {
     });
     document.getElementById("btn-programacao-montagem")?.addEventListener("click", () => {
         if (typeof showProgramacaoMontagemView === 'function') showProgramacaoMontagemView();
-    });
-    document.getElementById("btn-comercial")?.addEventListener("click", () => {
-        if (typeof showComercial === 'function') showComercial();
     });
 }

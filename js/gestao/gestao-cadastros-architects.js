@@ -217,6 +217,7 @@ async function saveArchitectCreateFromPicker(event) {
         alertAppDialog(contact.error);
         return;
     }
+    await withGestaoCadastroSaveOverlay(document.getElementById('architect-create-modal'), async () => {
     const now = new Date().toISOString();
     const { data, error } = await persistArchitectRecord({
         name,
@@ -257,6 +258,7 @@ async function saveArchitectCreateFromPicker(event) {
         return;
     }
     setArchitectPickerSelection({ id: data.id, name: data.name });
+    });
 }
 
 async function openArchitectPickerModal(onSelectCallback) {
@@ -464,16 +466,17 @@ async function saveGestaoArchitectRow(tr) {
         alertAppDialog('Informe o nome do arquiteto.');
         return;
     }
-    const { error } = await persistArchitectRecord({
-        name,
-        isActive: Boolean(tr.querySelector('.gestao-architect-active')?.checked),
-        updatedAt: new Date().toISOString(),
-        updatedById: currentUser?.id || null
-    }, architectId);
-    if (error) {
-        alertAppDialog('Erro ao salvar arquiteto: ' + error.message);
-        return;
-    }
+    await withGestaoCadastroSaveOverlay(tr, async () => {
+        const { error } = await persistArchitectRecord({
+            name,
+            isActive: Boolean(tr.querySelector('.gestao-architect-active')?.checked),
+            updatedAt: new Date().toISOString(),
+            updatedById: currentUser?.id || null
+        }, architectId);
+        if (error) {
+            alertAppDialog('Erro ao salvar arquiteto: ' + error.message);
+        }
+    });
 }
 
 async function deleteGestaoArchitectRow(tr) {

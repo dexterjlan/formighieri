@@ -214,6 +214,7 @@ async function saveGestaoMontadorRow(row, button = null) {
 
     setGestaoMontadorSaveButtonState(button, 'saving');
 
+    await withGestaoCadastroSaveOverlay(row, async () => {
     try {
         const { data, error, isActiveUnsupported, loginEmailUnsupported } = await persistGestaoMontadorRow(
             montadorId,
@@ -259,6 +260,7 @@ async function saveGestaoMontadorRow(row, button = null) {
         alertAppDialog('Erro ao salvar montador: ' + (error.message || 'erro inesperado'));
         setGestaoMontadorSaveButtonState(button, 'idle');
     }
+    });
 }
 
 async function deleteGestaoMontadorRow(row) {
@@ -315,6 +317,7 @@ async function addGestaoMontador(event) {
         return;
     }
 
+    await withGestaoCadastroSaveOverlay(document.getElementById('gestao-montadores-panel'), async () => {
     const insertPayload = { name, isActive: true };
     if (gestaoMontadorLoginEmailColumnAvailable && loginEmail) {
         insertPayload.loginEmail = loginEmail;
@@ -347,17 +350,7 @@ async function addGestaoMontador(event) {
 
     document.getElementById('gestao-new-montador-form')?.reset();
     await loadGestaoMontadoresList();
-}
-
-const GESTAO_CHARACTERISTICS_SAVE_OVERLAY = {
-    overlayId: 'gestao-characteristics-save-loading',
-    messageId: 'gestao-characteristics-save-loading-msg',
-    spinnerId: 'gestao-characteristics-save-loading-spinner'
-};
-
-function setGestaoCharacteristicsSaveLoading(active, message = 'Salvando...') {
-    if (typeof setActionOverlayLoading !== 'function') return;
-    setActionOverlayLoading(GESTAO_CHARACTERISTICS_SAVE_OVERLAY, active, message, 'loading');
+    });
 }
 
 async function loadGestaoProjectCharacteristics(activeOnly = false) {
@@ -452,9 +445,7 @@ async function saveGestaoProjectCharacteristicRow(row) {
         return;
     }
 
-    setGestaoCharacteristicsSaveLoading(true);
-    void document.getElementById('gestao-characteristics-save-loading')?.offsetWidth;
-    try {
+    await withGestaoCadastroSaveOverlay(row, async () => {
         const now = new Date().toISOString();
         const { error } = await supabaseClient
             .from('ProjectCharacteristic')
@@ -467,9 +458,7 @@ async function saveGestaoProjectCharacteristicRow(row) {
         }
 
         await loadGestaoProjectCharacteristicsList();
-    } finally {
-        setGestaoCharacteristicsSaveLoading(false);
-    }
+    });
 }
 
 async function deleteGestaoProjectCharacteristicRow(row) {
@@ -539,9 +528,7 @@ async function addGestaoProjectCharacteristic(event) {
         return;
     }
 
-    setGestaoCharacteristicsSaveLoading(true);
-    void document.getElementById('gestao-characteristics-save-loading')?.offsetWidth;
-    try {
+    await withGestaoCadastroSaveOverlay(document.getElementById('gestao-characteristics-panel'), async () => {
         const now = new Date().toISOString();
         const { error } = await supabaseClient
             .from('ProjectCharacteristic')
@@ -560,9 +547,7 @@ async function addGestaoProjectCharacteristic(event) {
         document.getElementById('gestao-new-characteristic-form')?.reset();
         document.getElementById('gestao-new-characteristic-sort').value = '0';
         await loadGestaoProjectCharacteristicsList();
-    } finally {
-        setGestaoCharacteristicsSaveLoading(false);
-    }
+    });
 }
 
 let gestaoClientesCache = [];
@@ -670,24 +655,26 @@ async function saveGestaoClienteRow(tr, button) {
         return;
     }
 
-    const now = new Date().toISOString();
-    const payload = {
-        name: nome,
-        isActive: ativo,
-        updatedAt: now
-    };
-    const { error } = await supabaseClient.from('Client').update(payload).eq('id', clienteId);
+    await withGestaoCadastroSaveOverlay(tr, async () => {
+        const now = new Date().toISOString();
+        const payload = {
+            name: nome,
+            isActive: ativo,
+            updatedAt: now
+        };
+        const { error } = await supabaseClient.from('Client').update(payload).eq('id', clienteId);
 
-    if (error) {
-        alertAppDialog('Erro ao salvar cliente: ' + error.message);
-        return;
-    }
+        if (error) {
+            alertAppDialog('Erro ao salvar cliente: ' + error.message);
+            return;
+        }
 
-    if (button) {
-        const orig = button.textContent;
-        button.textContent = 'Salvo!';
-        setTimeout(() => { button.textContent = orig; }, 1200);
-    }
+        if (button) {
+            const orig = button.textContent;
+            button.textContent = 'Salvo!';
+            setTimeout(() => { button.textContent = orig; }, 1200);
+        }
+    });
 }
 
 async function deleteGestaoClienteRow(tr) {

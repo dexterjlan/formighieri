@@ -35,6 +35,20 @@ async function fetchPendenciasEnviadosCompras() {
             .map(project => [project.id, project])
     );
 
+    const reasonIds = [...new Set(compras.map(item => item.purchaseReasonId).filter(Boolean))];
+    let reasonsById = {};
+
+    if (reasonIds.length) {
+        const reasonResult = await supabaseClient
+            .from('PurchaseReason')
+            .select('id, name')
+            .in('id', reasonIds);
+
+        if (!reasonResult.error && reasonResult.data) {
+            reasonsById = Object.fromEntries(reasonResult.data.map(row => [row.id, row.name]));
+        }
+    }
+
     const purchaseItemIds = [...new Set(compras.map(item => item.implementationPurchaseItemId).filter(Boolean))];
     let purchaseItemsById = {};
 
@@ -59,7 +73,8 @@ async function fetchPendenciasEnviadosCompras() {
                 project,
                 clientName: getOrderClientName(project?.order) || '',
                 projectName: project?.name || '',
-                subtypeName
+                subtypeName,
+                reasonName: reasonsById[compra.purchaseReasonId] || ''
             };
         })
         .filter(item => item.project);
@@ -101,6 +116,7 @@ function renderPendenciasEnviadosComprasList(items) {
         tipoLabel: typeof formatCompraTipoLabel === 'function'
             ? formatCompraTipoLabel(item.purchaseType, item.subtypeName)
             : (item.purchaseType || '—'),
+        reasonName: item.reasonName || '—',
         statusName: item.status || '—',
         statusClass: typeof getCompraStatusBadgeClass === 'function'
             ? getCompraStatusBadgeClass(item.status)
@@ -119,7 +135,7 @@ function renderPendenciasEnviadosComprasList(items) {
         onRefresh: loadPendenciasEnviadosCompras,
         tableId: 'pendencias-enviados-compras',
         rows,
-        minWidth: '860px',
+        minWidth: '980px',
         emptyMessage: 'Nenhuma solicitação de compra em aberto.',
         columns: [
             ...getPendenciasInteractiveIdentityColumns({
@@ -130,6 +146,11 @@ function renderPendenciasEnviadosComprasList(items) {
             {
                 key: 'tipoLabel',
                 label: 'Tipo',
+                cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'reasonName',
+                label: 'Motivo',
                 cellClass: 'p-3 text-xs text-slate-600'
             },
             getPendenciasInteractiveStatusColumn(),

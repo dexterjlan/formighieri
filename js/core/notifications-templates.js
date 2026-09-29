@@ -473,6 +473,106 @@ function buildApprovalEmailHtml(payload) {
 </body>
 </html>`;
 }
+function buildRequisicoesPurchaseEmailSubject(purchaseType, clientName, orderCode, subtypeName = '') {
+    const tipoLabel = typeof formatCompraTipoLabel === 'function'
+        ? formatCompraTipoLabel(purchaseType, subtypeName)
+        : (purchaseType || '—');
+    const client = clientName || '—';
+    const order = orderCode || '—';
+    return `Requisição de compra de ${tipoLabel} - ${client} (${order})`;
+}
+
+function buildRequisicoesPurchaseEmailBody(payload) {
+    const lines = [
+        payload.eventTitle,
+        '',
+        `Pedido: ${payload.orderCode}`
+    ];
+
+    if (hasOrderProject(payload.projectName)) {
+        lines.push(`Projeto: ${payload.projectName}`);
+    }
+
+    lines.push(
+        `Cliente: ${payload.clientName}`,
+        `Consultor: ${payload.consultantName}`,
+        `Projetista: ${payload.projetistaName}`,
+        `Tipo: ${payload.purchaseType}`,
+        `Motivo: ${payload.reasonName || '—'}`,
+        `Observação: ${payload.observation || '—'}`,
+        `Ação por: ${payload.actedByName} (${payload.actedByRole})`
+    );
+
+    if (payload.attachmentFileName) {
+        lines.push(`Arquivo: ${payload.attachmentFileName}`);
+    }
+
+    return appendEmailNoReplyFooterText(lines.join('\n'));
+}
+
+function buildRequisicoesPurchaseEmailHtml(payload) {
+    const projectRow = hasOrderProject(payload.projectName)
+        ? `<tr>
+            <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Projeto</td>
+            <td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.projectName)}</td>
+           </tr>`
+        : '';
+    const fileRow = payload.attachmentFileName
+        ? `<tr>
+            <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Arquivo</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.attachmentFileName)}</td>
+           </tr>`
+        : '';
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:Inter,Arial,sans-serif;color:#0f172a;">
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.06);">
+    ${buildEmailBrandHeaderHtml(payload.eventTitle, '#f59e0b')}
+    <div style="padding:24px;">
+      <table style="width:100%;border-collapse:collapse;font-size:14px;margin-bottom:20px;">
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;width:120px;">Pedido</td>
+          <td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.orderCode)}</td>
+        </tr>
+        ${projectRow}
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Cliente</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.clientName)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Consultor</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.consultantName)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Projetista</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.projetistaName)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Tipo</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.purchaseType)}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Motivo</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.reasonName || '—')}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Observação</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.observation || '—')}</td>
+        </tr>
+        ${fileRow}
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;">Ação por</td>
+          <td style="padding:8px 12px;">${escapeHtml(payload.actedByName)} <span style="color:#64748b;">(${escapeHtml(payload.actedByRole)})</span></td>
+        </tr>
+      </table>
+      ${buildEmailNoReplyFooterHtml()}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 function buildCompraLiberacaoEmailSubject(purchaseType, clientName, orderCode, subtypeName = '') {
     const tipoLabel = typeof formatCompraTipoLabel === 'function'
         ? formatCompraTipoLabel(purchaseType, subtypeName)

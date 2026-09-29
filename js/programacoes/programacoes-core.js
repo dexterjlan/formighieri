@@ -5,6 +5,7 @@ const PROGRAMACOES_SECTIONS = [
 
 let programacoesActiveSection = 'projects';
 let programacoesFullscreen = false;
+let programacoesLinkedNav = null;
 
 const PROGRAMACOES_FULLSCREEN_BUTTON_HTML = `
     <button type="button" id="btn-programacoes-fullscreen"
@@ -37,16 +38,34 @@ function toggleProgramacoesFullscreen() {
     setProgramacoesFullscreen(!programacoesFullscreen);
 }
 
+function setProgramacoesLinkedNav(key) {
+    programacoesLinkedNav = key || null;
+}
+
 function renderProgramacoesSidebar() {
     const nav = document.getElementById('programacoes-sidebar-nav');
     if (!nav) return;
 
-    nav.innerHTML = PROGRAMACOES_SECTIONS.map(section => `
+    const markSelection = !document.getElementById('programacoes-view')?.classList.contains('hidden');
+    const gestaoView = document.getElementById('gestao-view');
+    const linkedActive = !markSelection
+        && document.querySelector('#btn-programacoes > summary')?.classList.contains('is-active')
+        && gestaoView
+        && !gestaoView.classList.contains('hidden');
+    const montagemActive = linkedActive && programacoesLinkedNav === 'montagem';
+    const producaoActive = linkedActive && programacoesLinkedNav === 'producao';
+    const showMontagem = typeof canViewProgramacaoMontagem !== 'function' || canViewProgramacaoMontagem();
+    const showProducao = typeof canViewProgramacaoProducao === 'function' && canViewProgramacaoProducao();
+    const montagemButton = showMontagem
+        ? `<button type="button" id="btn-programacao-montagem" class="app-nav-item app-nav-item--nested${montagemActive ? ' is-active' : ''}">Montagem</button>`
+        : '';
+    const producaoButton = showProducao
+        ? `<button type="button" id="btn-programacao-producao" class="app-nav-item app-nav-item--nested${producaoActive ? ' is-active' : ''}">Produção</button>`
+        : '';
+    nav.innerHTML = montagemButton + producaoButton + PROGRAMACOES_SECTIONS.map(section => `
         <button type="button"
-            class="programacoes-nav-btn w-full text-left text-xs px-3 py-2 rounded-lg font-medium mb-1 ${
-                programacoesActiveSection === section.id
-                    ? 'bg-indigo-600 text-white'
-                    : 'text-slate-600 hover:bg-slate-100'
+            class="app-nav-item app-nav-item--nested programacoes-nav-btn ${
+                markSelection && programacoesActiveSection === section.id ? 'is-active' : ''
             }"
             data-programacoes-section="${section.id}">
             ${escapeHtml(section.label)}
@@ -83,8 +102,18 @@ async function loadProgramacoesContent() {
     }
 }
 
+function ensureProgramacoesViewVisible() {
+    const view = document.getElementById('programacoes-view');
+    if (!view?.classList.contains('hidden')) return;
+    if (typeof hideSubViews === 'function') hideSubViews();
+    view.classList.remove('hidden');
+    if (typeof updateMainNavActive === 'function') updateMainNavActive('programacoes');
+}
+
 function selectProgramacoesSection(sectionId) {
     if (!PROGRAMACOES_SECTIONS.some(section => section.id === sectionId)) return;
+    programacoesLinkedNav = null;
+    ensureProgramacoesViewVisible();
     programacoesActiveSection = sectionId;
     renderProgramacoesSidebar();
     loadProgramacoesContent();
@@ -101,6 +130,7 @@ function showProgramacoes() {
         programacoesActiveSection = 'projects';
     }
 
+    programacoesLinkedNav = null;
     hideSubViews();
     document.getElementById('programacoes-view')?.classList.remove('hidden');
     updateMainNavActive('programacoes');
@@ -117,6 +147,7 @@ async function restoreProgramacoesView(state = {}) {
         return;
     }
 
+    programacoesLinkedNav = null;
     const savedSection = state.programacoesSection || 'projects';
     programacoesActiveSection = PROGRAMACOES_SECTIONS.some(section => section.id === savedSection)
         ? savedSection
@@ -139,7 +170,10 @@ function updateProgramacoesNav() {
         btn.classList.add('hidden');
         return;
     }
-    btn.classList.toggle('hidden', !canAccessProgramacoes());
+    const canAccess = canAccessProgramacoes();
+    const canMontagem = typeof canViewProgramacaoMontagem === 'function' && canViewProgramacaoMontagem();
+    btn.classList.toggle('hidden', !canAccess && !canMontagem);
+    if (canAccess) renderProgramacoesSidebar();
 }
 
 const PROGRAMACOES_ACTION_OVERLAY = typeof createModalOverlayConfig === 'function'
@@ -152,8 +186,27 @@ function setProgramacoesActionLoading(active, message = 'Processando...', status
 }
 
 function bindProgramacoesEvents() {
-    document.getElementById('btn-programacoes')?.addEventListener('click', showProgramacoes);
+    document.getElementById('btn-programacoes')?.addEventListener('click', event => {
+        const details = event.currentTarget;
+        if (event.target.closest('#programacoes-sidebar-nav, #btn-programacao-montagem, #btn-programacao-producao')) return;
+        if (!event.target.closest('summary')) return;
+        event.preventDefault();
+        if (details.open) {
+            details.open = false;
+            return;
+        }
+        details.open = true;
+        showProgramacoes();
+    });
     document.getElementById('programacoes-sidebar-nav')?.addEventListener('click', event => {
+        if (event.target.closest('#btn-programacao-montagem')) {
+            if (typeof showProgramacaoMontagemView === 'function') showProgramacaoMontagemView();
+            return;
+        }
+        if (event.target.closest('#btn-programacao-producao')) {
+            if (typeof showProgramacaoProducaoView === 'function') showProgramacaoProducaoView();
+            return;
+        }
         const btn = event.target.closest('[data-programacoes-section]');
         if (!btn) return;
         selectProgramacoesSection(btn.dataset.programacoesSection);
@@ -170,6 +223,7 @@ function bindProgramacoesEvents() {
     });
 }
 
+window.setProgramacoesLinkedNav = setProgramacoesLinkedNav;
 window.showProgramacoes = showProgramacoes;
 window.restoreProgramacoesView = restoreProgramacoesView;
 window.updateProgramacoesNav = updateProgramacoesNav;

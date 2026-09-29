@@ -283,6 +283,8 @@ function normalizePendenciasWorkloadStatusName(statusName) {
         : statusName;
 }
 
+let pendenciasProjetistasCache = [];
+
 async function fetchPendenciasActiveProjetistas() {
     const { data, error } = await supabaseClient
         .from('appUsers')
@@ -583,7 +585,7 @@ async function fetchPendenciasAguardandoPtSemProjetista() {
 }
 
 function getPendenciasProjetistaOptionsHtml(selectedId = null) {
-    return pendenciasProjetistasCache.map(projetista => {
+    return (pendenciasProjetistasCache || []).map(projetista => {
         const selected = Number(selectedId) === Number(projetista.id) ? 'selected' : '';
         return `<option value="${projetista.id}" ${selected}>${escapeHtml(projetista.name)}</option>`;
     }).join('');
@@ -1332,7 +1334,15 @@ async function loadPendenciasProjetosSemProjetistas() {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando projetos...</p>';
     }
 
-    const projectsResult = await fetchPendenciasAguardandoPtSemProjetista();
+    const [, projectsResult] = await Promise.all([
+        fetchPendenciasActiveProjetistas(),
+        (async () => {
+            if (typeof loadOrderProjectStatusesCache === 'function') {
+                await loadOrderProjectStatusesCache({ forceRefresh: true });
+            }
+            return fetchPendenciasAguardandoPtSemProjetista();
+        })()
+    ]);
     if (projectsResult.error) {
         renderPendenciasPlaceholder(
             'Projetos Sem Projetistas',

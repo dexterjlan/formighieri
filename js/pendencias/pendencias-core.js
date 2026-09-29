@@ -375,24 +375,21 @@ function renderPendenciasSidebar() {
         pendenciasActiveItem = null;
     }
 
+    const markSelection = !document.getElementById('pendencias-view')?.classList.contains('hidden');
+
     nav.innerHTML = sections.map(section => {
         const isActive = section.id === pendenciasActiveSection;
         const isExpanded = isPendenciasSectionExpanded(section.id);
-        const sectionClass = [
-            'pendencias-sidebar-section',
-            isActive ? 'is-active' : '',
-            isExpanded ? 'is-expanded' : 'is-collapsed'
-        ].filter(Boolean).join(' ');
 
         const itemsHtml = section.items.length
-            ? `<div class="pendencias-section-items">
+            ? `<div class="app-nav-branch__items ${isExpanded ? '' : 'hidden'}">
                     <button type="button"
-                        class="pendencias-overview-btn pendencias-subitem-btn ${!pendenciasActiveItem && isActive ? 'is-selected' : ''}">
+                        class="app-nav-item app-nav-item--nested pendencias-overview-btn ${markSelection && !pendenciasActiveItem && isActive ? 'is-active' : ''}">
                         Resumo
                     </button>
                     ${section.items.map(item => `
                     <button type="button"
-                        class="pendencias-item-btn pendencias-subitem-btn ${item.id === pendenciasActiveItem ? 'is-selected' : ''}"
+                        class="app-nav-item app-nav-item--nested pendencias-item-btn ${markSelection && item.id === pendenciasActiveItem ? 'is-active' : ''}"
                         data-pendencias-item="${item.id}">
                         ${escapeHtml(item.label)}
                     </button>
@@ -401,13 +398,12 @@ function renderPendenciasSidebar() {
             : '';
 
         return `
-        <div class="${sectionClass}" data-pendencias-section="${section.id}">
+        <div class="app-nav-branch" data-pendencias-section="${section.id}">
             <button type="button"
-                class="pendencias-section-btn"
+                class="app-nav-item app-nav-item--branch pendencias-section-btn"
                 data-pendencias-section="${section.id}"
                 aria-expanded="${isExpanded ? 'true' : 'false'}">
-                <span class="pendencias-section-chevron" aria-hidden="true">▶</span>
-                <span class="pendencias-section-label">${escapeHtml(section.label)}</span>
+                <span>${escapeHtml(section.label)}</span>
             </button>
             ${itemsHtml}
         </div>
@@ -416,16 +412,19 @@ function renderPendenciasSidebar() {
 
     nav.querySelectorAll('.pendencias-section-btn').forEach(button => {
         button.addEventListener('click', async () => {
+            ensurePendenciasViewVisible();
             const sectionId = button.dataset.pendenciasSection;
             const isSameSection = pendenciasActiveSection === sectionId;
 
             if (isSameSection) {
-                if (isPendenciasSectionExpanded(sectionId)) {
+                const wasExpanded = isPendenciasSectionExpanded(sectionId);
+                if (wasExpanded) {
                     togglePendenciasSectionCollapsed(sectionId);
                 } else {
                     pendenciasCollapsedSections.delete(sectionId);
                 }
                 renderPendenciasSidebar();
+                if (!wasExpanded) loadPendenciasContent();
                 return;
             }
 
@@ -437,6 +436,7 @@ function renderPendenciasSidebar() {
 
     nav.querySelectorAll('.pendencias-overview-btn').forEach(button => {
         button.addEventListener('click', async () => {
+            ensurePendenciasViewVisible();
             pendenciasActiveItem = null;
             renderPendenciasSidebar();
             persistPendenciasNavState();
@@ -446,6 +446,7 @@ function renderPendenciasSidebar() {
 
     nav.querySelectorAll('.pendencias-item-btn').forEach(button => {
         button.addEventListener('click', async () => {
+            ensurePendenciasViewVisible();
             pendenciasActiveItem = button.dataset.pendenciasItem;
             renderPendenciasSidebar();
             persistPendenciasNavState();
@@ -868,7 +869,16 @@ function getPendenciasProjectStatusName(project) {
     return project?.projectStatus?.name || '';
 }
 
+function ensurePendenciasViewVisible() {
+    const view = document.getElementById('pendencias-view');
+    if (!view?.classList.contains('hidden')) return;
+    if (typeof hideSubViews === 'function') hideSubViews();
+    view.classList.remove('hidden');
+    if (typeof updateMainNavActive === 'function') updateMainNavActive('pendencias');
+}
+
 function loadPendenciasContent() {
+    ensurePendenciasViewVisible();
     setPendenciasActionLoading(false);
 
     if (!pendenciasActiveItem) {
@@ -1109,11 +1119,19 @@ function updatePendenciasNav() {
         btn.classList.add('hidden');
         return;
     }
-    btn.classList.toggle('hidden', !canAccessPendencias());
+    const canAccess = canAccessPendencias();
+    btn.classList.toggle('hidden', !canAccess);
+    if (canAccess) renderPendenciasSidebar();
 }
 
 function bindPendenciasEvents() {
-    document.getElementById('btn-pendencias')?.addEventListener('click', showPendencias);
+    document.getElementById('btn-pendencias')?.addEventListener('click', event => {
+        const details = event.currentTarget;
+        if (!event.target.closest('summary')) return;
+        if (details?.open) return;
+        event.preventDefault();
+        showPendencias();
+    });
     if (typeof bindPendenciasAguardandoMedicaoModalEvents === 'function') {
         bindPendenciasAguardandoMedicaoModalEvents();
     }

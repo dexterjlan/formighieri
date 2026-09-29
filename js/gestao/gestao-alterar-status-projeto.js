@@ -224,6 +224,7 @@ async function saveGestaoAlterarStatusPendingChanges() {
     );
     if (!confirmed) return;
 
+    await withGestaoCadastroSaveOverlay(document.getElementById('gestao-alterar-status-projeto-panel'), async () => {
     const button = document.getElementById('gestao-alterar-status-save-all');
     setGestaoAlterarStatusSaveButtonState(button, 'saving');
 
@@ -276,6 +277,7 @@ async function saveGestaoAlterarStatusPendingChanges() {
     }
 
     alertAppDialog(`${changes.length} projeto(s) atualizado(s) com sucesso.`, { variant: 'success', title: 'Sucesso' });
+    });
 }
 
 async function loadGestaoAlterarStatusProjectsList() {

@@ -309,16 +309,10 @@ function normalizeShowComercialArgs(sectionOrTab, tab) {
 }
 
 function updateComercialSidebarButtons() {
-    const activeClasses = 'comercial-sidebar-btn w-full text-left text-xs px-3 py-2 rounded-lg font-medium bg-indigo-600 text-white';
-    const idleClasses = 'comercial-sidebar-btn w-full text-left text-xs px-3 py-2 rounded-lg font-medium text-slate-600 hover:bg-slate-100';
-    const funnelBtn = document.getElementById('comercial-section-funnel');
-    const commissionsBtn = document.getElementById('comercial-section-commissions');
-    if (funnelBtn) {
-        funnelBtn.className = comercialActiveSection === 'funnel' ? activeClasses : idleClasses;
-    }
-    if (commissionsBtn) {
-        commissionsBtn.className = comercialActiveSection === 'commissions' ? activeClasses : idleClasses;
-    }
+    document.getElementById('comercial-section-funnel')
+        ?.classList.toggle('is-active', comercialActiveSection === 'funnel');
+    document.getElementById('comercial-section-commissions')
+        ?.classList.toggle('is-active', comercialActiveSection === 'commissions');
 }
 
 function updateComercialSectionNav() {
@@ -546,8 +540,19 @@ async function loadWonDealsForOrderForm(clientId, currentOrderId = null) {
 }
 
 function bindComercialEvents() {
-    document.getElementById('btn-comercial')?.addEventListener('click', () => showComercial('funnel', 'board'));
-    document.getElementById('comercial-section-funnel')?.addEventListener('click', () => setComercialSection('funnel'));
+    document.getElementById('btn-comercial')?.addEventListener('click', event => {
+        const details = event.currentTarget;
+        if (event.target.closest('#comercial-sidebar-nav')) return;
+        if (!event.target.closest('summary')) return;
+        event.preventDefault();
+        if (details.open) {
+            details.open = false;
+            return;
+        }
+        details.open = true;
+        showComercial('funnel', 'board');
+    });
+    document.getElementById('comercial-section-funnel')?.addEventListener('click', () => showComercial('funnel'));
     if (typeof bindComercialCommissionsEvents === 'function') bindComercialCommissionsEvents();
     document.getElementById('comercial-tab-board')?.addEventListener('click', () => setComercialTab('board'));
     document.getElementById('comercial-tab-today')?.addEventListener('click', () => setComercialTab('today'));

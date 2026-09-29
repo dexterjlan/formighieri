@@ -22,6 +22,16 @@ const VIEW3D_GLTF_VIEWER_EXPOSURE_LOG2 = 0.5;
 const VIEW3D_GLTF_VIEWER_AMBIENT_INTENSITY = 0.5;
 const VIEW3D_GLTF_VIEWER_DIRECT_INTENSITY = 2.5;
 
+/** OrbitControls usa a mesma velocidade no mouse e no toque; no celular o gesto cobre a tela inteira. */
+const VIEW3D_DESKTOP_ROTATE_SPEED = 1;
+const VIEW3D_DESKTOP_ZOOM_SPEED = 1;
+const VIEW3D_TOUCH_ROTATE_SPEED = 0.5;
+const VIEW3D_TOUCH_ZOOM_SPEED = 0.6;
+
+function isView3dTouchNavigation() {
+    return window.matchMedia('(pointer: coarse)').matches;
+}
+
 /**
  * Visualizador GLB/GLTF (Three.js) — piloto tela 3D.
  */
@@ -75,6 +85,7 @@ class View3dThreeViewer {
         this.controls.dampingFactor = 0.08;
         this.controls.minDistance = 0.05;
         this.controls.maxDistance = 500;
+        this.applyNavigationSensitivity();
         this.navigationMode = 'orbit';
         this.setNavigationMode('orbit');
         this.controls.addEventListener('start', () => {
@@ -399,6 +410,12 @@ class View3dThreeViewer {
             return;
         }
         this.renderer.domElement.style.cursor = 'default';
+    }
+
+    applyNavigationSensitivity() {
+        const touch = isView3dTouchNavigation();
+        this.controls.rotateSpeed = touch ? VIEW3D_TOUCH_ROTATE_SPEED : VIEW3D_DESKTOP_ROTATE_SPEED;
+        this.controls.zoomSpeed = touch ? VIEW3D_TOUCH_ZOOM_SPEED : VIEW3D_DESKTOP_ZOOM_SPEED;
     }
 
     setNavigationMode(mode) {

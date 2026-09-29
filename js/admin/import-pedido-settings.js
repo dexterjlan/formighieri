@@ -1,6 +1,3 @@
-const SETTINGS_NAV_ACTIVE_CLASS = 'settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-slate-900 text-white';
-const SETTINGS_NAV_INACTIVE_CLASS = 'settings-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-
 let importConsultorFgpUsersCache = [];
 
 function setSettingsNavActive(panelKey) {
@@ -19,7 +16,8 @@ function setSettingsNavActive(panelKey) {
 
     Object.entries(buttons).forEach(([key, button]) => {
         if (!button) return;
-        button.className = key === panelKey ? SETTINGS_NAV_ACTIVE_CLASS : SETTINGS_NAV_INACTIVE_CLASS;
+        button.classList.add('app-nav-item', 'app-nav-item--nested');
+        button.classList.toggle('is-active', key === panelKey);
     });
 
     document.getElementById('settings-general-panel')?.classList.toggle('hidden', panelKey !== 'geral');

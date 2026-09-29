@@ -227,6 +227,10 @@ function canViewProgramacaoMontagem(user = currentUser) {
     return Boolean(user) && !isThirdParty(user);
 }
 
+function canViewProgramacaoProducao(user = currentUser) {
+    return canAccessGestao(user);
+}
+
 function canEditProgramacaoMontagem(user = currentUser) {
     return canAccessMontagemProgramacao(user);
 }

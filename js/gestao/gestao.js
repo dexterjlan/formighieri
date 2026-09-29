@@ -9,11 +9,6 @@ let editingGestaoOrderId = null;
 let gestaoOrderProjectsDraft = [];
 let editingGestaoProjectDraftIndex = null;
 
-const GESTAO_NAV_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
-const GESTAO_NAV_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-const GESTAO_NAV_SUB_ACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-100';
-const GESTAO_NAV_SUB_INACTIVE_CLASS = 'gestao-nav-sub-item w-full text-left pl-3 pr-2 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 hover:bg-slate-50 border border-transparent';
-
 const GESTAO_PROJECT_FORM_OVERLAY = typeof createModalOverlayConfig === 'function'
     ? createModalOverlayConfig('gestao-project-form', {
         disableElementIds: [
@@ -33,10 +28,50 @@ function setGestaoProjectFormLoading(active, message = 'Processando...', status 
 function waitGestaoProjectFormStatus(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons'];
+
+function resolveGestaoCadastroSaveHost(anchor) {
+    const element = anchor?.nodeType === 1 ? anchor : document.getElementById(anchor);
+    if (!element) return null;
+    const modal = element.closest('[id$="-modal"]');
+    if (modal) return modal.querySelector(':scope > .bg-white') || modal;
+    return element.closest('[id$="-panel"]') || element;
+}
+
+function ensureGestaoCadastroSaveOverlay(host) {
+    if (getComputedStyle(host).position === 'static') host.classList.add('relative');
+    let overlay = host.querySelector(':scope > .gestao-cadastro-save-overlay');
+    if (overlay) return overlay;
+
+    overlay = document.createElement('div');
+    overlay.className = 'gestao-cadastro-save-overlay hidden absolute inset-0 bg-white/90 flex flex-col items-center justify-center gap-3 z-30 px-6 text-center';
+    overlay.innerHTML = `
+        <div class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
+        <p class="gestao-cadastro-save-overlay__msg text-sm text-slate-700 font-medium">Salvando...</p>
+    `;
+    host.appendChild(overlay);
+    return overlay;
+}
+
+async function withGestaoCadastroSaveOverlay(anchor, task, message = 'Salvando...') {
+    const host = resolveGestaoCadastroSaveHost(anchor);
+    if (!host || typeof task !== 'function') return task?.();
+
+    const overlay = ensureGestaoCadastroSaveOverlay(host);
+    const messageEl = overlay.querySelector('.gestao-cadastro-save-overlay__msg');
+    if (messageEl) messageEl.textContent = message;
+    overlay.classList.remove('hidden');
+    void overlay.offsetWidth;
+
+    try {
+        return await task();
+    } finally {
+        overlay.classList.add('hidden');
+    }
+}
+
+window.withGestaoCadastroSaveOverlay = withGestaoCadastroSaveOverlay;
 const GESTAO_COMMERCIAL_FINANCE_NAV_KEYS = ['comercial-meta-venda', 'comercial-vendas', 'comercial-comissao-venda'];
-const GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-indigo-800 bg-indigo-50/50 border border-indigo-100 flex items-center justify-between gap-2';
-const GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS = 'gestao-nav-item w-full text-left px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 border border-transparent flex items-center justify-between gap-2';
 
 function formatGestaoDate(dateStr) {
     if (!dateStr) return '—';
@@ -67,7 +102,17 @@ function setGestaoCadastrosNavExpanded(expanded) {
     if (chevron) chevron.textContent = expanded ? '▼' : '▶';
 }
 
+function ensureGestaoViewVisible() {
+    const view = document.getElementById('gestao-view');
+    if (!view?.classList.contains('hidden')) return;
+    if (typeof hideSubViews === 'function') hideSubViews();
+    view.classList.remove('hidden');
+    updateGestaoCalendarLayout({ fromGestao: true });
+    if (typeof updateMainNavActive === 'function') updateMainNavActive('gestao');
+}
+
 function setGestaoNavActive(navKey) {
+    ensureGestaoViewVisible();
     const navMap = {
         pedido: document.getElementById('gestao-nav-pedido'),
         'alterar-status-projeto': document.getElementById('gestao-nav-alterar-status-projeto'),
@@ -78,8 +123,8 @@ function setGestaoNavActive(navKey) {
         montadores: document.getElementById('gestao-nav-montadores'),
         characteristics: document.getElementById('gestao-nav-characteristics'),
         'third-party-subtypes': document.getElementById('gestao-nav-third-party-subtypes'),
+        'purchase-reasons': document.getElementById('gestao-nav-purchase-reasons'),
         'montagem-programacao': document.getElementById('gestao-nav-montagem-programacao'),
-        'programacao-producao': document.getElementById('gestao-nav-programacao-producao'),
         dashboard: document.getElementById('gestao-nav-dashboard'),
         kanban: document.getElementById('gestao-nav-kanban'),
         'cronograma-pedido': document.getElementById('gestao-nav-cronograma-pedido'),
@@ -93,11 +138,7 @@ function setGestaoNavActive(navKey) {
 
     Object.entries(navMap).forEach(([key, button]) => {
         if (!button) return;
-
-        const isSubItem = GESTAO_CADASTRO_NAV_KEYS.includes(key) || GESTAO_COMMERCIAL_FINANCE_NAV_KEYS.includes(key);
-        const activeClass = isSubItem ? GESTAO_NAV_SUB_ACTIVE_CLASS : GESTAO_NAV_ACTIVE_CLASS;
-        const inactiveClass = isSubItem ? GESTAO_NAV_SUB_INACTIVE_CLASS : GESTAO_NAV_INACTIVE_CLASS;
-        button.className = key === navKey ? activeClass : inactiveClass;
+        button.classList.toggle('is-active', key === navKey);
     });
 
     if (typeof saveAppNavState === 'function') {
@@ -114,9 +155,7 @@ function setGestaoNavActive(navKey) {
     }
 
     if (cadastrosToggle) {
-        cadastrosToggle.className = cadastrosActive
-            ? GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS
-            : GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS;
+        cadastrosToggle.classList.remove('is-active');
     }
 
     if (commercialFinanceActive && typeof setGestaoCommercialFinanceNavExpanded === 'function') {
@@ -124,9 +163,7 @@ function setGestaoNavActive(navKey) {
     }
 
     if (commercialFinanceToggle) {
-        commercialFinanceToggle.className = commercialFinanceActive
-            ? GESTAO_NAV_CADASTROS_TOGGLE_ACTIVE_CLASS
-            : GESTAO_NAV_CADASTROS_TOGGLE_INACTIVE_CLASS;
+        commercialFinanceToggle.classList.remove('is-active');
     }
 
     updateGestaoCadastrosNavVisibility();
@@ -217,6 +254,9 @@ async function showProjectSchedulingView(options = {}) {
 async function showProgramacaoMontagemView(options = {}) {
     if (!canViewProgramacaoMontagem()) return;
 
+    if (typeof setProgramacoesLinkedNav === 'function' && !options.fromGestao) {
+        setProgramacoesLinkedNav('montagem');
+    }
     if (typeof hideSubViews === 'function') hideSubViews();
     document.getElementById('gestao-view')?.classList.remove('hidden');
     updateGestaoCalendarLayout(options);
@@ -239,8 +279,34 @@ async function showProgramacaoMontagemView(options = {}) {
     }
 }
 
+async function showProgramacaoProducaoView() {
+    if (typeof canViewProgramacaoProducao === 'function' && !canViewProgramacaoProducao()) {
+        alertAppDialog('Sem permissão para acessar a programação de produção.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (typeof setProgramacoesLinkedNav === 'function') setProgramacoesLinkedNav('producao');
+    if (typeof hideSubViews === 'function') hideSubViews();
+    document.getElementById('gestao-view')?.classList.remove('hidden');
+    updateGestaoCalendarLayout({});
+    if (typeof updateMainNavActive === 'function') updateMainNavActive('programacao-producao');
+    if (typeof updateAdminNav === 'function') updateAdminNav();
+
+    if (typeof showGestaoProgramacaoProducaoPanel === 'function') {
+        showGestaoProgramacaoProducaoPanel();
+    }
+    if (typeof renderProgramacoesSidebar === 'function') renderProgramacoesSidebar();
+    if (typeof saveAppNavState === 'function') {
+        saveAppNavState({
+            view: 'programacao-producao',
+            gestaoNav: 'programacao-producao'
+        });
+    }
+}
+
 window.showProjectSchedulingView = showProjectSchedulingView;
 window.showProgramacaoMontagemView = showProgramacaoMontagemView;
+window.showProgramacaoProducaoView = showProgramacaoProducaoView;
 
 function hideAllGestaoPanels() {
     document.getElementById('gestao-pedido-list-panel')?.classList.add('hidden');
@@ -259,6 +325,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-montadores-panel')?.classList.add('hidden');
     document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
     document.getElementById('gestao-third-party-subtypes-panel')?.classList.add('hidden');
+    document.getElementById('gestao-purchase-reasons-panel')?.classList.add('hidden');
     document.getElementById('gestao-compra-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-montagem-programacao-panel')?.classList.add('hidden');
     document.getElementById('gestao-programacao-producao-panel')?.classList.add('hidden');
@@ -1297,6 +1364,13 @@ function showGestaoCharacteristicsPanel() {
     setGestaoNavActive('characteristics');
 }
 
+function showGestaoPurchaseReasonsPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-purchase-reasons-panel')?.classList.remove('hidden');
+    setGestaoNavActive('purchase-reasons');
+    if (typeof loadGestaoPurchaseReasonsList === 'function') loadGestaoPurchaseReasonsList();
+}
+
 function showGestaoThirdPartySubtypesPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-third-party-subtypes-panel')?.classList.remove('hidden');
@@ -1397,7 +1471,13 @@ function bindGestaoEvents() {
     if (typeof bindGestaoSaleValueVisibilityToggles === 'function') {
         bindGestaoSaleValueVisibilityToggles();
     }
-    document.getElementById('btn-gestao')?.addEventListener('click', showGestao);
+    document.getElementById('btn-gestao')?.addEventListener('click', event => {
+        const details = event.currentTarget;
+        if (event.target.closest('#gestao-sidebar-nav')) return;
+        if (details?.tagName === 'DETAILS' && details.open && event.target.closest('summary')) return;
+        if (event.target.closest('summary')) event.preventDefault();
+        showGestao();
+    });
     document.getElementById('btn-gestao-create-order')?.addEventListener('click', openGestaoCreateOrderForm);
     document.getElementById('btn-gestao-back-list')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
@@ -1520,6 +1600,10 @@ function bindGestaoEvents() {
         editingGestaoOrderId = null;
         showGestaoCharacteristicsPanel();
         loadGestaoProjectCharacteristicsList();
+    });
+    document.getElementById('gestao-nav-purchase-reasons')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoPurchaseReasonsPanel();
     });
     document.getElementById('gestao-nav-third-party-subtypes')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
@@ -2001,51 +2085,53 @@ async function saveClienteCreateFromPicker(event) {
         return;
     }
 
-    const now = new Date().toISOString();
-    const { data, error } = await supabaseClient
-        .from('Client')
-        .insert({
-            name: nome,
-            isActive: true,
-            updatedAt: now
-        })
-        .select('id, name, isActive')
-        .single();
+    await withGestaoCadastroSaveOverlay(document.getElementById('cliente-create-modal'), async () => {
+        const now = new Date().toISOString();
+        const { data, error } = await supabaseClient
+            .from('Client')
+            .insert({
+                name: nome,
+                isActive: true,
+                updatedAt: now
+            })
+            .select('id, name, isActive')
+            .single();
 
-    if (error) {
-        const isDuplicate = error.code === '23505'
-            || /unique/i.test(error.message || '')
-            || /duplicate/i.test(error.message || '');
-        alertAppDialog(
-            isDuplicate
-                ? `Já existe um cliente com o nome "${nome}".`
-                : 'Erro ao cadastrar cliente: ' + error.message
-        );
-        return;
-    }
+        if (error) {
+            const isDuplicate = error.code === '23505'
+                || /unique/i.test(error.message || '')
+                || /duplicate/i.test(error.message || '');
+            alertAppDialog(
+                isDuplicate
+                    ? `Já existe um cliente com o nome "${nome}".`
+                    : 'Erro ao cadastrar cliente: ' + error.message
+            );
+            return;
+        }
 
-    if (data?.id && typeof upsertOwnerContact === 'function') {
-        const ownerType = typeof CONTACT_OWNER_TYPE_CLIENT === 'string' ? CONTACT_OWNER_TYPE_CLIENT : 'client';
-        await upsertOwnerContact(ownerType, data.id, {
-            name: contactName,
-            phone: contactFields.phone,
-            landlinePhone: contactFields.landlinePhone,
-            email: contactFields.email
-        });
-    }
+        if (data?.id && typeof upsertOwnerContact === 'function') {
+            const ownerType = typeof CONTACT_OWNER_TYPE_CLIENT === 'string' ? CONTACT_OWNER_TYPE_CLIENT : 'client';
+            await upsertOwnerContact(ownerType, data.id, {
+                name: contactName,
+                phone: contactFields.phone,
+                landlinePhone: contactFields.landlinePhone,
+                email: contactFields.email
+            });
+        }
 
-    clientePickerCache = [...(clientePickerCache || []), data]
-        .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
+        clientePickerCache = [...(clientePickerCache || []), data]
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
 
-    document.getElementById('cliente-create-form')?.reset();
-    if (clienteCreateSource === 'cadastro') {
-        toggleModal('cliente-create-modal', false);
-        const filterInput = document.getElementById('gestao-clientes-filter-name');
-        if (filterInput) filterInput.value = '';
-        if (typeof loadGestaoClientesList === 'function') await loadGestaoClientesList();
-        return;
-    }
-    selectClienteFromPicker({ id: data.id, name: data.name });
+        document.getElementById('cliente-create-form')?.reset();
+        if (clienteCreateSource === 'cadastro') {
+            toggleModal('cliente-create-modal', false);
+            const filterInput = document.getElementById('gestao-clientes-filter-name');
+            if (filterInput) filterInput.value = '';
+            if (typeof loadGestaoClientesList === 'function') await loadGestaoClientesList();
+            return;
+        }
+        selectClienteFromPicker({ id: data.id, name: data.name });
+    });
 }
 
 window.openClienteCreateModal = openClienteCreateModal;

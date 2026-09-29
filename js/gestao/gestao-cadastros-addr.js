@@ -781,6 +781,7 @@ async function saveGestaoAddr(event) {
     const { clientId, payload } = collectGestaoAddrFormPayload();
     if (!validateGestaoAddrPayload(clientId, payload)) return;
 
+    await withGestaoCadastroSaveOverlay(document.getElementById('gestao-addr-panel'), async () => {
     const now = new Date().toISOString();
     const record = {
         ...payload,
@@ -830,6 +831,7 @@ async function saveGestaoAddr(event) {
         }
         returnToGestaoOrderFormFromAddr();
     }
+    });
 }
 
 async function editGestaoAddrRow(addrId) {
