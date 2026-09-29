@@ -344,6 +344,40 @@ async function updateRevisionActivity(activityId, payload) {
     return { error };
 }
 
+async function deleteRevisionActivity(activityId) {
+    const normalizedId = Number(activityId);
+    if (!normalizedId) return { error: new Error('activityId inválido') };
+
+    const byActivity = await fetchRevisionActivityAttachmentsByActivityIds([normalizedId]);
+    const attachment = byActivity[String(normalizedId)];
+    if (attachment && typeof deleteRevisionActivityAttachmentRecord === 'function') {
+        try {
+            await deleteRevisionActivityAttachmentRecord(attachment);
+        } catch (error) {
+            console.warn('deleteRevisionActivity attachment:', error);
+        }
+    }
+
+    const { error } = await supabaseClient
+        .from('RevisionActivity')
+        .delete()
+        .eq('id', normalizedId);
+
+    return { error };
+}
+
+async function deleteRemovedRevisionActivities(keptActivityIds, loadedActivityIds) {
+    const kept = new Set((keptActivityIds || []).map(id => Number(id)).filter(Boolean));
+    const removed = (loadedActivityIds || []).map(id => Number(id)).filter(id => id && !kept.has(id));
+
+    for (const id of removed) {
+        const { error } = await deleteRevisionActivity(id);
+        if (error) return { ok: false, error };
+    }
+
+    return { ok: true };
+}
+
 async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
     const orderProjectIds = [...new Set(approvalIds.map(id => Number(id)).filter(Boolean))];
     if (!orderProjectIds.length) return {};
@@ -394,3 +428,5 @@ async function fetchCommercialRevisionsByApprovalIds(approvalIds) {
 window.fetchCommercialRevisionsByApprovalIds = fetchCommercialRevisionsByApprovalIds;
 window.ORDER_PROJECT_REVISION_DB_TYPES = ORDER_PROJECT_REVISION_DB_TYPES;
 window.fetchRevisionActivityAttachmentsByActivityIds = fetchRevisionActivityAttachmentsByActivityIds;
+window.deleteRevisionActivity = deleteRevisionActivity;
+window.deleteRemovedRevisionActivities = deleteRemovedRevisionActivities;

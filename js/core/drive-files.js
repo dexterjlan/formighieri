@@ -346,21 +346,59 @@ function driveFileMissingSetupMessage(error) {
     return error?.message || 'Erro ao enviar arquivo.';
 }
 
-function postGoogleDriveAction(payload) {
+const GOOGLE_APPS_SCRIPT_DRIVE_TIMEOUT_MS = 25000;
+
+function buildGoogleAppsScriptRequestBody(payload) {
+    return {
+        secret: NOTIFICATION_SCRIPT_SECRET,
+        environment: typeof FORMIGHIERI_APP_ENV === 'string' ? FORMIGHIERI_APP_ENV : 'prod',
+        createdById: typeof currentUser?.id !== 'undefined' ? currentUser.id : null,
+        ...payload
+    };
+}
+
+function googleAppsScriptUnavailableMessage(statusCode) {
+    const status = statusCode ? ` (HTTP ${statusCode})` : '';
+    return `Google Apps Script indisponível${status}. Republicar o Web App do projeto Notificações em script.google.com e atualizar GOOGLE_APPS_SCRIPT_URL em js/core/config.js.`;
+}
+
+async function postGoogleDriveAction(payload) {
     if (!isGoogleDriveAppsScriptConfigured()) {
-        return Promise.reject(new Error('Drive não configurado no Apps Script.'));
+        throw new Error('Drive não configurado no Apps Script.');
     }
-    return fetch(GOOGLE_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-            secret: NOTIFICATION_SCRIPT_SECRET,
-            environment: typeof FORMIGHIERI_APP_ENV === 'string' ? FORMIGHIERI_APP_ENV : 'prod',
-            createdById: typeof currentUser?.id !== 'undefined' ? currentUser.id : null,
-            ...payload
-        })
-    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), GOOGLE_APPS_SCRIPT_DRIVE_TIMEOUT_MS);
+
+    try {
+        const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(buildGoogleAppsScriptRequestBody(payload)),
+            signal: controller.signal
+        });
+
+        if (!response.ok) {
+            throw new Error(googleAppsScriptUnavailableMessage(response.status));
+        }
+
+        return response;
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw new Error(
+                'Tempo esgotado ao contactar o Google Apps Script. Verifique a implantação do Web App e a URL em js/core/config.js.'
+            );
+        }
+        if (error?.message?.includes('Google Apps Script')) {
+            throw error;
+        }
+        throw new Error(
+            `${googleAppsScriptUnavailableMessage()} Detalhe: ${error?.message || 'falha de rede'}`
+        );
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 function waitDriveMs(ms) {
@@ -382,8 +420,11 @@ async function fetchDriveFileRow(rowId) {
     return data || null;
 }
 
-async function waitForDriveFileRow(rowId, isDone, timeoutMs = 90000) {
+async function waitForDriveFileRow(rowId, isDone, timeoutMs = 60000) {
     const started = Date.now();
+    let unchangedSince = started;
+    let lastSnapshot = '';
+
     while (Date.now() - started < timeoutMs) {
         const row = await fetchDriveFileRow(rowId);
         if (!row) throw new Error('Registro do arquivo não encontrado.');
@@ -391,9 +432,21 @@ async function waitForDriveFileRow(rowId, isDone, timeoutMs = 90000) {
             throw new Error(row.ingestError || 'Falha no Drive');
         }
         if (isDone(row)) return row;
+
+        const snapshot = `${row.ingestStatus}|${row.ingestError || ''}|${row.driveFileId || ''}`;
+        if (snapshot !== lastSnapshot) {
+            lastSnapshot = snapshot;
+            unchangedSince = Date.now();
+        } else if (
+            Date.now() - unchangedSince > 20000
+            && (row.ingestStatus === 'pending' || String(row.ingestError || '').startsWith('uploading:'))
+        ) {
+            throw new Error(googleAppsScriptUnavailableMessage());
+        }
+
         await waitDriveMs(800);
     }
-    throw new Error('Tempo esgotado ao enviar ao Drive. Verifique se o Web App foi republicado.');
+    throw new Error(googleAppsScriptUnavailableMessage());
 }
 
 function readBlobAsBase64(blob) {

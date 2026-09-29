@@ -293,6 +293,210 @@ function formatProjectStatusHistoryAxisDate(dateStr) {
     return `${day}/${month}/${year}`;
 }
 
+function startOfProjectStatusHistoryDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function shiftProjectStatusHistoryDay(date, days) {
+    const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    next.setDate(next.getDate() + days);
+    return next;
+}
+
+function projectStatusHistoryDayKey(date) {
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function projectStatusHistoryDaySpan(startDate, endDate) {
+    const ms = startOfProjectStatusHistoryDay(endDate) - startOfProjectStatusHistoryDay(startDate);
+    return Math.max(0, Math.round(ms / 86400000));
+}
+
+const PROJECT_STATUS_HISTORY_CALENDAR_ORIGIN = 'Medição Realizada';
+
+function formatProjectStatusHistoryCalendarDay(date, includeYear = false) {
+    const label = `${date.getDate()}/${date.getMonth() + 1}`;
+    if (!includeYear) return label;
+    return `${label}/${String(date.getFullYear()).slice(-2)}`;
+}
+
+function listProjectStatusHistoryCalendarDays(startDate, endDate) {
+    const days = [];
+    let cursor = startOfProjectStatusHistoryDay(startDate);
+    const end = startOfProjectStatusHistoryDay(endDate);
+    while (cursor.getTime() <= end.getTime()) {
+        days.push(new Date(cursor));
+        cursor = shiftProjectStatusHistoryDay(cursor, 1);
+    }
+    return days;
+}
+
+function findProjectStatusHistoryOriginDate(segments) {
+    const originSegment = (segments || []).find(segment =>
+        segment.statusName === PROJECT_STATUS_HISTORY_CALENDAR_ORIGIN
+    );
+    const source = originSegment?.startAt || segments?.[0]?.startAt;
+    if (!source) return null;
+    const date = startOfProjectStatusHistoryDay(new Date(source));
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getProjectStatusHistorySegmentBounds(segment) {
+    const start = startOfProjectStatusHistoryDay(new Date(segment.startAt));
+    if (Number.isNaN(start.getTime())) return null;
+
+    if (segment.isCurrent) {
+        const today = startOfProjectStatusHistoryDay(new Date());
+        const endInclusive = today < start ? start : today;
+        return { startDate: start, endInclusive, isOpen: true };
+    }
+
+    const nextChange = startOfProjectStatusHistoryDay(new Date(segment.endAt));
+    if (Number.isNaN(nextChange.getTime())) {
+        return { startDate: start, endInclusive: start, isOpen: false };
+    }
+
+    const endInclusive = nextChange <= start
+        ? start
+        : shiftProjectStatusHistoryDay(nextChange, -1);
+    return { startDate: start, endInclusive, isOpen: false };
+}
+
+function buildProjectStatusHistoryCalendarItems(segments, originDate) {
+    return (segments || []).flatMap(segment => {
+        const bounds = getProjectStatusHistorySegmentBounds(segment);
+        if (!bounds || bounds.endInclusive < originDate) return [];
+
+        const startDate = bounds.startDate < originDate ? new Date(originDate) : bounds.startDate;
+        const dayCount = projectStatusHistoryDaySpan(startDate, bounds.endInclusive) + 1;
+        return [{
+            ...segment,
+            startDate,
+            endInclusive: bounds.endInclusive,
+            dayCount
+        }];
+    });
+}
+
+const PROJECT_STATUS_HISTORY_GROUPS = [
+    {
+        name: 'ante-projeto',
+        statuses: [
+            'Medição Realizada',
+            'Planta Levantada',
+            'Conferência Enviada',
+            'Conferência Realizada',
+            'Aguardando Projeto Técnico'
+        ]
+    },
+    {
+        name: 'Projeto Técnico',
+        statuses: ['Projeto Técnico']
+    },
+    {
+        name: 'Revisão',
+        statuses: [
+            'Em Revisão Comercial Cons.',
+            'Em Revisão Comercial Proj.',
+            'Em Revisão Comercial',
+            'Em Revisão Técnica',
+            'Em Revisão Técnica Revisor',
+            'Em Revisão Técnica Lider',
+            'Em Revisão Técnica Proj.',
+            'Em Revisão',
+            'Em revisão'
+        ]
+    },
+    {
+        name: 'Aprovação',
+        statuses: ['Aguardando Aprovação']
+    },
+    {
+        name: 'Implantação',
+        statuses: ['Nomear', 'Aguardando PPCP', 'Implantação']
+    },
+    {
+        name: 'Produção',
+        statuses: ['Em Produção', 'Montagem Interna']
+    },
+    {
+        name: 'Expedição',
+        statuses: ['Expedição']
+    },
+    {
+        name: 'Montagem Externa',
+        statuses: ['Montagem Externa', 'Aguardando Entrega Técnica', 'Entregue']
+    }
+];
+
+function getProjectStatusHistoryGroupName(statusName) {
+    const normalized = String(statusName || '').trim().toLowerCase();
+    const match = PROJECT_STATUS_HISTORY_GROUPS.find(group =>
+        group.statuses.some(name => name.toLowerCase() === normalized)
+    );
+    return match?.name || String(statusName || '').trim() || 'Status';
+}
+
+function formatProjectStatusHistoryStatusRange(startDate, endDate, isOpen) {
+    const sameDay = projectStatusHistoryDayKey(startDate) === projectStatusHistoryDayKey(endDate);
+    const sameMonth = startDate.getFullYear() === endDate.getFullYear()
+        && startDate.getMonth() === endDate.getMonth();
+    const startToken = sameMonth
+        ? String(startDate.getDate())
+        : `${startDate.getDate()}/${startDate.getMonth() + 1}`;
+    const endToken = sameMonth
+        ? String(endDate.getDate())
+        : `${endDate.getDate()}/${endDate.getMonth() + 1}`;
+
+    if (isOpen && sameDay) return `${startToken}-`;
+    if (sameDay) return startToken;
+    return `${startToken} ao ${endToken}`;
+}
+
+function buildProjectStatusHistoryGroupItems(items) {
+    const groups = [];
+
+    items.forEach(item => {
+        const name = getProjectStatusHistoryGroupName(item.statusName);
+        const last = groups[groups.length - 1];
+        if (last && last.name === name) {
+            if (item.endInclusive > last.endInclusive) last.endInclusive = item.endInclusive;
+            last.isCurrent = last.isCurrent || item.isCurrent;
+            last.dayCount = projectStatusHistoryDaySpan(last.startDate, last.endInclusive) + 1;
+            return;
+        }
+
+        groups.push({
+            name,
+            colorStatusName: item.statusName,
+            startDate: item.startDate,
+            endInclusive: item.endInclusive,
+            isCurrent: item.isCurrent,
+            dayCount: item.dayCount,
+            changedBy: item.changedBy,
+            observation: item.observation
+        });
+    });
+
+    return groups;
+}
+
+function assignProjectStatusHistoryCalendarLanes(items) {
+    const laneEndTimes = [];
+
+    return items.map(item => {
+        const startTime = item.startDate.getTime();
+        let lane = laneEndTimes.findIndex(endTime => endTime < startTime);
+        if (lane < 0) {
+            lane = laneEndTimes.length;
+            laneEndTimes.push(item.endInclusive.getTime());
+        } else {
+            laneEndTimes[lane] = item.endInclusive.getTime();
+        }
+        return { ...item, lane };
+    });
+}
+
 function buildProjectStatusHistorySegments(entries) {
     return (entries || []).map((entry, index) => {
         const statusName = entry.newStatus?.name || 'Status';
@@ -356,62 +560,58 @@ function renderProjectStatusHistoryTimeline(entries) {
     }
 
     const segments = buildProjectStatusHistorySegments(entries);
-    const totalDuration = segments.reduce((sum, segment) => sum + Math.max(segment.durationSeconds, 1), 0);
-    let cumulative = 0;
+    const originDate = findProjectStatusHistoryOriginDate(segments);
+    const statusItems = buildProjectStatusHistoryCalendarItems(segments, originDate);
+    const statusLanes = assignProjectStatusHistoryCalendarLanes(statusItems);
+    const groupItems = assignProjectStatusHistoryCalendarLanes(
+        buildProjectStatusHistoryGroupItems(statusItems)
+    );
+    const lastDate = statusItems.reduce(
+        (latest, item) => (item.endInclusive > latest ? item.endInclusive : latest),
+        originDate
+    );
+    const days = originDate ? listProjectStatusHistoryCalendarDays(originDate, lastDate) : [];
+    const spansYears = days.some(day => day.getFullYear() !== days[0].getFullYear());
+    const dayIndexByKey = new Map(days.map((day, index) => [projectStatusHistoryDayKey(day), index]));
+    const statusLaneCount = statusLanes.reduce((max, item) => Math.max(max, item.lane + 1), 0);
+    const columnTemplate = days.length ? `4.5rem repeat(${days.length}, 2.55rem)` : '4.5rem';
 
-    const barSegments = segments.map(segment => {
-        const weight = Math.max(segment.durationSeconds, 1);
-        const color = getProjectStatusHistoryBarColor(segment.statusName);
-        const durationLabel = formatStatusDurationSeconds(segment.durationSeconds) || '—';
-        const startLabel = formatProjectStatusHistoryAxisDate(segment.startAt);
-        const endLabel = segment.isCurrent
+    const dayCells = days.map((day, index) => {
+        const previous = index > 0 ? days[index - 1] : null;
+        const includeYear = spansYears && (!previous || previous.getFullYear() !== day.getFullYear());
+        return `<span class="project-status-history-calendar__day" style="grid-column:${index + 2};grid-row:1">${escapeHtml(formatProjectStatusHistoryCalendarDay(day, includeYear))}</span>`;
+    }).join('');
+
+    const renderSpans = (items, rowOffset, kind) => items.map(item => {
+        const startIndex = dayIndexByKey.get(projectStatusHistoryDayKey(item.startDate));
+        const endIndex = dayIndexByKey.get(projectStatusHistoryDayKey(item.endInclusive));
+        if (startIndex == null || endIndex == null) return '';
+
+        const color = getProjectStatusHistoryBarColor(item.colorStatusName || item.statusName || item.name);
+        const rangeLabel = formatProjectStatusHistoryStatusRange(item.startDate, item.endInclusive, item.isCurrent);
+        const caption = kind === 'group'
+            ? `${rangeLabel} ${item.name}`
+            : `${rangeLabel} ${item.statusName}`;
+        const startLabel = item.startAt ? formatProjectStatusHistoryAxisDate(item.startAt) : rangeLabel;
+        const endLabel = item.isCurrent
             ? 'Em andamento'
-            : formatProjectStatusHistoryAxisDate(segment.endAt);
-        const tooltipParts = [
-            segment.statusName,
-            `${startLabel} → ${endLabel}`,
-            `${durationLabel} · ${segment.changedBy}`
-        ];
-        if (segment.observation) tooltipParts.push(segment.observation);
-        const tooltip = tooltipParts.join('\n');
+            : (item.endAt ? formatProjectStatusHistoryAxisDate(item.endAt) : rangeLabel);
+        const tooltipParts = [caption, `${startLabel} → ${endLabel}`];
+        if (item.changedBy) tooltipParts.push(item.changedBy);
+        if (item.observation) tooltipParts.push(item.observation);
 
         return `
-            <div class="project-status-history-timeline__segment"
-                style="flex-grow:${weight};background-color:${color}"
-                title="${escapeHtml(tooltip)}">
-                <span class="project-status-history-timeline__segment-label">${escapeHtml(segment.statusName)}</span>
+            <div class="project-status-history-calendar__span project-status-history-calendar__span--${kind}"
+                style="grid-column:${startIndex + 2} / ${endIndex + 3};grid-row:${rowOffset + item.lane};--status-color:${color}"
+                title="${escapeHtml(tooltipParts.join('\n'))}">
+                <span class="project-status-history-calendar__bracket" aria-hidden="true"></span>
+                <span class="project-status-history-calendar__caption">${escapeHtml(caption)}</span>
             </div>
         `;
     }).join('');
 
-    const dateMarkers = [];
-    dateMarkers.push({
-        left: 0,
-        label: formatProjectStatusHistoryAxisDate(segments[0].startAt)
-    });
-
-    segments.forEach((segment, index) => {
-        cumulative += Math.max(segment.durationSeconds, 1);
-        const left = Math.min(100, (cumulative / totalDuration) * 100);
-        if (index < segments.length - 1) {
-            dateMarkers.push({
-                left,
-                label: formatProjectStatusHistoryAxisDate(segments[index + 1].startAt)
-            });
-        } else {
-            dateMarkers.push({
-                left: 100,
-                label: segment.isCurrent ? 'Agora' : formatProjectStatusHistoryAxisDate(segment.endAt)
-            });
-        }
-    });
-
-    const markersHtml = dateMarkers.map((marker, index) => `
-        <span class="project-status-history-timeline__date-marker ${index === 0 ? 'is-start' : ''} ${index === dateMarkers.length - 1 ? 'is-end' : ''}"
-            style="left:${marker.left}%">
-            ${escapeHtml(marker.label)}
-        </span>
-    `).join('');
+    const statusSpans = renderSpans(statusLanes, 2, 'status');
+    const groupSpans = renderSpans(groupItems, 2 + statusLaneCount, 'group');
 
     const legendItems = segments.map(segment => {
         const color = getProjectStatusHistoryBarColor(segment.statusName);
@@ -434,8 +634,16 @@ function renderProjectStatusHistoryTimeline(entries) {
 
     return `
         <div class="project-status-history-timeline">
-            <div class="project-status-history-timeline__bar">${barSegments}</div>
-            <div class="project-status-history-timeline__dates">${markersHtml}</div>
+            <div class="project-status-history-calendar">
+                <div class="project-status-history-calendar__scroll">
+                    <div class="project-status-history-calendar__grid" style="grid-template-columns:${columnTemplate}">
+                        <span class="project-status-history-calendar__axis" style="grid-column:1;grid-row:1">Dias</span>
+                        ${dayCells}
+                        ${statusSpans}
+                        ${groupSpans}
+                    </div>
+                </div>
+            </div>
             <ul class="project-status-history-timeline__legend">${legendItems}</ul>
         </div>
     `;

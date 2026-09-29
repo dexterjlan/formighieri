@@ -1210,7 +1210,8 @@ async function handleImplantacaoEnviarCompras() {
         const createdPurchases = await createComprasRecordsFromImplantacaoSend({
             implementationId: activeImplantacaoRecord.id,
             orderProjectId: activeImplantacaoOrderProjectId,
-            purchaseItems: purchaseItemsForCompras
+            purchaseItems: purchaseItemsForCompras,
+            requestOrigin: 'implementation'
         });
 
         if (!createdPurchases.length && purchaseItemsForCompras.length) {
@@ -1279,7 +1280,6 @@ async function continueImplantacaoPurchaseRequest(draft, extras = {}) {
         implementationId: draft.implementationId,
         orderProjectId: draft.orderProjectId,
         purchaseItems: purchaseItemsForCompras,
-        forcePurchaseType: 'Implantação',
         requestOrigin: 'implementation',
         purchaseReasonId: extras.purchaseReasonId || null,
         observation: extras.observation || null,
