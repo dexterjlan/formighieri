@@ -2,6 +2,30 @@ let currentTechnicalReviewerProject = null;
 let editingTechnicalReviewerRevisionId = null;
 let technicalReviewerRevisionModalViewOnly = false;
 let technicalReviewerRevisionActivityRowCounter = 0;
+let technicalReviewerRevisionLoadedActivityIds = [];
+
+async function requestRemoveTechnicalReviewerRevisionActivityRow(rowId, canRemove) {
+    if (!canRemove || !rowId) return;
+
+    const isPersisted = !String(rowId).startsWith('temp-');
+    if (isPersisted) {
+        const confirmed = await confirmAppDialog(
+            'Excluir esta atividade? A exclusão será confirmada ao salvar a revisão.',
+            { title: 'Excluir atividade', confirmLabel: 'Excluir' }
+        );
+        if (!confirmed) return;
+    }
+
+    if (typeof removeRevisionActivityRowFromDom === 'function') {
+        removeRevisionActivityRowFromDom(
+            rowId,
+            '#tr-revision-activities-list',
+            'tr-revision-empty-msg'
+        );
+    }
+
+    updateTechnicalReviewerRevisionModalControls(getCurrentTechnicalReviewerProject());
+}
 let currentTechnicalReviewerRevisionMeta = {
     revisionStartedAt: null,
     revisionCompletedAt: null
@@ -220,6 +244,11 @@ function renderTechnicalReviewerRevisionActivityRow(activity = {}) {
                 ${activity.completedAt ? formatDate(activity.completedAt) : '—'}
             </p>
         </td>
+        <td class="p-3 align-top text-center">
+            ${reviewerCanEdit
+                ? `<button type="button" class="revision-activity-remove-btn" data-remove-tr-revision-activity="${escapeHtml(String(rowId))}" title="Excluir atividade">Excluir</button>`
+                : '<span class="text-slate-300 text-xs">—</span>'}
+        </td>
     `;
 
     const checkbox = tr.querySelector('.tr-revision-activity-completed');
@@ -238,6 +267,10 @@ function renderTechnicalReviewerRevisionActivityRow(activity = {}) {
     });
     descriptionInput?.addEventListener('input', () => {
         updateTechnicalReviewerRevisionModalControls(getCurrentTechnicalReviewerProject());
+    });
+
+    tr.querySelector('.revision-activity-remove-btn')?.addEventListener('click', () => {
+        requestRemoveTechnicalReviewerRevisionActivityRow(rowId, reviewerCanEdit);
     });
 
     if (typeof hydrateRevisionActivityAttachmentPreviews === 'function') {
@@ -267,6 +300,7 @@ async function loadTechnicalReviewerRevisionActivities(revisionId) {
 
     list.innerHTML = '';
     const activities = await fetchRevisionActivities(revisionId);
+    technicalReviewerRevisionLoadedActivityIds = (activities || []).map(item => item.id).filter(Boolean);
 
     if (!activities.length) {
         document.getElementById('tr-revision-empty-msg')?.classList.remove('hidden');
@@ -394,6 +428,7 @@ async function openTechnicalReviewerRevisionModal(orderProjectId, options = {}) 
     const { viewOnly = false, revisionId = null } = options;
     technicalReviewerRevisionModalViewOnly = viewOnly;
     editingTechnicalReviewerRevisionId = null;
+    technicalReviewerRevisionLoadedActivityIds = [];
     resetTechnicalReviewerRevisionMeta();
 
     const project = await fetchOrderProjectForTechnicalReviewerRevision(orderProjectId);
@@ -461,6 +496,7 @@ function closeTechnicalReviewerRevisionModal() {
     setTechnicalReviewerRevisionModalLoading(false);
     technicalReviewerRevisionModalViewOnly = false;
     editingTechnicalReviewerRevisionId = null;
+    technicalReviewerRevisionLoadedActivityIds = [];
     resetTechnicalReviewerRevisionMeta();
     currentTechnicalReviewerProject = null;
     if (typeof resetRevisionActivityAttachments === 'function') {
@@ -553,6 +589,18 @@ async function persistTechnicalReviewerRevision() {
         editingTechnicalReviewerRevisionId = revisionId;
     }
 
+    if (revisionId && technicalReviewerRevisionLoadedActivityIds.length
+        && typeof deleteRemovedRevisionActivities === 'function') {
+        const deleteResult = await deleteRemovedRevisionActivities(
+            activities.map(activity => activity.id).filter(Boolean),
+            technicalReviewerRevisionLoadedActivityIds
+        );
+        if (!deleteResult.ok) {
+            alertAppDialog('Erro ao excluir atividade: ' + (deleteResult.error?.message || 'Erro desconhecido'));
+            return { ok: false };
+        }
+    }
+
     const activityIdByRowId = {};
 
     for (const activity of activities) {
@@ -596,6 +644,8 @@ async function persistTechnicalReviewerRevision() {
             return { ok: false };
         }
     }
+
+    technicalReviewerRevisionLoadedActivityIds = activities.map(activity => activity.id).filter(Boolean);
 
     await updateRevisionRecord(revisionId, {});
 

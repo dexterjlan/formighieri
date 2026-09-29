@@ -400,18 +400,17 @@ async function createComprasRecordsFromImplantacaoSend(options = {}) {
 
     await fetchOrderProjectCodesForCompra(orderProjectId);
     const now = new Date().toISOString();
-    const forceType = options.forcePurchaseType || null;
     const rows = items.map(item => ({
         implementationId,
         implementationPurchaseItemId: item.id,
         orderProjectId,
-        purchaseType: forceType || item.purchaseType,
+        purchaseType: item.purchaseType,
         fallbackPurchaseType: item.purchaseType,
         status: getDefaultCompraStatusName(),
         createdById: currentUser?.id || null,
         updatedById: currentUser?.id || null,
         updatedAt: now,
-        requestOrigin: options.requestOrigin || (forceType === 'Implantação' ? 'implementation' : null),
+        requestOrigin: options.requestOrigin || null,
         purchaseReasonId: options.purchaseReasonId || null,
         thirdPartySubtypeId: item.thirdPartySubtypeId || options.thirdPartySubtypeId || null,
         requestObservation: options.observation || null,

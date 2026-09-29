@@ -5,7 +5,6 @@ const REQUISICOES_PURCHASE_TYPES = [
     { value: 'Terceiro', label: 'Terceiro' }
 ];
 
-const REQUISICOES_PURCHASE_TYPE_IMPLEMENTATION = 'Implantação';
 const PURCHASE_REQUEST_FILES_BUCKET = 'purchase-request-files';
 
 let requisicoesPurchaseOrders = [];
@@ -60,6 +59,26 @@ async function uploadRequisicoesPurchaseFile(file, orderProjectId) {
     return { path, fileName: file.name };
 }
 
+function formatRequisicoesImplementationPurchaseItemLabel(item) {
+    const match = REQUISICOES_PURCHASE_TYPES.find(type => type.value === item?.purchaseType);
+    const base = match?.label || item?.purchaseType || '—';
+    const subtypeName = item?.thirdPartySubtype?.name || '';
+    if (item?.purchaseType === 'Terceiro' && subtypeName) {
+        return `${base} — ${subtypeName}`;
+    }
+    return base;
+}
+
+function renderRequisicoesImplementationPurchaseItemsSummary(items = []) {
+    if (!items.length) {
+        return '<p class="text-xs text-amber-700">Nenhuma lista marcada para envio na implantação.</p>';
+    }
+    const rows = items.map(item => (
+        `<li>${escapeHtml(formatRequisicoesImplementationPurchaseItemLabel(item))}</li>`
+    )).join('');
+    return `<ul class="text-xs text-slate-700 list-disc pl-4 space-y-0.5">${rows}</ul>`;
+}
+
 function renderRequisicoesPurchaseForm(draft) {
     const locked = draft?.origin === 'implementation';
     const typeOptions = REQUISICOES_PURCHASE_TYPES.map(type => (
@@ -71,7 +90,7 @@ function renderRequisicoesPurchaseForm(draft) {
             <div>
                 <h2 class="font-bold text-sm text-slate-900">Enviar para compras</h2>
                 <p class="text-xs text-slate-400 mt-1">${locked
-                    ? 'Esta compra veio da implantação. O tipo fica fixo em Implantação.'
+                    ? 'Confirme pedido e projeto, escolha o motivo e envie. Cada lista da implantação gerará uma compra com o tipo correto (material, ferragem, tinta ou terceiro).'
                     : 'Escolha o pedido, o projeto e o tipo da lista. Se for terceiro, informe o subtipo.'}</p>
             </div>
             <div id="requisicoes-purchase-sql-hint" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"></div>
@@ -86,13 +105,17 @@ function renderRequisicoesPurchaseForm(draft) {
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="requisicoes-purchase-project">Projeto</label>
                     <select id="requisicoes-purchase-project" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white" ${locked ? 'disabled' : ''}></select>
                 </div>
-                <div>
+                <div id="requisicoes-purchase-type-wrap" class="${locked ? 'hidden' : ''}">
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="requisicoes-purchase-type">Tipo</label>
-                    <select id="requisicoes-purchase-type" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white" ${locked ? 'disabled' : ''}>
-                        ${locked
-                            ? `<option value="${REQUISICOES_PURCHASE_TYPE_IMPLEMENTATION}">Implantação</option>`
-                            : `<option value="">Selecione</option>${typeOptions}`}
+                    <select id="requisicoes-purchase-type" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white">
+                        <option value="">Selecione</option>${typeOptions}
                     </select>
+                </div>
+                <div id="requisicoes-purchase-implementation-items-wrap" class="${locked ? '' : 'hidden'} md:col-span-2">
+                    <div class="text-xs font-semibold text-slate-500 mb-1">Listas a enviar</div>
+                    <div id="requisicoes-purchase-implementation-items" class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                        ${renderRequisicoesImplementationPurchaseItemsSummary(draft?.purchaseItems)}
+                    </div>
                 </div>
                 <div id="requisicoes-purchase-subtype-wrap" class="hidden">
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="requisicoes-purchase-subtype">Subtipo de terceiro</label>
@@ -316,6 +339,15 @@ async function loadRequisicoesPurchases() {
             reasonSelect.innerHTML = '<option value="">Selecione o motivo</option>' + reasons.map(item => (
                 `<option value="${item.id}">${escapeHtml(item.name)}</option>`
             )).join('');
+            if (draft?.origin === 'implementation') {
+                const implantacaoReason = reasons.find(reason => {
+                    const name = String(reason.name || '').trim().toLocaleLowerCase('pt-BR');
+                    return name === 'implantação' || name === 'implantacao';
+                });
+                if (implantacaoReason) {
+                    reasonSelect.value = String(implantacaoReason.id);
+                }
+            }
         }
     } catch (error) {
         if (hint) {
@@ -343,11 +375,19 @@ async function submitRequisicoesPurchase(draft) {
     const file = document.getElementById('requisicoes-purchase-file')?.files?.[0] || null;
     const locked = draft?.origin === 'implementation';
 
-    if (!orderId || !orderProjectId || !purchaseType) {
+    if (!orderId || !orderProjectId) {
+        alertAppDialog('Informe pedido e projeto.');
+        return;
+    }
+    if (locked && !(draft?.purchaseItems || []).length) {
+        alertAppDialog('Nenhuma lista da implantação está marcada para envio.');
+        return;
+    }
+    if (!locked && !purchaseType) {
         alertAppDialog('Informe pedido, projeto e tipo.');
         return;
     }
-    if (purchaseType === 'Terceiro' && !subtypeId) {
+    if (!locked && purchaseType === 'Terceiro' && !subtypeId) {
         alertAppDialog('Selecione o subtipo de terceiro.');
         return;
     }

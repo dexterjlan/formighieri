@@ -1,3 +1,25 @@
+let revisionLoadedActivityIds = [];
+
+async function requestRemoveCommercialRevisionActivityRow(rowId, canRemove) {
+    if (!canRemove || !rowId) return;
+
+    const isPersisted = !String(rowId).startsWith('temp-');
+    if (isPersisted) {
+        const confirmed = await confirmAppDialog(
+            'Excluir esta atividade? A exclusão será confirmada ao salvar a revisão.',
+            { title: 'Excluir atividade', confirmLabel: 'Excluir' }
+        );
+        if (!confirmed) return;
+    }
+
+    if (typeof removeRevisionActivityRowFromDom === 'function') {
+        removeRevisionActivityRowFromDom(rowId);
+    }
+
+    const approval = getCurrentApproval();
+    if (approval) updateRevisionModalControls(approval);
+}
+
 function isEmRevisaoTecnicaApproval(approval) {
     const projectStatusName = typeof getCommercialApprovalProjectStatusName === 'function'
         ? getCommercialApprovalProjectStatusName(approval)
@@ -338,6 +360,11 @@ function renderRevisionActivityRow(activity) {
                 ${activity.completedAt ? formatDate(activity.completedAt) : '—'}
             </p>
         </td>
+        <td class="p-3 align-top text-center">
+            ${consultorCanEdit
+                ? `<button type="button" class="revision-activity-remove-btn" data-remove-revision-activity="${escapeHtml(String(rowId))}" title="Excluir atividade">Excluir</button>`
+                : '<span class="text-slate-300 text-xs">—</span>'}
+        </td>
     `;
 
     const checkbox = tr.querySelector('.revision-activity-completed');
@@ -352,6 +379,10 @@ function renderRevisionActivityRow(activity) {
             completedAtEl.textContent = '—';
         }
         updateRevisionModalControls(approval);
+    });
+
+    tr.querySelector('.revision-activity-remove-btn')?.addEventListener('click', () => {
+        requestRemoveCommercialRevisionActivityRow(rowId, consultorCanEdit);
     });
 
     if (typeof hydrateRevisionActivityAttachmentPreviews === 'function') {
@@ -467,6 +498,8 @@ async function loadRevisionActivities(revisionId) {
     const tbody = document.getElementById('revision-activities-list');
     tbody.innerHTML = '';
 
+    revisionLoadedActivityIds = (activities || []).map(item => item.id).filter(Boolean);
+
     if (!activities || activities.length === 0) {
         document.getElementById('revision-empty-msg').classList.remove('hidden');
         updateRevisionModalControls(getCurrentApproval());
@@ -534,6 +567,7 @@ async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica',
 
     currentRevisionApprovalId = approvalId;
     editingRevisionId = null;
+    revisionLoadedActivityIds = [];
     revisionActivityRowCounter = 0;
     resetCurrentRevisionMeta();
     if (typeof resetRevisionActivityAttachments === 'function') {
@@ -737,6 +771,7 @@ function closeCommercialRevisionModal() {
     setCommercialRevisionModalLoading(false);
     revisionModalViewOnly = false;
     editingRevisionId = null;
+    revisionLoadedActivityIds = [];
     currentRevisionApprovalId = null;
     resetCurrentRevisionMeta();
     if (typeof resetRevisionActivityAttachments === 'function') {
@@ -790,6 +825,17 @@ async function persistCommercialRevision() {
         }
     }
 
+    if (revisionId && revisionLoadedActivityIds.length && typeof deleteRemovedRevisionActivities === 'function') {
+        const deleteResult = await deleteRemovedRevisionActivities(
+            activities.map(activity => activity.id).filter(Boolean),
+            revisionLoadedActivityIds
+        );
+        if (!deleteResult.ok) {
+            alertAppDialog('Erro ao excluir atividade: ' + (deleteResult.error?.message || 'Erro desconhecido'));
+            return { ok: false };
+        }
+    }
+
     const activityIdByRowId = {};
 
     for (const activity of activities) {
@@ -835,6 +881,8 @@ async function persistCommercialRevision() {
     }
 
     await updateRevisionRecord(revisionId, {});
+
+    revisionLoadedActivityIds = activities.map(activity => activity.id).filter(Boolean);
 
     return { ok: true, createdRevision, activities };
 }

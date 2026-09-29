@@ -337,10 +337,11 @@
                 <div class="fm-revision-table-wrap overflow-x-auto border border-slate-200 rounded-xl">
                     <table class="revision-activities-table w-full text-xs">
                         <colgroup>
-                            <col style="width:36%">
+                            <col style="width:34%">
                             <col style="width:72px">
-                            <col style="width:36%">
-                            <col style="width:112px">
+                            <col style="width:34%">
+                            <col style="width:104px">
+                            <col style="width:72px">
                         </colgroup>
                         <thead class="bg-slate-50 text-slate-500 uppercase">
                             <tr>
@@ -348,6 +349,7 @@
                                 <th class="text-center p-3 font-semibold align-top">Realizado</th>
                                 <th class="text-left p-3 font-semibold align-top">Observação</th>
                                 <th class="text-left p-3 font-semibold align-top">Data realização</th>
+                                <th class="text-center p-3 font-semibold align-top"></th>
                             </tr>
                         </thead>
                         <tbody id="revision-activities-list" class="divide-y divide-slate-100"></tbody>
@@ -403,10 +405,11 @@
                 <div class="fm-revision-table-wrap overflow-x-auto border border-slate-200 rounded-xl">
                     <table class="revision-activities-table w-full text-xs">
                         <colgroup>
-                            <col style="width:36%">
+                            <col style="width:34%">
                             <col style="width:72px">
-                            <col style="width:36%">
-                            <col style="width:112px">
+                            <col style="width:34%">
+                            <col style="width:104px">
+                            <col style="width:72px">
                         </colgroup>
                         <thead class="bg-slate-50 text-slate-500 uppercase">
                             <tr>
@@ -414,6 +417,7 @@
                                 <th class="text-center p-3 font-semibold align-top">Realizado</th>
                                 <th class="text-left p-3 font-semibold align-top">Observação</th>
                                 <th class="text-left p-3 font-semibold align-top">Data realização</th>
+                                <th class="text-center p-3 font-semibold align-top"></th>
                             </tr>
                         </thead>
                         <tbody id="tr-revision-activities-list" class="divide-y divide-slate-100"></tbody>
@@ -1655,10 +1659,17 @@
                             </button>
                         </div>
                     </div>
-                    <button type="button" id="btn-third-party-project-detail-download" disabled
-                        class="w-full text-xs bg-white border border-indigo-200 text-indigo-800 py-2 rounded-lg font-medium hover:bg-indigo-50 disabled:opacity-50">
-                        Baixar arquivo
-                    </button>
+                    <div id="third-party-project-detail-file-actions" class="hidden flex flex-wrap gap-2">
+                        <button type="button" id="btn-third-party-project-detail-open" disabled
+                            class="text-xs bg-indigo-700 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50"
+                            title="Abre o PDF no visualizador do navegador (Chrome, etc.)">
+                            Abrir
+                        </button>
+                        <button type="button" id="btn-third-party-project-detail-download" disabled
+                            class="text-xs bg-white border border-indigo-200 text-indigo-800 px-2.5 py-1.5 rounded-lg font-medium hover:bg-indigo-50 disabled:opacity-50">
+                            Baixar
+                        </button>
+                    </div>
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                     <div>

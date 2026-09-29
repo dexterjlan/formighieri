@@ -106,6 +106,8 @@ function renderThirdPartyProjectDetailDriveSection(project, driveFile) {
     const pathEl = document.getElementById('third-party-project-detail-drive-path');
     const legacyPathEl = document.getElementById('third-party-project-detail-legacy-path');
     const uploadWrap = document.getElementById('third-party-project-detail-upload-wrap');
+    const fileActionsWrap = document.getElementById('third-party-project-detail-file-actions');
+    const openBtn = document.getElementById('btn-third-party-project-detail-open');
     const downloadBtn = document.getElementById('btn-third-party-project-detail-download');
     const sendBtn = document.getElementById('btn-third-party-project-detail-send');
     const finishBtn = document.getElementById('btn-third-party-project-detail-finish');
@@ -127,13 +129,20 @@ function renderThirdPartyProjectDetailDriveSection(project, driveFile) {
             ?.classList.toggle('hidden', !legacyPath);
     }
 
-    if (!driveFile?.id) {
+    const hasDriveFile = Boolean(
+        driveFile?.id && (driveFile?.driveFileId || String(driveFile?.url || '').trim())
+    );
+
+    if (!hasDriveFile) {
         emptyEl?.classList.remove('hidden');
         currentEl?.classList.add('hidden');
+        fileActionsWrap?.classList.add('hidden');
+        if (openBtn) openBtn.disabled = true;
         if (downloadBtn) downloadBtn.disabled = true;
     } else {
         emptyEl?.classList.add('hidden');
         currentEl?.classList.remove('hidden');
+        fileActionsWrap?.classList.remove('hidden');
         if (nameEl) nameEl.textContent = driveFile.fileName || 'Arquivo';
         if (metaEl) {
             const size = typeof formatDriveFileSize === 'function'
@@ -144,6 +153,7 @@ function renderThirdPartyProjectDetailDriveSection(project, driveFile) {
                 : '';
             metaEl.textContent = [size, updated].filter(Boolean).join(' · ') || '—';
         }
+        if (openBtn) openBtn.disabled = false;
         if (downloadBtn) downloadBtn.disabled = false;
     }
 
@@ -308,16 +318,49 @@ async function uploadThirdPartyProjectDetailFile() {
     }
 }
 
-function downloadThirdPartyProjectDetailFile() {
-    const file = thirdPartyProjectDetailState.driveFile;
-    const url = typeof resolveDriveFileDownloadUrl === 'function'
+function openThirdPartyProjectDetailUrlInNewTab(url) {
+    const href = String(url || '').trim();
+    if (!href) return false;
+    const link = document.createElement('a');
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return true;
+}
+
+function resolveThirdPartyProjectDetailDownloadUrl(file) {
+    const driveFileId = typeof extractGoogleDriveFileId === 'function'
+        ? extractGoogleDriveFileId(file)
+        : '';
+    if (driveFileId) {
+        return `https://drive.google.com/uc?export=download&confirm=t&id=${encodeURIComponent(driveFileId)}`;
+    }
+    const stored = String(file?.url || '').trim();
+    if (stored) return stored;
+    return typeof resolveDriveFileDownloadUrl === 'function'
         ? resolveDriveFileDownloadUrl(file)
         : '';
-    if (!url) {
-        alertAppDialog('Não foi possível gerar o link de download.', { variant: 'warning', title: 'Aviso' });
-        return;
+}
+
+function openThirdPartyProjectDetailFile() {
+    const file = thirdPartyProjectDetailState.driveFile;
+    const url = typeof resolveDriveFilePdfBrowserOpenUrl === 'function'
+        ? resolveDriveFilePdfBrowserOpenUrl(file)
+        : '';
+    if (!openThirdPartyProjectDetailUrlInNewTab(url)) {
+        alertAppDialog('Não foi possível abrir o arquivo.', { variant: 'warning', title: 'Aviso' });
     }
-    window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function downloadThirdPartyProjectDetailFile() {
+    const file = thirdPartyProjectDetailState.driveFile;
+    const url = resolveThirdPartyProjectDetailDownloadUrl(file);
+    if (!openThirdPartyProjectDetailUrlInNewTab(url)) {
+        alertAppDialog('Não foi possível gerar o link de download.', { variant: 'warning', title: 'Aviso' });
+    }
 }
 
 async function sendThirdPartyProjectFromDetailModal() {
@@ -397,6 +440,7 @@ function bindThirdPartyProjectDetailModalEvents() {
     });
 
     document.getElementById('btn-third-party-project-detail-upload')?.addEventListener('click', uploadThirdPartyProjectDetailFile);
+    document.getElementById('btn-third-party-project-detail-open')?.addEventListener('click', openThirdPartyProjectDetailFile);
     document.getElementById('btn-third-party-project-detail-download')?.addEventListener('click', downloadThirdPartyProjectDetailFile);
     document.getElementById('btn-third-party-project-detail-send')?.addEventListener('click', sendThirdPartyProjectFromDetailModal);
     document.getElementById('btn-third-party-project-detail-finish')?.addEventListener('click', finishThirdPartyProjectFromDetailModal);

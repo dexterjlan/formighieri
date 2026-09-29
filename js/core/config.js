@@ -83,9 +83,8 @@ const NOTIFICATION_FROM_NAME = 'FGP - Formighieri';
 // URL pública do app (e-mails, confirmação de cadastro no Supabase Auth).
 const APP_PUBLIC_URL = getAppPublicUrl();
 
-// Google Apps Script — envia pelo Gmail formighieri.notificacoes@gmail.com
-// Sincroniza calendário FGP → Google Calendar "FGP - Comercial" (ver docs/calendar-google-sync-setup.md)
-// Cole o script de google-apps-script/FormighieriNotificacoes.gs e publique como Web App
+// Google Apps Script — e-mail (Gmail), upload Drive e calendário (ver docs/calendar-google-sync-setup.md).
+// Após republicar o Web App, copie a URL /exec atualizada. URL inválida → upload fica em "carregando" ou falha rápido.
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP1IkfR8OfsYRQEq3IGB_VF_XSGnTQkN5WAjngfTCNGHohp4IcEd4fzaxb3a_o72A/exec';
 const NOTIFICATION_SCRIPT_SECRET = 'Hanna@2020';
 

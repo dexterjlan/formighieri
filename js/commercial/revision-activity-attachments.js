@@ -460,6 +460,25 @@ function setRevisionActivityAttachmentDraft(rowId, file) {
     return true;
 }
 
+function removeRevisionActivityRowFromDom(rowId, listSelector = '#revision-activities-list', emptyMsgId = 'revision-empty-msg') {
+    const key = String(rowId);
+    const tr = document.querySelector(
+        `${listSelector} tr[data-row-id="${CSS.escape(key)}"]`
+    );
+    if (!tr) return;
+
+    removeRevisionActivityAttachmentDraft(key);
+    revisionActivityAttachmentExisting.delete(key);
+    revisionActivityAttachmentExisting.delete(String(Number(key)) || key);
+
+    tr.remove();
+
+    const remaining = document.querySelectorAll(`${listSelector} tr`).length;
+    if (remaining === 0) {
+        document.getElementById(emptyMsgId)?.classList.remove('hidden');
+    }
+}
+
 function removeRevisionActivityAttachmentDraft(rowId) {
     const key = String(rowId);
     const draft = revisionActivityAttachmentDrafts.get(key);

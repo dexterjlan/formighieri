@@ -35,24 +35,40 @@ function buildEmailErrorLogPayload(payload, meta = {}) {
     };
 }
 
+const GOOGLE_APPS_SCRIPT_EMAIL_TIMEOUT_MS = 25000;
+
 async function executeEmailFetch(payload) {
-    // Sem timeout/abort: com mode no-cors não há confirmação de entrega e o GAS pode
-    // demorar; abortar e reenviar gerava o mesmo e-mail várias vezes em produção.
-    await fetch(GOOGLE_APPS_SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({
-            secret: NOTIFICATION_SCRIPT_SECRET,
-            to_email: payload.to_email,
-            from_name: payload.from_name,
-            reply_to: payload.reply_to,
-            subject: payload.subject,
-            message_body: payload.message_body,
-            message_html: payload.message_html,
-            cc_email: payload.cc_email || ''
-        })
-    });
+    // mode no-cors: não há confirmação de entrega; timeout evita overlay preso se a URL do Web App cair.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), GOOGLE_APPS_SCRIPT_EMAIL_TIMEOUT_MS);
+
+    try {
+        await fetch(GOOGLE_APPS_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+                secret: NOTIFICATION_SCRIPT_SECRET,
+                to_email: payload.to_email,
+                from_name: payload.from_name,
+                reply_to: payload.reply_to,
+                subject: payload.subject,
+                message_body: payload.message_body,
+                message_html: payload.message_html,
+                cc_email: payload.cc_email || ''
+            }),
+            signal: controller.signal
+        });
+    } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw new Error(
+                'Tempo esgotado ao contactar o Google Apps Script para e-mail. Verifique GOOGLE_APPS_SCRIPT_URL em js/core/config.js.'
+            );
+        }
+        throw error;
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 async function deliverEmailWithRetries(payload, meta = {}) {
