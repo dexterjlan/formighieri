@@ -379,6 +379,41 @@ function sortGestaoRelatorioProjectsByDeliveryDate(projects, context = {}) {
     return [...(projects || [])].sort((a, b) => compareGestaoRelatorioProjectsByDeliveryDate(a, b, context));
 }
 
+function getGestaoRelatorioPedidosPendentesClientGroupSortDeliveryDate(clientGroup) {
+    const dates = (clientGroup?.orders || [])
+        .map(orderGroup => orderGroup.clientDeliveryDate)
+        .filter(Boolean)
+        .sort((a, b) => String(a).localeCompare(String(b)));
+    return dates[0] || '';
+}
+
+function compareGestaoRelatorioPedidosPendentesClientGroups(a, b, options = {}) {
+    if (options.sortByDeliveryDate) {
+        const dateA = getGestaoRelatorioPedidosPendentesClientGroupSortDeliveryDate(a);
+        const dateB = getGestaoRelatorioPedidosPendentesClientGroupSortDeliveryDate(b);
+        if (!dateA && !dateB) {
+            return a.clientName.localeCompare(b.clientName, 'pt-BR');
+        }
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        const dateCompare = String(dateA).localeCompare(String(dateB));
+        if (dateCompare !== 0) return dateCompare;
+    }
+    return a.clientName.localeCompare(b.clientName, 'pt-BR');
+}
+
+function sortGestaoRelatorioFechamentoProducaoProjectsAlphabetically(projects) {
+    return [...(projects || [])].sort((a, b) => {
+        const nameCompare = String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+        if (nameCompare !== 0) return nameCompare;
+        return String(a.order?.orderCode || '').localeCompare(
+            String(b.order?.orderCode || ''),
+            'pt-BR',
+            { numeric: true }
+        );
+    });
+}
+
 function isGestaoRelatorioPedidosPendentesComplementaryProject(project) {
     return typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project);
 }
@@ -558,7 +593,7 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
                         totalSaleValue: orders.reduce((sum, order) => sum + order.totalSaleValue, 0)
                     };
                 })
-                .sort((a, b) => a.clientName.localeCompare(b.clientName, 'pt-BR'));
+                .sort((a, b) => compareGestaoRelatorioPedidosPendentesClientGroups(a, b, options));
 
             const orders = clients.flatMap(client => client.orders);
 
@@ -867,7 +902,7 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, option
                     ...clientGroup,
                     projects: options.sortByDeliveryDate
                         ? sortGestaoRelatorioProjectsByDeliveryDate(clientGroup.projects, context)
-                        : sortGestaoRelatorioFechamentoProducaoProjects(clientGroup.projects),
+                        : sortGestaoRelatorioFechamentoProducaoProjectsAlphabetically(clientGroup.projects),
                     totalSaleValue: sumGestaoRelatorioSaleValues(clientGroup.projects)
                 }));
 

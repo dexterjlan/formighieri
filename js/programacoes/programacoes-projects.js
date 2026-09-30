@@ -188,7 +188,7 @@ function renderProgramacoesMoveButtons(row, options = {}) {
     `;
 }
 
-function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
+function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, characteristicsMap = new Map()) {
     const content = document.getElementById('programacoes-content');
     if (!content) return;
 
@@ -204,10 +204,16 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         const clientDeliveryPhase = getProgramacoesClientDeliveryPhase(project, phasesByOrderId);
         const clientDeliveryDate = getProgramacoesClientDeliveryDate(project, phasesByOrderId);
         const clientDeliveryLabel = formatProgramacoesDateLabel(clientDeliveryDate);
-        const projectDeliveryDate = project?.deliveryDate || null;
-        const projectDeliveryLabel = formatProgramacoesDateLabel(projectDeliveryDate);
         const productionMonth = project?.productionMonth || null;
         const productionMonthLabel = formatProgramacoesProductionMonthLabel(productionMonth);
+        const characteristicRows = characteristicsMap.get(Number(project.id)) || [];
+        const characteristicHtml = typeof renderProgramacoesProjectCharacteristicsCell === 'function'
+            ? renderProgramacoesProjectCharacteristicsCell(characteristicRows)
+            : '—';
+        const characteristicFilterText = characteristicRows
+            .map(row => row.characteristic?.name)
+            .filter(Boolean)
+            .join(' ');
 
         return (typeof mapPendenciasInteractiveIdentity === 'function'
             ? mapPendenciasInteractiveIdentity(project, {
@@ -218,8 +224,9 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
                 clientDeliveryLabel,
                 clientDeliveryDate,
                 clientDeliveryPhaseName: clientDeliveryPhase?.name || '',
-                projectDeliveryLabel,
-                projectDeliveryDate,
+                characteristicRows,
+                characteristicHtml,
+                characteristicFilterText,
                 productionMonth,
                 productionMonthLabel,
                 designerName: project?.designer?.name || '—'
@@ -236,8 +243,9 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
                 clientDeliveryLabel,
                 clientDeliveryDate,
                 clientDeliveryPhaseName: clientDeliveryPhase?.name || '',
-                projectDeliveryLabel,
-                projectDeliveryDate,
+                characteristicRows,
+                characteristicHtml,
+                characteristicFilterText,
                 productionMonth,
                 productionMonthLabel
             });
@@ -265,7 +273,12 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
         {
             key: 'clientName',
             label: 'Cliente',
-            cellClass: 'p-3 text-xs text-slate-600'
+            thClass: 'programacoes-col-client',
+            cellClass: 'px-2 py-2 text-xs text-slate-600 programacoes-col-client',
+            render: (row) => {
+                const name = row.clientName || '—';
+                return `<span class="programacoes-col-client-text" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`;
+            }
         },
         {
             key: 'projectName',
@@ -315,12 +328,13 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}) {
             }
         },
         {
-            key: 'projectDeliveryLabel',
-            label: 'Dt Proj.',
-            title: 'Data de entrega do projeto',
-            thClass: 'whitespace-nowrap',
-            cellClass: 'p-3 text-xs text-slate-600 whitespace-nowrap',
-            getFilterValue: row => [row.projectDeliveryLabel, row.projectDeliveryDate].filter(Boolean).join(' ')
+            key: 'characteristicFilterText',
+            label: 'Características',
+            title: 'Características do projeto',
+            thClass: 'programacoes-col-characteristics whitespace-nowrap',
+            cellClass: 'p-2 programacoes-col-characteristics',
+            getFilterValue: row => row.characteristicFilterText || '',
+            render: (row) => row.characteristicHtml || '—'
         },
         {
             key: 'productionMonthLabel',
@@ -478,8 +492,12 @@ async function loadProgramacoesProjects(options = {}) {
     const phasesByOrderId = typeof fetchPhasesByOrderIdForPendenciasProjects === 'function'
         ? await fetchPhasesByOrderIdForPendenciasProjects(projects)
         : {};
+    const projectIds = projects.map(project => project.id).filter(Boolean);
+    const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
+        ? await fetchOrderProjectCharacteristicsMap(projectIds)
+        : new Map();
 
-    renderProgramacoesProjectsTable(queueRows, phasesByOrderId);
+    renderProgramacoesProjectsTable(queueRows, phasesByOrderId, characteristicsMap);
 }
 
 window.loadProgramacoesProjects = loadProgramacoesProjects;

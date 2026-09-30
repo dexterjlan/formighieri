@@ -759,7 +759,7 @@ async function loadProgramacaoProducao() {
                     ? getGestaoRelatorioFechamentoProducaoProjectMonthKey
                     : undefined,
                 sortDescending: false,
-                sortByDeliveryDate: true,
+                sortByDeliveryDate: false,
                 phasesByOrderId,
                 projectsById: typeof buildGestaoRelatorioProjectsById === 'function'
                     ? buildGestaoRelatorioProjectsById(projects || [])

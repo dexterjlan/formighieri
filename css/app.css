@@ -2816,6 +2816,20 @@ body.gestao-kanban-fullscreen-active {
     max-width: 5rem;
 }
 
+.programacoes-col-client {
+    max-width: 20rem;
+    width: 20rem;
+    min-width: 0;
+}
+
+.programacoes-col-client-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
 .programacoes-seq-input {
     width: 2.85rem;
     padding: 0.2rem 0.15rem;
@@ -2935,6 +2949,48 @@ body.programacoes-fullscreen-active {
 .programacoes-move-btn:disabled {
     opacity: 0.35;
     cursor: not-allowed;
+}
+
+.programacoes-col-characteristics {
+    max-width: 10.5rem;
+    width: 10.5rem;
+    min-width: 0;
+}
+
+.programacoes-project-characteristics {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.programacoes-project-characteristics-chips {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.2rem;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.programacoes-project-characteristic-chip {
+    display: inline-block;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 4.75rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0.05rem 0.3rem;
+    border-radius: 999px;
+    background: rgb(238 242 255);
+    border: 1px solid rgb(199 210 254);
+    color: rgb(67 56 202);
+    font-size: 0.5625rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.programacoes-project-characteristic-none {
+    font-size: 0.625rem;
+    color: rgb(148 163 184);
 }
 
 .pendencias-project-characteristics-chips {

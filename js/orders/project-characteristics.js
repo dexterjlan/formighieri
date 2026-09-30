@@ -158,6 +158,24 @@ function renderPendenciasProjectCharacteristicsCell(rows = []) {
     `;
 }
 
+function renderProgramacoesProjectCharacteristicsCell(rows = []) {
+    const labels = getProjectCharacteristicLabelsFromRows(rows);
+    if (!labels.length) {
+        return '<span class="programacoes-project-characteristic-none">—</span>';
+    }
+
+    const title = labels.join(', ');
+    return `
+        <div class="programacoes-project-characteristics" title="${escapeHtml(title)}">
+            <div class="programacoes-project-characteristics-chips">
+                ${labels.map(label => `
+                    <span class="programacoes-project-characteristic-chip">${escapeHtml(label)}</span>
+                `).join('')}
+            </div>
+        </div>
+    `;
+}
+
 function renderGestaoProjectCharacteristicsFormHtml(characteristics = [], selectedIds = [], linkedCharacteristicIds = new Set()) {
     const selected = new Set(selectedIds.map(id => Number(id)).filter(Boolean));
     const hasNone = selected.size === 0;
@@ -788,6 +806,7 @@ function bindProjectCharacteristicsEvents() {
 window.closeProjectCharacteristicsModal = closeProjectCharacteristicsModal;
 window.openProjectCharacteristicsModalForConference = openProjectCharacteristicsModalForConference;
 window.fetchOrderProjectCharacteristicsMap = fetchOrderProjectCharacteristicsMap;
+window.renderProgramacoesProjectCharacteristicsCell = renderProgramacoesProjectCharacteristicsCell;
 window.renderProjectViewCharacteristics = renderProjectViewCharacteristics;
 window.loadGestaoProjectCharacteristicsForm = loadGestaoProjectCharacteristicsForm;
 window.resetGestaoProjectCharacteristicsForm = resetGestaoProjectCharacteristicsForm;
