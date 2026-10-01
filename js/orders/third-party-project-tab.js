@@ -13,6 +13,12 @@ function isThirdPartyOrderTabVisible() {
 }
 
 function setThirdPartyProjectActionLoading(active, message = 'Processando...', status = 'loading') {
+    if (typeof isImplantacaoModalOpen === 'function' && isImplantacaoModalOpen()
+        && typeof setImplantacaoModalLoading === 'function') {
+        setImplantacaoModalLoading(active, message, status);
+        return;
+    }
+
     if (isThirdPartyPendenciasViewVisible() && typeof setPendenciasActionLoading === 'function') {
         setPendenciasActionLoading(active, message, status);
         return;

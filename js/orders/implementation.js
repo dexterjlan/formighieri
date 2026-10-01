@@ -281,6 +281,22 @@ function renderImplantacaoTerceiroPurchaseItems() {
         const statusClass = isApproved ? 'text-emerald-700' : 'text-amber-700';
         const statusHtml = `<span class="text-[10px] font-medium ${statusClass}">${escapeHtml(getImplantacaoTerceiroSubtypeThirdPartyStatusLabel(thirdPartyProject))}</span>`;
         const checkboxDisabled = sentToCommercial;
+        const thirdPartyProjectId = Number(thirdPartyProject.id);
+        const detailLinkHtml = thirdPartyProjectId
+            ? `<button type="button"
+                    class="implantacao-terceiro-detail-link inline-flex items-center justify-center w-7 h-7 shrink-0 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-teal-700 hover:border-teal-200"
+                    title="Ver detalhe do projeto de terceiros"
+                    aria-label="Ver detalhe do projeto de terceiros"
+                    data-third-party-project-id="${thirdPartyProjectId}">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M5 3h9a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>
+                        <path d="M7 8h8"/>
+                        <path d="M7 12h8"/>
+                        <circle cx="15.5" cy="16" r="3.25"/>
+                        <path d="m17.9 18.4 3.1 3.1"/>
+                    </svg>
+                </button>`
+            : '';
 
         return `
             <div class="implantacao-terceiro-item flex items-start gap-3" data-subtype-id="${subtypeId}" data-item-id="${existing.id || ''}">
@@ -288,7 +304,10 @@ function renderImplantacaoTerceiroPurchaseItems() {
                     ${existing.isChecked ? 'checked' : ''} ${checkboxDisabled ? 'disabled' : ''}>
                 <div class="flex-1 space-y-1 min-w-0">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                        <span class="text-xs font-semibold text-slate-700">${label}${requiredMarker}</span>
+                        <div class="flex flex-wrap items-center gap-2 min-w-0">
+                            <span class="text-xs font-semibold text-slate-700">${label}${requiredMarker}</span>
+                            ${detailLinkHtml}
+                        </div>
                         <div class="flex flex-wrap items-center gap-2 shrink-0 text-xs text-slate-600">
                             ${statusHtml}
                             <label class="inline-flex items-center gap-2 cursor-default">
@@ -827,6 +846,30 @@ async function updateOrderProjectStatusForImplantacao(orderProjectId, statusName
     if (error) throw error;
 }
 
+function isImplantacaoModalOpen() {
+    const modal = document.getElementById('implantacao-modal');
+    return Boolean(modal && !modal.classList.contains('hidden'));
+}
+
+async function refreshImplantacaoModalThirdPartyState() {
+    if (!isImplantacaoModalOpen() || !activeImplantacaoOrderProjectId) {
+        return;
+    }
+
+    if (typeof fetchThirdPartyProjectsByOrderProjectId === 'function') {
+        activeImplantacaoThirdPartyProjects = await fetchThirdPartyProjectsByOrderProjectId(
+            activeImplantacaoOrderProjectId
+        );
+    }
+
+    if (activeImplantacaoRecord?.id) {
+        await loadActiveImplementationPurchaseItems(activeImplantacaoRecord.id);
+    }
+
+    populateImplantacaoForm(activeImplantacaoRecord);
+    updateImplantacaoActionButtons(activeImplantacaoRecord);
+}
+
 async function refreshImplantacaoRelatedViews(orderProjectId) {
     if (activeOrderId && typeof refreshPpcpRelatedViews === 'function') {
         await refreshPpcpRelatedViews(activeOrderId);
@@ -845,7 +888,10 @@ async function refreshImplantacaoRelatedViews(orderProjectId) {
         await loadOrderProjects(activeOrderId);
     }
 
-    if (!activeOrderId && orderProjectId && typeof loadPendenciasImplantacao === 'function') {
+    if (!activeOrderId
+        && orderProjectId
+        && typeof loadPendenciasImplantacao === 'function'
+        && !isImplantacaoModalOpen()) {
         await loadPendenciasImplantacao();
     }
 
@@ -858,6 +904,38 @@ async function refreshImplantacaoRelatedViews(orderProjectId) {
 
     if (typeof refreshActiveOrderComprasTab === 'function') {
         await refreshActiveOrderComprasTab();
+    }
+}
+
+async function openImplantacaoThirdPartyProjectDetail(thirdPartyProjectId) {
+    const projectId = Number(thirdPartyProjectId);
+    if (!projectId) return;
+
+    if (typeof openThirdPartyProjectDetailModal !== 'function') {
+        alertAppDialog('Detalhe do projeto indisponível.');
+        return;
+    }
+
+    setImplantacaoModalLoading(true, 'Carregando detalhe do terceiro...');
+    try {
+        let project = null;
+        if (typeof fetchThirdPartyProjectById === 'function') {
+            project = await fetchThirdPartyProjectById(projectId);
+        }
+        if (!project) {
+            project = (activeImplantacaoThirdPartyProjects || []).find(
+                item => Number(item.id) === projectId
+            );
+        }
+        if (!project) {
+            alertAppDialog('Projeto de terceiros não encontrado.');
+            return;
+        }
+        await openThirdPartyProjectDetailModal(project);
+    } catch (error) {
+        alertAppDialog(error.message || 'Não foi possível abrir o detalhe.');
+    } finally {
+        setImplantacaoModalLoading(false);
     }
 }
 
@@ -936,6 +1014,8 @@ window.ensureImplementationRecordsForProjects = ensureImplementationRecordsForPr
 window.fetchOrderProjectsInImplementationStatus = fetchOrderProjectsInImplementationStatus;
 window.syncImplementationRecordsMapForProjects = syncImplementationRecordsMapForProjects;
 window.closeImplantacaoModal = closeImplementationModal;
+window.isImplantacaoModalOpen = isImplantacaoModalOpen;
+window.refreshImplantacaoModalThirdPartyState = refreshImplantacaoModalThirdPartyState;
 window.openImplantacaoModal = openImplementationModal;
 window.ensureImplantacaoRecordsForProjects = ensureImplementationRecordsForProjects;
 window.fetchOrderProjectsInImplantacaoStatus = fetchOrderProjectsInImplementationStatus;
@@ -1147,6 +1227,24 @@ async function createImplantacaoThirdPartyProjectForSubtype(subtypeId) {
     }
 }
 
+async function resolveImplementationPurchaseReasonId() {
+    const { data, error } = await supabaseClient
+        .from('PurchaseReason')
+        .select('id, name')
+        .eq('isActive', true);
+
+    if (error) {
+        console.warn('resolveImplementationPurchaseReasonId:', error.message);
+        return null;
+    }
+
+    const match = (data || []).find(reason => {
+        const name = String(reason.name || '').trim().toLocaleLowerCase('pt-BR');
+        return name === 'implantação' || name === 'implantacao';
+    });
+    return match?.id ? Number(match.id) : null;
+}
+
 async function handleImplantacaoEnviarCompras() {
     if (!activeImplantacaoRecord?.id) return;
 
@@ -1180,38 +1278,19 @@ async function handleImplantacaoEnviarCompras() {
         return;
     }
 
-    if (typeof openRequisicoesPurchaseFromImplementation === 'function') {
-        const purchaseItemsForCompras = await getImplementationPurchaseItemsForComprasSend(formValues);
-        const { data: orderProject, error: orderProjectError } = await supabaseClient
-            .from('OrderProject')
-            .select('orderId')
-            .eq('id', activeImplantacaoOrderProjectId)
-            .maybeSingle();
-        if (orderProjectError) throw orderProjectError;
-
-        openRequisicoesPurchaseFromImplementation({
-            implementationId: activeImplantacaoRecord.id,
-            orderProjectId: activeImplantacaoOrderProjectId,
-            orderId: orderProject?.orderId || null,
-            purchaseItems: purchaseItemsForCompras,
-            allPurchaseItems: getImplementationPurchaseItemsForSave(),
-            formValues
-        });
-        closeImplantacaoModal();
-        return;
-    }
-
     try {
         setImplantacaoModalLoading(true, 'Registrando solicitações de compra...');
         const now = new Date().toISOString();
 
         const purchaseItemsForCompras = await getImplementationPurchaseItemsForComprasSend(formValues);
+        const purchaseReasonId = await resolveImplementationPurchaseReasonId();
 
         const createdPurchases = await createComprasRecordsFromImplantacaoSend({
             implementationId: activeImplantacaoRecord.id,
             orderProjectId: activeImplantacaoOrderProjectId,
             purchaseItems: purchaseItemsForCompras,
-            requestOrigin: 'implementation'
+            requestOrigin: 'implementation',
+            purchaseReasonId
         });
 
         if (!createdPurchases.length && purchaseItemsForCompras.length) {
@@ -1407,6 +1486,13 @@ function bindImplementationEvents() {
         if (event.target.closest('.implantacao-terceiro-checked')) {
             updateImplantacaoActionButtons();
         }
+    });
+
+    document.getElementById('implantacao-terceiros-items')?.addEventListener('click', (event) => {
+        const detailButton = event.target.closest('.implantacao-terceiro-detail-link');
+        if (!detailButton) return;
+        event.preventDefault();
+        openImplantacaoThirdPartyProjectDetail(Number(detailButton.dataset.thirdPartyProjectId));
     });
 
     document.getElementById('btn-implantacao-terceiro-create')?.addEventListener('click', () => {

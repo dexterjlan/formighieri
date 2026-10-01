@@ -256,20 +256,35 @@ function renderThirdPartyProjectDetailModalFields(project) {
 
 async function openThirdPartyProjectDetailModal(project) {
     const modal = document.getElementById('third-party-project-detail-modal');
-    if (!modal || !project) return;
+    if (!modal || !project?.id) return;
 
-    thirdPartyProjectDetailState.project = project;
-    thirdPartyProjectDetailState.driveContext = await resolveThirdPartyProjectDriveContext(project);
+    let resolvedProject = project;
+    const needsFullRecord = !Number(project.orderId)
+        || !project.orderProject
+        || !project.order?.orderCode;
+    if (needsFullRecord && typeof fetchThirdPartyProjectById === 'function') {
+        try {
+            const loaded = await fetchThirdPartyProjectById(Number(project.id));
+            if (loaded) {
+                resolvedProject = loaded;
+            }
+        } catch (error) {
+            console.warn('openThirdPartyProjectDetailModal:', error);
+        }
+    }
+
+    thirdPartyProjectDetailState.project = resolvedProject;
+    thirdPartyProjectDetailState.driveContext = await resolveThirdPartyProjectDriveContext(resolvedProject);
     clearThirdPartyProjectDetailFileSelection();
 
-    renderThirdPartyProjectDetailModalFields(project);
+    renderThirdPartyProjectDetailModalFields(resolvedProject);
 
     try {
-        const driveFile = await loadThirdPartyProjectDetailDriveFile(project);
-        renderThirdPartyProjectDetailDriveSection(project, driveFile);
+        const driveFile = await loadThirdPartyProjectDetailDriveFile(resolvedProject);
+        renderThirdPartyProjectDetailDriveSection(resolvedProject, driveFile);
     } catch (error) {
         console.error('openThirdPartyProjectDetailModal:', error);
-        renderThirdPartyProjectDetailDriveSection(project, null);
+        renderThirdPartyProjectDetailDriveSection(resolvedProject, null);
     }
 
     toggleModal('third-party-project-detail-modal', true);
@@ -413,7 +428,14 @@ function closeThirdPartyProjectDetailModal() {
 }
 
 async function reloadThirdPartyProjectViews() {
-    if (typeof loadPendenciasThirdPartyProjetista === 'function'
+    const implantacaoOpen = typeof isImplantacaoModalOpen === 'function' && isImplantacaoModalOpen();
+
+    if (implantacaoOpen && typeof refreshImplantacaoModalThirdPartyState === 'function') {
+        await refreshImplantacaoModalThirdPartyState();
+    }
+
+    if (!implantacaoOpen
+        && typeof loadPendenciasThirdPartyProjetista === 'function'
         && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
         await loadPendenciasThirdPartyProjetista();
     }

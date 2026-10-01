@@ -713,6 +713,7 @@ async function approveThirdPartyProject(thirdPartyProjectId) {
     if (!confirmed) return;
 
     const previousStatus = project.status;
+    const implantacaoOpen = typeof isImplantacaoModalOpen === 'function' && isImplantacaoModalOpen();
 
     setThirdPartyProjectActionLoading(true, 'Aprovando projeto...');
 
@@ -730,6 +731,10 @@ async function approveThirdPartyProject(thirdPartyProjectId) {
         setThirdPartyProjectActionLoading(true, 'Atualizando telas...');
         await refreshThirdPartyProjectViews();
 
+        if (implantacaoOpen && typeof refreshThirdPartyProjectDetailAfterChange === 'function') {
+            await refreshThirdPartyProjectDetailAfterChange(updatedProject.id);
+        }
+
         setThirdPartyProjectActionLoading(true, 'Projeto aprovado com sucesso!', 'success');
         await waitThirdPartyProjectActionStatus(900);
     } catch (error) {
@@ -741,17 +746,27 @@ async function approveThirdPartyProject(thirdPartyProjectId) {
 }
 
 async function refreshThirdPartyProjectViews() {
+    const implantacaoOpen = typeof isImplantacaoModalOpen === 'function' && isImplantacaoModalOpen();
+
+    if (implantacaoOpen && typeof refreshImplantacaoModalThirdPartyState === 'function') {
+        await refreshImplantacaoModalThirdPartyState();
+    }
+
     if (activeOrderId && typeof loadOrderThirdPartyProjectsTab === 'function') {
         await loadOrderThirdPartyProjectsTab(activeOrderId);
     }
-    if (typeof loadPendenciasThirdPartyConsultor === 'function'
-        && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
-        await loadPendenciasThirdPartyConsultor();
+
+    if (!implantacaoOpen) {
+        if (typeof loadPendenciasThirdPartyConsultor === 'function'
+            && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
+            await loadPendenciasThirdPartyConsultor();
+        }
+        if (typeof loadPendenciasThirdPartyProjetista === 'function'
+            && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
+            await loadPendenciasThirdPartyProjetista();
+        }
     }
-    if (typeof loadPendenciasThirdPartyProjetista === 'function'
-        && !document.getElementById('pendencias-view')?.classList.contains('hidden')) {
-        await loadPendenciasThirdPartyProjetista();
-    }
+
     if (typeof refreshPendenciasOverviewCounts === 'function') {
         await refreshPendenciasOverviewCounts();
     }

@@ -260,7 +260,7 @@ async function fetchThirdPartyProjectsByOrderProjectId(orderProjectId) {
         .from('ThirdPartyProject')
         .select(select)
         .eq('orderProjectId', normalizedId)
-        .order('id', { ascending: true }));
+        .order('id', { ascending: true }), { includeOrder: true });
 }
 
 async function fetchThirdPartyProjectsByOrderId(orderId) {
