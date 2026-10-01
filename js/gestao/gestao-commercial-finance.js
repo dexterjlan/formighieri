@@ -31,6 +31,16 @@ function setGestaoCommercialFinanceMetaLoading(active, message = 'Carregando...'
     setActionOverlayLoading(GESTAO_COMMERCIAL_FINANCE_META_LOADING_OVERLAY, active, message, 'loading');
 }
 
+function reportCommercialFinanceMonthCloseStep(options, message) {
+    if (typeof options?.onStep === 'function') {
+        options.onStep(message);
+    }
+}
+
+async function yieldCommercialFinanceMonthCloseUi() {
+    await new Promise(resolve => window.requestAnimationFrame(() => resolve()));
+}
+
 function assertGestaoCommercialFinanceAccess() {
     if (!canAccessGestaoCommercialFinance()) {
         alertAppDialog('Somente administradores e gestores comerciais podem acessar Comercial Financeiro.', { variant: 'warning', title: 'Aviso' });
@@ -590,9 +600,46 @@ async function fetchCommercialFinanceConsultantAdjustments(saleYearMonth = '') {
     gestaoCommercialFinanceConsultantAdjustmentsSchemaReady = true;
     gestaoCommercialFinanceConsultantAdjustmentsCache = (data || []).map(item => ({
         ...item,
+        saleYearMonth: normalizeCommercialFinanceSaleYearMonth(item.saleYearMonth),
         consultantName: item.consultant?.name || ''
     }));
     return { data: gestaoCommercialFinanceConsultantAdjustmentsCache, error: null };
+}
+
+function buildCommercialFinanceCommissionRecordsForSaleMonth(saleYearMonth) {
+    const normalizedYearMonth = normalizeCommercialFinanceSaleYearMonth(saleYearMonth);
+    const monthSales = filterCommercialFinanceSalesBySaleYearMonth(
+        gestaoCommercialFinanceSalesCache,
+        normalizedYearMonth
+    );
+
+    return filterCommercialFinanceCommissionSales(monthSales).map(sale => {
+        const fromSale = commercialFinanceSaleToCommissionRecord(sale);
+        const orderId = Number(sale.salesOrderId);
+        if (!fromSale || !orderId) {
+            return fromSale;
+        }
+
+        const merged = getCommercialFinanceMergedOrder(orderId);
+        if (!merged) {
+            return fromSale;
+        }
+
+        const installments = getCommercialFinanceOrderClientInstallments(merged);
+        const countsForTier = merged.countsForTier !== false && merged.commissionCountsForTier !== false;
+        const rateOverride = merged.rateOverride ?? merged.commissionRateOverride ?? fromSale.rateOverride;
+
+        return {
+            ...fromSale,
+            countsForTier,
+            commissionCountsForTier: countsForTier,
+            rateOverride,
+            commissionRateOverride: rateOverride,
+            paymentMethod: normalizeCommercialFinancePaymentMethod(merged.paymentMethod || fromSale.paymentMethod),
+            installmentCount: merged.installmentCount ?? fromSale.installmentCount,
+            clientInstallments: installments.length ? installments : fromSale.clientInstallments
+        };
+    }).filter(Boolean);
 }
 
 async function saveCommercialFinanceConsultantAdjustment(saleYearMonth, consultantUserId, adjustmentPercent, reason) {
@@ -939,7 +986,11 @@ async function saveCommercialFinanceClientInstallments(orderId, installments = [
     existingSale.installments = installmentsResult.installments;
     existingSale.installmentCount = installmentsResult.installments.length || 1;
     existingSale.paymentMethod = COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT;
-    syncCommercialFinanceMergedOrderCache(normalizedOrderId);
+    syncCommercialFinanceMergedOrderCache(normalizedOrderId, {
+        paymentMethod: COMMERCIAL_FINANCE_PAYMENT_INSTALLMENT,
+        clientInstallments: installmentsResult.installments,
+        installmentCount: installmentsResult.installments.length || 1
+    });
     return installmentsResult;
 }
 
@@ -1032,15 +1083,18 @@ function mapCommercialFinanceCommissionEntryPayload(entry, monthCloseId = null) 
     };
 }
 
-async function closeCommercialFinanceSaleMonth(saleYearMonth) {
+async function prepareCommercialFinanceMonthCloseDrafts(saleYearMonth, options = {}) {
+    const {
+        requireAllConfirmed = false,
+        collectValidationErrors = false
+    } = options;
     const normalizedYearMonth = String(saleYearMonth || '').trim();
     if (!normalizedYearMonth) {
-        return { ok: false, message: 'Informe o mês de venda para fechar.' };
-    }
-    if (gestaoCommercialFinanceClosedSaleMonths.has(normalizedYearMonth)) {
-        return { ok: false, message: 'Este mês de venda já foi fechado.' };
+        return { ok: false, message: 'Informe o mês de venda.' };
     }
 
+    reportCommercialFinanceMonthCloseStep(options, 'Carregando metas, vendas e ajustes...');
+    await yieldCommercialFinanceMonthCloseUi();
     await fetchCommercialFinanceMonthlyTargets();
     const [managerResult] = await Promise.all([
         fetchCommercialFinanceManagerUser(),
@@ -1050,67 +1104,367 @@ async function closeCommercialFinanceSaleMonth(saleYearMonth) {
     const managerUser = managerResult.data;
     const managerUserId = managerUser?.id ? Number(managerUser.id) : null;
 
-    const monthSales = filterCommercialFinanceSalesBySaleYearMonth(
+    const confirmedRecords = buildCommercialFinanceCommissionRecordsForSaleMonth(normalizedYearMonth);
+    await fetchCommercialFinanceConsultantAdjustments();
+    reportCommercialFinanceMonthCloseStep(options, 'Validando vendas confirmadas...');
+    await yieldCommercialFinanceMonthCloseUi();
+    const monthTarget = gestaoCommercialFinanceTargetsByYearMonth[normalizedYearMonth] || {};
+    const pendingCount = countCommercialFinancePendingOrdersForMonth(
+        gestaoCommercialFinanceOrdersCache,
         gestaoCommercialFinanceSalesCache,
         normalizedYearMonth
     );
-    const confirmedRecords = buildCommercialFinanceCommissionRecordsFromSales(
-        filterCommercialFinanceCommissionSales(monthSales)
-    );
-    await fetchCommercialFinanceConsultantAdjustments();
-    const monthTarget = gestaoCommercialFinanceTargetsByYearMonth[normalizedYearMonth] || {};
+
+    const validationErrors = [];
+    let recordsForCommission = confirmedRecords;
+    if (collectValidationErrors) {
+        recordsForCommission = [];
+        confirmedRecords.forEach(record => {
+            const validation = validateCommercialFinanceOrderForCommission(record);
+            if (!validation.ok) {
+                validationErrors.push(validation.message);
+            } else {
+                recordsForCommission.push(record);
+            }
+        });
+    } else {
+        for (const record of confirmedRecords) {
+            const validation = validateCommercialFinanceOrderForCommission(record);
+            if (!validation.ok) {
+                return { ok: false, message: validation.message };
+            }
+        }
+    }
+
     const needsTierRates = monthNeedsCommercialFinanceTierRates(
-        confirmedRecords,
+        recordsForCommission,
         normalizedYearMonth,
         managerUserId
     );
     const needsManagerTierRates = monthNeedsCommercialFinanceManagerTierRates(
-        confirmedRecords,
+        recordsForCommission,
         normalizedYearMonth,
         managerUserId
     );
     const tiers = monthTarget.tiers || [];
     const managerTiers = monthTarget.managerTiers || [];
     if (needsTierRates && !tiers.length) {
-        return { ok: false, message: `Cadastre as faixas de comissão em Meta de Venda para ${formatCommercialFinanceYearMonthLabel(normalizedYearMonth)}.` };
+        return {
+            ok: false,
+            message: `Cadastre as faixas de comissão em Meta de Venda para ${formatCommercialFinanceYearMonthLabel(normalizedYearMonth)}.`
+        };
     }
     if (needsManagerTierRates && !managerTiers.length) {
-        return { ok: false, message: `Cadastre as faixas do gestor comercial em Meta de Venda para ${formatCommercialFinanceYearMonthLabel(normalizedYearMonth)}.` };
-    }
-    for (const record of confirmedRecords) {
-        const validation = validateCommercialFinanceOrderForCommission(record);
-        if (!validation.ok) {
-            return { ok: false, message: validation.message };
-        }
+        return {
+            ok: false,
+            message: `Cadastre as faixas do gestor comercial em Meta de Venda para ${formatCommercialFinanceYearMonthLabel(normalizedYearMonth)}.`
+        };
     }
 
-    const pendingCount = countCommercialFinancePendingOrdersForMonth(
-        gestaoCommercialFinanceOrdersCache,
-        gestaoCommercialFinanceSalesCache,
-        normalizedYearMonth
-    );
-    if (pendingCount > 0) {
+    if (requireAllConfirmed && pendingCount > 0) {
         return {
             ok: false,
             message: `Ainda há ${pendingCount} venda(s) sem confirmação em ${formatCommercialFinanceYearMonthLabel(normalizedYearMonth)}. Confirme todas antes de fechar.`
         };
     }
 
+    reportCommercialFinanceMonthCloseStep(options, 'Calculando comissões (consultores e equipe)...');
+    await yieldCommercialFinanceMonthCloseUi();
     const draft = buildCommercialFinanceCommissionEntryDrafts(
-        confirmedRecords,
+        recordsForCommission,
         gestaoCommercialFinanceTargetsByYearMonth,
         normalizedYearMonth,
         gestaoCommercialFinanceConsultantAdjustmentsCache,
         managerUserId
     );
     const managerTeamEntries = buildCommercialFinanceManagerTeamEntryDrafts(
-        confirmedRecords,
+        recordsForCommission,
         normalizedYearMonth,
         monthTarget,
         managerUser,
         managerUserId
     );
     const allEntries = [...draft.entries, ...managerTeamEntries];
+
+    return {
+        ok: true,
+        saleYearMonth: normalizedYearMonth,
+        confirmedCount: confirmedRecords.length,
+        validConfirmedCount: recordsForCommission.length,
+        pendingCount,
+        validationErrors,
+        draft,
+        managerTeamEntries,
+        allEntries,
+        rateByConsultantMonth: draft.rateByConsultantMonth || {}
+    };
+}
+
+async function simulateCommercialFinanceSaleMonth(saleYearMonth) {
+    const prepared = await prepareCommercialFinanceMonthCloseDrafts(saleYearMonth, {
+        requireAllConfirmed: false,
+        collectValidationErrors: true
+    });
+    if (!prepared.ok) {
+        return prepared;
+    }
+
+    const { allEntries, draft, confirmedCount, validConfirmedCount, pendingCount, validationErrors } = prepared;
+    if (!confirmedCount) {
+        return {
+            ok: true,
+            saleYearMonth: prepared.saleYearMonth,
+            confirmedCount: 0,
+            validConfirmedCount: 0,
+            pendingCount,
+            validationErrors,
+            entries: [],
+            totalsByReferenceMonth: {},
+            totalCommission: 0,
+            rateByConsultantMonth: prepared.rateByConsultantMonth || {}
+        };
+    }
+
+    const totalsByReferenceMonth = {};
+    let totalCommission = 0;
+    allEntries.forEach(entry => {
+        const referenceMonth = entry.referenceYearMonth || '';
+        const amount = roundCommercialFinanceMoney(Number(entry.commissionAmount) || 0);
+        totalCommission = roundCommercialFinanceMoney(totalCommission + amount);
+        if (!referenceMonth) return;
+        totalsByReferenceMonth[referenceMonth] = roundCommercialFinanceMoney(
+            (totalsByReferenceMonth[referenceMonth] || 0) + amount
+        );
+    });
+
+    return {
+        ok: true,
+        saleYearMonth: prepared.saleYearMonth,
+        confirmedCount,
+        validConfirmedCount,
+        pendingCount,
+        validationErrors,
+        entries: allEntries,
+        entryCount: allEntries.length,
+        confirmedSaleCount: draft.confirmedCount,
+        totalsByReferenceMonth,
+        totalCommission,
+        rateByConsultantMonth: prepared.rateByConsultantMonth || {}
+    };
+}
+
+function formatCommercialFinanceSimulationRateLabel(entry, rateByConsultantMonth = {}) {
+    const consultantUserId = Number(entry?.consultantUserId);
+    const saleYearMonth = normalizeCommercialFinanceSaleYearMonth(
+        entry?.saleYearMonth || getCommercialFinanceYearMonthFromDate(entry?.saleDate)
+    );
+    const rateInfo = rateByConsultantMonth[`${consultantUserId}:${saleYearMonth}`];
+    const ratePercent = Number(entry?.ratePercent ?? rateInfo?.ratePercent);
+    if (!Number.isFinite(ratePercent)) {
+        return '—';
+    }
+
+    const adjustmentPercent = Number(rateInfo?.adjustmentPercent) || 0;
+    if (!adjustmentPercent) {
+        return formatCommercialFinanceRatePercent(ratePercent);
+    }
+
+    const baseRatePercent = Number(rateInfo?.baseRatePercent);
+    const sign = adjustmentPercent > 0 ? '+' : '−';
+    const adjustmentLabel = formatCommercialFinanceRatePercent(Math.abs(adjustmentPercent));
+    if (Number.isFinite(baseRatePercent)) {
+        return `${formatCommercialFinanceRatePercent(ratePercent)} (${formatCommercialFinanceRatePercent(baseRatePercent)} ${sign} ${adjustmentLabel})`;
+    }
+
+    return `${formatCommercialFinanceRatePercent(ratePercent)} (${sign} ${adjustmentLabel})`;
+}
+
+function renderCommercialFinanceMonthSimulationBody(result) {
+    if (!result.ok) {
+        return `<p class="text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">${escapeHtml(result.message || 'Não foi possível simular.')}</p>`;
+    }
+
+    const monthLabel = formatCommercialFinanceYearMonthLabel(result.saleYearMonth);
+    const warnings = [];
+
+    if (result.pendingCount > 0) {
+        warnings.push(
+            `${result.pendingCount} venda(s) do mês ainda não confirmada(s) — fora da simulação.`
+        );
+    }
+    if (result.validationErrors?.length) {
+        result.validationErrors.forEach(message => warnings.push(message));
+    }
+    if (result.confirmedCount > 0 && result.validConfirmedCount < result.confirmedCount) {
+        warnings.push(
+            'Algumas vendas confirmadas foram ignoradas por dados incompletos (ex.: parcelas).'
+        );
+    }
+
+    const metricsHtml = `
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                <span class="block text-[10px] font-semibold uppercase text-slate-400">Confirmadas</span>
+                <strong class="text-sm text-slate-900">${result.validConfirmedCount} / ${result.confirmedCount}</strong>
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
+                <span class="block text-[10px] font-semibold uppercase text-slate-400">Registros</span>
+                <strong class="text-sm text-slate-900">${result.entryCount || 0}</strong>
+            </div>
+            <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 col-span-2 sm:col-span-2">
+                <span class="block text-[10px] font-semibold uppercase text-indigo-500">Comissão total simulada</span>
+                <strong class="text-sm text-indigo-900">${escapeHtml(formatSaleValue(result.totalCommission || 0))}</strong>
+            </div>
+        </div>
+    `;
+
+    const warningsHtml = warnings.length
+        ? `<ul class="mb-4 space-y-1 text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 list-disc list-inside">${warnings.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+        : '';
+
+    const referenceMonths = Object.keys(result.totalsByReferenceMonth || {}).sort();
+    const rateByConsultantMonth = result.rateByConsultantMonth || {};
+    const consultantRateRows = Object.entries(rateByConsultantMonth)
+        .filter(([, info]) => Number(info?.adjustmentPercent))
+        .map(([key, info]) => {
+            const consultantUserId = Number(String(key).split(':')[0]);
+            const sampleEntry = (result.entries || []).find(entry =>
+                Number(entry.consultantUserId) === consultantUserId
+                && entry.entryType !== COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_TEAM
+            );
+            const consultantName = sampleEntry?.consultantName || `Consultor #${consultantUserId}`;
+            const sign = Number(info.adjustmentPercent) > 0 ? '+' : '−';
+            return `
+                <span class="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+                    <span class="text-slate-600">${escapeHtml(consultantName)}</span>
+                    <strong class="text-slate-800">${escapeHtml(formatCommercialFinanceRatePercent(info.baseRatePercent))} ${sign} ${escapeHtml(formatCommercialFinanceRatePercent(Math.abs(Number(info.adjustmentPercent))))} = ${escapeHtml(formatCommercialFinanceRatePercent(info.ratePercent))}</strong>
+                </span>
+            `;
+        })
+        .join('');
+
+    const consultantRatesHtml = consultantRateRows
+        ? `
+            <div class="mb-4">
+                <h5 class="text-[10px] font-bold uppercase text-slate-500 mb-2">Ajustes de alíquota aplicados</h5>
+                <div class="flex flex-wrap gap-2">${consultantRateRows}</div>
+            </div>
+        `
+        : '';
+
+    const totalsByMonthHtml = referenceMonths.length
+        ? `
+            <div class="mb-4">
+                <h5 class="text-[10px] font-bold uppercase text-slate-500 mb-2">Comissão por mês de pagamento</h5>
+                <div class="flex flex-wrap gap-2">
+                    ${referenceMonths.map(monthKey => `
+                        <span class="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+                            <span class="text-slate-500">${escapeHtml(formatCommercialFinanceYearMonthLabel(monthKey))}</span>
+                            <strong class="text-slate-800">${escapeHtml(formatSaleValue(result.totalsByReferenceMonth[monthKey]))}</strong>
+                        </span>
+                    `).join('')}
+                </div>
+            </div>
+        `
+        : '';
+
+    if (!result.entries?.length) {
+        return `
+            ${metricsHtml}
+            ${warningsHtml}
+            <p class="text-slate-500 text-center py-6">Nenhum registro de comissão para ${escapeHtml(monthLabel)} com as vendas confirmadas válidas.</p>
+        `;
+    }
+
+    const sortedEntries = [...result.entries].sort((left, right) => {
+        const refCompare = String(left.referenceYearMonth || '').localeCompare(String(right.referenceYearMonth || ''));
+        if (refCompare !== 0) return refCompare;
+        const orderCompare = String(left.orderCode || '').localeCompare(String(right.orderCode || ''));
+        if (orderCompare !== 0) return orderCompare;
+        return Number(left.installmentNumber || 0) - Number(right.installmentNumber || 0);
+    });
+
+    const rowsHtml = sortedEntries.map(entry => {
+        const saleConsultant = entry.saleConsultantName || entry.consultantName || '—';
+        const payee = entry.entryType === COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_TEAM
+            ? `${entry.consultantName} (${saleConsultant})`
+            : (entry.consultantName || '—');
+        return `
+            <tr class="border-b border-slate-100 last:border-0">
+                <td class="p-2 text-slate-600 whitespace-nowrap">${escapeHtml(formatCommercialFinanceEntryTypeLabel(entry.entryType))}</td>
+                <td class="p-2 font-mono text-slate-800 whitespace-nowrap">${escapeHtml(entry.orderCode || '—')}</td>
+                <td class="p-2 text-slate-700">${escapeHtml(entry.clientName || '—')}</td>
+                <td class="p-2 text-slate-700">${escapeHtml(payee)}</td>
+                <td class="p-2 whitespace-nowrap">${escapeHtml(formatCommercialFinanceYearMonthLabel(entry.referenceYearMonth))}</td>
+                <td class="p-2 text-right whitespace-nowrap">${escapeHtml(formatSaleValue(entry.clientInstallmentAmount || 0))}</td>
+                <td class="p-2 text-right whitespace-nowrap">${escapeHtml(formatCommercialFinanceSimulationRateLabel(entry, rateByConsultantMonth))}</td>
+                <td class="p-2 text-right font-medium text-slate-900 whitespace-nowrap">${escapeHtml(formatSaleValue(entry.commissionAmount || 0))}</td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        ${metricsHtml}
+        ${warningsHtml}
+        ${consultantRatesHtml}
+        ${totalsByMonthHtml}
+        <div class="gestao-commercial-finance-table-wrap overflow-x-auto border border-slate-200 rounded-lg">
+            <table class="gestao-commercial-finance-table w-full text-xs">
+                <thead>
+                    <tr class="bg-slate-50 text-slate-500">
+                        <th class="p-2 text-left font-semibold">Tipo</th>
+                        <th class="p-2 text-left font-semibold">Pedido</th>
+                        <th class="p-2 text-left font-semibold">Cliente</th>
+                        <th class="p-2 text-left font-semibold">Beneficiário</th>
+                        <th class="p-2 text-left font-semibold">Mês pagamento</th>
+                        <th class="p-2 text-right font-semibold">Base (R$)</th>
+                        <th class="p-2 text-right font-semibold">%</th>
+                        <th class="p-2 text-right font-semibold">Comissão</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+async function openCommercialFinanceMonthCloseSimulationModal(saleYearMonth) {
+    const normalizedYearMonth = String(saleYearMonth || '').trim() || getCommercialFinanceCurrentYearMonth();
+    const titleEl = document.getElementById('commercial-finance-month-simulation-title');
+    const bodyEl = document.getElementById('commercial-finance-month-simulation-body');
+    if (titleEl) {
+        titleEl.textContent = `Simulação — ${formatCommercialFinanceYearMonthLabel(normalizedYearMonth)}`;
+    }
+    if (bodyEl) {
+        bodyEl.innerHTML = '<p class="text-slate-400 text-center py-8">Calculando...</p>';
+    }
+    toggleModal('commercial-finance-month-simulation-modal', true);
+
+    const result = await simulateCommercialFinanceSaleMonth(normalizedYearMonth);
+    if (bodyEl) {
+        bodyEl.innerHTML = renderCommercialFinanceMonthSimulationBody(result);
+    }
+}
+
+async function closeCommercialFinanceSaleMonth(saleYearMonth, options = {}) {
+    const normalizedYearMonth = String(saleYearMonth || '').trim();
+    if (!normalizedYearMonth) {
+        return { ok: false, message: 'Informe o mês de venda para fechar.' };
+    }
+    if (gestaoCommercialFinanceClosedSaleMonths.has(normalizedYearMonth)) {
+        return { ok: false, message: 'Este mês de venda já foi fechado.' };
+    }
+
+    const prepared = await prepareCommercialFinanceMonthCloseDrafts(normalizedYearMonth, {
+        requireAllConfirmed: true,
+        collectValidationErrors: false,
+        onStep: options.onStep
+    });
+    if (!prepared.ok) {
+        return prepared;
+    }
+
+    const { draft, allEntries } = prepared;
 
     if (!draft.confirmedCount) {
         return { ok: false, message: 'Não há vendas confirmadas para fechar neste mês.' };
@@ -1125,6 +1479,8 @@ async function closeCommercialFinanceSaleMonth(saleYearMonth) {
         closedByUserId: closedByUserId || null
     };
 
+    reportCommercialFinanceMonthCloseStep(options, 'Registrando fechamento do mês...');
+    await yieldCommercialFinanceMonthCloseUi();
     const { data: closeRow, error: closeError } = await supabaseClient
         .from('SalesCommissionMonthClose')
         .insert(closePayload)
@@ -1140,6 +1496,11 @@ async function closeCommercialFinanceSaleMonth(saleYearMonth) {
         mapCommercialFinanceCommissionEntryPayload(entry, closeRow.id)
     );
 
+    reportCommercialFinanceMonthCloseStep(
+        options,
+        `Gravando ${entryPayload.length} registro(s) de comissão...`
+    );
+    await yieldCommercialFinanceMonthCloseUi();
     const { error: entriesError } = await supabaseClient
         .from('SalesCommissionEntry')
         .insert(entryPayload);
@@ -1156,9 +1517,29 @@ async function closeCommercialFinanceSaleMonth(saleYearMonth) {
     gestaoCommercialFinanceClosedSaleMonths.add(normalizedYearMonth);
 
     if (typeof tryCreateManagerDeliveryBonusForDeliveredOrder === 'function') {
+        const monthSales = filterCommercialFinanceSalesBySaleYearMonth(
+            gestaoCommercialFinanceSalesCache,
+            normalizedYearMonth
+        );
         const confirmedSales = filterCommercialFinanceCommissionSales(monthSales);
-        for (const sale of confirmedSales) {
+        const bonusCheckTotal = confirmedSales.length;
+        if (bonusCheckTotal > 0) {
+            reportCommercialFinanceMonthCloseStep(
+                options,
+                `Verificando bônus de entrega (0/${bonusCheckTotal})...`
+            );
+            await yieldCommercialFinanceMonthCloseUi();
+        }
+        for (let index = 0; index < confirmedSales.length; index += 1) {
+            const sale = confirmedSales[index];
             const salesOrderId = Number(sale?.salesOrderId);
+            if (bonusCheckTotal > 0 && (index === 0 || (index + 1) % 3 === 0 || index === confirmedSales.length - 1)) {
+                reportCommercialFinanceMonthCloseStep(
+                    options,
+                    `Verificando bônus de entrega (${index + 1}/${bonusCheckTotal})...`
+                );
+                await yieldCommercialFinanceMonthCloseUi();
+            }
             if (!salesOrderId) continue;
             try {
                 await tryCreateManagerDeliveryBonusForDeliveredOrder(salesOrderId);
@@ -1167,6 +1548,9 @@ async function closeCommercialFinanceSaleMonth(saleYearMonth) {
             }
         }
     }
+
+    reportCommercialFinanceMonthCloseStep(options, 'Finalizando...');
+    await yieldCommercialFinanceMonthCloseUi();
 
     return {
         ok: true,
@@ -1256,11 +1640,7 @@ async function upsertCommercialFinanceSale(
     }
 
     const normalizedOrderId = Number(orderId);
-    const baseOrder = gestaoCommercialFinanceOrdersCache.find(order => Number(order.id) === normalizedOrderId);
-    const mergedOrder = mergeCommercialFinanceOrderWithSale(
-        baseOrder,
-        getCommercialFinanceSaleForOrder(normalizedOrderId)
-    );
+    const mergedOrder = getCommercialFinanceMergedOrder(normalizedOrderId);
     if (!mergedOrder) {
         return { ok: false, message: 'Pedido não encontrado.' };
     }
@@ -2278,12 +2658,22 @@ async function saveCommercialFinanceClientInstallmentsFromModal() {
         return result;
     }
 
-    await upsertCommercialFinanceSale(
-        orderId,
-        paymentMethod,
-        result.installments.length,
-        Boolean(order.commissionConfirmed || order.isImported)
-    );
+    const commissionConfirmed = Boolean(order.commissionConfirmed || order.isImported);
+    if (commissionConfirmed) {
+        const upsertResult = await upsertCommercialFinanceSale(
+            orderId,
+            paymentMethod,
+            result.installments.length,
+            true
+        );
+        if (!upsertResult.ok) {
+            alertAppDialog(
+                upsertResult.message || (isCash ? 'Não foi possível salvar o pagamento.' : 'Não foi possível salvar as parcelas.'),
+                { variant: 'warning', title: 'Aviso' }
+            );
+            return upsertResult;
+        }
+    }
 
     toggleModal('commercial-finance-client-installments-modal', false);
     gestaoCommercialFinanceClientInstallmentsModalOrderId = null;
@@ -2319,7 +2709,7 @@ function renderCommercialFinanceConsultantAdjustmentsPanel(saleYearMonth = '') {
     const isClosed = gestaoCommercialFinanceClosedSaleMonths.has(normalizedYearMonth);
     const consultants = getCommercialFinanceConsultantsForSaleMonth(normalizedYearMonth);
     const adjustments = (gestaoCommercialFinanceConsultantAdjustmentsCache || [])
-        .filter(item => item.saleYearMonth === normalizedYearMonth);
+        .filter(item => normalizeCommercialFinanceSaleYearMonth(item.saleYearMonth) === normalizedYearMonth);
 
     const consultantOptions = consultants.map(consultant => `
         <option value="${Number(consultant.id)}">${escapeHtml(consultant.name)}</option>
@@ -2354,7 +2744,7 @@ function renderCommercialFinanceConsultantAdjustmentsPanel(saleYearMonth = '') {
             <div>
                 <h4 class="text-sm font-bold text-slate-900">Ajustes de alíquota por consultor</h4>
                 <p class="text-xs text-slate-500 mt-1">
-                    Soma ao percentual da faixa do mês (ex.: -0,25% por atraso). Aplica-se às vendas <strong>sem alíquota específica</strong>.
+                    Mês de venda igual ao seletor de <strong>Fechar mês</strong>. Soma ao percentual da faixa (ex.: -0,25% por atraso). Não altera vendas com alíquota específica na linha.
                 </p>
             </div>
             ${!gestaoCommercialFinanceConsultantAdjustmentsSchemaReady ? `
@@ -2435,7 +2825,7 @@ function renderCommercialFinanceVendasClosePanel(closeYearMonth = '') {
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Fechar mês de vendas</h4>
                     <p class="text-xs text-slate-500 mt-1">
-                        Após confirmar todas as vendas do mês, feche para gerar os registros de comissão (consultor e % equipe do gestor). O bônus de entrega do gestor é criado quando o pedido fica 100% entregue. À vista e parcelado usam o mês de pagamento informado pelo gestor.
+                        Após confirmar todas as vendas do mês, feche para gerar os registros de comissão (consultor e % equipe do gestor). O bônus de entrega do gestor é criado quando o pedido fica 100% entregue, no mês da entrega. À vista e parcelado usam o mês de pagamento informado pelo gestor.
                     </p>
                 </div>
                 <div class="w-full sm:w-52">
@@ -2484,6 +2874,11 @@ function renderCommercialFinanceVendasClosePanel(closeYearMonth = '') {
                         Reabrir mês
                     </button>
                 ` : `
+                    <button type="button" id="gestao-commercial-finance-simulate-month-btn"
+                        class="text-xs bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        ${!gestaoCommercialFinanceCommissionCloseSchemaReady || !gestaoCommercialFinanceSalesSchemaReady ? 'disabled' : ''}>
+                        Simulação
+                    </button>
                     <button type="button" id="gestao-commercial-finance-close-month-btn"
                         class="text-xs bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
                         ${!gestaoCommercialFinanceCommissionCloseSchemaReady ? 'disabled' : ''}>
@@ -2586,7 +2981,7 @@ function renderGestaoCommercialFinanceVendas(orders = [], filters = {}) {
         `;
     }).join('');
 
-    const selectedSaleMonth = filters.yearMonth || filters.closeYearMonth || '';
+    const selectedSaleMonth = filters.closeYearMonth || filters.yearMonth || '';
 
     return `
         ${renderCommercialFinanceVendasClosePanel(filters.closeYearMonth)}
@@ -3264,6 +3659,16 @@ function bindGestaoCommercialFinanceEvents() {
             return;
         }
 
+        const simulateMonthButton = event.target.closest('#gestao-commercial-finance-simulate-month-btn');
+        if (simulateMonthButton && !simulateMonthButton.disabled) {
+            const saleYearMonth = document.getElementById('gestao-commercial-finance-close-month')?.value
+                || getCommercialFinanceCurrentYearMonth();
+            simulateMonthButton.disabled = true;
+            await openCommercialFinanceMonthCloseSimulationModal(saleYearMonth);
+            simulateMonthButton.disabled = false;
+            return;
+        }
+
         const closeMonthButton = event.target.closest('#gestao-commercial-finance-close-month-btn');
         if (closeMonthButton) {
             const saleYearMonth = document.getElementById('gestao-commercial-finance-close-month')?.value
@@ -3278,10 +3683,16 @@ function bindGestaoCommercialFinanceEvents() {
             if (!confirmed) return;
 
             closeMonthButton.disabled = true;
-            closeMonthButton.textContent = 'Fechando...';
-            const result = await closeCommercialFinanceSaleMonth(saleYearMonth);
-            closeMonthButton.disabled = false;
-            closeMonthButton.textContent = 'Fechar mês';
+            setGestaoCommercialFinanceMetaLoading(true, 'Iniciando fechamento do mês...');
+            let result;
+            try {
+                result = await closeCommercialFinanceSaleMonth(saleYearMonth, {
+                    onStep: (message) => setGestaoCommercialFinanceMetaLoading(true, message)
+                });
+            } finally {
+                setGestaoCommercialFinanceMetaLoading(false);
+                closeMonthButton.disabled = false;
+            }
 
             if (!result.ok) {
                 alertAppDialog(result.message || 'Não foi possível fechar o mês.', { variant: 'warning', title: 'Aviso' });
@@ -3292,7 +3703,12 @@ function bindGestaoCommercialFinanceEvents() {
                 `Mês fechado com ${result.entryCount} registro(s) de comissão.`,
                 { variant: 'success', title: 'Sucesso' }
             );
-            await loadGestaoCommercialFinanceVendas();
+            setGestaoCommercialFinanceMetaLoading(true, 'Atualizando tela...');
+            try {
+                await loadGestaoCommercialFinanceVendas();
+            } finally {
+                setGestaoCommercialFinanceMetaLoading(false);
+            }
             return;
         }
 
@@ -3452,5 +3868,9 @@ function bindGestaoCommercialFinanceEvents() {
 
     document.getElementById('commercial-finance-client-installments-save')?.addEventListener('click', () => {
         saveCommercialFinanceClientInstallmentsFromModal();
+    });
+
+    document.getElementById('commercial-finance-month-simulation-close')?.addEventListener('click', () => {
+        toggleModal('commercial-finance-month-simulation-modal', false);
     });
 }

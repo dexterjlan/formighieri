@@ -23,6 +23,15 @@ function getCommercialFinanceYearMonthFromDate(dateStr) {
     return normalized.slice(0, 7);
 }
 
+function normalizeCommercialFinanceSaleYearMonth(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (/^\d{4}-\d{2}$/.test(raw)) {
+        return raw;
+    }
+    return getCommercialFinanceYearMonthFromDate(raw);
+}
+
 function getCommercialFinanceCurrentYearMonth() {
     const now = typeof getLocalIsoDate === 'function' ? getLocalIsoDate() : new Date().toISOString().slice(0, 10);
     return getCommercialFinanceYearMonthFromDate(now);
@@ -490,7 +499,9 @@ function buildCommercialFinanceConsultantMonthlyTotals(records = []) {
         if (!orderCountsForCommercialFinanceTierSum(record)) return;
 
         const consultantUserId = Number(record?.consultantUserId || record?.consultor?.id);
-        const yearMonth = record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate);
+        const yearMonth = normalizeCommercialFinanceSaleYearMonth(
+            record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate)
+        );
         if (!consultantUserId || !yearMonth) return;
 
         const key = `${consultantUserId}:${yearMonth}`;
@@ -516,7 +527,7 @@ function buildCommercialFinanceConsultantAdjustmentsMap(adjustments = []) {
     const map = {};
     (adjustments || []).forEach(adjustment => {
         const consultantUserId = Number(adjustment?.consultantUserId);
-        const saleYearMonth = String(adjustment?.saleYearMonth || '').trim();
+        const saleYearMonth = normalizeCommercialFinanceSaleYearMonth(adjustment?.saleYearMonth);
         if (!consultantUserId || !saleYearMonth) return;
 
         const key = `${consultantUserId}:${saleYearMonth}`;
@@ -541,7 +552,9 @@ function getCommercialFinanceOrderCommissionRatePercent(order, rateByConsultantM
     }
 
     const consultantUserId = Number(order?.consultantUserId || order?.consultor?.id);
-    const saleYearMonth = order?.saleYearMonth || getCommercialFinanceYearMonthFromDate(order?.saleDate);
+    const saleYearMonth = normalizeCommercialFinanceSaleYearMonth(
+        order?.saleYearMonth || getCommercialFinanceYearMonthFromDate(order?.saleDate)
+    );
     if (!consultantUserId || !saleYearMonth) return 0;
 
     const rateInfo = rateByConsultantMonth[`${consultantUserId}:${saleYearMonth}`] || { ratePercent: 0 };
@@ -638,7 +651,7 @@ function buildCommercialFinanceManagerTeamEntryDrafts(
         return [];
     }
 
-    const referenceYearMonth = addCommercialFinanceMonths(saleYearMonth, 1);
+    const normalizedCloseMonth = normalizeCommercialFinanceSaleYearMonth(saleYearMonth);
     const managerName = managerUser?.name || 'Gestor comercial';
 
     return filterCommercialFinanceCommissionOrders(records)
@@ -649,6 +662,11 @@ function buildCommercialFinanceManagerTeamEntryDrafts(
             if (commissionAmount <= 0) {
                 return null;
             }
+
+            const recordSaleYearMonth = normalizeCommercialFinanceSaleYearMonth(
+                record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate)
+            ) || normalizedCloseMonth;
+            const referenceYearMonth = recordSaleYearMonth;
 
             const consultantName = typeof getOrderConsultantNameFromRecord === 'function'
                 ? getOrderConsultantNameFromRecord(record)
@@ -662,7 +680,7 @@ function buildCommercialFinanceManagerTeamEntryDrafts(
                 salesOrderId: Number(record.salesOrderId || record.id) || null,
                 consultantUserId: normalizedManagerId,
                 saleDate: record.saleDate,
-                saleYearMonth,
+                saleYearMonth: recordSaleYearMonth,
                 referenceYearMonth,
                 orderCode: record.orderCode || '',
                 clientName,
@@ -679,6 +697,36 @@ function buildCommercialFinanceManagerTeamEntryDrafts(
         .filter(Boolean);
 }
 
+function computeCommercialFinanceConsultantMonthRate(
+    consultantUserId,
+    yearMonth,
+    totalSales,
+    targetsByYearMonth,
+    adjustmentsByConsultantMonth,
+    managerUserId
+) {
+    const isManager = Boolean(managerUserId) && Number(consultantUserId) === Number(managerUserId);
+    const tiers = isManager
+        ? (targetsByYearMonth[yearMonth]?.managerTiers || [])
+        : (targetsByYearMonth[yearMonth]?.tiers || []);
+    const match = matchCommercialFinanceCommissionTier(totalSales, tiers);
+    const adjustments = isManager
+        ? []
+        : (adjustmentsByConsultantMonth[`${consultantUserId}:${yearMonth}`] || []);
+    const adjustmentPercent = sumCommercialFinanceConsultantAdjustmentPercent(adjustments);
+    const adjustedRate = Math.max(0, roundCommercialFinanceMoney(match.ratePercent + adjustmentPercent));
+
+    return {
+        ratePercent: adjustedRate,
+        baseRatePercent: match.ratePercent,
+        adjustmentPercent,
+        totalSales,
+        tier: match.tier,
+        adjustments,
+        isManager
+    };
+}
+
 function buildCommercialFinanceCommissionReport(
     records = [],
     targetsByYearMonth = {},
@@ -692,26 +740,41 @@ function buildCommercialFinanceCommissionReport(
     const saleEntries = [];
 
     Object.values(consultantTotals).forEach(entry => {
-        const isManager = Boolean(managerUserId) && Number(entry.consultantUserId) === Number(managerUserId);
-        const tiers = isManager
-            ? (targetsByYearMonth[entry.yearMonth]?.managerTiers || [])
-            : (targetsByYearMonth[entry.yearMonth]?.tiers || []);
-        const match = matchCommercialFinanceCommissionTier(entry.totalSales, tiers);
-        const adjustments = isManager
-            ? []
-            : (adjustmentsByConsultantMonth[`${entry.consultantUserId}:${entry.yearMonth}`] || []);
-        const adjustmentPercent = sumCommercialFinanceConsultantAdjustmentPercent(adjustments);
-        const adjustedRate = Math.max(0, roundCommercialFinanceMoney(match.ratePercent + adjustmentPercent));
+        rateByConsultantMonth[`${entry.consultantUserId}:${entry.yearMonth}`] = computeCommercialFinanceConsultantMonthRate(
+            entry.consultantUserId,
+            entry.yearMonth,
+            entry.totalSales,
+            targetsByYearMonth,
+            adjustmentsByConsultantMonth,
+            managerUserId
+        );
+    });
 
-        rateByConsultantMonth[`${entry.consultantUserId}:${entry.yearMonth}`] = {
-            ratePercent: adjustedRate,
-            baseRatePercent: match.ratePercent,
-            adjustmentPercent,
-            totalSales: entry.totalSales,
-            tier: match.tier,
-            adjustments,
-            isManager
-        };
+    const consultantMonthKeysFromOrders = new Set();
+    confirmedOrders.forEach(order => {
+        if (getCommercialFinanceOrderExplicitRatePercent(order) !== null) return;
+        const consultantUserId = Number(order?.consultantUserId || order?.consultor?.id);
+        const saleYearMonth = normalizeCommercialFinanceSaleYearMonth(
+            order?.saleYearMonth || getCommercialFinanceYearMonthFromDate(order?.saleDate)
+        );
+        if (!consultantUserId || !saleYearMonth) return;
+        consultantMonthKeysFromOrders.add(`${consultantUserId}:${saleYearMonth}`);
+    });
+
+    consultantMonthKeysFromOrders.forEach(key => {
+        if (rateByConsultantMonth[key]) return;
+        const [consultantUserIdText, yearMonth] = key.split(':');
+        const consultantUserId = Number(consultantUserIdText);
+        const totalsEntry = consultantTotals[key];
+        const totalSales = totalsEntry?.totalSales ?? 0;
+        rateByConsultantMonth[key] = computeCommercialFinanceConsultantMonthRate(
+            consultantUserId,
+            yearMonth,
+            totalSales,
+            targetsByYearMonth,
+            adjustmentsByConsultantMonth,
+            managerUserId
+        );
     });
 
     confirmedOrders.forEach(order => {
@@ -771,10 +834,13 @@ function buildCommercialFinanceMonthlyRealizedSalesMap(sales = [], year) {
 }
 
 function filterCommercialFinanceSalesBySaleYearMonth(sales = [], saleYearMonth) {
-    if (!saleYearMonth) return [];
+    const normalizedFilter = normalizeCommercialFinanceSaleYearMonth(saleYearMonth);
+    if (!normalizedFilter) return [];
     return (sales || []).filter(sale => {
-        const yearMonth = sale?.saleYearMonth || getCommercialFinanceYearMonthFromDate(sale?.saleDate);
-        return yearMonth === saleYearMonth;
+        const yearMonth = normalizeCommercialFinanceSaleYearMonth(
+            sale?.saleYearMonth || getCommercialFinanceYearMonthFromDate(sale?.saleDate)
+        );
+        return yearMonth === normalizedFilter;
     });
 }
 
@@ -860,19 +926,22 @@ function buildCommercialFinanceCommissionEntryDrafts(
     consultantAdjustments = [],
     managerUserId = null
 ) {
+    const normalizedSaleYearMonth = normalizeCommercialFinanceSaleYearMonth(saleYearMonth);
     const monthRecords = (records || []).filter(record => {
-        const yearMonth = record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate);
-        return yearMonth === saleYearMonth;
+        const yearMonth = normalizeCommercialFinanceSaleYearMonth(
+            record?.saleYearMonth || getCommercialFinanceYearMonthFromDate(record?.saleDate)
+        );
+        return yearMonth === normalizedSaleYearMonth;
     });
     const confirmedOrders = filterCommercialFinanceCommissionOrders(monthRecords);
-    const monthTarget = targetsByYearMonth[saleYearMonth] || {};
+    const monthTarget = targetsByYearMonth[normalizedSaleYearMonth] || targetsByYearMonth[saleYearMonth] || {};
     const tiers = monthTarget.tiers || [];
     const managerTiers = monthTarget.managerTiers || [];
     const monthAdjustments = (consultantAdjustments || []).filter(
-        adjustment => adjustment.saleYearMonth === saleYearMonth
+        adjustment => normalizeCommercialFinanceSaleYearMonth(adjustment.saleYearMonth) === normalizedSaleYearMonth
     );
     const report = buildCommercialFinanceCommissionReport(confirmedOrders, {
-        [saleYearMonth]: { tiers, managerTiers }
+        [normalizedSaleYearMonth]: { tiers, managerTiers }
     }, monthAdjustments, managerUserId);
     const entries = [];
 
@@ -895,7 +964,7 @@ function buildCommercialFinanceCommissionEntryDrafts(
                 salesOrderId: Number(order.salesOrderId || order.id) || null,
                 consultantUserId: entry.consultantUserId,
                 saleDate: order.saleDate,
-                saleYearMonth,
+                saleYearMonth: normalizedSaleYearMonth,
                 referenceYearMonth: installment.yearMonth,
                 orderCode: order.orderCode || '',
                 clientName,
@@ -913,7 +982,8 @@ function buildCommercialFinanceCommissionEntryDrafts(
     return {
         confirmedCount: confirmedOrders.length,
         pendingCount: 0,
-        entries
+        entries,
+        rateByConsultantMonth: report.rateByConsultantMonth
     };
 }
 

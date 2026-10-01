@@ -248,12 +248,14 @@ async function tryCreateManagerDeliveryBonusForDeliveredOrder(orderId) {
     }
 
     const deliveryDate = orderRow.actualDeliveryDate || orderRow.clientDeliveryDate;
-    const deliveryYearMonth = getCommercialFinanceYearMonthFromDate(deliveryDate);
+    const deliveryYearMonth = typeof normalizeCommercialFinanceSaleYearMonth === 'function'
+        ? normalizeCommercialFinanceSaleYearMonth(getCommercialFinanceYearMonthFromDate(deliveryDate))
+        : getCommercialFinanceYearMonthFromDate(deliveryDate);
     if (!deliveryYearMonth) {
         return { ok: false, reason: 'missing_delivery_date' };
     }
 
-    const referenceYearMonth = addCommercialFinanceMonths(deliveryYearMonth, 1);
+    const referenceYearMonth = deliveryYearMonth;
 
     if (await managerDeliveryBonusEntryExists(normalizedOrderId)) {
         return { ok: false, reason: 'already_exists' };

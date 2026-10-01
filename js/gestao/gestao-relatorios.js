@@ -462,11 +462,23 @@ function getGestaoRelatorioPedidosPendentesOrderGroup(
             order: project.order || {},
             clientDeliveryDate: deliveryDate,
             projects: [],
-            complementarProjects: []
+            complementarProjects: [],
+            replacedProjects: []
         };
     }
 
     return monthGroups[monthKey].clientsByKey[clientKey].ordersById[orderKey];
+}
+
+function compareGestaoRelatorioPedidosPendentesChildProjects(a, b, context, options = {}) {
+    if (options.sortByDeliveryDate) {
+        return compareGestaoRelatorioProjectsByDeliveryDate(a, b, context);
+    }
+    return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+}
+
+function getGestaoRelatorioReplacedProjectParentId(project) {
+    return Number(project?.replacedByProjectId || project?.replacedBy?.id) || null;
 }
 
 function buildGestaoRelatorioPedidosPendentesProjectTree(parentProjects, complementarProjects, projectsById = {}, options = {}) {
@@ -476,6 +488,7 @@ function buildGestaoRelatorioPedidosPendentesProjectTree(parentProjects, complem
         : (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
 
     const complementarByParentId = {};
+    const replacedByParentId = {};
     const parentIdsInList = new Set(parentProjects.map(project => Number(project.id)));
 
     (complementarProjects || []).forEach(project => {
@@ -485,30 +498,76 @@ function buildGestaoRelatorioPedidosPendentesProjectTree(parentProjects, complem
         complementarByParentId[parentId].push(project);
     });
 
-    Object.values(complementarByParentId).forEach(children => {
-        children.sort((a, b) => {
-            if (options.sortByDeliveryDate) {
-                return compareGestaoRelatorioProjectsByDeliveryDate(a, b, context);
-            }
-            return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
-        });
+    (options.replacedProjects || []).forEach(project => {
+        const parentId = getGestaoRelatorioReplacedProjectParentId(project);
+        if (!parentId) return;
+        if (!replacedByParentId[parentId]) replacedByParentId[parentId] = [];
+        replacedByParentId[parentId].push(project);
     });
 
-    const extraParentIds = Object.keys(complementarByParentId)
-        .map(Number)
+    const sortChildren = (children) => {
+        children.sort((a, b) => compareGestaoRelatorioPedidosPendentesChildProjects(a, b, context, options));
+    };
+
+    Object.values(complementarByParentId).forEach(sortChildren);
+    Object.values(replacedByParentId).forEach(sortChildren);
+
+    const extraParentIds = [...new Set([
+        ...Object.keys(complementarByParentId).map(Number),
+        ...Object.keys(replacedByParentId).map(Number)
+    ])]
         .filter(parentId => parentId && !parentIdsInList.has(parentId) && projectsById[parentId]);
 
     const allParents = [...parentProjects, ...extraParentIds.map(parentId => projectsById[parentId])]
         .sort(sortParents);
 
-    return allParents.map(project => ({
-        project,
-        children: complementarByParentId[Number(project.id)] || [],
-        parentPending: parentIdsInList.has(Number(project.id))
-    }));
+    return allParents.map(project => {
+        const projectId = Number(project.id);
+        const children = [
+            ...(complementarByParentId[projectId] || []),
+            ...(replacedByParentId[projectId] || [])
+        ];
+        sortChildren(children);
+
+        return {
+            project,
+            children,
+            parentPending: parentIdsInList.has(projectId)
+        };
+    });
 }
 
-function countGestaoRelatorioPedidosPendentesOrderProjects(projectTree) {
+function sumGestaoRelatorioPedidosPendentesProjectTreeSaleValues(projectTree) {
+    return (projectTree || []).reduce((sum, { project, children, parentPending }) => {
+        let part = 0;
+
+        if (parentPending) {
+            const value = typeof getProjectEffectiveSaleValue === 'function'
+                ? getProjectEffectiveSaleValue(project)
+                : Number(project.saleValue);
+            part += Number.isFinite(value) ? value : 0;
+        }
+
+        (children || []).forEach(child => {
+            const value = typeof getProjectEffectiveSaleValue === 'function'
+                ? getProjectEffectiveSaleValue(child)
+                : Number(child.saleValue);
+            part += Number.isFinite(value) ? value : 0;
+        });
+
+        return sum + part;
+    }, 0);
+}
+
+function countGestaoRelatorioPedidosPendentesOrderProjects(projectTree, options = {}) {
+    const scheduleRootProjectIds = options.scheduleRootProjectIds;
+
+    if (scheduleRootProjectIds) {
+        return (projectTree || []).filter(entry =>
+            entry.parentPending && scheduleRootProjectIds.has(Number(entry.project.id))
+        ).length;
+    }
+
     return (projectTree || []).filter(entry => entry.parentPending || (entry.children || []).length > 0).length;
 }
 
@@ -516,10 +575,15 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
     const monthGroups = {};
     const parentProjects = [];
     const complementarProjects = [];
+    const replacedProjects = [];
 
     (projects || []).forEach(project => {
         if (isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
             complementarProjects.push(project);
+            return;
+        }
+        if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+            replacedProjects.push(project);
             return;
         }
         parentProjects.push(project);
@@ -541,6 +605,16 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
         orderGroup.complementarProjects.push(project);
     });
 
+    if (!options.attachReplacedUnderReplacementOrder) {
+        replacedProjects.forEach(project => {
+            const keys = getGestaoRelatorioPedidosPendentesOrderGroupKeys(project, context, options);
+            if (!keys.orderId) return;
+
+            const orderGroup = getGestaoRelatorioPedidosPendentesOrderGroup(monthGroups, keys, project);
+            orderGroup.replacedProjects.push(project);
+        });
+    }
+
     return Object.values(monthGroups)
         .sort((a, b) => {
             if (a.monthKey === 'sem-data') return 1;
@@ -552,27 +626,53 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
                 .map(clientGroup => {
                     const orders = Object.values(clientGroup.ordersById)
                         .map(orderGroup => {
+                            if (options.attachReplacedUnderReplacementOrder && !orderGroup.projects?.length) {
+                                return null;
+                            }
+
+                            const parentIds = new Set(
+                                (orderGroup.projects || []).map(project => Number(project.id)).filter(Boolean)
+                            );
+                            const orderReplacedProjects = options.attachReplacedUnderReplacementOrder
+                                ? replacedProjects.filter(project =>
+                                    parentIds.has(getGestaoRelatorioReplacedProjectParentId(project))
+                                )
+                                : (orderGroup.replacedProjects || []);
                             const projectTree = buildGestaoRelatorioPedidosPendentesProjectTree(
                                 orderGroup.projects,
                                 orderGroup.complementarProjects,
                                 context.projectsById || {},
                                 {
                                     sortByDeliveryDate: options.sortByDeliveryDate,
-                                    context
+                                    context,
+                                    replacedProjects: orderReplacedProjects
                                 }
                             );
                             const valueProjects = [
                                 ...orderGroup.projects,
-                                ...(orderGroup.complementarProjects || [])
+                                ...(orderGroup.complementarProjects || []),
+                                ...(options.attachReplacedUnderReplacementOrder
+                                    ? orderReplacedProjects
+                                    : (orderGroup.replacedProjects || []))
                             ];
+                            const countOptions = options.scheduleRootProjectIds
+                                ? { scheduleRootProjectIds: options.scheduleRootProjectIds }
+                                : {};
+                            const totalSaleValue = options.attachReplacedUnderReplacementOrder
+                                ? sumGestaoRelatorioPedidosPendentesProjectTreeSaleValues(projectTree)
+                                : sumGestaoRelatorioSaleValues(valueProjects);
 
                             return {
                                 ...orderGroup,
                                 projectTree,
-                                projectCount: countGestaoRelatorioPedidosPendentesOrderProjects(projectTree),
-                                totalSaleValue: sumGestaoRelatorioSaleValues(valueProjects)
+                                projectCount: countGestaoRelatorioPedidosPendentesOrderProjects(
+                                    projectTree,
+                                    countOptions
+                                ),
+                                totalSaleValue
                             };
                         })
+                        .filter(Boolean)
                         .sort((a, b) => {
                             if (options.sortByDeliveryDate) {
                                 const dateCompare = String(a.clientDeliveryDate || '').localeCompare(String(b.clientDeliveryDate || ''));
@@ -607,6 +707,17 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
         });
 }
 
+function getGestaoRelatorioPedidosPendentesNestedProjectKindLabel(project) {
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+        return 'Substituído';
+    }
+    if (typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
+        && isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
+        return 'Complementar';
+    }
+    return '';
+}
+
 function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) {
     const { nested = false, parentOnly = false } = options;
     const statusName = getGestaoRelatorioStatusName(project);
@@ -615,6 +726,7 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
         : 'bg-slate-100 text-slate-700';
     const saleValue = formatGestaoRelatorioSaleValue(getProjectEffectiveSaleValue(project));
     const labelPrefix = nested ? '↳ ' : '';
+    const nestedKindLabel = nested ? getGestaoRelatorioPedidosPendentesNestedProjectKindLabel(project) : '';
     const cellPadding = nested ? 'p-2 pl-8' : 'p-2 pl-6';
     const rowClass = nested
         ? 'border-b border-slate-50 last:border-0 bg-slate-50/20'
@@ -622,7 +734,12 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
 
     return `
         <tr class="${rowClass}">
-            <td class="${cellPadding} text-xs ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(`${labelPrefix}${getGestaoRelatorioProjectLabel(project, options)}`)}</td>
+            <td class="${cellPadding} text-xs ${nested ? 'text-slate-600' : 'text-slate-700'}">
+                <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <span>${escapeHtml(`${labelPrefix}${getGestaoRelatorioProjectLabel(project, options)}`)}</span>
+                    ${nestedKindLabel ? `<span class="text-[10px] text-slate-400 shrink-0">${escapeHtml(nestedKindLabel)}</span>` : ''}
+                </div>
+            </td>
             <td class="p-2">
                 ${parentOnly ? '<span class="text-[10px] text-slate-400">—</span>' : `
                 <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
@@ -780,8 +897,12 @@ function getGestaoRelatorioFechamentoProducaoProjectMonthKey(project) {
     return getGestaoRelatorioMonthKey(project?.internalAssemblyEndDate || project?.productionMonth);
 }
 
-function isGestaoRelatorioFechamentoProducaoProject(project, statuses = []) {
+function isGestaoRelatorioFechamentoProducaoRootProject(project, statuses = []) {
     if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+        return false;
+    }
+    if (typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
+        && isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
         return false;
     }
 
@@ -795,6 +916,58 @@ function isGestaoRelatorioFechamentoProducaoProject(project, statuses = []) {
     }
 
     return sortOrder >= minSort;
+}
+
+function isGestaoRelatorioFechamentoProducaoProject(project, statuses = []) {
+    return isGestaoRelatorioFechamentoProducaoRootProject(project, statuses);
+}
+
+function getGestaoRelatorioFechamentoProducaoChildParentProject(project, projectsById = {}) {
+    if (typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
+        && isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
+        const parentId = Number(project.parentProjectId || project.parentProject?.id);
+        return parentId ? (projectsById[parentId] || null) : null;
+    }
+
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+        const parentId = getGestaoRelatorioReplacedProjectParentId(project);
+        return parentId ? (projectsById[parentId] || null) : null;
+    }
+
+    return null;
+}
+
+function expandGestaoRelatorioFechamentoProducaoProjects(fechamentoRoots, allProjects = []) {
+    const roots = fechamentoRoots || [];
+    const list = allProjects?.length ? allProjects : roots;
+    const projectsById = buildGestaoRelatorioProjectsById(list);
+    const rootIds = new Set(roots.map(project => Number(project.id)).filter(Boolean));
+    const included = new Map();
+
+    roots.forEach(project => {
+        const projectId = Number(project.id);
+        if (projectId) included.set(projectId, project);
+    });
+
+    list.forEach(project => {
+        const parent = getGestaoRelatorioFechamentoProducaoChildParentProject(project, projectsById);
+        const parentId = Number(parent?.id);
+        if (!parentId || !rootIds.has(parentId)) return;
+
+        const projectId = Number(project.id);
+        if (projectId) included.set(projectId, project);
+    });
+
+    return [...included.values()];
+}
+
+function resolveGestaoRelatorioFechamentoProducaoGroupingAnchor(project, projectsById, fechamentoRootIds) {
+    const parent = getGestaoRelatorioFechamentoProducaoChildParentProject(project, projectsById);
+    const parentId = Number(parent?.id);
+    if (parent && fechamentoRootIds.has(parentId)) {
+        return parent;
+    }
+    return project;
 }
 
 function getGestaoRelatorioFechamentoProducaoTotals(projects) {
@@ -836,9 +1009,11 @@ async function loadGestaoRelatorioFechamentoProducaoProjects() {
         enrichedProjects = await enrichGestaoRelatorioProjectsWithSubstituicaoValues(enrichedProjects);
     }
 
-    return enrichedProjects.filter(project =>
-        isGestaoRelatorioFechamentoProducaoProject(project, statuses)
+    const fechamentoRoots = enrichedProjects.filter(project =>
+        isGestaoRelatorioFechamentoProducaoRootProject(project, statuses)
     );
+
+    return expandGestaoRelatorioFechamentoProducaoProjects(fechamentoRoots, enrichedProjects);
 }
 
 async function loadGestaoRelatorioFechamentoProducaoTotals() {
@@ -847,8 +1022,31 @@ async function loadGestaoRelatorioFechamentoProducaoTotals() {
 }
 
 async function loadGestaoRelatorioFechamentoProducaoMonthGroups(options = {}) {
-    const fechamentoProjects = await loadGestaoRelatorioFechamentoProducaoProjects();
-    return groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects, options);
+    const statuses = typeof loadGestaoProjectStatuses === 'function'
+        ? await loadGestaoProjectStatuses(true)
+        : [];
+    const { data: projects, error } = await fetchGestaoRelatorioProjects();
+    if (error) throw error;
+
+    let enrichedProjects = projects || [];
+    if (typeof enrichGestaoRelatorioProjectsWithSubstituicaoValues === 'function') {
+        enrichedProjects = await enrichGestaoRelatorioProjectsWithSubstituicaoValues(enrichedProjects);
+    }
+
+    const fechamentoRoots = enrichedProjects.filter(project =>
+        isGestaoRelatorioFechamentoProducaoRootProject(project, statuses)
+    );
+    const fechamentoProjects = expandGestaoRelatorioFechamentoProducaoProjects(
+        fechamentoRoots,
+        enrichedProjects
+    );
+
+    return groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects, {
+        ...options,
+        projectsById: options.projectsById || buildGestaoRelatorioProjectsById(enrichedProjects),
+        fechamentoRoots,
+        fechamentoRootIds: new Set(fechamentoRoots.map(project => Number(project.id)).filter(Boolean))
+    });
 }
 
 function sortGestaoRelatorioFechamentoProducaoProjects(projects) {
@@ -870,11 +1068,22 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, option
         phasesByOrderId: options.phasesByOrderId || {},
         projectsById: options.projectsById || buildGestaoRelatorioProjectsById(projects)
     };
+    const projectsById = context.projectsById;
+    const fechamentoRootIds = options.fechamentoRootIds instanceof Set
+        ? options.fechamentoRootIds
+        : new Set(
+            (options.fechamentoRoots || projects).map(project => Number(project.id)).filter(Boolean)
+        );
     const monthGroups = {};
 
     projects.forEach(project => {
-        const monthKey = getMonthKey(project);
-        const clientName = getOrderClientName(project.order)?.trim() || 'Sem cliente';
+        const anchor = resolveGestaoRelatorioFechamentoProducaoGroupingAnchor(
+            project,
+            projectsById,
+            fechamentoRootIds
+        );
+        const monthKey = getMonthKey(anchor);
+        const clientName = getOrderClientName(anchor.order)?.trim() || 'Sem cliente';
         const clientKey = clientName.toLocaleLowerCase('pt-BR');
 
         if (!monthGroups[monthKey]) {
@@ -917,21 +1126,82 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, option
         });
 }
 
+function buildGestaoRelatorioFechamentoProducaoProjectTree(projects, projectsById = {}) {
+    const parentProjects = [];
+    const complementarProjects = [];
+    const replacedProjects = [];
+
+    (projects || []).forEach(project => {
+        if (isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
+            complementarProjects.push(project);
+            return;
+        }
+        if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+            replacedProjects.push(project);
+            return;
+        }
+        parentProjects.push(project);
+    });
+
+    return buildGestaoRelatorioPedidosPendentesProjectTree(
+        parentProjects,
+        complementarProjects,
+        projectsById,
+        { replacedProjects }
+    );
+}
+
 function renderGestaoRelatorioFechamentoProducaoProjectRow(project, options = {}) {
+    const { nested = false } = options;
     const orderCode = project.order?.orderCode || '—';
     const fimMontagem = typeof formatGestaoDate === 'function'
         ? formatGestaoDate(project.internalAssemblyEndDate)
         : (project.internalAssemblyEndDate || '—');
     const saleValue = formatGestaoRelatorioSaleValue(getProjectEffectiveSaleValue(project));
+    const labelPrefix = nested ? '↳ ' : '';
+    const nestedKindLabel = nested ? getGestaoRelatorioPedidosPendentesNestedProjectKindLabel(project) : '';
+    const rowClass = nested
+        ? 'border-b border-slate-100 last:border-0 bg-slate-50/30'
+        : 'border-b border-slate-100 last:border-0';
+    const projectCellClass = nested ? 'pl-8' : '';
+    const assemblyMonthMismatch = !nested
+        && options.isProgramacaoScheduleRoot
+        && typeof options.getRealizadoAssemblyMonthMismatch === 'function'
+        && options.getRealizadoAssemblyMonthMismatch(project);
+    const assemblyMismatchMarker = assemblyMonthMismatch
+        ? '<span class="text-amber-600 font-bold" title="Fim da montagem interna em mês diferente do programado">*</span>'
+        : '';
 
     return `
-        <tr class="border-b border-slate-100 last:border-0">
-            <td class="p-2.5 text-xs font-mono text-slate-600">${escapeHtml(orderCode)}</td>
-            <td class="p-2.5 text-xs font-medium text-slate-800">${escapeHtml(getGestaoRelatorioProjectLabel(project, options))}</td>
+        <tr class="${rowClass}">
+            <td class="p-2.5 text-xs font-mono text-slate-600">${nested ? '' : escapeHtml(orderCode)}</td>
+            <td class="p-2.5 text-xs font-medium text-slate-800 ${projectCellClass}">
+                <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <span>${escapeHtml(`${labelPrefix}${getGestaoRelatorioProjectLabel(project, options)}`)}</span>
+                    ${assemblyMismatchMarker}
+                    ${nestedKindLabel ? `<span class="text-[10px] font-normal text-slate-400 shrink-0">${escapeHtml(nestedKindLabel)}</span>` : ''}
+                </div>
+            </td>
             <td class="p-2.5 text-xs text-slate-500 whitespace-nowrap">${escapeHtml(fimMontagem)}</td>
             <td class="p-2.5 text-xs text-slate-700 whitespace-nowrap text-right font-medium">${escapeHtml(saleValue)}</td>
         </tr>
     `;
+}
+
+function renderGestaoRelatorioFechamentoProducaoProjectTreeRows(projectTree, options = {}) {
+    return (projectTree || []).map(({ project, children, parentPending }) => {
+        const parentRow = parentPending
+            ? renderGestaoRelatorioFechamentoProducaoProjectRow(project, {
+                ...options,
+                isProgramacaoScheduleRoot: Boolean(options.getRealizadoAssemblyMonthMismatch)
+            })
+            : renderGestaoRelatorioFechamentoProducaoProjectRow(project, { ...options, nested: true });
+        const childRows = (children || [])
+            .map(child => renderGestaoRelatorioFechamentoProducaoProjectRow(child, { ...options, nested: true }))
+            .join('');
+
+        return `${parentRow}${childRows}`;
+    }).join('');
 }
 
 function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options = {}) {
@@ -959,7 +1229,13 @@ function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options
                                 <th class="text-right p-2.5 font-semibold">Valor</th>
                             </tr>
                         </thead>
-                        <tbody>${clientGroup.projects.map(project => renderGestaoRelatorioFechamentoProducaoProjectRow(project, options)).join('')}</tbody>
+                        <tbody>${renderGestaoRelatorioFechamentoProducaoProjectTreeRows(
+                            buildGestaoRelatorioFechamentoProducaoProjectTree(
+                                clientGroup.projects,
+                                options.projectsById || {}
+                            ),
+                            options
+                        )}</tbody>
                     </table>
                 </div>
             </div>
@@ -967,7 +1243,7 @@ function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options
     `;
 }
 
-function renderGestaoRelatorioFechamentoProducaoGroups(groups) {
+function renderGestaoRelatorioFechamentoProducaoGroups(groups, options = {}) {
     if (!groups.length) {
         return '<p class="text-xs text-slate-400 text-center py-4">Nenhum projeto em expedição ou status posterior para fechamento.</p>';
     }
@@ -988,7 +1264,9 @@ function renderGestaoRelatorioFechamentoProducaoGroups(groups) {
                     <span class="text-xs font-bold text-emerald-700 shrink-0">${escapeHtml(totalLabel)}</span>
                 </div>
                 <div class="collapsible-list-body hidden p-2 space-y-2">
-                    ${monthGroup.clients.map(renderGestaoRelatorioFechamentoProducaoClientGroup).join('')}
+                    ${monthGroup.clients.map(clientGroup =>
+                        renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options)
+                    ).join('')}
                 </div>
             </div>
         `;
@@ -1007,10 +1285,18 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
     );
     const pedidosPendentesGrandTotal = pedidosPendentesGroups.reduce((sum, group) => sum + group.totalSaleValue, 0);
     const pedidosPendentesGrandTotalLabel = formatGestaoRelatorioSaleValue(pedidosPendentesGrandTotal);
-    const fechamentoProjects = projects.filter(project =>
-        isGestaoRelatorioFechamentoProducaoProject(project, statuses)
+    const projectsById = buildGestaoRelatorioProjectsById(projects);
+    const fechamentoRoots = projects.filter(project =>
+        isGestaoRelatorioFechamentoProducaoRootProject(project, statuses)
     );
-    const fechamentoGroups = groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects);
+    const fechamentoRootIds = new Set(fechamentoRoots.map(project => Number(project.id)).filter(Boolean));
+    const fechamentoProjects = expandGestaoRelatorioFechamentoProducaoProjects(fechamentoRoots, projects);
+    const fechamentoRenderOptions = { projectsById };
+    const fechamentoGroups = groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects, {
+        projectsById,
+        fechamentoRoots,
+        fechamentoRootIds
+    });
     const fechamentoTotals = getGestaoRelatorioFechamentoProducaoTotals(fechamentoProjects);
     const fechamentoGrandTotalLabel = formatGestaoRelatorioSaleValue(fechamentoTotals.totalSaleValue);
 
@@ -1042,14 +1328,14 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Fechamento Produção</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} ou em status posteriores, agrupados pelo mês do fim da montagem interna e, dentro de cada mês, por cliente.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} ou em status posteriores, agrupados pelo mês do fim da montagem interna e, dentro de cada mês, por cliente. Complementares e substituídos aparecem como filhos do projeto pai e entram na contagem e no valor total.</p>
                 </div>
                 <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg">
                     Total: ${escapeHtml(fechamentoGrandTotalLabel)}
                 </span>
             </div>
             <div id="gestao-relatorio-fechamento-groups" class="p-3 space-y-2">
-                ${renderGestaoRelatorioFechamentoProducaoGroups(fechamentoGroups)}
+                ${renderGestaoRelatorioFechamentoProducaoGroups(fechamentoGroups, fechamentoRenderOptions)}
             </div>
         </section>
     `;
@@ -1115,6 +1401,9 @@ function bindGestaoRelatoriosEvents() {
 window.filterGestaoRelatorioPedidosPendentesProjects = filterGestaoRelatorioPedidosPendentesProjects;
 window.buildGestaoRelatorioProjectsById = buildGestaoRelatorioProjectsById;
 window.groupGestaoRelatorioPedidosPendentesByMonthAndClient = groupGestaoRelatorioPedidosPendentesByMonthAndClient;
+window.getGestaoRelatorioReplacedProjectParentId = getGestaoRelatorioReplacedProjectParentId;
+window.getGestaoRelatorioPedidosPendentesNestedProjectKindLabel = getGestaoRelatorioPedidosPendentesNestedProjectKindLabel;
+window.sumGestaoRelatorioPedidosPendentesProjectTreeSaleValues = sumGestaoRelatorioPedidosPendentesProjectTreeSaleValues;
 window.renderGestaoRelatorioPedidosPendentesGroups = renderGestaoRelatorioPedidosPendentesGroups;
 window.buildGestaoRelatorioPedidosPendentesProjectTree = buildGestaoRelatorioPedidosPendentesProjectTree;
 window.getGestaoRelatorioPedidosPendentesProjectDeliveryDate = getGestaoRelatorioPedidosPendentesProjectDeliveryDate;
@@ -1130,3 +1419,6 @@ window.loadGestaoRelatorioFechamentoProducaoProjects = loadGestaoRelatorioFecham
 window.loadGestaoRelatorioFechamentoProducaoMonthGroups = loadGestaoRelatorioFechamentoProducaoMonthGroups;
 window.renderGestaoRelatorioFechamentoProducaoTotalsLine = renderGestaoRelatorioFechamentoProducaoTotalsLine;
 window.loadGestaoRelatorioFechamentoProducaoTotals = loadGestaoRelatorioFechamentoProducaoTotals;
+window.expandGestaoRelatorioFechamentoProducaoProjects = expandGestaoRelatorioFechamentoProducaoProjects;
+window.resolveGestaoRelatorioFechamentoProducaoGroupingAnchor = resolveGestaoRelatorioFechamentoProducaoGroupingAnchor;
+window.isGestaoRelatorioFechamentoProducaoRootProject = isGestaoRelatorioFechamentoProducaoRootProject;
