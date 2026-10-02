@@ -116,6 +116,7 @@
                         <p class="app-subnav__title">Configurações</p>
                         <nav id="settings-sidebar-nav" aria-label="Seções de configurações">
                             <button type="button" id="settings-nav-geral" class="app-nav-item app-nav-item--nested">Geral</button>
+                            <button type="button" id="settings-nav-activity-log" class="app-nav-item app-nav-item--nested">Auditoria</button>
                             <button type="button" id="settings-nav-import-pedido" class="app-nav-item app-nav-item--nested">ImportPedido</button>
                             <button type="button" id="settings-nav-addr-label" class="app-nav-item app-nav-item--nested">Labels de endereço</button>
                             <div class="app-nav-branch">
@@ -496,6 +497,83 @@
                                 </button>
                             </div>
                         </form>
+                    </div>
+
+                    <div id="settings-activity-log-panel" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h2 class="font-bold text-sm text-slate-900">Auditoria de alterações</h2>
+                            <p class="text-xs text-slate-400 mt-1">Registro de mudanças em status, montagem, detalhamento e revisão. Somente administradores.</p>
+                            <p id="activity-log-status" class="text-[10px] text-amber-700 mt-2"></p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Usuário</label>
+                                    <select id="activity-log-filter-user"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                        <option value="">Todos os usuários</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ação</label>
+                                    <select id="activity-log-filter-action"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                        <option value="">Todas as ações</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Pedido (código)</label>
+                                    <input type="text" id="activity-log-filter-order" placeholder="Ex: 2024-001"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">De</label>
+                                    <input type="date" id="activity-log-filter-from"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Até</label>
+                                    <input type="date" id="activity-log-filter-to"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                </div>
+                                <div class="flex items-end gap-2 flex-wrap">
+                                    <button type="button" id="activity-log-apply-filters"
+                                        class="w-full md:w-auto bg-slate-900 text-white text-xs px-4 py-2 rounded-lg font-semibold hover:bg-slate-800">
+                                        Filtrar
+                                    </button>
+                                    <button type="button" id="activity-log-refresh"
+                                        class="w-full md:w-auto bg-white border border-slate-200 text-slate-700 text-xs px-4 py-2 rounded-lg font-semibold hover:bg-slate-50">
+                                        Atualizar
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-left min-w-[720px]">
+                                    <thead class="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
+                                        <tr>
+                                            <th class="p-2.5 font-semibold">Quando</th>
+                                            <th class="p-2.5 font-semibold">Quem</th>
+                                            <th class="p-2.5 font-semibold">Ação</th>
+                                            <th class="p-2.5 font-semibold">Pedido</th>
+                                            <th class="p-2.5 font-semibold">Projeto</th>
+                                            <th class="p-2.5 font-semibold">Entidade</th>
+                                            <th class="p-2.5 font-semibold">Alteração</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="activity-log-table-body"></tbody>
+                                </table>
+                                <p id="activity-log-empty" class="hidden text-xs text-slate-400 text-center py-8">Nenhum registro para os filtros selecionados.</p>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p id="activity-log-pagination-summary" class="text-[10px] text-slate-400"></p>
+                                <div class="flex gap-2">
+                                    <button type="button" id="activity-log-prev-page"
+                                        class="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-40">Anterior</button>
+                                    <button type="button" id="activity-log-next-page"
+                                        class="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-40">Próxima</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="settings-import-pedido-panel" class="hidden space-y-4">

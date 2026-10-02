@@ -46,6 +46,9 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const canOpen = confirmed || canEdit || canConfirm || isAnteprojetoConferencePartiallyConfirmed(conference);
     const pendingSubmitIds = getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference);
     const pendingSubmitCount = pendingSubmitIds.length;
+    const partialSubmitSelection = typeof shouldShowConferencePartialSubmitSelection === 'function'
+        ? shouldShowConferencePartialSubmitSelection(conference)
+        : pendingSubmitCount > 1;
     const projetistaName = projetistaNames[conference.designerId] || '-';
     const isPartial = isAnteprojetoConferencePartiallyConfirmed(conference);
     const statusClass = approved
@@ -109,7 +112,13 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
     const projectsWrap = document.createElement('div');
     projectsWrap.className = 'space-y-1';
 
-    (conference.conferenceProjects || []).forEach(project => {
+    const managerApprovalView = typeof canApproveAnteprojetoConference === 'function'
+        && canApproveAnteprojetoConference(conference);
+    const conferenceProjectsForCard = managerApprovalView
+        ? (conference.conferenceProjects || []).filter(isConferenceProjectAwaitingManagerApproval)
+        : (conference.conferenceProjects || []);
+
+    conferenceProjectsForCard.forEach(project => {
         const projectName = project.orderProject?.name || 'Projeto';
         const modules = project.modules || [];
         const projectId = Number(project.orderProjectId);
@@ -128,8 +137,9 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
         projectRow.innerHTML = `
             <button type="button" class="anteprojeto-tree-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                 aria-label="Expandir">▶</button>
-            ${canConfirm && awaitingSubmit && pendingSubmitCount > 1
-                ? `<input type="checkbox" class="anteprojeto-card-project-submit-select h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" data-order-project-id="${projectId}" checked>`
+            ${canConfirm && awaitingSubmit && partialSubmitSelection
+                ? `<input type="checkbox" class="anteprojeto-card-project-submit-select h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" data-order-project-id="${projectId}" checked
+                    title="Incluir este projeto no envio ao gestor">`
                 : ''}
             <span class="text-xs font-semibold text-slate-800">🏠 ${escapeHtml(projectName)}</span>
             ${sentToManager
@@ -198,13 +208,13 @@ function renderAnteprojetoConferenceCard(conference, projetistaNames = {}) {
         const confirmWrap = document.createElement('div');
         confirmWrap.className = 'flex flex-col items-end gap-1.5 pt-2 border-t border-slate-100';
         confirmWrap.dataset.conferenceId = String(conference.id);
-        const confirmLabel = pendingSubmitCount > 1
+        const confirmLabel = partialSubmitSelection
             ? 'Enviar projetos selecionados ao gestor'
             : 'Enviar ao gestor comercial';
         confirmWrap.innerHTML = `
             <p class="text-[10px] text-slate-500 text-right leading-relaxed max-w-md">
                 <span class="text-red-500">*</span>
-                ${pendingSubmitCount > 1
+                ${partialSubmitSelection
                     ? 'Marque os projetos a enviar e classifique todas as observações deles.'
                     : 'Classifique Req. Proj., Req. Cons. ou OK em cada observação antes de enviar ao gestor.'}
             </p>

@@ -114,7 +114,7 @@ async function resolveDetailingDriveContextForRecord(orderProjectId, record, pro
 
     const { data, error } = await supabaseClient
         .from('OrderProject')
-        .select('id, name, projectCode, orderId, order:salesOrders(orderCode)')
+        .select('id, name, projectCode, orderId, order:salesOrders(orderCode, client:Client(name))')
         .eq('id', orderProjectId)
         .maybeSingle();
 
@@ -124,6 +124,9 @@ async function resolveDetailingDriveContextForRecord(orderProjectId, record, pro
 
     const orderCode = data?.order?.orderCode || '';
     const projectName = data?.name || projectNameFallback;
+    const clientName = (typeof getOrderClientName === 'function' && getOrderClientName(data?.order))
+        || data?.order?.client?.name
+        || '';
     if (!orderCode || !projectName) return null;
 
     const params = {
@@ -135,6 +138,7 @@ async function resolveDetailingDriveContextForRecord(orderProjectId, record, pro
     return {
         ...params,
         orderCode,
+        clientName,
         projectName,
         orderId: Number(data?.orderId || 0) || null,
         orderProjectId: Number(orderProjectId),
@@ -244,7 +248,13 @@ async function uploadFilesToDetailingDrive(fileList, context, options = {}) {
         setLoading?.(true, 'Enviando arquivo(s) para o Drive...');
 
         for (const file of files) {
-            await saveDriveFileUpload(file, context, (sent, total) => {
+            const uploadContext = {
+                ...context,
+                fileName: typeof buildDetailingDriveFileName === 'function'
+                    ? buildDetailingDriveFileName(context.orderCode, context.clientName, context.projectName)
+                    : file.name
+            };
+            await saveDriveFileUpload(file, uploadContext, (sent, total) => {
                 if (!setLoading || !total) return;
                 const pct = Math.min(100, Math.round((sent / total) * 100));
                 setLoading(true, `Enviando ${file.name} (${pct}%)...`);

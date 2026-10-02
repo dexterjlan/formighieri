@@ -118,7 +118,50 @@ function getOrderProjectStatusNameFromConferenceProject(conferenceProject) {
 
 function isConferenceProjectAwaitingConsultorSubmit(conferenceProject) {
     const statusName = getOrderProjectStatusNameFromConferenceProject(conferenceProject);
-    return !statusName || statusName === ORDER_PROJECT_STATUS_CONFERENCIA_ENVIADA;
+    if (statusName === ORDER_PROJECT_STATUS_CONFERENCIA_REALIZADA) return false;
+    if (!statusName || statusName === ORDER_PROJECT_STATUS_CONFERENCIA_ENVIADA) return true;
+    // Projeto na conferência antes de todos receberem “Conferência Enviada”
+    if (statusName === 'Planta Levantada') return true;
+    return false;
+}
+
+function isConferenceProjectPendingConsultorSubmitToManager(conferenceProject) {
+    return getOrderProjectStatusNameFromConferenceProject(conferenceProject)
+        !== ORDER_PROJECT_STATUS_CONFERENCIA_REALIZADA;
+}
+
+function shouldShowConferencePartialSubmitSelection(conference) {
+    const pendingSubmitIds = getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference);
+    if (pendingSubmitIds.length > 1) return true;
+    const notYetSentToManager = (conference?.conferenceProjects || [])
+        .filter(isConferenceProjectPendingConsultorSubmitToManager);
+    return notYetSentToManager.length > 1;
+}
+
+function shouldShowConferencePartialManagerApprovalSelection(conference) {
+    return getConferenceOrderProjectIdsAwaitingManagerApproval(conference).length > 1;
+}
+
+function filterConferenceForManagerApprovalView(conference) {
+    if (!conference) return conference;
+    const awaitingIds = new Set(getConferenceOrderProjectIdsAwaitingManagerApproval(conference));
+    return {
+        ...conference,
+        conferenceProjects: (conference.conferenceProjects || []).filter(project =>
+            awaitingIds.has(Number(project.orderProjectId))
+        )
+    };
+}
+
+function resolveConferenceManagerApprovalProjectIds(conference, requestedIds = null) {
+    const pending = getConferenceOrderProjectIdsAwaitingManagerApproval(conference);
+    if (!pending.length) return [];
+
+    const normalizedRequested = requestedIds == null
+        ? pending
+        : [...new Set((requestedIds || []).map(id => Number(id)).filter(Boolean))];
+
+    return normalizedRequested.filter(id => pending.includes(id));
 }
 
 function isConferenceProjectAwaitingManagerApproval(conferenceProject) {
@@ -824,7 +867,16 @@ function bindPreliminaryDesignEvents() {
     });
     document.getElementById('btn-anteprojeto-modal-approve')?.addEventListener('click', async () => {
         if (!editingAnteprojetoConferenceId) return;
-        await showPreliminaryDesignApproveDeliveryModal(editingAnteprojetoConferenceId);
+        const selectedIds = typeof collectConferenceProjectIdsForManagerApprovalFromDom === 'function'
+            ? collectConferenceProjectIdsForManagerApprovalFromDom()
+            : null;
+        if (Array.isArray(selectedIds) && !selectedIds.length) {
+            alertAppDialog('Marque ao menos um projeto para aprovar.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
+        await showPreliminaryDesignApproveDeliveryModal(editingAnteprojetoConferenceId, {
+            orderProjectIds: selectedIds ?? undefined
+        });
     });
     document.getElementById('btn-anteprojeto-modal-return')?.addEventListener('click', () => {
         if (!editingAnteprojetoConferenceId) return;

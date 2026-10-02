@@ -3,6 +3,7 @@ let importConsultorFgpUsersCache = [];
 function setSettingsNavActive(panelKey) {
     const buttons = {
         geral: document.getElementById('settings-nav-geral'),
+        'activity-log': document.getElementById('settings-nav-activity-log'),
         'import-pedido': document.getElementById('settings-nav-import-pedido'),
         'addr-label': document.getElementById('settings-nav-addr-label'),
         'calendar-event-types': document.getElementById('settings-nav-calendar-event-types'),
@@ -21,6 +22,7 @@ function setSettingsNavActive(panelKey) {
     });
 
     document.getElementById('settings-general-panel')?.classList.toggle('hidden', panelKey !== 'geral');
+    document.getElementById('settings-activity-log-panel')?.classList.toggle('hidden', panelKey !== 'activity-log');
     document.getElementById('settings-import-pedido-panel')?.classList.toggle('hidden', panelKey !== 'import-pedido');
     document.getElementById('settings-addr-label-panel')?.classList.toggle('hidden', panelKey !== 'addr-label');
 

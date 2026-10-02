@@ -220,28 +220,66 @@ async function fetchAnteprojetoApprovalDeliveryContext(conference) {
 
     const hasPhases = phases.length >= 2;
 
+    const partialApprovalSelection = typeof shouldShowConferencePartialManagerApprovalSelection === 'function'
+        ? shouldShowConferencePartialManagerApprovalSelection(conference)
+        : projects.length > 1;
+
     return {
         orderCode,
         clientName,
         clientDeliveryDate,
         projects,
         phases,
-        hasPhases
+        hasPhases,
+        partialApprovalSelection
     };
 }
 
-function renderAnteprojetoApproveProjectsFieldsFlat(projects = []) {
+function renderAnteprojetoApproveProjectSelectCheckbox(projectId, showCheckbox) {
+    if (!showCheckbox) return '';
+    return `<input type="checkbox"
+        class="anteprojeto-approve-project-select h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+        data-project-id="${projectId}"
+        checked
+        title="Incluir este projeto na aprovação">`;
+}
+
+function collectAnteprojetoApproveSelectedProjectIds() {
+    const context = anteprojetoApproveDeliveryContext;
+    const checkboxes = [...document.querySelectorAll('.anteprojeto-approve-project-select')];
+    if (!context?.partialApprovalSelection || !checkboxes.length) {
+        return null;
+    }
+
+    const selected = checkboxes
+        .filter(input => input.checked)
+        .map(input => Number(input.dataset.projectId))
+        .filter(Boolean);
+
+    if (selected.length) return selected;
+    if (checkboxes.length === 1) {
+        return [Number(checkboxes[0].dataset.projectId)].filter(Boolean);
+    }
+    return [];
+}
+
+function renderAnteprojetoApproveProjectsFieldsFlat(projects = [], options = {}) {
     const wrap = document.getElementById('anteprojeto-approve-projects-wrap');
     if (!wrap) return;
 
     if (!projects.length) {
-        wrap.innerHTML = '<p class="text-xs text-slate-400">Nenhum projeto na conferência.</p>';
+        wrap.innerHTML = '<p class="text-xs text-slate-400">Nenhum projeto aguardando aprovação do gestor.</p>';
         return;
     }
 
+    const showCheckbox = Boolean(options.partialApprovalSelection) && projects.length > 1;
+
     wrap.innerHTML = projects.map(project => `
         <div class="border border-slate-200 rounded-lg p-3 bg-slate-50/40" data-project-id="${project.id}">
-            <div class="text-xs font-semibold text-slate-800 mb-2">${escapeHtml(project.name)}</div>
+            <div class="flex items-center gap-2 mb-2">
+                ${renderAnteprojetoApproveProjectSelectCheckbox(project.id, showCheckbox)}
+                <div class="text-xs font-semibold text-slate-800">${escapeHtml(project.name)}</div>
+            </div>
             <label class="block text-[11px] font-semibold text-slate-500 mb-1" for="anteprojeto-approve-project-${project.id}">
                 Data de entrega do projeto <span class="text-red-500">*</span>
             </label>
@@ -253,13 +291,14 @@ function renderAnteprojetoApproveProjectsFieldsFlat(projects = []) {
     `).join('');
 }
 
-function renderAnteprojetoApproveProjectsFieldsPhased(projects = [], phases = []) {
+function renderAnteprojetoApproveProjectsFieldsPhased(projects = [], phases = [], options = {}) {
     const wrap = document.getElementById('anteprojeto-approve-projects-wrap');
     if (!wrap) return;
 
+    const showCheckbox = Boolean(options.partialApprovalSelection) && projects.length > 1;
     const groups = groupAnteprojetoApproveProjectsByPhase(projects, phases);
     if (!groups.length) {
-        wrap.innerHTML = '<p class="text-xs text-slate-400">Nenhum projeto na conferência.</p>';
+        wrap.innerHTML = '<p class="text-xs text-slate-400">Nenhum projeto aguardando aprovação do gestor.</p>';
         return;
     }
 
@@ -267,7 +306,10 @@ function renderAnteprojetoApproveProjectsFieldsPhased(projects = [], phases = []
         <div class="border border-slate-200 rounded-lg overflow-hidden bg-white" data-phase-id="${phase.id}">
             ${phaseProjects.map((project, index) => `
                 <div class="flex items-center justify-between gap-3 px-3 py-2.5 ${index < phaseProjects.length - 1 ? 'border-b border-slate-100' : ''}" data-project-id="${project.id}">
-                    <div class="text-xs font-semibold text-slate-800 min-w-0 truncate">${escapeHtml(project.name)}</div>
+                    <div class="flex items-center gap-2 min-w-0">
+                        ${renderAnteprojetoApproveProjectSelectCheckbox(project.id, showCheckbox)}
+                        <div class="text-xs font-semibold text-slate-800 min-w-0 truncate">${escapeHtml(project.name)}</div>
+                    </div>
                     <div class="flex items-center gap-2 shrink-0 text-right">
                         <span class="text-[11px] font-medium text-slate-500 whitespace-nowrap">${escapeHtml(phase.name || 'Fase')}</span>
                         ${index === 0 ? `
@@ -292,14 +334,14 @@ function renderAnteprojetoApproveProjectsFieldsPhased(projects = [], phases = []
 
 function renderAnteprojetoApproveProjectsFields(projects = [], options = {}) {
     if (options.hasPhases) {
-        renderAnteprojetoApproveProjectsFieldsPhased(projects, options.phases || []);
+        renderAnteprojetoApproveProjectsFieldsPhased(projects, options.phases || [], options);
         return;
     }
 
-    renderAnteprojetoApproveProjectsFieldsFlat(projects);
+    renderAnteprojetoApproveProjectsFieldsFlat(projects, options);
 }
 
-async function showPreliminaryDesignApproveDeliveryModal(conferenceId) {
+async function showPreliminaryDesignApproveDeliveryModal(conferenceId, options = {}) {
     const normalizedId = Number(conferenceId);
     if (!normalizedId) return;
 
@@ -330,9 +372,19 @@ async function showPreliminaryDesignApproveDeliveryModal(conferenceId) {
     pendingAnteprojetoApproveConferenceId = normalizedId;
 
     const context = await fetchAnteprojetoApprovalDeliveryContext(conference);
+    const preselectedIds = options.orderProjectIds != null
+        ? [...new Set((options.orderProjectIds || []).map(id => Number(id)).filter(Boolean))]
+        : null;
+    if (preselectedIds?.length) {
+        const idSet = new Set(preselectedIds);
+        context.projects = (context.projects || []).filter(project => idSet.has(Number(project.id)));
+    }
     if (!context.projects?.length) {
         alertAppDialog('Não há projetos aguardando aprovação nesta conferência.', { variant: 'warning', title: 'Aviso' });
         return;
+    }
+    if (preselectedIds?.length) {
+        context.partialApprovalSelection = false;
     }
     anteprojetoApproveDeliveryContext = context;
 
@@ -356,18 +408,42 @@ async function showPreliminaryDesignApproveDeliveryModal(conferenceId) {
     syncAnteprojetoApproveDeliveryUi(context.hasPhases);
     renderAnteprojetoApproveProjectsFields(context.projects, {
         hasPhases: context.hasPhases,
-        phases: context.phases
+        phases: context.phases,
+        partialApprovalSelection: context.partialApprovalSelection
     });
     syncAnteprojetoApproveProjectDeliveryConstraints();
 
+    const submitBtn = document.getElementById('btn-anteprojeto-approve-modal-submit');
+    if (submitBtn) {
+        submitBtn.textContent = context.partialApprovalSelection
+            ? 'Aprovar projeto(s) selecionado(s)'
+            : 'Confirmar aprovação';
+    }
+
+    const projectsLabel = document.getElementById('anteprojeto-approve-projects-label');
+    if (projectsLabel) {
+        projectsLabel.textContent = context.partialApprovalSelection
+            ? 'Projetos enviados ao gestor (marque os que deseja aprovar agora)'
+            : (context.hasPhases ? 'Projetos por fase de entrega' : 'Datas de entrega dos projetos');
+    }
+
     toggleModal('anteprojeto-approve-modal', true);
     (context.hasPhases ? pathEl : orderDeliveryEl)?.focus();
+}
+
+function filterAnteprojetoApproveProjectsForSelection(projects = []) {
+    const selectedIds = collectAnteprojetoApproveSelectedProjectIds();
+    if (selectedIds == null) return projects;
+    const idSet = new Set(selectedIds);
+    return (projects || []).filter(project => idSet.has(Number(project.id)));
 }
 
 function collectAnteprojetoApproveDeliverySelections() {
     const conferencePath = document.getElementById('anteprojeto-approve-conference-path')?.value?.trim() || '';
     const hasPhases = anteprojetoApproveOrderHasPhases();
     const context = anteprojetoApproveDeliveryContext || { projects: [], phases: [] };
+    const selectedProjectIds = collectAnteprojetoApproveSelectedProjectIds();
+    const projectsForApproval = filterAnteprojetoApproveProjectsForSelection(context.projects);
 
     if (hasPhases) {
         const phaseDeliveries = [...new Map(
@@ -383,7 +459,7 @@ function collectAnteprojetoApproveDeliverySelections() {
             phaseDeliveries.map(item => [item.phaseId, item.deliveryDate])
         );
 
-        const projectDeliveries = (context.projects || []).map(project => {
+        const projectDeliveries = projectsForApproval.map(project => {
             const phase = resolveAnteprojetoApproveProjectPhase(project, context.phases);
             const phaseDeliveryDate = phaseDateById[Number(phase?.id)] || '';
             return {
@@ -401,24 +477,30 @@ function collectAnteprojetoApproveDeliverySelections() {
             orderDeliveryDate,
             conferencePath,
             phaseDeliveries,
-            projectDeliveries
+            projectDeliveries,
+            approvedProjectIds: projectDeliveries.map(item => item.projectId)
         };
     }
 
     const orderDeliveryDate = document.getElementById('anteprojeto-approve-order-delivery')?.value || '';
+    const selectedIdSet = selectedProjectIds == null
+        ? null
+        : new Set(selectedProjectIds);
     const projectDeliveries = [...document.querySelectorAll('.anteprojeto-approve-project-delivery')]
         .map(input => ({
             projectId: Number(input.dataset.projectId),
             deliveryDate: input.value || ''
         }))
-        .filter(item => item.projectId);
+        .filter(item => item.projectId)
+        .filter(item => !selectedIdSet || selectedIdSet.has(item.projectId));
 
     return {
         hasPhases: false,
         orderDeliveryDate,
         conferencePath,
         phaseDeliveries: [],
-        projectDeliveries
+        projectDeliveries,
+        approvedProjectIds: projectDeliveries.map(item => item.projectId)
     };
 }
 
@@ -429,7 +511,13 @@ function validateAnteprojetoApproveDeliverySelections(selections) {
     }
 
     if (!selections.projectDeliveries.length) {
-        alertAppDialog('Nenhum projeto encontrado para aprovar.', { variant: 'warning', title: 'Aviso' });
+        const partial = anteprojetoApproveDeliveryContext?.partialApprovalSelection;
+        alertAppDialog(
+            partial
+                ? 'Marque ao menos um projeto para aprovar.'
+                : 'Nenhum projeto encontrado para aprovar.',
+            { variant: 'warning', title: 'Aviso' }
+        );
         return false;
     }
 
@@ -610,7 +698,9 @@ async function submitAnteprojetoApproveDeliveryModal() {
         await saveAnteprojetoApprovalDeliveryDates(conference, selections);
 
         closePreliminaryDesignApproveDeliveryModal();
-        await approvePreliminaryDesignConference(conferenceId);
+        await approvePreliminaryDesignConference(conferenceId, {
+            orderProjectIds: selections.approvedProjectIds
+        });
     } catch (error) {
         setAnteprojetoApproveModalLoading(true, `Erro ao salvar dados: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));
@@ -618,7 +708,7 @@ async function submitAnteprojetoApproveDeliveryModal() {
     }
 }
 
-async function approvePreliminaryDesignConference(conferenceId) {
+async function approvePreliminaryDesignConference(conferenceId, options = {}) {
     const conference = anteprojetoConferencesCache.find(c => c.id === conferenceId);
     if (!conference) return;
 
@@ -627,7 +717,9 @@ async function approvePreliminaryDesignConference(conferenceId) {
         return;
     }
 
-    const approvedProjectIds = getConferenceOrderProjectIdsAwaitingManagerApproval(conference);
+    const approvedProjectIds = typeof resolveConferenceManagerApprovalProjectIds === 'function'
+        ? resolveConferenceManagerApprovalProjectIds(conference, options.orderProjectIds ?? null)
+        : getConferenceOrderProjectIdsAwaitingManagerApproval(conference);
     if (!approvedProjectIds.length) {
         alertAppDialog('Não há projetos aguardando aprovação nesta conferência.', { variant: 'warning', title: 'Aviso' });
         return;

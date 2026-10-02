@@ -163,6 +163,10 @@ async function showSystemSettings(panelKey = 'geral') {
         fillSystemSettingsForm(systemSettingsCache);
         return;
     }
+    if (panelKey === 'activity-log' && typeof initActivityLogAdminPanel === 'function') {
+        await initActivityLogAdminPanel();
+        return;
+    }
     if (panelKey === 'import-pedido' && typeof loadImportPedidoSettings === 'function') {
         await loadImportPedidoSettings();
         return;

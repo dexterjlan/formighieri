@@ -126,7 +126,7 @@ async function showPreliminaryDesignReturnObservationForm(conferenceId) {
 
     const observationEl = document.getElementById('anteprojeto-return-modal-observation');
     if (observationEl) {
-        observationEl.value = conference.managerObservation || '';
+        observationEl.value = '';
     }
 
     toggleModal('anteprojeto-return-modal', true);
@@ -161,6 +161,17 @@ async function returnPreliminaryDesignConferenceToConsultor(conferenceId, observ
     }
 
     activeOrderId = conference.orderId || activeOrderId;
+
+    const projectIdsToReturn = typeof getConferenceOrderProjectIdsAwaitingManagerApproval === 'function'
+        ? getConferenceOrderProjectIdsAwaitingManagerApproval(conference)
+        : [];
+    if (!projectIdsToReturn.length) {
+        alertAppDialog(
+            'Não há projetos aguardando aprovação do gestor para devolver ao consultor.',
+            { variant: 'warning', title: 'Aviso' }
+        );
+        return;
+    }
 
     try {
         setAnteprojetoConferenceActionLoading(true, 'Registrando observações da devolução...');
@@ -212,13 +223,13 @@ async function returnPreliminaryDesignConferenceToConsultor(conferenceId, observ
         conference.managerObservation = trimmedObservation;
 
         setAnteprojetoConferenceActionLoading(true, 'Atualizando status dos projetos...');
-        await applyConferenciaEnviadaStatusToProjects(getConferenceOrderProjectIds(conference));
+        await applyConferenciaEnviadaStatusToProjects(projectIdsToReturn);
 
         if (typeof notifyConferenciaDevolvidaConsultorEmail === 'function') {
             setAnteprojetoConferenceActionLoading(true, 'Enviando e-mail de notificação...');
             await notifyConferenciaDevolvidaConsultorEmail({
                 orderId: conference.orderId,
-                orderProjectIds: getConferenceOrderProjectIds(conference),
+                orderProjectIds: projectIdsToReturn,
                 observation: trimmedObservation
             });
         }

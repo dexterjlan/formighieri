@@ -68,12 +68,22 @@ async function addAnteprojetoProjectSection(project = {}, options = {}) {
     const { canEditStructure = true, canExtendStructure = true, canEditConsultor = false, readOnly = false } = options;
     const structureDisabled = readOnly || !canEditStructure;
     const extendDisabled = readOnly || !canExtendStructure;
-    const projectStatusName = project.projectStatusName || '';
-    const sentToManager = projectStatusName === ORDER_PROJECT_STATUS_CONFERENCIA_REALIZADA;
-    const awaitingConsultorSubmit = !sentToManager && (
-        !projectStatusName || projectStatusName === ORDER_PROJECT_STATUS_CONFERENCIA_ENVIADA
-    );
-    const showSubmitSelect = canEditConsultor && awaitingConsultorSubmit && Boolean(options.consultorSubmitSelectionEnabled);
+    const conferenceProjectStub = {
+        orderProject: {
+            projectStatus: { name: project.projectStatusName || '' },
+            statusId: project.statusId
+        }
+    };
+    const awaitingConsultorSubmit = typeof isConferenceProjectAwaitingConsultorSubmit === 'function'
+        ? isConferenceProjectAwaitingConsultorSubmit(conferenceProjectStub)
+        : false;
+    const sentToManager = !awaitingConsultorSubmit
+        && (project.projectStatusName || '') === ORDER_PROJECT_STATUS_CONFERENCIA_REALIZADA;
+    const showSubmitSelect = canEditConsultor
+        && awaitingConsultorSubmit
+        && Boolean(options.consultorSubmitSelectionEnabled);
+    const showManagerApproveSelect = sentToManager
+        && Boolean(options.managerApprovalSelectionEnabled);
     const sectionReadOnlyConsultor = readOnly || sentToManager;
     const sectionOptions = {
         ...options,
@@ -88,6 +98,9 @@ async function addAnteprojetoProjectSection(project = {}, options = {}) {
     if (awaitingConsultorSubmit) {
         section.dataset.awaitingConsultorSubmit = '1';
     }
+    if (sentToManager) {
+        section.dataset.awaitingManagerApproval = '1';
+    }
 
     section.innerHTML = `
         <div class="flex justify-between items-center gap-2 px-4 py-2.5 bg-sky-100/50 border-b border-sky-200">
@@ -95,6 +108,10 @@ async function addAnteprojetoProjectSection(project = {}, options = {}) {
                 ${showSubmitSelect
                     ? `<input type="checkbox" class="anteprojeto-project-submit-select h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 shrink-0" checked
                         title="Incluir este projeto no envio ao gestor">`
+                    : ''}
+                ${showManagerApproveSelect
+                    ? `<input type="checkbox" class="anteprojeto-project-approve-select h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0" checked
+                        title="Incluir este projeto na aprovação">`
                     : ''}
                 <span class="text-xs font-bold text-slate-800 truncate">🏠 ${escapeHtml(project.label || 'Projeto')}</span>
                 ${sentToManager

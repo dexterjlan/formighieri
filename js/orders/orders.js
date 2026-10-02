@@ -12,8 +12,17 @@ function orderHasDeliveryPhases(orderId) {
 }
 
 function formatOrderDeliverySummary(orderId, clientDeliveryDate, options = {}) {
-    if (orderHasDeliveryPhases(orderId)) {
-        return 'Entrega em fases';
+    const phases = getOrderPhasesForOrder(orderId);
+    if (phases.length >= 2) {
+        const parts = phases.map(phase => {
+            const dateLabel = typeof formatGestaoDate === 'function'
+                ? formatGestaoDate(phase.deliveryDate)
+                : (phase.deliveryDate || '—');
+            const phaseName = phase.name || 'Fase';
+            return `${phaseName}: ${dateLabel}`;
+        });
+        const prefix = options.prefix === 'Entrega' ? 'Entrega' : 'Entrega pedido';
+        return `${prefix} — ${parts.join(' · ')}`;
     }
 
     const prefix = options.prefix || 'Entrega pedido';
@@ -950,6 +959,9 @@ async function selectOrder(id) {
         const order = await fetchOrderDetailRecord(normalizedId);
         if (loadToken !== selectOrderLoadToken) return;
 
+        if (typeof loadOrderPhasesForOrders === 'function') {
+            await loadOrderPhasesForOrders([order]);
+        }
         await applyOrderDetailHeader(order);
         if (loadToken !== selectOrderLoadToken) return;
 

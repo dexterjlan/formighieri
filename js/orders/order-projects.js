@@ -136,14 +136,14 @@ async function fetchOrderProjectsForOrder(orderId) {
         .from('OrderProject')
         .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name, sortOrder), designer:appUsers!OrderProject_designerId_fkey(id, name), deliveryPhaseId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
         .eq('orderId', orderId)
-        .order('createdAt', { ascending: true });
+        .order('name', { ascending: true });
 
     if (result.error?.message?.includes('deliveryPhaseId')) {
         result = await supabaseClient
             .from('OrderProject')
             .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name, sortOrder), designer:appUsers!OrderProject_designerId_fkey(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
             .eq('orderId', orderId)
-            .order('createdAt', { ascending: true });
+            .order('name', { ascending: true });
     }
 
     if (result.error?.message?.includes('designer')) {
@@ -151,7 +151,7 @@ async function fetchOrderProjectsForOrder(orderId) {
             .from('OrderProject')
             .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name), parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode))')
             .eq('orderId', orderId)
-            .order('createdAt', { ascending: true });
+            .order('name', { ascending: true });
     }
 
     if (result.error?.message?.includes('parentProject') || result.error?.message?.includes('isComplementary')
@@ -161,7 +161,7 @@ async function fetchOrderProjectsForOrder(orderId) {
             .from('OrderProject')
             .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
             .eq('orderId', orderId)
-            .order('createdAt', { ascending: true });
+            .order('name', { ascending: true });
     }
 
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
@@ -169,7 +169,7 @@ async function fetchOrderProjectsForOrder(orderId) {
             .from('OrderProject')
             .select('*, environmentType:EnvironmentType(name)')
             .eq('orderId', orderId)
-            .order('createdAt', { ascending: true });
+            .order('name', { ascending: true });
     }
 
     if (result.error) {
@@ -346,7 +346,10 @@ async function loadOrderProjects(orderId) {
         await loadOrderPhasesForOrders([{ id: Number(orderId) }]);
     }
 
-    const projects = await fetchOrderProjectsForOrder(orderId);
+    let projects = await fetchOrderProjectsForOrder(orderId);
+    projects = [...projects].sort((a, b) =>
+        String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base' })
+    );
     const hasPhases = typeof orderHasDeliveryPhases === 'function'
         && orderHasDeliveryPhases(orderId);
     orderProjectsCache = projects;
@@ -368,35 +371,30 @@ async function loadOrderProjects(orderId) {
 
     list.innerHTML = '<div class="order-projects-grid"></div>';
     const grid = list.querySelector('.order-projects-grid');
+    if (hasPhases) {
+        grid.classList.add('order-projects-grid--with-phases');
+    }
 
     const header = document.createElement('div');
     header.className = 'order-projects-grid__header';
     header.innerHTML = `
         <span class="order-projects-grid__head order-projects-grid__head--project">Projeto</span>
         <span class="order-projects-grid__head">Projetista</span>
-        <span class="order-projects-grid__head">${hasPhases ? 'Fase' : 'Entrega'}</span>
+        ${hasPhases ? '<span class="order-projects-grid__head">Fase</span>' : ''}
         <span class="order-projects-grid__head">Status</span>
         <span class="order-projects-grid__head order-projects-grid__head--actions">Ação</span>
     `;
     grid.appendChild(header);
 
-    [...orderProjectsCache]
-        .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }))
-        .forEach(p => {
+    orderProjectsCache.forEach(p => {
             const statusName = getOrderProjectStatusName(p);
             const statusClass = getOrderProjectStatusBadgeClass(statusName);
             const phaseDisplay = typeof getOrderProjectPhaseDisplay === 'function'
                 ? getOrderProjectPhaseDisplay(p, orderId)
                 : null;
-            const deliveryDate = typeof formatGestaoDate === 'function'
-                ? formatGestaoDate(p.deliveryDate)
-                : (p.deliveryDate || '—');
-            const deliveryCell = phaseDisplay
-                ? `<span class="block font-medium text-slate-700">${escapeHtml(phaseDisplay.name)}</span><span class="block text-[9px] text-slate-500">${escapeHtml(phaseDisplay.dateLabel)}</span>`
-                : escapeHtml(deliveryDate);
-            const deliveryTitle = phaseDisplay
-                ? `${phaseDisplay.name} · ${phaseDisplay.dateLabel}`
-                : `Entrega do projeto técnico: ${deliveryDate}`;
+            const phaseCellHtml = phaseDisplay
+                ? `<span class="order-projects-grid__cell text-[10px] text-slate-600 whitespace-nowrap" title="${escapeHtml(`${phaseDisplay.name} · ${phaseDisplay.dateLabel}`)}"><span class="block font-medium text-slate-700">${escapeHtml(phaseDisplay.name)}</span><span class="block text-[9px] text-slate-500">${escapeHtml(phaseDisplay.dateLabel)}</span></span>`
+                : '';
             const designerName = p.designer?.name || '—';
             const projectId = Number(p.id);
             const approval = actionContext.approvalsByProject?.[projectId] || null;
@@ -426,7 +424,7 @@ async function loadOrderProjects(orderId) {
                         </div>
                     </div>
                     <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
-                    <span class="order-projects-grid__cell text-[10px] text-slate-600 whitespace-nowrap" title="${escapeHtml(deliveryTitle)}">${deliveryCell}</span>
+                    ${phaseCellHtml}
                     <span class="order-projects-grid__cell order-projects-grid__cell--status text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
                     <div class="order-projects-grid__cell order-projects-grid__cell--actions">
                         ${typeof renderOrderProjectActionButtons === 'function'

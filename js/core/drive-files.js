@@ -277,6 +277,19 @@ function buildDescriptiveDriveFileName(orderCode, clientName, maxLength = DESCRI
     return name;
 }
 
+const DETAILING_DRIVE_CLIENT_FILE_NAME_MAX_LENGTH = 100;
+
+function buildDetailingDriveFileName(orderCode, clientName, projectName) {
+    const ext = '.pdf';
+    const order = String(orderCode || '').trim().replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_') || 'Pedido';
+    let client = sanitizeDescriptiveClientFileSlug(clientName) || 'Cliente';
+    if (client.length > DETAILING_DRIVE_CLIENT_FILE_NAME_MAX_LENGTH) {
+        client = client.slice(0, DETAILING_DRIVE_CLIENT_FILE_NAME_MAX_LENGTH);
+    }
+    const project = sanitizeDescriptiveClientFileSlug(projectName) || 'Projeto';
+    return `DET_${order}_${client}_${project}${ext}`;
+}
+
 function validateDriveUploadFiles(files, folderKind = DRIVE_FILE_FOLDER_KIND.DETAILING) {
     const list = Array.from(files || []);
     const allowed = allowedDriveExtensionsForFolderKind(folderKind);
@@ -869,6 +882,7 @@ window.DRIVE_FILE_IMAGE_INPUT_ACCEPT = DRIVE_FILE_IMAGE_INPUT_ACCEPT;
 window.isGoogleDriveAppsScriptConfigured = isGoogleDriveAppsScriptConfigured;
 window.buildDriveFolderPath = buildDriveFolderPath;
 window.buildDescriptiveDriveFileName = buildDescriptiveDriveFileName;
+window.buildDetailingDriveFileName = buildDetailingDriveFileName;
 window.formatDriveFileSize = formatDriveFileSize;
 window.validateDriveUploadFiles = validateDriveUploadFiles;
 window.fetchDriveFiles = fetchDriveFiles;

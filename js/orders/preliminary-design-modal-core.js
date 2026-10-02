@@ -110,6 +110,26 @@ function setAnteprojetoModalFields(conference, options = {}) {
     updateAnteprojetoModalSendControls(conference);
 }
 
+function collectConferenceProjectIdsForManagerApprovalFromDom() {
+    const sections = Array.from(document.querySelectorAll('#anteprojeto-projects-structure .anteprojeto-project-section'));
+    const awaitingSections = sections.filter(section => section.dataset.awaitingManagerApproval === '1');
+    if (!awaitingSections.length) return null;
+
+    const hasApproveCheckbox = awaitingSections.some(section =>
+        section.querySelector('.anteprojeto-project-approve-select')
+    );
+    if (!hasApproveCheckbox) return null;
+
+    return awaitingSections
+        .filter(section => {
+            const checkbox = section.querySelector('.anteprojeto-project-approve-select');
+            if (!checkbox) return true;
+            return checkbox.checked;
+        })
+        .map(section => Number(section.dataset.orderProjectId))
+        .filter(Boolean);
+}
+
 function collectConferenceProjectIdsForConsultorSubmitFromDom() {
     const sections = Array.from(document.querySelectorAll('#anteprojeto-projects-structure .anteprojeto-project-section'));
     const pendingSections = sections.filter(section => section.dataset.awaitingConsultorSubmit === '1');
@@ -157,8 +177,14 @@ function refreshPreliminaryDesignModalConfirmButton() {
     const pendingCount = document.querySelectorAll(
         '#anteprojeto-projects-structure .anteprojeto-project-section[data-awaiting-consultor-submit="1"]'
     ).length;
+    const conference = editingAnteprojetoConferenceId
+        ? anteprojetoConferencesCache.find(item => Number(item.id) === Number(editingAnteprojetoConferenceId))
+        : null;
+    const multiSelect = conference && typeof shouldShowConferencePartialSubmitSelection === 'function'
+        ? shouldShowConferencePartialSubmitSelection(conference)
+        : pendingCount > 1;
     const allReady = areAllAnteprojetoModalObservationsReady();
-    btn.textContent = pendingCount > 1
+    btn.textContent = multiSelect
         ? 'Enviar projetos selecionados ao gestor'
         : 'Enviar ao gestor comercial';
     btn.disabled = !allReady;
@@ -199,6 +225,16 @@ function updateAnteprojetoModalApproveControls(conference) {
     wrap.classList.toggle('hidden', !canAct);
     approveBtn.disabled = !canAct;
     returnBtn.disabled = !canAct;
+
+    if (approveBtn && canAct) {
+        const awaitingCount = getConferenceOrderProjectIdsAwaitingManagerApproval(conference).length;
+        const partial = typeof shouldShowConferencePartialManagerApprovalSelection === 'function'
+            ? shouldShowConferencePartialManagerApprovalSelection(conference)
+            : awaitingCount > 1;
+        approveBtn.textContent = partial
+            ? 'Aprovar projeto(s) selecionado(s)'
+            : 'Aprovar conferência';
+    }
 }
 
 const ANTEPROJETO_CONFERENCE_SELECT = `
@@ -335,7 +371,7 @@ async function openPreliminaryDesignModal(conferenceId = null) {
     const readOnly = Boolean(
         conference
         && (conference.status === 'Aprovada'
-            || conference.status === 'Confirmada'
+            || (conference.status === 'Confirmada' && !canEditAnteprojetoConsultorFields(conference))
             || (!canEditAnteprojetoConference(conference) && !canEditAnteprojetoConsultorFields(conference)))
     );
     const canEditStructure = canEditAnteprojetoConference(conference);
@@ -383,16 +419,32 @@ async function openPreliminaryDesignModal(conferenceId = null) {
     const title = document.getElementById('anteprojeto-modal-title');
 
     if (conference) {
-        title.textContent = readOnly ? 'Conferência de Anteprojeto' : 'Editar Conferência';
-        const consultorSubmitSelectionEnabled = getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference).length > 1;
+        const managerApprovalView = typeof canApproveAnteprojetoConference === 'function'
+            && canApproveAnteprojetoConference(conference);
+        const conferenceForStructure = managerApprovalView
+            && typeof filterConferenceForManagerApprovalView === 'function'
+            ? filterConferenceForManagerApprovalView(conference)
+            : conference;
+
+        title.textContent = readOnly || managerApprovalView
+            ? 'Conferência de Anteprojeto'
+            : 'Editar Conferência';
+        const consultorSubmitSelectionEnabled = typeof shouldShowConferencePartialSubmitSelection === 'function'
+            ? shouldShowConferencePartialSubmitSelection(conference)
+            : getConferenceOrderProjectIdsAwaitingConsultorSubmit(conference).length > 1;
+        const managerApprovalSelectionEnabled = managerApprovalView
+            && (typeof shouldShowConferencePartialManagerApprovalSelection === 'function'
+                ? shouldShowConferencePartialManagerApprovalSelection(conference)
+                : getConferenceOrderProjectIdsAwaitingManagerApproval(conference).length > 1);
         const modalOptions = {
             canEditStructure,
             canExtendStructure,
             canEditConsultor,
-            readOnly,
-            consultorSubmitSelectionEnabled
+            readOnly: readOnly || managerApprovalView,
+            consultorSubmitSelectionEnabled,
+            managerApprovalSelectionEnabled
         };
-        groupConferenceByProjects(conference).forEach(project => {
+        groupConferenceByProjects(conferenceForStructure).forEach(project => {
             addAnteprojetoProjectSection(project, modalOptions);
         });
     } else {
