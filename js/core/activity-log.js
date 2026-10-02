@@ -1,17 +1,49 @@
+// Catálogo alinhado aos triggers em supabase/feats/activity-log-triggers-wave1.sql e wave2.sql
 const ACTIVITY_LOG_ACTIONS = {
+    // OrderProject (onda 1 + 2)
     'order_project.status_changed': 'Status do projeto alterado',
-    'order_project.internal_assembly_started': 'Início da montagem interna',
-    'order_project.internal_assembly_finished': 'Fim da montagem interna',
+    'order_project.internal_assembly_started': 'Início da montagem interna registrado',
+    'order_project.internal_assembly_start_date_changed': 'Data de início da montagem interna alterada',
+    'order_project.internal_assembly_finished': 'Fim da montagem interna registrado',
+    'order_project.internal_assembly_end_date_changed': 'Data de fim da montagem interna alterada',
     'order_project.cabinet_maker_assigned': 'Marceneiro associado',
+    'order_project.designer_assigned': 'Projetista associado ao projeto',
+    'order_project.delivery_date_changed': 'Data de entrega do projeto alterada',
+    'order_project.production_month_changed': 'Mês de produção alterado',
+    'order_project.technical_forecast_changed': 'Previsão de projeto técnico alterada',
+    // Detailing (onda 1)
     'detailing.created': 'Detalhamento criado',
     'detailing.designer_assigned': 'Projetista de detalhamento associado',
     'detailing.started': 'Detalhamento iniciado',
     'detailing.completed': 'Detalhamento encerrado',
     'detailing.status_changed': 'Status do detalhamento alterado',
+    // Revision (onda 1 + refinamento onda 2)
     'revision.started': 'Revisão iniciada',
+    'revision.designer_started': 'Projetista iniciou revisão técnica',
+    'revision.reviewer_started': 'Revisor iniciou revisão técnica',
+    'revision.consultor_revision_started': 'Consultor iniciou revisão comercial',
+    'revision.third_party_started': 'Revisão de terceiro iniciada',
     'revision.completed': 'Revisão concluída',
-    'revision.status_changed': 'Status da revisão alterado'
+    'revision.designer_completed': 'Projetista concluiu revisão técnica',
+    'revision.reviewer_completed': 'Revisor concluiu revisão técnica',
+    'revision.consultor_revision_completed': 'Consultor concluiu revisão comercial',
+    'revision.third_party_completed': 'Revisão de terceiro concluída',
+    'revision.status_changed': 'Status da revisão alterado',
+    // Measurement (onda 2)
+    'measurement.created': 'Medição registrada',
+    // Conferência de anteprojeto (onda 2)
+    'preliminary_design_conference.status_changed': 'Status da conferência de anteprojeto alterado',
+    // Implantação / PPCP (onda 2)
+    'implementation.created': 'Implantação aberta',
+    'implementation.status_changed': 'Status da implantação alterado',
+    'implementation.sent_to_production': 'Implantação enviada para produção',
+    'implementation.closed': 'Implantação encerrada',
+    // Requisições (onda 2)
+    'order_request.status_changed': 'Status da requisição alterado'
 };
+
+// Próxima onda (ainda sem trigger): ThirdPartyProject, salesOrders.actualDeliveryDate,
+// OrderProjectStatusHistory manual, histórico PreliminaryDesignConferenceHistory (voltar consultor).
 
 const ACTIVITY_LOG_PAGE_SIZE_DEFAULT = 50;
 
