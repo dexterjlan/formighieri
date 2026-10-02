@@ -452,9 +452,9 @@
         </main>
 
         <!-- TELA ADMIN: CONFIGURAÇÕES DO SISTEMA -->
-        <main id="system-settings-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6">
-            <div class="max-w-6xl mx-auto">
-                <div class="settings-content min-w-0 space-y-4">
+        <main id="system-settings-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6 min-h-0">
+            <div id="system-settings-layout" class="max-w-6xl mx-auto w-full min-h-[calc(100vh-10rem)] flex flex-col">
+                <div class="settings-content min-w-0 space-y-4 flex-1 flex flex-col min-h-0">
                     <div id="settings-general-panel" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h2 class="font-bold text-sm text-slate-900">Configurações do Sistema</h2>
@@ -499,14 +499,14 @@
                         </form>
                     </div>
 
-                    <div id="settings-activity-log-panel" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div id="settings-activity-log-panel" class="hidden flex-1 flex flex-col min-h-0 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h2 class="font-bold text-sm text-slate-900">Auditoria de alterações</h2>
                             <p class="text-xs text-slate-400 mt-1">Registro de mudanças em status, montagem, detalhamento e revisão. Somente administradores.</p>
                             <p id="activity-log-status" class="text-[10px] text-amber-700 mt-2"></p>
                         </div>
-                        <div class="p-4 md:p-5 space-y-4">
-                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div class="p-4 md:p-5 space-y-4 flex-1 flex flex-col min-h-0">
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 shrink-0">
                                 <div>
                                     <label class="block text-[10px] font-semibold text-slate-500 mb-1">Usuário</label>
                                     <select id="activity-log-filter-user"
@@ -547,8 +547,8 @@
                                     </button>
                                 </div>
                             </div>
-                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
-                                <table class="w-full text-left min-w-[720px]">
+                            <div id="activity-log-table-wrap" class="flex-1 min-h-[min(28rem,calc(100vh-20rem))] overflow-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-left min-w-[960px]">
                                     <thead class="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                                         <tr>
                                             <th class="p-2.5 font-semibold">Quando</th>
@@ -556,7 +556,7 @@
                                             <th class="p-2.5 font-semibold">Ação</th>
                                             <th class="p-2.5 font-semibold">Pedido</th>
                                             <th class="p-2.5 font-semibold">Projeto</th>
-                                            <th class="p-2.5 font-semibold">Entidade</th>
+                                            <th class="p-2.5 font-semibold">Cliente</th>
                                             <th class="p-2.5 font-semibold">Alteração</th>
                                         </tr>
                                     </thead>

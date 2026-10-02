@@ -134,10 +134,12 @@ async function enrichActivityLogRows(rows = []) {
     if (!list.length) return list;
 
     const userIds = [...new Set(list.map(row => Number(row.changedById)).filter(Boolean))];
-    const orderIds = [...new Set(list.map(row => Number(row.orderId)).filter(Boolean))];
+    const orderProjectIds = [...new Set(list.map(row => Number(row.orderProjectId)).filter(Boolean))];
+    let orderIds = [...new Set(list.map(row => Number(row.orderId)).filter(Boolean))];
 
     const userById = {};
     const orderById = {};
+    const orderProjectById = {};
 
     if (userIds.length) {
         const { data: users, error } = await supabaseClient
@@ -151,23 +153,61 @@ async function enrichActivityLogRows(rows = []) {
         }
     }
 
-    if (orderIds.length) {
-        const { data: orders, error } = await supabaseClient
-            .from('salesOrders')
-            .select('id, orderCode')
-            .in('id', orderIds);
+    if (orderProjectIds.length) {
+        const { data: projects, error } = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, orderId')
+            .in('id', orderProjectIds);
         if (!error) {
-            (orders || []).forEach(order => {
+            (projects || []).forEach(project => {
+                orderProjectById[Number(project.id)] = project;
+                if (project.orderId) {
+                    orderIds.push(Number(project.orderId));
+                }
+            });
+        }
+    }
+
+    orderIds = [...new Set(orderIds.filter(Boolean))];
+
+    if (orderIds.length) {
+        let ordersResult = await supabaseClient
+            .from('salesOrders')
+            .select('id, orderCode, client:Client(name)')
+            .in('id', orderIds);
+
+        if (ordersResult.error?.message?.includes('Client')) {
+            ordersResult = await supabaseClient
+                .from('salesOrders')
+                .select('id, orderCode')
+                .in('id', orderIds);
+        }
+
+        if (!ordersResult.error) {
+            (ordersResult.data || []).forEach(order => {
                 orderById[Number(order.id)] = order;
             });
         }
     }
 
-    return list.map(row => ({
-        ...row,
-        changedBy: userById[Number(row.changedById)] || row.changedBy || null,
-        order: orderById[Number(row.orderId)] || row.order || null
-    }));
+    return list.map(row => {
+        const orderProject = orderProjectById[Number(row.orderProjectId)] || row.orderProject || null;
+        const resolvedOrderId = Number(row.orderId) || Number(orderProject?.orderId) || null;
+        const order = resolvedOrderId
+            ? (orderById[resolvedOrderId] || row.order || null)
+            : (row.order || null);
+        const clientName = order && typeof getOrderClientName === 'function'
+            ? (getOrderClientName(order) || '')
+            : (order?.client?.name || '');
+
+        return {
+            ...row,
+            changedBy: userById[Number(row.changedById)] || row.changedBy || null,
+            order,
+            orderProject,
+            clientName
+        };
+    });
 }
 
 async function fetchActivityLogPage(options = {}) {

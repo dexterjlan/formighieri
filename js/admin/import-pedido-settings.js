@@ -31,6 +31,14 @@ function setSettingsNavActive(panelKey) {
         document.getElementById(panelId)?.classList.toggle('hidden', panelKey !== key);
     });
 
+    const settingsLayout = document.getElementById('system-settings-layout');
+    if (settingsLayout) {
+        const wide = panelKey === 'activity-log';
+        settingsLayout.classList.toggle('max-w-6xl', !wide);
+        settingsLayout.classList.toggle('max-w-none', wide);
+        settingsLayout.classList.toggle('w-full', wide);
+    }
+
     if (typeof saveAppNavState === 'function') {
         saveAppNavState({ view: 'settings', settingsNav: panelKey });
     }

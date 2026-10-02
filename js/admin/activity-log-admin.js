@@ -94,9 +94,9 @@ function renderActivityLogAdminRows(rows) {
         );
         const orderCode = escapeHtml(row.order?.orderCode || (row.orderId ? `#${row.orderId}` : '—'));
         const projectRef = row.orderProjectId
-            ? escapeHtml(`Projeto #${row.orderProjectId}`)
+            ? escapeHtml(row.orderProject?.name || `Projeto #${row.orderProjectId}`)
             : '—';
-        const entity = escapeHtml(`${row.entityType || '—'} #${row.entityId || '—'}`);
+        const clientName = escapeHtml(row.clientName || row.order?.client?.name || '—');
 
         return `
             <tr class="border-b border-slate-100 hover:bg-slate-50/60">
@@ -105,7 +105,7 @@ function renderActivityLogAdminRows(rows) {
                 <td class="p-2.5 text-xs text-slate-800">${actionLabel}</td>
                 <td class="p-2.5 text-xs text-slate-500">${orderCode}</td>
                 <td class="p-2.5 text-xs text-slate-500">${projectRef}</td>
-                <td class="p-2.5 text-xs text-slate-500 font-mono text-[10px]">${entity}</td>
+                <td class="p-2.5 text-xs text-slate-500">${clientName}</td>
                 <td class="p-2.5 text-xs text-slate-700">${change}</td>
             </tr>
         `;

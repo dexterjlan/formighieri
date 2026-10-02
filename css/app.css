@@ -2295,6 +2295,14 @@ body.gestao-kanban-fullscreen-active {
     line-height: 1.35;
 }
 
+#system-settings-layout.max-w-none .settings-content {
+    width: 100%;
+}
+
+#settings-activity-log-panel:not(.hidden) {
+    min-height: min(100%, calc(100vh - 11rem));
+}
+
 .order-projects-grid {
     display: grid;
     grid-template-columns:
