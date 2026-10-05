@@ -110,6 +110,16 @@
                     </div>
                 </details>
 
+                <details id="btn-performance" class="app-nav-group hidden" data-nav-group="performance">
+                    <summary class="app-nav-item"><svg class="app-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 17V11"/><path d="M12 17V7"/><path d="M16 17v-4"/></svg><span>Performance</span></summary>
+                    <div class="app-subnav">
+                        <p class="app-subnav__title">Performance</p>
+                        <nav id="performance-sidebar-nav" aria-label="Seções de performance">
+                            <button type="button" id="performance-nav-projeto" class="app-nav-item app-nav-item--nested">Projeto</button>
+                        </nav>
+                    </div>
+                </details>
+
                 <details id="btn-system-settings" class="app-nav-group hidden" data-nav-group="settings">
                     <summary class="app-nav-item"><svg class="app-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3V20.5M4.9 6.4l1.6 1.6M17.5 16l1.6 1.6M3.5 12h2.2M18.3 12h2.2M4.9 17.6l1.6-1.6M17.5 8l1.6-1.6"/></svg><span>Configurações</span></summary>
                     <div class="app-subnav">
@@ -143,6 +153,8 @@
             </div>
         </aside>
         <div class="app-shell__body">
+        <button type="button" id="app-mobile-menu-backdrop" class="app-mobile-menu-backdrop hidden"
+            tabindex="-1" aria-hidden="true"></button>
         <button type="button" id="btn-mobile-menu" class="app-sidebar-toggle"
             aria-controls="app-sidebar" aria-expanded="true" aria-label="Ocultar submenu">
             <svg class="app-sidebar-toggle__chevron" viewBox="0 0 20 20" aria-hidden="true">
@@ -329,6 +341,11 @@
                         </div>
                         <div class="p-5 border-b border-slate-100">
                             <div>
+                                <button type="button" id="btn-dashboard-mobile-back-list"
+                                    class="dashboard-mobile-back hidden max-md:inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-800 mb-3 px-2 py-1.5 -ml-2 rounded-lg hover:bg-indigo-50">
+                                    <span aria-hidden="true">←</span>
+                                    <span>Voltar aos pedidos</span>
+                                </button>
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex items-center gap-2 min-w-0">
                                         <span
@@ -449,6 +466,39 @@
                     </div>
                 </div>
             </section>
+        </main>
+
+        <!-- PERFORMANCE (admin) -->
+        <main id="performance-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6 min-h-0">
+            <div class="max-w-6xl mx-auto w-full min-h-[calc(100vh-10rem)] flex flex-col">
+                <div id="performance-projeto-panel" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                    <div class="app-panel-header p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3 shrink-0">
+                        <div class="app-panel-header__title min-w-0">
+                            <h2 class="font-bold text-sm text-slate-900">Performance — Projeto</h2>
+                            <p class="text-xs text-slate-400 mt-0.5">Saídas de status por semana: entregas de projeto técnico, atividades de revisão comercial e lançamentos (implantação).</p>
+                        </div>
+                        <form id="performance-projeto-filter-form" class="app-panel-header__actions flex flex-wrap items-end gap-2">
+                            <div>
+                                <label for="performance-projeto-weeks" class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Semanas para trás</label>
+                                <input type="number" id="performance-projeto-weeks" min="4" max="52" value="8"
+                                    class="w-24 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                            </div>
+                            <button type="submit"
+                                class="text-xs bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-800">
+                                Aplicar
+                            </button>
+                            <button type="button" id="btn-performance-projeto-refresh"
+                                class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                <span>Atualizar</span>
+                            </button>
+                        </form>
+                    </div>
+                    <div id="performance-projeto-content" class="flex-1 min-h-0 overflow-auto p-4 space-y-4 bg-slate-50/30">
+                        <p class="text-xs text-slate-400 text-center py-8">Carregando...</p>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <!-- TELA ADMIN: CONFIGURAÇÕES DO SISTEMA -->
@@ -2185,13 +2235,13 @@
                     </div>
 
                     <div id="gestao-kanban-panel" class="hidden w-full bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
-                        <div class="p-4 border-b border-slate-100 bg-slate-50/50 shrink-0 space-y-3">
+                        <div class="gestao-kanban-panel__header p-4 border-b border-slate-100 bg-slate-50/50 shrink-0 space-y-3">
                             <div class="flex flex-wrap justify-between items-center gap-3">
-                                <div>
+                                <div class="gestao-kanban-panel__intro min-w-0">
                                     <h3 class="font-bold text-sm text-slate-900">Kanban</h3>
-                                    <p class="text-xs text-slate-400 mt-0.5">Projetos por status — código do pedido, cliente e projetos em cada coluna.</p>
+                                    <p class="gestao-kanban-panel__description text-xs text-slate-400 mt-0.5">Projetos por status — código do pedido, cliente e projetos em cada coluna.</p>
                                 </div>
-                                <div class="order-tab-actions shrink-0">
+                                <div class="gestao-kanban-panel__toolbar order-tab-actions shrink-0">
                                     <button type="button" id="btn-gestao-kanban-fullscreen"
                                         class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50"
                                         aria-pressed="false">
@@ -2210,7 +2260,7 @@
                                     </button>
                                 </div>
                             </div>
-                            <div class="flex flex-wrap items-end gap-2">
+                            <div class="gestao-kanban-panel__filters flex flex-wrap items-end gap-2">
                                 <div class="flex-1 min-w-[12rem] max-w-md">
                                     <label for="gestao-kanban-filter-client" class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Filtrar por cliente</label>
                                     <input type="text" id="gestao-kanban-filter-client"

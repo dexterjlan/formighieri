@@ -7,7 +7,8 @@ const DRIVE_FILE_FOLDER_KIND = {
     REQUEST: 'request',
     DESCRIPTIVE: 'descriptive',
     THIRD_PARTY: 'thirdParty',
-    MODEL_3D: 'model3d'
+    MODEL_3D: 'model3d',
+    IMPLEMENTATION_LIST: 'implementationList'
 };
 
 const DRIVE_FILE_ENTITY_TYPE = {
@@ -17,7 +18,8 @@ const DRIVE_FILE_ENTITY_TYPE = {
     ORDER_REQUEST_ACTIVITY: 'OrderRequestActivity',
     SALES_ORDER: 'SalesOrder',
     THIRD_PARTY_PROJECT: 'ThirdPartyProject',
-    ORDER_PROJECT: 'OrderProject'
+    ORDER_PROJECT: 'OrderProject',
+    IMPLEMENTATION_PURCHASE_ITEM: 'ImplementationPurchaseItem'
 };
 
 const DRIVE_FILE_FOLDER_NAMES = {
@@ -26,8 +28,12 @@ const DRIVE_FILE_FOLDER_NAMES = {
     [DRIVE_FILE_FOLDER_KIND.REQUEST]: 'requisicao',
     [DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE]: 'descritivo',
     [DRIVE_FILE_FOLDER_KIND.THIRD_PARTY]: 'terceiros',
-    [DRIVE_FILE_FOLDER_KIND.MODEL_3D]: '3d'
+    [DRIVE_FILE_FOLDER_KIND.MODEL_3D]: '3d',
+    [DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST]: 'Listas'
 };
+
+const DRIVE_FILE_IMPLEMENTATION_LIST_EXTENSIONS = ['pdf'];
+const DRIVE_FILE_IMPLEMENTATION_LIST_INPUT_ACCEPT = '.pdf,application/pdf';
 
 const DRIVE_FILE_MODEL_3D_EXTENSIONS = ['glb', 'gltf'];
 const DRIVE_FILE_MODEL_3D_INPUT_ACCEPT = '.glb,.gltf,model/gltf-binary,model/gltf+json';
@@ -85,8 +91,9 @@ function isImageDriveFolderKind(folderKind) {
 }
 
 function allowedDriveExtensionsForFolderKind(folderKind) {
-    if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE) {
-        return ['pdf'];
+    if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE
+        || folderKind === DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST) {
+        return DRIVE_FILE_IMPLEMENTATION_LIST_EXTENSIONS;
     }
     if (folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D) {
         return DRIVE_FILE_MODEL_3D_EXTENSIONS;
@@ -279,6 +286,21 @@ function buildDescriptiveDriveFileName(orderCode, clientName, maxLength = DESCRI
 
 const DETAILING_DRIVE_CLIENT_FILE_NAME_MAX_LENGTH = 100;
 
+const IMPLEMENTATION_LIST_PURCHASE_TYPE_FILE_LABEL = {
+    Material: 'Material',
+    Ferragem: 'Ferragens',
+    Tinta: 'Tintas'
+};
+
+function buildImplementationListDriveFileName(orderCode, projectName, purchaseType) {
+    const tipo = IMPLEMENTATION_LIST_PURCHASE_TYPE_FILE_LABEL[purchaseType]
+        || String(purchaseType || 'Lista').trim()
+        || 'Lista';
+    const order = String(orderCode || '').trim().replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_') || 'Pedido';
+    const project = sanitizeDescriptiveClientFileSlug(projectName) || 'Projeto';
+    return `${order}_${project}_Lista_${tipo}.pdf`;
+}
+
 function buildDetailingDriveFileName(orderCode, clientName, projectName) {
     const ext = '.pdf';
     const order = String(orderCode || '').trim().replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_') || 'Pedido';
@@ -296,7 +318,8 @@ function validateDriveUploadFiles(files, folderKind = DRIVE_FILE_FOLDER_KIND.DET
     const maxBytes = maxDriveUploadBytesForFolderKind(folderKind);
     const invalidType = list.find(file => !allowed.includes(getDriveFileExtension(file?.name)));
     if (invalidType) {
-        if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE) {
+        if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE
+            || folderKind === DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST) {
             return `O arquivo "${invalidType.name}" não é permitido. Envie apenas PDF.`;
         }
         if (isImageDriveFolderKind(folderKind)) {
@@ -353,10 +376,17 @@ function isDriveFileTableMissingError(error) {
 }
 
 function driveFileMissingSetupMessage(error) {
+    const message = String(error?.message || '');
     if (isDriveFileTableMissingError(error)) {
         return 'Execute no SQL Editor (DEV): supabase/feats/create-drive-file.sql';
     }
-    return error?.message || 'Erro ao enviar arquivo.';
+    if (message.includes('DriveFile_folderKind_check')
+        || message.includes('DriveFile_entityType_check')
+        || message.includes('implementationList')
+        || message.includes('ImplementationPurchaseItem')) {
+        return 'Execute no SQL Editor (DEV): supabase/feats/drive-file-implementation-list.sql';
+    }
+    return message || 'Erro ao enviar arquivo.';
 }
 
 const GOOGLE_APPS_SCRIPT_DRIVE_TIMEOUT_MS = 25000;
@@ -883,6 +913,8 @@ window.isGoogleDriveAppsScriptConfigured = isGoogleDriveAppsScriptConfigured;
 window.buildDriveFolderPath = buildDriveFolderPath;
 window.buildDescriptiveDriveFileName = buildDescriptiveDriveFileName;
 window.buildDetailingDriveFileName = buildDetailingDriveFileName;
+window.buildImplementationListDriveFileName = buildImplementationListDriveFileName;
+window.DRIVE_FILE_IMPLEMENTATION_LIST_INPUT_ACCEPT = DRIVE_FILE_IMPLEMENTATION_LIST_INPUT_ACCEPT;
 window.formatDriveFileSize = formatDriveFileSize;
 window.validateDriveUploadFiles = validateDriveUploadFiles;
 window.fetchDriveFiles = fetchDriveFiles;

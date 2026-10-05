@@ -985,6 +985,10 @@ async function selectOrder(id) {
 
         updateOrderDetailTabsVisibility();
         await switchOrderDetailTab(getFirstVisibleOrderDetailTab(), { awaitTabLoad: true });
+
+        if (typeof syncDashboardMobileDetailState === 'function') {
+            syncDashboardMobileDetailState(true);
+        }
     } catch (error) {
         console.error('selectOrder:', error);
         alertAppDialog(error?.message ? `Erro ao carregar o pedido: ${error.message}` : 'Erro ao carregar o pedido.');

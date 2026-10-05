@@ -935,6 +935,123 @@ body {
     gap: 0.4rem;
 }
 
+.performance-projeto-week-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font: inherit;
+    font-weight: 700;
+    color: rgb(51 65 85);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+}
+
+.performance-projeto-week-toggle:hover {
+    color: rgb(67 56 202);
+}
+
+.performance-projeto-week-toggle__chevron {
+    color: rgb(100 116 139);
+    flex-shrink: 0;
+}
+
+.performance-projeto-week-detail__cell {
+    background: rgb(248 250 252);
+    padding: 0.5rem 0.75rem 0.75rem !important;
+    border-bottom: 1px solid rgb(226 232 240);
+}
+
+@media (max-width: 767px) {
+    #performance-projeto-content .gestao-performance-exit-chart,
+    #gestao-performance-content .gestao-performance-exit-chart {
+        min-height: 8.5rem;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #performance-projeto-content .gestao-performance-exit-table thead {
+        display: none;
+    }
+
+    #performance-projeto-content .gestao-performance-exit-table tr.performance-projeto-week-row {
+        display: block;
+        margin-bottom: 0.65rem;
+        border: 1px solid rgb(226 232 240);
+        border-radius: 0.5rem;
+        overflow: hidden;
+        background: rgb(255 255 255);
+    }
+
+    #performance-projeto-content .gestao-performance-exit-table tr.performance-projeto-week-row th,
+    #performance-projeto-content .gestao-performance-exit-table tr.performance-projeto-week-row td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        white-space: normal;
+        text-align: right;
+        border-bottom: 1px solid rgb(241 245 249);
+        padding: 0.55rem 0.65rem;
+    }
+
+    #performance-projeto-content .gestao-performance-exit-table tr.performance-projeto-week-row th {
+        text-align: left;
+        background: rgb(248 250 252);
+        font-weight: 700;
+    }
+
+    #performance-projeto-content .gestao-performance-exit-table tr.performance-projeto-week-row td[data-metric-label]::before {
+        content: attr(data-metric-label);
+        font-weight: 600;
+        color: rgb(100 116 139);
+        text-align: left;
+        flex: 1;
+        min-width: 0;
+    }
+
+    #performance-projeto-content .gestao-performance-exit-table tr.performance-projeto-week-detail {
+        display: block;
+        margin: -0.35rem 0 0.65rem;
+        border: 1px solid rgb(226 232 240);
+        border-top: 0;
+        border-radius: 0 0 0.5rem 0.5rem;
+    }
+
+    #performance-projeto-content .gestao-performance-exit-table tr.performance-projeto-week-detail td {
+        display: block;
+        white-space: normal;
+    }
+
+    #performance-projeto-content .gestao-performance-project-list__item,
+    #gestao-performance-content .gestao-performance-project-list__item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        font-size: 0.75rem;
+    }
+
+    #performance-projeto-content .gestao-performance-project-list__items,
+    #gestao-performance-content .gestao-performance-project-list__items {
+        max-height: none;
+    }
+
+    #performance-projeto-content .gestao-performance-history-btn,
+    #gestao-performance-content .gestao-performance-history-btn {
+        align-self: flex-start;
+        min-height: 2.25rem;
+        padding: 0.35rem 0.65rem;
+        font-size: 0.75rem;
+    }
+
+    #performance-projeto-content .performance-projeto-week-toggle {
+        width: 100%;
+        justify-content: flex-start;
+        min-height: 2.25rem;
+    }
+}
+
 .gestao-commercial-finance-table {
     width: 100%;
     border-collapse: collapse;
@@ -1777,6 +1894,14 @@ body.gestao-kanban-fullscreen-active {
     overflow: hidden;
 }
 
+.gestao-kanban-column {
+    max-height: var(--gestao-kanban-column-max-height, calc(100vh - 15rem));
+}
+
+#gestao-kanban-panel {
+    --gestao-kanban-column-max-height: calc(100vh - 15rem);
+}
+
 .gestao-kanban-panel--fullscreen {
     position: fixed;
     inset: 0;
@@ -1791,11 +1916,11 @@ body.gestao-kanban-fullscreen-active {
     box-shadow: none;
 }
 
-.gestao-kanban-panel--fullscreen > .p-4.border-b h3 {
+.gestao-kanban-panel--fullscreen .gestao-kanban-panel__header h3 {
     font-size: 1rem;
 }
 
-.gestao-kanban-panel--fullscreen > .p-4.border-b p {
+.gestao-kanban-panel--fullscreen .gestao-kanban-panel__description {
     font-size: 0.8125rem;
 }
 
@@ -1803,8 +1928,8 @@ body.gestao-kanban-fullscreen-active {
     padding: 1rem 1.25rem;
 }
 
-.gestao-kanban-panel--fullscreen .gestao-kanban-column {
-    max-height: calc(100vh - 5.5rem);
+.gestao-kanban-panel--fullscreen {
+    --gestao-kanban-column-max-height: calc(100vh - 5.5rem);
 }
 
 #gestao-cronograma-pedido-content {
@@ -3134,12 +3259,33 @@ body.installer-only-nav #btn-logout {
         max-height: none;
     }
 
-    #orders-list {
-        max-height: 45vh;
+    #dashboard-view.fm-dashboard {
+        gap: 0.75rem;
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
     }
 
-    #detail-section {
-        min-height: 50vh;
+    #dashboard-view.fm-dashboard--mobile-detail .fm-orders-panel {
+        display: none;
+    }
+
+    #dashboard-view:not(.fm-dashboard--mobile-detail) #detail-section {
+        display: none;
+    }
+
+    #dashboard-view:not(.fm-dashboard--mobile-detail) .fm-orders-panel {
+        min-height: calc(100dvh - 9rem);
+    }
+
+    #dashboard-view:not(.fm-dashboard--mobile-detail) #orders-list {
+        max-height: none;
+        flex: 1;
+    }
+
+    #dashboard-view.fm-dashboard--mobile-detail #detail-section {
+        min-height: auto;
+        max-height: none;
+        display: flex;
     }
 
     .app-header-menu-btn {
@@ -3214,14 +3360,97 @@ body.installer-only-nav #btn-logout {
     }
 
     #gestao-dashboard-panel,
+    #gestao-kanban-panel .gestao-kanban-panel__description,
+    #gestao-kanban-panel .gestao-kanban-panel__toolbar,
+    #gestao-kanban-panel .gestao-kanban-panel__filters {
+        display: none;
+    }
+
+    #gestao-kanban-panel .gestao-kanban-panel__header {
+        padding: 0.35rem 0.75rem;
+        border-bottom-width: 0;
+        background: transparent;
+    }
+
+    #gestao-kanban-panel .gestao-kanban-panel__intro h3 {
+        font-size: 0.75rem;
+        margin: 0;
+    }
+
+    #gestao-kanban-panel #gestao-kanban-board {
+        padding: 0.5rem;
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #gestao-view:has(#gestao-kanban-panel:not(.hidden)) {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+        padding: 0.5rem;
+    }
+
+    #gestao-view:has(#gestao-kanban-panel:not(.hidden)) #gestao-view-layout,
+    #gestao-view:has(#gestao-kanban-panel:not(.hidden)) #gestao-view-layout > .flex-1 {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #gestao-kanban-panel:not(.hidden) {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        height: calc(100dvh - 3.25rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        max-height: calc(100dvh - 3.25rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        --gestao-kanban-column-max-height: calc(100dvh - 4.75rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    }
+
+    @media (orientation: landscape) {
+        #gestao-kanban-panel .gestao-kanban-panel__header {
+            display: none;
+        }
+
+        #gestao-kanban-panel:not(.hidden) {
+            height: calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+            max-height: calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+            --gestao-kanban-column-max-height: calc(100dvh - 2.25rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+        }
+
+        #gestao-view:has(#gestao-kanban-panel:not(.hidden)) {
+            padding: 0.25rem 0.5rem;
+        }
+    }
+
     #gestao-kanban-panel,
     #gestao-cronograma-pedido-panel,
     #gestao-project-scheduling-panel,
     #gestao-relatorios-panel,
     #gestao-performance-panel,
     #gestao-comercial-financeiro-panel,
-    #gestao-project-history-panel {
+    #gestao-project-history-panel,
+    #performance-projeto-panel,
+    #performance-view > div {
         min-height: auto;
+    }
+
+    .app-panel-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .app-panel-header__actions {
+        width: 100%;
+    }
+
+    .app-panel-header__actions .order-tab-action-btn,
+    .app-panel-header__actions button[type="submit"] {
+        min-height: 2.5rem;
     }
 
     .calendar-layout {

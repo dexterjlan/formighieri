@@ -13,26 +13,59 @@ const IMPLANTACAO_STANDARD_PURCHASE_UI = [
     {
         purchaseType: IMPLANTACAO_PURCHASE_TYPE_MATERIAL,
         label: 'Lista de Material',
-        checkedId: 'implantacao-compras-checked',
-        pathId: 'implantacao-compras-path',
-        comercialId: 'implantacao-compras-enviado-comercial',
-        comercialDateId: 'implantacao-compras-enviado-comercial-date'
+        comercialId: 'implantacao-compras-enviar-comercial',
+        comercialDateId: 'implantacao-compras-enviar-comercial-date',
+        notApplicableId: 'implantacao-compras-nao-possui',
+        uploadSectionId: 'implantacao-compras-upload-section',
+        uploadHintId: 'implantacao-compras-upload-hint',
+        drivePathId: 'implantacao-compras-drive-path',
+        fileInputId: 'implantacao-compras-file-input',
+        fileDisplayId: 'implantacao-compras-file-display',
+        selectFileBtnId: 'btn-implantacao-compras-select-file',
+        uploadBtnId: 'btn-implantacao-compras-upload',
+        currentEmptyId: 'implantacao-compras-current-empty',
+        currentFileId: 'implantacao-compras-current-file',
+        currentNameId: 'implantacao-compras-current-name',
+        currentMetaId: 'implantacao-compras-current-meta',
+        downloadBtnId: 'btn-implantacao-compras-download'
     },
     {
         purchaseType: IMPLANTACAO_PURCHASE_TYPE_FERRAGEM,
         label: 'Lista de Ferragens',
-        checkedId: 'implantacao-ferragens-checked',
-        pathId: 'implantacao-ferragens-path',
-        comercialId: 'implantacao-ferragens-enviado-comercial',
-        comercialDateId: 'implantacao-ferragens-enviado-comercial-date'
+        comercialId: 'implantacao-ferragens-enviar-comercial',
+        comercialDateId: 'implantacao-ferragens-enviar-comercial-date',
+        notApplicableId: 'implantacao-ferragens-nao-possui',
+        uploadSectionId: 'implantacao-ferragens-upload-section',
+        uploadHintId: 'implantacao-ferragens-upload-hint',
+        drivePathId: 'implantacao-ferragens-drive-path',
+        fileInputId: 'implantacao-ferragens-file-input',
+        fileDisplayId: 'implantacao-ferragens-file-display',
+        selectFileBtnId: 'btn-implantacao-ferragens-select-file',
+        uploadBtnId: 'btn-implantacao-ferragens-upload',
+        currentEmptyId: 'implantacao-ferragens-current-empty',
+        currentFileId: 'implantacao-ferragens-current-file',
+        currentNameId: 'implantacao-ferragens-current-name',
+        currentMetaId: 'implantacao-ferragens-current-meta',
+        downloadBtnId: 'btn-implantacao-ferragens-download'
     },
     {
         purchaseType: IMPLANTACAO_PURCHASE_TYPE_TINTA,
         label: 'Lista de Tintas',
-        checkedId: 'implantacao-tintas-checked',
-        pathId: 'implantacao-tintas-path',
-        comercialId: 'implantacao-tintas-enviado-comercial',
-        comercialDateId: 'implantacao-tintas-enviado-comercial-date'
+        comercialId: 'implantacao-tintas-enviar-comercial',
+        comercialDateId: 'implantacao-tintas-enviar-comercial-date',
+        notApplicableId: 'implantacao-tintas-nao-possui',
+        uploadSectionId: 'implantacao-tintas-upload-section',
+        uploadHintId: 'implantacao-tintas-upload-hint',
+        drivePathId: 'implantacao-tintas-drive-path',
+        fileInputId: 'implantacao-tintas-file-input',
+        fileDisplayId: 'implantacao-tintas-file-display',
+        selectFileBtnId: 'btn-implantacao-tintas-select-file',
+        uploadBtnId: 'btn-implantacao-tintas-upload',
+        currentEmptyId: 'implantacao-tintas-current-empty',
+        currentFileId: 'implantacao-tintas-current-file',
+        currentNameId: 'implantacao-tintas-current-name',
+        currentMetaId: 'implantacao-tintas-current-meta',
+        downloadBtnId: 'btn-implantacao-tintas-download'
     }
 ];
 
@@ -40,8 +73,111 @@ let activeImplantacaoOrderProjectId = null;
 let activeImplantacaoRecord = null;
 let activeImplantacaoProjectName = '';
 let activeImplementationPurchaseItems = [];
+let activeImplantacaoCompraLinkedPurchaseItemIds = new Set();
+let activeImplantacaoCompraLockedStandardPurchaseTypes = new Set();
 let activeImplantacaoThirdPartyProjects = [];
 let implantacaoThirdPartySubtypesCache = [];
+
+const IMPLANTACAO_STANDARD_PURCHASE_TYPES = new Set([
+    IMPLANTACAO_PURCHASE_TYPE_MATERIAL,
+    IMPLANTACAO_PURCHASE_TYPE_FERRAGEM,
+    IMPLANTACAO_PURCHASE_TYPE_TINTA
+]);
+
+function registerImplantacaoCompraPurchaseRow(row, linkedIds, lockedStandardTypes) {
+    const purchaseItemId = Number(row?.implementationPurchaseItemId || 0);
+    if (purchaseItemId > 0) {
+        linkedIds.add(purchaseItemId);
+        return;
+    }
+
+    const purchaseType = String(row?.purchaseType || '').trim();
+    if (IMPLANTACAO_STANDARD_PURCHASE_TYPES.has(purchaseType)) {
+        lockedStandardTypes.add(purchaseType);
+    }
+}
+
+function isImplementationPurchaseItemSentToCompras(item) {
+    if (!item) return false;
+    if (item.sentToCommercial === true) return true;
+
+    const itemId = Number(item.id || 0);
+    if (itemId > 0 && activeImplantacaoCompraLinkedPurchaseItemIds.has(itemId)) {
+        return true;
+    }
+
+    const purchaseType = String(item.purchaseType || '').trim();
+    if (IMPLANTACAO_STANDARD_PURCHASE_TYPES.has(purchaseType)
+        && activeImplantacaoCompraLockedStandardPurchaseTypes.has(purchaseType)) {
+        return true;
+    }
+
+    return false;
+}
+
+async function loadImplantacaoCompraLinkedPurchaseItemIds(
+    implementationId,
+    purchaseItems = [],
+    orderProjectId = activeImplantacaoOrderProjectId
+) {
+    const linkedIds = new Set();
+    const lockedStandardTypes = new Set();
+    const implementationKey = Number(implementationId || 0);
+    const orderProjectKey = Number(orderProjectId || 0);
+    const purchaseItemIds = (purchaseItems || [])
+        .map(row => Number(row.id || 0))
+        .filter(id => id > 0);
+
+    const mergePurchaseRows = (rows) => {
+        (rows || []).forEach(row => registerImplantacaoCompraPurchaseRow(row, linkedIds, lockedStandardTypes));
+    };
+
+    if (implementationKey) {
+        const { data, error } = await supabaseClient
+            .from('Purchase')
+            .select('implementationPurchaseItemId, purchaseType')
+            .eq('implementationId', implementationKey);
+
+        if (error && !error.message?.includes('Purchase')) {
+            console.warn('loadImplantacaoCompraLinkedPurchaseItemIds:', error.message);
+        } else {
+            mergePurchaseRows(data);
+        }
+    }
+
+    if (orderProjectKey && implementationKey) {
+        let query = supabaseClient
+            .from('Purchase')
+            .select('implementationPurchaseItemId, purchaseType, implementationId')
+            .eq('orderProjectId', orderProjectKey)
+            .eq('implementationId', implementationKey);
+
+        const { data, error } = await query;
+
+        if (error && !error.message?.includes('Purchase')) {
+            console.warn('loadImplantacaoCompraLinkedPurchaseItemIds by project:', error.message);
+        } else {
+            mergePurchaseRows(data);
+        }
+    }
+
+    if (purchaseItemIds.length) {
+        const { data, error } = await supabaseClient
+            .from('Purchase')
+            .select('implementationPurchaseItemId, purchaseType')
+            .in('implementationPurchaseItemId', purchaseItemIds);
+
+        if (error && !error.message?.includes('Purchase')) {
+            console.warn('loadImplantacaoCompraLinkedPurchaseItemIds by item:', error.message);
+        } else {
+            mergePurchaseRows(data);
+        }
+    }
+
+    activeImplantacaoCompraLinkedPurchaseItemIds = linkedIds;
+    activeImplantacaoCompraLockedStandardPurchaseTypes = lockedStandardTypes;
+    return linkedIds;
+}
 
 function canAccessImplantacaoModal() {
     return Boolean(activeOrderId)
@@ -121,11 +257,39 @@ function getImplantacaoTerceiroSubtypeThirdPartyStatusLabel(project) {
     return project.status || '';
 }
 
-function readImplantacaoStandardChecked(checkboxId, item) {
-    if (Boolean(item?.sentToCommercial)) {
-        return Boolean(item?.isChecked);
-    }
-    return Boolean(document.getElementById(checkboxId)?.checked);
+function readImplantacaoStandardPurchaseRowFromForm(config) {
+    const existing = getImplantacaoStandardPurchaseItem(config.purchaseType);
+    const sentToCommercial = isImplementationPurchaseItemSentToCompras(existing);
+    const notApplicableInput = document.getElementById(config.notApplicableId);
+    const comercialInput = document.getElementById(config.comercialId);
+    const isNotApplicable = sentToCommercial
+        ? Boolean(existing?.isNotApplicable)
+        : Boolean(notApplicableInput?.checked);
+    const folderPath = isNotApplicable
+        ? ''
+        : (existing?.folderPath || '');
+    const hasUploadedFile = typeof hasImplantacaoListDriveFileUploaded === 'function'
+        ? hasImplantacaoListDriveFileUploaded(config.purchaseType, {
+            ...existing,
+            folderPath,
+            isNotApplicable
+        })
+        : Boolean(String(folderPath || '').trim());
+    const pendingSendToCommercial = sentToCommercial
+        ? Boolean(existing?.sentToCommercial)
+        : (hasUploadedFile && Boolean(comercialInput?.checked));
+
+    return {
+        ...(existing || {}),
+        purchaseType: config.purchaseType,
+        folderPath,
+        isNotApplicable,
+        pendingSendToCommercial,
+        isChecked: isNotApplicable || hasUploadedFile,
+        sentToCommercial,
+        sentToCommercialAt: existing?.sentToCommercialAt || null,
+        thirdPartySubtypeId: null
+    };
 }
 
 function readImplantacaoTerceiroSubtypeRowsFromForm() {
@@ -137,8 +301,9 @@ function readImplantacaoTerceiroSubtypeRowsFromForm() {
             && Number(item.thirdPartySubtypeId) === subtypeId
         )) || {};
         const row = document.querySelector(`.implantacao-terceiro-item[data-subtype-id="${subtypeId}"]`);
-        const sentToCommercial = Boolean(existing.sentToCommercial);
+        const sentToCommercial = isImplementationPurchaseItemSentToCompras(existing);
         const checkedInput = row?.querySelector('.implantacao-terceiro-checked');
+        const isApproved = thirdPartyProject.status === THIRD_PARTY_PROJECT_STATUS_APPROVED;
 
         return {
             ...existing,
@@ -147,7 +312,9 @@ function readImplantacaoTerceiroSubtypeRowsFromForm() {
             thirdPartySubtypeId: subtypeId,
             thirdPartySubtype: existing.thirdPartySubtype || subtype,
             folderPath: existing.folderPath || '',
-            isChecked: sentToCommercial ? Boolean(existing.isChecked) : Boolean(checkedInput?.checked),
+            isChecked: sentToCommercial
+                ? Boolean(existing.isChecked)
+                : (isApproved && Boolean(checkedInput?.checked)),
             sentToCommercial,
             sentToCommercialAt: existing.sentToCommercialAt || null
         };
@@ -158,16 +325,7 @@ function readImplementationPurchaseItemsFromForm() {
     const items = [];
 
     IMPLANTACAO_STANDARD_PURCHASE_UI.forEach(config => {
-        const existing = getImplantacaoStandardPurchaseItem(config.purchaseType);
-        items.push({
-            ...(existing || {}),
-            purchaseType: config.purchaseType,
-            folderPath: document.getElementById(config.pathId)?.value?.trim() || '',
-            isChecked: readImplantacaoStandardChecked(config.checkedId, existing),
-            sentToCommercial: Boolean(existing?.sentToCommercial),
-            sentToCommercialAt: existing?.sentToCommercialAt || null,
-            thirdPartySubtypeId: null
-        });
+        items.push(readImplantacaoStandardPurchaseRowFromForm(config));
     });
 
     items.push(...readImplantacaoTerceiroSubtypeRowsFromForm());
@@ -191,28 +349,9 @@ function readImplantacaoFormValues() {
 }
 
 function populateImplantacaoStandardPurchaseFields() {
-    IMPLANTACAO_STANDARD_PURCHASE_UI.forEach(config => {
-        const item = getImplantacaoStandardPurchaseItem(config.purchaseType);
-        const pathInput = document.getElementById(config.pathId);
-        const checkedInput = document.getElementById(config.checkedId);
-        const comercialInput = document.getElementById(config.comercialId);
-
-        if (pathInput) {
-            pathInput.value = item?.folderPath || '';
-            if (Boolean(item?.sentToCommercial)) pathInput.disabled = true;
-        }
-        if (checkedInput) {
-            checkedInput.checked = Boolean(item?.isChecked);
-            if (Boolean(item?.sentToCommercial)) checkedInput.disabled = true;
-        }
-        if (comercialInput) comercialInput.checked = Boolean(item?.sentToCommercial);
-
-        updateImplantacaoComercialDateLabel(
-            config.comercialId,
-            config.comercialDateId,
-            item?.sentToCommercial ? item?.sentToCommercialAt : null
-        );
-    });
+    if (typeof refreshImplantacaoListUploadSections === 'function') {
+        refreshImplantacaoListUploadSections(activeImplantacaoRecord);
+    }
 }
 
 function getImplantacaoTerceiroDisplayName(item) {
@@ -271,7 +410,7 @@ function renderImplantacaoTerceiroPurchaseItems() {
         const existing = getImplantacaoTerceiroPurchaseItems().find(
             item => Number(item.thirdPartySubtypeId) === subtypeId
         ) || {};
-        const sentToCommercial = Boolean(existing.sentToCommercial);
+        const sentToCommercial = isImplementationPurchaseItemSentToCompras(existing);
         const isRequired = isImplantacaoTerceiroSubtypeRequired(subtypeId);
         const isApproved = thirdPartyProject.status === THIRD_PARTY_PROJECT_STATUS_APPROVED;
         const label = escapeHtml(subtype.name || 'Terceiros');
@@ -280,7 +419,16 @@ function renderImplantacaoTerceiroPurchaseItems() {
             : '';
         const statusClass = isApproved ? 'text-emerald-700' : 'text-amber-700';
         const statusHtml = `<span class="text-[10px] font-medium ${statusClass}">${escapeHtml(getImplantacaoTerceiroSubtypeThirdPartyStatusLabel(thirdPartyProject))}</span>`;
-        const checkboxDisabled = sentToCommercial;
+        const canMarkForComprasSend = isApproved && !sentToCommercial;
+        const checkboxDisabled = !canMarkForComprasSend;
+        const checkboxChecked = sentToCommercial
+            ? Boolean(existing.isChecked)
+            : (canMarkForComprasSend && Boolean(existing.isChecked));
+        const checkboxTitle = sentToCommercial
+            ? ''
+            : (isApproved
+                ? 'Marcar para enviar às compras'
+                : 'Disponível após aprovação do consultor');
         const thirdPartyProjectId = Number(thirdPartyProject.id);
         const detailLinkHtml = thirdPartyProjectId
             ? `<button type="button"
@@ -301,7 +449,8 @@ function renderImplantacaoTerceiroPurchaseItems() {
         return `
             <div class="implantacao-terceiro-item flex items-start gap-3" data-subtype-id="${subtypeId}" data-item-id="${existing.id || ''}">
                 <input type="checkbox" class="implantacao-terceiro-checked mt-1 rounded border-slate-300 text-teal-700 focus:ring-teal-500"
-                    ${existing.isChecked ? 'checked' : ''} ${checkboxDisabled ? 'disabled' : ''}>
+                    title="${escapeHtml(checkboxTitle)}"
+                    ${checkboxChecked ? 'checked' : ''} ${checkboxDisabled ? 'disabled' : ''}>
                 <div class="flex-1 space-y-1 min-w-0">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <div class="flex flex-wrap items-center gap-2 min-w-0">
@@ -369,8 +518,9 @@ function populateImplantacaoForm(record) {
 
 function setImplantacaoComercialFieldsDisabled() {
     IMPLANTACAO_STANDARD_PURCHASE_UI.forEach(config => {
+        const item = getImplantacaoStandardPurchaseItem(config.purchaseType);
         const el = document.getElementById(config.comercialId);
-        if (el) el.disabled = true;
+        if (el && isImplementationPurchaseItemSentToCompras(item)) el.disabled = true;
     });
 }
 
@@ -387,11 +537,24 @@ function setImplantacaoProjetoFieldsDisabled(disabled) {
 function setImplantacaoFormDisabled(disabled) {
     IMPLANTACAO_STANDARD_PURCHASE_UI.forEach(config => {
         const item = getImplantacaoStandardPurchaseItem(config.purchaseType);
-        const sentToCommercial = Boolean(item?.sentToCommercial);
-        const pathEl = document.getElementById(config.pathId);
-        const checkedEl = document.getElementById(config.checkedId);
-        if (pathEl) pathEl.disabled = disabled || sentToCommercial;
-        if (checkedEl) checkedEl.disabled = disabled || sentToCommercial;
+        const sentToCommercial = isImplementationPurchaseItemSentToCompras(item);
+        const locked = disabled || sentToCommercial;
+        const notApplicableEl = document.getElementById(config.notApplicableId);
+        const comercialEl = document.getElementById(config.comercialId);
+        if (notApplicableEl) notApplicableEl.disabled = locked;
+        if (comercialEl && !sentToCommercial) {
+            const hasFile = typeof hasImplantacaoListDriveFileUploaded === 'function'
+                ? hasImplantacaoListDriveFileUploaded(config.purchaseType, item)
+                : Boolean(String(item?.folderPath || '').trim());
+            comercialEl.disabled = disabled || !hasFile;
+        }
+        [config.selectFileBtnId, config.uploadBtnId].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = locked;
+        });
+        if (typeof updateImplantacaoListUploadButtons === 'function') {
+            updateImplantacaoListUploadButtons(config.purchaseType);
+        }
     });
 
     document.getElementById('implantacao-wps-op-code')?.toggleAttribute('disabled', disabled);
@@ -401,11 +564,16 @@ function setImplantacaoFormDisabled(disabled) {
         const existing = getImplantacaoTerceiroPurchaseItems().find(
             item => Number(item.thirdPartySubtypeId) === subtypeId
         );
-        const sentToCommercial = Boolean(existing?.sentToCommercial);
-        const locked = disabled || sentToCommercial;
+        const sentToCommercial = isImplementationPurchaseItemSentToCompras(existing);
+        const thirdPartyProject = getImplantacaoThirdPartyProjectForSubtype(subtypeId);
+        const isApproved = thirdPartyProject?.status === THIRD_PARTY_PROJECT_STATUS_APPROVED;
+        const locked = disabled || sentToCommercial || !isApproved;
 
         const checkedEl = row.querySelector('.implantacao-terceiro-checked');
-        if (checkedEl) checkedEl.disabled = locked;
+        if (checkedEl) {
+            checkedEl.disabled = locked;
+            if (!isApproved && !sentToCommercial) checkedEl.checked = false;
+        }
     });
 
     const createSelect = document.getElementById('implantacao-terceiro-create-subtype');
@@ -417,7 +585,7 @@ function setImplantacaoFormDisabled(disabled) {
 }
 
 function canSendImplantacaoTerceiroItem(item) {
-    if (!item?.isChecked || item?.sentToCommercial) return false;
+    if (!item?.isChecked || isImplementationPurchaseItemSentToCompras(item)) return false;
 
     const thirdPartyProject = getImplantacaoThirdPartyProjectForSubtype(item.thirdPartySubtypeId);
     if (!thirdPartyProject) return false;
@@ -433,9 +601,13 @@ function canSendImplementationPurchaseItem(item) {
         return canSendImplantacaoTerceiroItem(item);
     }
 
-    return Boolean(item?.isChecked)
-        && Boolean(item?.folderPath)
-        && !item?.sentToCommercial;
+    const hasUploadedFile = typeof hasImplantacaoListDriveFileUploaded === 'function'
+        ? hasImplantacaoListDriveFileUploaded(item.purchaseType, item)
+        : Boolean(String(item?.folderPath || '').trim());
+
+    return hasUploadedFile
+        && Boolean(item?.pendingSendToCommercial)
+        && !isImplementationPurchaseItemSentToCompras(item);
 }
 
 function allImplantacaoThirdPartyProjectsApprovedAndSent() {
@@ -488,7 +660,11 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
     const standardItems = IMPLANTACAO_STANDARD_PURCHASE_UI.map(config => (
         values.purchaseItems.find(item => item.purchaseType === config.purchaseType)
     ));
-    const allStandardChecked = standardItems.every(item => Boolean(item?.isChecked));
+    const allStandardChecked = standardItems.every(item => (
+        typeof isImplantacaoStandardPurchaseItemFulfilled === 'function'
+            ? isImplantacaoStandardPurchaseItemFulfilled(item)
+            : Boolean(item?.isChecked)
+    ));
 
     const canEncerrar = canAct
         && values.isProjectChecked
@@ -709,6 +885,7 @@ function buildImplementationPurchaseItemPayload(item, implementationId) {
             ? (item.thirdPartySubtypeId || null)
             : null,
         folderPath: item.folderPath || null,
+        isNotApplicable: Boolean(item.isNotApplicable),
         isChecked: Boolean(item.isChecked),
         sentToCommercial: Boolean(item.sentToCommercial),
         sentToCommercialAt: item.sentToCommercialAt || null,
@@ -724,6 +901,23 @@ async function saveImplementationPurchaseItems(purchaseItems = [], implementatio
     const savedItems = [];
 
     for (const item of purchaseItems) {
+        const existingRow = activeImplementationPurchaseItems.find(row => (
+            (item.id && Number(row.id) === Number(item.id))
+            || (
+                item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO
+                && Number(row.thirdPartySubtypeId) === Number(item.thirdPartySubtypeId)
+            )
+            || (
+                item.purchaseType !== IMPLANTACAO_PURCHASE_TYPE_TERCEIRO
+                && row.purchaseType === item.purchaseType
+            )
+        ));
+
+        if (isImplementationPurchaseItemSentToCompras(existingRow)) {
+            if (existingRow) savedItems.push(existingRow);
+            continue;
+        }
+
         const payload = buildImplementationPurchaseItemPayload(item, implementationId);
 
         if (item.id) {
@@ -798,14 +992,15 @@ async function getImplementationPurchaseItemsForComprasSend(formValues) {
     await saveImplementationPurchaseItems(itemsToPersist, activeImplantacaoRecord.id);
 
     return activeImplementationPurchaseItems.filter(item => (
-        itemsToSend.some(row => (
+        !isImplementationPurchaseItemSentToCompras(item)
+        && itemsToSend.some(row => (
             (row.id && Number(row.id) === Number(item.id))
             || (
                 item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO
                 && Number(item.thirdPartySubtypeId) === Number(row.thirdPartySubtypeId)
             )
         ))
-    )).filter(canSendImplementationPurchaseItem);
+    ));
 }
 
 async function getOrderProjectStatusIdForImplantacao(statusName) {
@@ -864,6 +1059,11 @@ async function refreshImplantacaoModalThirdPartyState() {
 
     if (activeImplantacaoRecord?.id) {
         await loadActiveImplementationPurchaseItems(activeImplantacaoRecord.id);
+        await loadImplantacaoCompraLinkedPurchaseItemIds(
+            activeImplantacaoRecord.id,
+            activeImplementationPurchaseItems,
+            activeImplantacaoOrderProjectId
+        );
     }
 
     populateImplantacaoForm(activeImplantacaoRecord);
@@ -969,6 +1169,11 @@ async function openImplementationModal(orderProjectId, projectName = '', options
         }
 
         await loadActiveImplementationPurchaseItems(activeImplantacaoRecord.id);
+        await loadImplantacaoCompraLinkedPurchaseItemIds(
+            activeImplantacaoRecord.id,
+            activeImplementationPurchaseItems,
+            activeImplantacaoOrderProjectId
+        );
 
         if (typeof fetchThirdPartyProjectsByOrderProjectId === 'function') {
             activeImplantacaoThirdPartyProjects = await fetchThirdPartyProjectsByOrderProjectId(
@@ -986,7 +1191,9 @@ async function openImplementationModal(orderProjectId, projectName = '', options
         }
         toggleModal('implantacao-modal', true);
     } catch (error) {
-        if (error.message?.includes('ImplementationPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
+        if (error.message?.includes('isNotApplicable')) {
+            alertAppDialog('Execute supabase/feats/add-implementation-purchase-item-is-not-applicable.sql no Supabase SQL Editor (DEV e produção).');
+        } else if (error.message?.includes('ImplementationPurchaseItem') || error.message?.includes('ThirdPartySubtype')) {
             alertAppDialog('Execute supabase/feats/add-third-party-subtype-and-implementation-purchase-item.sql no Supabase SQL Editor de produção.');
         } else if (error.message?.includes('Implementation') || error.message?.includes('does not exist')) {
             alertAppDialog('Tabela Implementation não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.');
@@ -1001,11 +1208,16 @@ function closeImplementationModal() {
     if (typeof resetImplantacaoDetalhamentoUploadSection === 'function') {
         resetImplantacaoDetalhamentoUploadSection();
     }
+    if (typeof resetImplantacaoListUploadSections === 'function') {
+        resetImplantacaoListUploadSections();
+    }
     toggleModal('implantacao-modal', false);
     activeImplantacaoOrderProjectId = null;
     activeImplantacaoRecord = null;
     activeImplantacaoProjectName = '';
     activeImplementationPurchaseItems = [];
+    activeImplantacaoCompraLinkedPurchaseItemIds = new Set();
+    activeImplantacaoCompraLockedStandardPurchaseTypes = new Set();
     activeImplantacaoThirdPartyProjects = [];
 }
 window.closeImplementationModal = closeImplementationModal;
@@ -1017,6 +1229,7 @@ window.closeImplantacaoModal = closeImplementationModal;
 window.isImplantacaoModalOpen = isImplantacaoModalOpen;
 window.refreshImplantacaoModalThirdPartyState = refreshImplantacaoModalThirdPartyState;
 window.openImplantacaoModal = openImplementationModal;
+window.isImplementationPurchaseItemSentToCompras = isImplementationPurchaseItemSentToCompras;
 window.ensureImplantacaoRecordsForProjects = ensureImplementationRecordsForProjects;
 window.fetchOrderProjectsInImplantacaoStatus = fetchOrderProjectsInImplementationStatus;
 window.syncImplantacaoRecordsMapForProjects = syncImplementationRecordsMapForProjects;
@@ -1227,6 +1440,23 @@ async function createImplantacaoThirdPartyProjectForSubtype(subtypeId) {
     }
 }
 
+function formatImplantacaoPurchaseItemForComprasConfirm(item) {
+    if (!item) return 'Item';
+    if (item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TERCEIRO) {
+        return `Terceiros — ${getImplantacaoTerceiroDisplayName(item)}`;
+    }
+
+    const config = IMPLANTACAO_STANDARD_PURCHASE_UI.find(row => row.purchaseType === item.purchaseType);
+    const label = config?.label || item.purchaseType || 'Lista';
+    if (item.isNotApplicable) return `${label} (não possui)`;
+    return `${label} (PDF)`;
+}
+
+function buildImplantacaoEnviarComprasConfirmMessage(items = []) {
+    const lines = items.map(item => `• ${formatImplantacaoPurchaseItemForComprasConfirm(item)}`);
+    return `Os itens abaixo serão enviados às compras:\n\n${lines.join('\n')}`;
+}
+
 async function resolveImplementationPurchaseReasonId() {
     const { data, error } = await supabaseClient
         .from('PurchaseReason')
@@ -1263,7 +1493,7 @@ async function handleImplantacaoEnviarCompras() {
             return;
         }
 
-        alertAppDialog('Marque ao menos um item válido para enviar às compras (listas com caminho ou terceiros com projeto aprovado).');
+        alertAppDialog('Marque "Enviar para comercial" em ao menos uma lista com PDF já enviado, ou um terceiro com projeto aprovado.');
         return;
     }
 
@@ -1278,11 +1508,26 @@ async function handleImplantacaoEnviarCompras() {
         return;
     }
 
+    const confirmed = await confirmAppDialog(
+        buildImplantacaoEnviarComprasConfirmMessage(itemsToSend),
+        {
+            title: `Enviar para compras — ${activeImplantacaoProjectName || 'Projeto'}?`,
+            confirmLabel: 'Enviar para compras',
+            cancelLabel: 'Cancelar'
+        }
+    );
+    if (!confirmed) return;
+
     try {
         setImplantacaoModalLoading(true, 'Registrando solicitações de compra...');
         const now = new Date().toISOString();
 
-        const purchaseItemsForCompras = await getImplementationPurchaseItemsForComprasSend(formValues);
+        const freshFormValues = readImplantacaoFormValues();
+        const purchaseItemsForCompras = await getImplementationPurchaseItemsForComprasSend(freshFormValues);
+        if (!purchaseItemsForCompras.length) {
+            throw new Error('Nenhum item pôde ser enviado às compras. Verifique os checkboxes e tente novamente.');
+        }
+
         const purchaseReasonId = await resolveImplementationPurchaseReasonId();
 
         const createdPurchases = await createComprasRecordsFromImplantacaoSend({
@@ -1290,10 +1535,11 @@ async function handleImplantacaoEnviarCompras() {
             orderProjectId: activeImplantacaoOrderProjectId,
             purchaseItems: purchaseItemsForCompras,
             requestOrigin: 'implementation',
-            purchaseReasonId
+            purchaseReasonId,
+            purchaseItemsAlreadyValidated: true
         });
 
-        if (!createdPurchases.length && purchaseItemsForCompras.length) {
+        if (!createdPurchases.length) {
             throw new Error('Não foi possível gerar a solicitação de compra. Tente salvar e enviar novamente.');
         }
 
@@ -1309,6 +1555,11 @@ async function handleImplantacaoEnviarCompras() {
         });
 
         await saveImplementationPurchaseItems(updatedPurchaseItems, activeImplantacaoRecord.id);
+        await loadImplantacaoCompraLinkedPurchaseItemIds(
+            activeImplantacaoRecord.id,
+            activeImplementationPurchaseItems,
+            activeImplantacaoOrderProjectId
+        );
 
         setImplantacaoModalLoading(true, 'Salvando implantação...');
         const payload = buildImplantacaoUpdatePayload(formValues, {
@@ -1364,7 +1615,8 @@ async function continueImplantacaoPurchaseRequest(draft, extras = {}) {
         observation: extras.observation || null,
         attachmentPath: extras.attachmentPath || null,
         attachmentFileName: extras.attachmentFileName || null,
-        thirdPartySubtypeId: extras.thirdPartySubtypeId || null
+        thirdPartySubtypeId: extras.thirdPartySubtypeId || null,
+        purchaseItemsAlreadyValidated: true
     });
 
     if (!createdPurchases.length && purchaseItemsForCompras.length) {
@@ -1404,8 +1656,13 @@ async function handleImplantacaoEncerrar() {
         formValues.purchaseItems.find(item => item.purchaseType === config.purchaseType)
     ));
 
-    if (!formValues.isProjectChecked || !standardItems.every(item => item?.isChecked)) {
-        alertAppDialog('Marque todos os checklists para encerrar a implantação.');
+    const allListsFulfilled = standardItems.every(item => (
+        typeof isImplantacaoStandardPurchaseItemFulfilled === 'function'
+            ? isImplantacaoStandardPurchaseItemFulfilled(item)
+            : Boolean(item?.isChecked)
+    ));
+    if (!formValues.isProjectChecked || !allListsFulfilled) {
+        alertAppDialog('Envie todas as listas (PDF) ou marque "Não possui" antes de encerrar a implantação.');
         return;
     }
 
@@ -1461,9 +1718,6 @@ async function handleImplantacaoEncerrar() {
 function bindImplementationEvents() {
     [
         'implantacao-projeto-path',
-        'implantacao-compras-path',
-        'implantacao-ferragens-path',
-        'implantacao-tintas-path',
         'implantacao-wps-op-code'
     ].forEach(id => {
         document.getElementById(id)?.addEventListener('input', () => {
@@ -1471,21 +1725,25 @@ function bindImplementationEvents() {
         });
     });
 
-    [
-        'implantacao-projeto-checked',
-        'implantacao-compras-checked',
-        'implantacao-ferragens-checked',
-        'implantacao-tintas-checked'
-    ].forEach(id => {
-        document.getElementById(id)?.addEventListener('change', () => {
-            updateImplantacaoActionButtons();
-        });
+    document.getElementById('implantacao-projeto-checked')?.addEventListener('change', () => {
+        updateImplantacaoActionButtons();
     });
 
     document.getElementById('implantacao-terceiros-items')?.addEventListener('change', (event) => {
-        if (event.target.closest('.implantacao-terceiro-checked')) {
-            updateImplantacaoActionButtons();
+        const checkbox = event.target.closest('.implantacao-terceiro-checked');
+        if (!checkbox) return;
+        const row = checkbox.closest('.implantacao-terceiro-item');
+        const subtypeId = Number(row?.dataset.subtypeId);
+        const thirdPartyProject = getImplantacaoThirdPartyProjectForSubtype(subtypeId);
+        const existing = getImplantacaoTerceiroPurchaseItems().find(
+            item => Number(item.thirdPartySubtypeId) === subtypeId
+        );
+        if (isImplementationPurchaseItemSentToCompras(existing)
+            || thirdPartyProject?.status !== THIRD_PARTY_PROJECT_STATUS_APPROVED) {
+            checkbox.checked = false;
+            return;
         }
+        updateImplantacaoActionButtons();
     });
 
     document.getElementById('implantacao-terceiros-items')?.addEventListener('click', (event) => {
@@ -1516,6 +1774,9 @@ function bindImplementationEvents() {
 
     if (typeof bindImplantacaoDetalhamentoUploadEvents === 'function') {
         bindImplantacaoDetalhamentoUploadEvents();
+    }
+    if (typeof bindImplantacaoListUploadEvents === 'function') {
+        bindImplantacaoListUploadEvents();
     }
 }
 

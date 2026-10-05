@@ -1383,3 +1383,19 @@ function bindGestaoPerformanceEvents() {
         openGestaoPerformanceProjectStatusHistory(button.dataset.orderProjectId);
     });
 }
+
+if (typeof window !== 'undefined') {
+    window.gestaoPerformanceShared = {
+        fetchGestaoPerformanceHistoryRows,
+        fetchGestaoPerformanceProjects,
+        enrichGestaoPerformanceProjects,
+        buildGestaoPerformanceTimeline,
+        getGestaoPerformanceReferenceProject,
+        getGestaoPerformanceHistoryStatusName,
+        isGestaoPerformanceStatusNameMatch,
+        findGestaoPerformanceStatusExitAt,
+        getGestaoPerformanceProjectTimeline,
+        gestaoPerformanceDateToLocalIso,
+        GESTAO_PERFORMANCE_BAR_COLORS
+    };
+}

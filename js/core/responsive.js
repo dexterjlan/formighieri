@@ -38,8 +38,17 @@ function showAppSubnav() {
     applyAppSubnavCollapsed(false);
 }
 
+function setMobileMenuBackdropVisible(visible) {
+    const backdrop = document.getElementById('app-mobile-menu-backdrop');
+    if (!backdrop) return;
+    backdrop.hidden = !visible;
+    backdrop.classList.toggle('hidden', !visible);
+    backdrop.setAttribute('aria-hidden', visible ? 'false' : 'true');
+}
+
 function closeMobileMenu() {
     document.body.classList.remove('is-mobile-menu-open');
+    setMobileMenuBackdropVisible(false);
     updateMobileMenuButtonState(false);
 }
 
@@ -47,10 +56,25 @@ function toggleMobileMenu() {
     if (isMobileViewport()) {
         const open = !document.body.classList.contains('is-mobile-menu-open');
         document.body.classList.toggle('is-mobile-menu-open', open);
+        setMobileMenuBackdropVisible(open);
         updateMobileMenuButtonState(open);
         return;
     }
     applyAppSubnavCollapsed(!isAppSubnavCollapsed());
+}
+
+function syncDashboardMobileDetailState(showDetail) {
+    const dashboard = document.getElementById('dashboard-view');
+    if (!dashboard) return;
+    if (!isMobileViewport()) {
+        dashboard.classList.remove('fm-dashboard--mobile-detail');
+        return;
+    }
+    dashboard.classList.toggle('fm-dashboard--mobile-detail', Boolean(showDetail));
+}
+
+function showDashboardMobileOrderList() {
+    syncDashboardMobileDetailState(false);
 }
 
 function syncMobileLayoutState() {
@@ -59,6 +83,7 @@ function syncMobileLayoutState() {
 
     if (!mobile) {
         closeMobileMenu();
+        document.getElementById('dashboard-view')?.classList.remove('fm-dashboard--mobile-detail');
     }
 }
 
@@ -126,6 +151,8 @@ function bindResponsiveLayout() {
     }
 
     document.getElementById('btn-mobile-menu')?.addEventListener('click', toggleMobileMenu);
+    document.getElementById('app-mobile-menu-backdrop')?.addEventListener('click', closeMobileMenu);
+    document.getElementById('btn-dashboard-mobile-back-list')?.addEventListener('click', showDashboardMobileOrderList);
     bindSidebarRailHover();
 
     document.getElementById('app-header-nav')?.addEventListener('click', event => {
@@ -143,3 +170,5 @@ function bindResponsiveLayout() {
 window.isMobileViewport = isMobileViewport;
 window.closeMobileMenu = closeMobileMenu;
 window.bindResponsiveLayout = bindResponsiveLayout;
+window.syncDashboardMobileDetailState = syncDashboardMobileDetailState;
+window.showDashboardMobileOrderList = showDashboardMobileOrderList;

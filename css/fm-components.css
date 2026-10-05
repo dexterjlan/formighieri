@@ -902,6 +902,52 @@ body.installer-only-nav #app-header-nav button:not(#btn-view3d):not(#btn-logout)
     body:has(.app-nav-group[open]) .app-shell__body {
         margin-left: 0;
     }
+
+    body.is-mobile-menu-open {
+        overflow: hidden;
+    }
+
+    .app-mobile-menu-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 38;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: rgb(15 23 42 / 0.45);
+        cursor: pointer;
+    }
+
+    body.is-mobile-menu-open .app-mobile-menu-backdrop:not(.hidden) {
+        display: block;
+    }
+
+    .app-sidebar {
+        z-index: 45;
+    }
+
+    .app-shell__body {
+        padding-top: calc(3rem + env(safe-area-inset-top, 0px));
+        padding-right: env(safe-area-inset-right, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-left: env(safe-area-inset-left, 0px);
+    }
+
+    .app-sidebar-toggle {
+        width: 2.75rem;
+        height: 2.75rem;
+        top: calc(0.65rem + env(safe-area-inset-top, 0px));
+        left: max(0.55rem, env(safe-area-inset-left, 0px));
+    }
+
+    .app-sidebar__nav > .app-nav-item,
+    .app-sidebar__nav > .app-nav-group > summary.app-nav-item,
+    .app-sidebar__foot .app-nav-item {
+        min-height: 2.75rem;
+        padding-top: 0.45rem;
+        padding-bottom: 0.45rem;
+    }
 }
 
 /* Pendências dentro da lateral: mesma paleta do menu, sem cartão violeta */

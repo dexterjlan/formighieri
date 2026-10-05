@@ -803,55 +803,124 @@
                                 class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600">
                         </div>
                     </div>
-                    <div class="flex items-start gap-3">
-                        <input type="checkbox" id="implantacao-compras-checked"
-                            class="mt-1 rounded border-slate-300 text-teal-700 focus:ring-teal-500">
-                        <div class="flex-1 space-y-1">
-                            <div class="flex items-center justify-between gap-3">
-                                <label for="implantacao-compras-path" class="text-xs font-semibold text-slate-700">Lista de Material</label>
-                                <label class="inline-flex items-center gap-2 text-xs text-slate-600 shrink-0 cursor-default">
-                                    <input type="checkbox" id="implantacao-compras-enviado-comercial" disabled
-                                        class="rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-not-allowed">
-                                    <span>Enviado para comercial</span>
-                                    <span id="implantacao-compras-enviado-comercial-date" class="text-slate-400"></span>
+                    <div class="border border-slate-100 rounded-lg p-3 space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-xs font-semibold text-slate-700">Lista de Material</p>
+                            <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="implantacao-compras-enviar-comercial"
+                                        class="rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                    <span>Enviar para comercial</span>
+                                    <span id="implantacao-compras-enviar-comercial-date" class="text-slate-400"></span>
+                                </label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="implantacao-compras-nao-possui"
+                                        class="rounded border-slate-300 text-teal-700 focus:ring-teal-500">
+                                    <span>Não possui</span>
                                 </label>
                             </div>
-                            <input type="text" id="implantacao-compras-path" placeholder="Caminho da pasta"
-                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600">
+                        </div>
+                        <div id="implantacao-compras-upload-section" class="space-y-2">
+                            <p id="implantacao-compras-upload-hint" class="text-[10px] text-slate-500"></p>
+                            <p id="implantacao-compras-drive-path" class="hidden text-[10px] text-slate-400 font-mono break-all"></p>
+                            <input type="file" id="implantacao-compras-file-input" accept=".pdf,application/pdf" class="hidden">
+                            <div class="flex flex-wrap gap-2">
+                                <input type="text" id="implantacao-compras-file-display" readonly placeholder="Nenhum arquivo selecionado"
+                                    class="flex-1 min-w-[8rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 text-slate-600">
+                                <button type="button" id="btn-implantacao-compras-select-file"
+                                    class="text-xs bg-white border border-teal-200 text-teal-800 px-2.5 py-1.5 rounded-lg font-medium hover:bg-teal-50">Escolher PDF</button>
+                                <button type="button" id="btn-implantacao-compras-upload"
+                                    class="text-xs bg-teal-700 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-teal-800 disabled:opacity-50">Enviar</button>
+                            </div>
+                            <div id="implantacao-compras-current-empty" class="text-[10px] text-slate-400">Nenhum PDF enviado.</div>
+                            <div id="implantacao-compras-current-file" class="hidden flex flex-wrap items-center justify-between gap-2 py-1.5 px-2 rounded-lg border border-slate-100 bg-white">
+                                <div class="min-w-0">
+                                    <p id="implantacao-compras-current-name" class="text-xs font-medium text-slate-800 truncate"></p>
+                                    <p id="implantacao-compras-current-meta" class="text-[10px] text-slate-400"></p>
+                                </div>
+                                <button type="button" id="btn-implantacao-compras-download"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-2 py-1 rounded-lg font-medium hover:bg-indigo-50 disabled:opacity-50">Baixar</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="flex items-start gap-3">
-                        <input type="checkbox" id="implantacao-ferragens-checked"
-                            class="mt-1 rounded border-slate-300 text-teal-700 focus:ring-teal-500">
-                        <div class="flex-1 space-y-1">
-                            <div class="flex items-center justify-between gap-3">
-                                <label for="implantacao-ferragens-path" class="text-xs font-semibold text-slate-700">Lista de Ferragens</label>
-                                <label class="inline-flex items-center gap-2 text-xs text-slate-600 shrink-0 cursor-default">
-                                    <input type="checkbox" id="implantacao-ferragens-enviado-comercial" disabled
-                                        class="rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-not-allowed">
-                                    <span>Enviado para comercial</span>
-                                    <span id="implantacao-ferragens-enviado-comercial-date" class="text-slate-400"></span>
+                    <div class="border border-slate-100 rounded-lg p-3 space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-xs font-semibold text-slate-700">Lista de Ferragens</p>
+                            <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="implantacao-ferragens-enviar-comercial"
+                                        class="rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                    <span>Enviar para comercial</span>
+                                    <span id="implantacao-ferragens-enviar-comercial-date" class="text-slate-400"></span>
+                                </label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="implantacao-ferragens-nao-possui"
+                                        class="rounded border-slate-300 text-teal-700 focus:ring-teal-500">
+                                    <span>Não possui</span>
                                 </label>
                             </div>
-                            <input type="text" id="implantacao-ferragens-path" placeholder="Caminho da pasta"
-                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600">
+                        </div>
+                        <div id="implantacao-ferragens-upload-section" class="space-y-2">
+                            <p id="implantacao-ferragens-upload-hint" class="text-[10px] text-slate-500"></p>
+                            <p id="implantacao-ferragens-drive-path" class="hidden text-[10px] text-slate-400 font-mono break-all"></p>
+                            <input type="file" id="implantacao-ferragens-file-input" accept=".pdf,application/pdf" class="hidden">
+                            <div class="flex flex-wrap gap-2">
+                                <input type="text" id="implantacao-ferragens-file-display" readonly placeholder="Nenhum arquivo selecionado"
+                                    class="flex-1 min-w-[8rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 text-slate-600">
+                                <button type="button" id="btn-implantacao-ferragens-select-file"
+                                    class="text-xs bg-white border border-teal-200 text-teal-800 px-2.5 py-1.5 rounded-lg font-medium hover:bg-teal-50">Escolher PDF</button>
+                                <button type="button" id="btn-implantacao-ferragens-upload"
+                                    class="text-xs bg-teal-700 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-teal-800 disabled:opacity-50">Enviar</button>
+                            </div>
+                            <div id="implantacao-ferragens-current-empty" class="text-[10px] text-slate-400">Nenhum PDF enviado.</div>
+                            <div id="implantacao-ferragens-current-file" class="hidden flex flex-wrap items-center justify-between gap-2 py-1.5 px-2 rounded-lg border border-slate-100 bg-white">
+                                <div class="min-w-0">
+                                    <p id="implantacao-ferragens-current-name" class="text-xs font-medium text-slate-800 truncate"></p>
+                                    <p id="implantacao-ferragens-current-meta" class="text-[10px] text-slate-400"></p>
+                                </div>
+                                <button type="button" id="btn-implantacao-ferragens-download"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-2 py-1 rounded-lg font-medium hover:bg-indigo-50 disabled:opacity-50">Baixar</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="flex items-start gap-3">
-                        <input type="checkbox" id="implantacao-tintas-checked"
-                            class="mt-1 rounded border-slate-300 text-teal-700 focus:ring-teal-500">
-                        <div class="flex-1 space-y-1">
-                            <div class="flex items-center justify-between gap-3">
-                                <label for="implantacao-tintas-path" class="text-xs font-semibold text-slate-700">Lista de Tintas</label>
-                                <label class="inline-flex items-center gap-2 text-xs text-slate-600 shrink-0 cursor-default">
-                                    <input type="checkbox" id="implantacao-tintas-enviado-comercial" disabled
-                                        class="rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-not-allowed">
-                                    <span>Enviado para comercial</span>
-                                    <span id="implantacao-tintas-enviado-comercial-date" class="text-slate-400"></span>
+                    <div class="border border-slate-100 rounded-lg p-3 space-y-2">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <p class="text-xs font-semibold text-slate-700">Lista de Tintas</p>
+                            <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="implantacao-tintas-enviar-comercial"
+                                        class="rounded border-slate-300 text-amber-600 focus:ring-amber-500">
+                                    <span>Enviar para comercial</span>
+                                    <span id="implantacao-tintas-enviar-comercial-date" class="text-slate-400"></span>
+                                </label>
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="implantacao-tintas-nao-possui"
+                                        class="rounded border-slate-300 text-teal-700 focus:ring-teal-500">
+                                    <span>Não possui</span>
                                 </label>
                             </div>
-                            <input type="text" id="implantacao-tintas-path" placeholder="Caminho da pasta"
-                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-teal-600">
+                        </div>
+                        <div id="implantacao-tintas-upload-section" class="space-y-2">
+                            <p id="implantacao-tintas-upload-hint" class="text-[10px] text-slate-500"></p>
+                            <p id="implantacao-tintas-drive-path" class="hidden text-[10px] text-slate-400 font-mono break-all"></p>
+                            <input type="file" id="implantacao-tintas-file-input" accept=".pdf,application/pdf" class="hidden">
+                            <div class="flex flex-wrap gap-2">
+                                <input type="text" id="implantacao-tintas-file-display" readonly placeholder="Nenhum arquivo selecionado"
+                                    class="flex-1 min-w-[8rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 text-slate-600">
+                                <button type="button" id="btn-implantacao-tintas-select-file"
+                                    class="text-xs bg-white border border-teal-200 text-teal-800 px-2.5 py-1.5 rounded-lg font-medium hover:bg-teal-50">Escolher PDF</button>
+                                <button type="button" id="btn-implantacao-tintas-upload"
+                                    class="text-xs bg-teal-700 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-teal-800 disabled:opacity-50">Enviar</button>
+                            </div>
+                            <div id="implantacao-tintas-current-empty" class="text-[10px] text-slate-400">Nenhum PDF enviado.</div>
+                            <div id="implantacao-tintas-current-file" class="hidden flex flex-wrap items-center justify-between gap-2 py-1.5 px-2 rounded-lg border border-slate-100 bg-white">
+                                <div class="min-w-0">
+                                    <p id="implantacao-tintas-current-name" class="text-xs font-medium text-slate-800 truncate"></p>
+                                    <p id="implantacao-tintas-current-meta" class="text-[10px] text-slate-400"></p>
+                                </div>
+                                <button type="button" id="btn-implantacao-tintas-download"
+                                    class="text-xs bg-white border border-indigo-200 text-indigo-800 px-2 py-1 rounded-lg font-medium hover:bg-indigo-50 disabled:opacity-50">Baixar</button>
+                            </div>
                         </div>
                     </div>
                     <div id="implantacao-terceiros-section" class="border-t border-slate-100 pt-3 space-y-2">

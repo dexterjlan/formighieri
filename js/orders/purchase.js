@@ -245,12 +245,30 @@ async function fetchImplementationPurchaseItemForCompra(implementationPurchaseIt
 
     const { data, error } = await supabaseClient
         .from('ImplementationPurchaseItem')
-        .select('id, purchaseType, folderPath, thirdPartySubtype:ThirdPartySubtype(id, name)')
+        .select('id, purchaseType, folderPath, isNotApplicable, thirdPartySubtype:ThirdPartySubtype(id, name)')
         .eq('id', implementationPurchaseItemId)
         .maybeSingle();
 
     if (error) throw error;
     return data;
+}
+
+function isCompraImplementationListPurchaseType(purchaseType) {
+    const type = String(purchaseType || '').trim();
+    return type === COMPRA_TIPO_MATERIAL
+        || type === COMPRA_TIPO_FERRAGEM
+        || type === COMPRA_TIPO_TINTA;
+}
+
+async function fetchImplementationPurchaseListDriveFileForCompra(implementationPurchaseItemId) {
+    const itemId = Number(implementationPurchaseItemId || 0);
+    if (!itemId || typeof findDriveFileForEntity !== 'function') return null;
+
+    return findDriveFileForEntity({
+        entityType: DRIVE_FILE_ENTITY_TYPE.IMPLEMENTATION_PURCHASE_ITEM,
+        entityId: itemId,
+        folderKind: DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST
+    });
 }
 
 function unwrapAppUserEmbed(embed) {
@@ -354,6 +372,11 @@ async function enrichCompraRecord(record) {
             enriched.subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
             enriched.purchaseItem = purchaseItem;
 
+            if (isCompraImplementationListPurchaseType(purchaseItem?.purchaseType)
+                && !purchaseItem?.isNotApplicable) {
+                enriched.listaDriveFile = await fetchImplementationPurchaseListDriveFileForCompra(purchaseItem.id);
+            }
+
             if (record.orderProjectId && typeof buildThirdPartyProjectObservationLookupByOrderProjectIds === 'function') {
                 const lookup = await buildThirdPartyProjectObservationLookupByOrderProjectIds([record.orderProjectId]);
                 enriched.projectObservation = typeof resolveThirdPartyProjectObservationForCompra === 'function'
@@ -392,10 +415,13 @@ async function createComprasRecordsFromImplantacaoSend(options = {}) {
     const {
         implementationId,
         orderProjectId,
-        purchaseItems = []
+        purchaseItems = [],
+        purchaseItemsAlreadyValidated = false
     } = options;
 
-    const items = getImplantacaoCompraSendItems(purchaseItems);
+    const items = purchaseItemsAlreadyValidated
+        ? (purchaseItems || []).filter(item => item && !item.sentToCommercial)
+        : getImplantacaoCompraSendItems(purchaseItems);
     if (!items.length) return [];
 
     await fetchOrderProjectCodesForCompra(orderProjectId);
@@ -736,7 +762,8 @@ function setCompraSummaryRowVisible(wrapId, visible) {
 }
 
 function populateCompraForm(record) {
-    activeCompraThirdPartyDriveFile = record?.thirdPartyDriveFile || null;
+    const purchaseDriveFile = record?.listaDriveFile || record?.thirdPartyDriveFile || null;
+    activeCompraThirdPartyDriveFile = purchaseDriveFile;
     const fromImplementation = isCompraImplantacaoMotivo(record);
     const designerName = String(record?.designerName || record?.thirdPartyDesignerName || '').trim();
     const subtypeName = String(record?.subtypeName || '').trim();
@@ -764,8 +791,11 @@ function populateCompraForm(record) {
     setCompraSummaryRowVisible('compra-modal-ppcp-wrap', fromImplementation);
     setCompraSummaryText('compra-modal-requester-name', record?.requesterName);
     setCompraSummaryRowVisible('compra-modal-requester-wrap', !fromImplementation);
+    const hasPurchaseDriveFile = Boolean(
+        purchaseDriveFile?.driveFileId || String(purchaseDriveFile?.url || '').trim()
+    );
     setCompraSummaryText('compra-modal-lista-path', path);
-    setCompraSummaryRowVisible('compra-modal-path-wrap', Boolean(path));
+    setCompraSummaryRowVisible('compra-modal-path-wrap', Boolean(path) && !hasPurchaseDriveFile);
     setCompraSummaryText('compra-modal-attachment-name', attachmentName);
     setCompraSummaryRowVisible('compra-modal-attachment-wrap', Boolean(attachmentPath || attachmentName));
     const canOpenAttachment = Boolean(attachmentPath);
@@ -810,22 +840,22 @@ function populateCompraForm(record) {
     const fileNameEl = document.getElementById('compra-modal-third-party-file-name');
     const openBtn = document.getElementById('btn-compra-third-party-open');
     const downloadBtn = document.getElementById('btn-compra-third-party-download');
-    const driveFile = record?.thirdPartyDriveFile;
-    const hasThirdPartyDriveFile = Boolean(
-        driveFile?.driveFileId || String(driveFile?.url || '').trim()
+    const isImplementationList = isCompraImplementationListPurchaseType(
+        record?.purchaseItem?.purchaseType || record?.purchaseType
     );
+    const showPurchaseDriveFile = hasPurchaseDriveFile && (isTerceiro || isImplementationList);
 
     if (fileWrap) {
-        fileWrap.classList.toggle('hidden', !isTerceiro || !hasThirdPartyDriveFile);
+        fileWrap.classList.toggle('hidden', !showPurchaseDriveFile);
     }
     if (fileNameEl) {
-        fileNameEl.textContent = driveFile?.fileName || 'Nenhum arquivo no Drive';
+        fileNameEl.textContent = purchaseDriveFile?.fileName || 'Nenhum arquivo no Drive';
     }
     if (openBtn) {
-        openBtn.disabled = !hasThirdPartyDriveFile;
+        openBtn.disabled = !showPurchaseDriveFile;
     }
     if (downloadBtn) {
-        downloadBtn.disabled = !hasThirdPartyDriveFile;
+        downloadBtn.disabled = !showPurchaseDriveFile;
     }
 }
 
@@ -1000,6 +1030,7 @@ async function handleCompraSalvar() {
             subtypeName: activeCompraRecord?.subtypeName,
             thirdPartyDesignerName: activeCompraRecord?.thirdPartyDesignerName,
             thirdPartyDriveFile: activeCompraRecord?.thirdPartyDriveFile,
+            listaDriveFile: activeCompraRecord?.listaDriveFile,
             purchaseItem: activeCompraRecord?.purchaseItem,
             projectObservation: activeCompraRecord?.projectObservation,
             requestOrigin: activeCompraRecord?.requestOrigin,

@@ -312,6 +312,12 @@ async function restoreAppNavState() {
             case 'gestao':
                 await restoreGestaoView(state);
                 return true;
+            case 'performance':
+                if (typeof showPerformanceProjeto === 'function') {
+                    showPerformanceProjeto();
+                    return true;
+                }
+                return false;
             case 'pendencias':
                 await restorePendenciasView(state);
                 return true;
@@ -437,6 +443,7 @@ const INSTALLER_HIDDEN_MAIN_NAV_IDS = [
     'btn-pendencias',
     'btn-pesquisas',
     'btn-gestao',
+    'btn-performance',
     'btn-system-settings'
 ];
 
@@ -464,6 +471,10 @@ function updateAdminNav() {
     document.getElementById("btn-back-dashboard")?.classList.toggle("hidden", thirdParty);
     document.getElementById("btn-system-settings").classList.toggle("hidden", !isAdmin() || thirdParty);
     document.getElementById("btn-gestao").classList.toggle("hidden", !canAccessGestao());
+    document.getElementById("btn-performance")?.classList.toggle(
+        "hidden",
+        !(typeof canAccessPerformance === 'function' && canAccessPerformance())
+    );
     document.getElementById("btn-conversations-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-approvals-query").classList.toggle("hidden", !canSeeQueryNav());
     document.getElementById("btn-calendario").classList.toggle("hidden", !canAccessCalendar());
@@ -497,6 +508,7 @@ function updateMainNavActive(activeView) {
         'project-scheduling': document.getElementById('btn-project-scheduling'),
         'programacao-montagem': document.getElementById('btn-programacao-montagem'),
         gestao: document.getElementById('btn-gestao'),
+        performance: document.getElementById('btn-performance'),
         pendencias: document.getElementById('btn-pendencias'),
         pesquisas: document.getElementById('btn-pesquisas'),
         view3d: document.getElementById('btn-view3d'),
@@ -524,6 +536,9 @@ function clearInactiveSubnavSelection(activeView) {
     }
     if (activeView !== 'gestao') {
         document.querySelectorAll('#gestao-sidebar-nav .is-active').forEach(el => el.classList.remove('is-active'));
+    }
+    if (activeView !== 'performance') {
+        document.querySelectorAll('#performance-sidebar-nav .is-active').forEach(el => el.classList.remove('is-active'));
     }
     if (activeView !== 'pendencias') {
         document.querySelectorAll('#pendencias-sidebar-nav .is-active, #pendencias-sidebar-nav .is-selected').forEach(el => {
@@ -564,6 +579,7 @@ function hideSubViews() {
     document.getElementById("calendar-view").classList.add("hidden");
     document.getElementById("comercial-view")?.classList.add("hidden");
     document.getElementById("gestao-view").classList.add("hidden");
+    document.getElementById("performance-view")?.classList.add("hidden");
     document.getElementById("programacoes-view")?.classList.add("hidden");
     document.getElementById("requisicoes-view")?.classList.add("hidden");
     document.getElementById("pendencias-view").classList.add("hidden");
@@ -583,6 +599,9 @@ function showDashboard() {
 
     hideSubViews();
     document.getElementById("dashboard-view").classList.remove("hidden");
+    if (typeof syncDashboardMobileDetailState === 'function') {
+        syncDashboardMobileDetailState(false);
+    }
     updateMainNavActive('dashboard');
     updateAdminNav();
     saveAppNavState({
