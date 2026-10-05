@@ -3,7 +3,7 @@ function canAccessPendenciasAguardandoMedicao() {
 }
 
 function canEditPendenciasAguardandoMedicaoStatus() {
-    return isGestorComercial();
+    return isGestorComercial() || isAdmin();
 }
 
 async function fetchPendenciasAguardandoMeasurementProjects() {
