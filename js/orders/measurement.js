@@ -748,6 +748,7 @@ async function openMeasurementModal(measurementId = null, options = {}) {
         return;
     }
 
+    resetMedicaoModalInteractiveState();
     document.getElementById('medicao-form').reset();
 
     const defaultDateWrap = document.getElementById('medicao-default-date-wrap');
@@ -798,13 +799,36 @@ window.closeMedicaoModal = closeMeasurementModal;
 const MEDICAO_MODAL_OVERLAY = createModalOverlayConfig('medicao-modal', {
     disableElementIds: ['medicao-form-submit'],
     reenableElementIdsOnHide: ['medicao-form-submit'],
-    closeButtonSelector: '#medicao-modal button[onclick="closeMeasurementModal()"]',
+    closeButtonSelector: '#btn-cancel-medicao',
     disableFormSelector: '#medicao-modal input:not([disabled]), #medicao-modal textarea:not([disabled])',
     disableDatasetKey: 'medicaoLoadingDisabled'
 });
 
 function setMedicaoModalLoading(active, message = 'Processando...', status = 'loading') {
     setModalOverlayLoading(MEDICAO_MODAL_OVERLAY, active, message, status);
+}
+
+/** Garante campos editáveis ao abrir a modal (ex.: após save com overlay ou disabled residual). */
+function resetMedicaoModalInteractiveState() {
+    setMedicaoModalLoading(false);
+
+    const observationEl = document.getElementById('medicao-observation');
+    if (observationEl) {
+        delete observationEl.dataset.medicaoLoadingDisabled;
+        observationEl.disabled = false;
+        observationEl.readOnly = false;
+    }
+
+    const defaultDateEl = document.getElementById('medicao-default-date');
+    if (defaultDateEl) {
+        delete defaultDateEl.dataset.medicaoLoadingDisabled;
+        defaultDateEl.disabled = false;
+    }
+
+    const submitBtn = document.getElementById('medicao-form-submit');
+    if (submitBtn) {
+        submitBtn.disabled = false;
+    }
 }
 
 async function refreshMedicaoRelatedViews() {
@@ -1266,6 +1290,11 @@ function bindMeasurementEvents() {
         await saveMedicao();
     });
     document.getElementById('medicao-default-date')?.addEventListener('change', syncMeasurementProjectDatesFromDefault);
+    document.getElementById('medicao-default-date')?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        document.getElementById('medicao-observation')?.focus();
+    });
 }
 
 const fetchMedicaoContextByProjectIds = fetchMeasurementContextByProjectIds;
