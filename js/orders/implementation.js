@@ -1493,7 +1493,7 @@ async function handleImplantacaoEnviarCompras() {
             return;
         }
 
-        alertAppDialog('Marque "Enviar para comercial" em ao menos uma lista com PDF já enviado, ou um terceiro com projeto aprovado.');
+        alertAppDialog('Marque "Enviar para Compras" em ao menos uma lista com PDF já enviado, ou um terceiro com projeto aprovado.');
         return;
     }
 
