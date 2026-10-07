@@ -7,7 +7,9 @@ function isGestaoKanbanComplementarProject(project) {
 }
 
 function isGestaoKanbanHiddenProject(project) {
-    return isGestaoKanbanComplementarProject(project) || isReplacedOrderProject(project);
+    if (isGestaoKanbanComplementarProject(project) || isReplacedOrderProject(project)) return true;
+    if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) return true;
+    return false;
 }
 
 function getGestaoKanbanCardDeliveryDate(order, phase = null) {
@@ -90,9 +92,12 @@ function buildGestaoKanbanCardsForStatus(statusId, orders) {
 }
 
 function renderGestaoKanbanProjectRow(project, options = {}) {
-    const { nested = false, isComplementar = false, orderCode = '' } = options;
+    const { nested = false, isComplementar = false, orderCode = '', order = null, aggregatorChildLabels = [] } = options;
 
     let displayName = project.name || 'Projeto';
+    if (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)) {
+        displayName = `${displayName} (Agrupador)`;
+    }
     if (isComplementar || nested || project.isComplementary) {
         const orderLabel = project.order?.orderCode || orderCode || '';
         const orderPart = orderLabel ? `${orderLabel} - ` : '';
@@ -101,11 +106,15 @@ function renderGestaoKanbanProjectRow(project, options = {}) {
 
     const daysInStatusLabel = formatGestaoKanbanDaysInCurrentStatus(project);
     const showHistoryBtn = !isComplementar && !nested && !project.isComplementary;
+    const aggregatorTooltip = (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)
+        && aggregatorChildLabels.length)
+        ? aggregatorChildLabels.join(', ')
+        : '';
 
     return `
         <div class="flex items-start justify-between gap-2 ${nested ? 'ml-4 pl-2 border-l border-indigo-100' : ''}">
             <div class="flex items-baseline gap-1.5 min-w-0 flex-wrap">
-                <span class="text-[11px] leading-snug ${nested ? 'text-slate-600' : 'text-slate-700'}">${escapeHtml(displayName)}</span>
+                <span class="text-[11px] leading-snug ${nested ? 'text-slate-600' : 'text-slate-700'}"${aggregatorTooltip ? ` title="${escapeHtml(aggregatorTooltip)}"` : ''}>${escapeHtml(displayName)}</span>
                 ${daysInStatusLabel
                     ? `<span class="text-[10px] text-slate-400 whitespace-nowrap" title="Dias no status atual">${escapeHtml(daysInStatusLabel)}</span>`
                     : ''}
@@ -136,7 +145,13 @@ function renderGestaoKanbanCard(order, projectTree, phase = null) {
 
         return `
             <li class="space-y-1.5 list-none">
-                ${renderGestaoKanbanProjectRow(project, { orderCode: order.orderCode })}
+                ${renderGestaoKanbanProjectRow(project, {
+                    orderCode: order.orderCode,
+                    order,
+                    aggregatorChildLabels: typeof getOrderProjectAggregatorChildNames === 'function'
+                        ? getOrderProjectAggregatorChildNames(order, project.id)
+                        : []
+                })}
                 ${childrenHtml}
             </li>
         `;
@@ -1167,6 +1182,7 @@ async function loadGestaoKanban() {
             project.isComplementary === undefined && project.parentProjectId === undefined
             || project.isReplaced === undefined && project.replacedByProjectId === undefined
             || project.isReplacement === undefined && project.replacesProjectId === undefined
+            || project.isAggregator === undefined && project.aggregatorOrderProjectId === undefined
         )
     );
 

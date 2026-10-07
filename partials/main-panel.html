@@ -82,6 +82,7 @@
                                 <button type="button" id="gestao-nav-addr" class="app-nav-item app-nav-item--nested">Endereços</button>
                                 <button type="button" id="gestao-nav-marceneiros" class="app-nav-item app-nav-item--nested">Marceneiros</button>
                                 <button type="button" id="gestao-nav-alterar-status-projeto" class="app-nav-item app-nav-item--nested">Alterar Status Projeto</button>
+                                <button type="button" id="gestao-nav-agrupar-projetos" class="app-nav-item app-nav-item--nested hidden">Agrupar Projetos</button>
                                 <button type="button" id="gestao-nav-montadores" class="app-nav-item app-nav-item--nested">Montadores</button>
                                 <button type="button" id="gestao-nav-characteristics" class="app-nav-item app-nav-item--nested">Características</button>
                                 <button type="button" id="gestao-nav-third-party-subtypes" class="app-nav-item app-nav-item--nested">Subtipos Terceiros</button>
@@ -1500,6 +1501,64 @@
                                         <tr>
                                             <td colspan="5" class="p-6 text-center text-xs text-slate-500">
                                                 Informe o código do pedido e/ou o nome do cliente para buscar projetos.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-agrupar-projetos-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Agrupar Projetos</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Crie um agrupador no pedido e vincule ambientes no mesmo status e na mesma data de entrega (de Aguardando Projeto Técnico até Aguardando Aprovação). O agrupador não possui valor de venda.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <div class="relative z-30 max-w-xl border border-slate-200 rounded-xl p-3 bg-slate-50/40" id="gestao-agrupar-projetos-order-wrap">
+                                <label class="block text-[10px] font-semibold text-slate-500 mb-1" for="gestao-agrupar-projetos-order-search">Pedido</label>
+                                <input id="gestao-agrupar-projetos-order-search" type="text" autocomplete="off" role="combobox"
+                                    aria-expanded="false" aria-controls="gestao-agrupar-projetos-order-list" aria-autocomplete="list"
+                                    placeholder="Digite o nome do cliente"
+                                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                <div id="gestao-agrupar-projetos-order-list"
+                                    class="hidden absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+                                    role="listbox"></div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-end border border-slate-200 rounded-xl p-3 bg-white">
+                                <div>
+                                    <label for="gestao-agrupar-projetos-name" class="block text-[10px] font-semibold text-slate-500 mb-1">Nome do agrupador</label>
+                                    <input type="text" id="gestao-agrupar-projetos-name"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Ex: Cozinha + Área gourmet">
+                                </div>
+                                <div class="text-xs text-slate-500 md:pb-2" id="gestao-agrupar-projetos-order-summary"></div>
+                            </div>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <div class="p-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
+                                    <div class="space-y-0.5">
+                                        <span class="text-xs text-slate-500 block" id="gestao-agrupar-projetos-count">Nenhum pedido carregado</span>
+                                        <span class="text-[10px] text-slate-400 block" id="gestao-agrupar-projetos-status-hint">Selecione ao menos dois projetos com o mesmo status.</span>
+                                    </div>
+                                    <button type="button" id="gestao-agrupar-projetos-save" disabled
+                                        class="text-xs bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        Criar agrupador
+                                    </button>
+                                </div>
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="p-3 font-semibold w-10"></th>
+                                            <th class="text-left p-3 font-semibold">Ambiente</th>
+                                            <th class="text-left p-3 font-semibold">Código</th>
+                                            <th class="text-left p-3 font-semibold">Entrega</th>
+                                            <th class="text-left p-3 font-semibold">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-agrupar-projetos-list" class="divide-y divide-slate-100">
+                                        <tr>
+                                            <td colspan="5" class="p-6 text-center text-xs text-slate-500">
+                                                Selecione um pedido para ver os ambientes.
                                             </td>
                                         </tr>
                                     </tbody>

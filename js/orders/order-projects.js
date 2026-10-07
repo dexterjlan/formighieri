@@ -1,5 +1,38 @@
 let environmentTypesCache = [];
 let orderProjectsCache = [];
+const orderProjectsAggregatorExpandedIds = new Set();
+
+function syncOrderProjectAggregatorToggleButton(button, expanded) {
+    if (!button) return;
+    button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    button.title = expanded ? 'Recolher ambientes' : 'Expandir ambientes';
+    const icon = button.querySelector('.order-project-aggregator-toggle__icon');
+    if (icon) {
+        icon.textContent = expanded ? '▼' : '▶';
+    }
+}
+
+function setOrderProjectAggregatorChildrenExpanded(grid, aggregatorId, expanded) {
+    const normalizedId = Number(aggregatorId);
+    if (!normalizedId || !grid) return;
+
+    const wrapper = grid.querySelector(
+        `.order-projects-grid__children[data-aggregator-id="${normalizedId}"]`
+    );
+    const toggle = grid.querySelector(
+        `.order-project-aggregator-toggle[data-aggregator-id="${normalizedId}"]`
+    );
+
+    if (expanded) {
+        orderProjectsAggregatorExpandedIds.add(normalizedId);
+        wrapper?.classList.remove('is-collapsed');
+    } else {
+        orderProjectsAggregatorExpandedIds.delete(normalizedId);
+        wrapper?.classList.add('is-collapsed');
+    }
+
+    syncOrderProjectAggregatorToggleButton(toggle, expanded);
+}
 
 async function loadEnvironmentTypes() {
     if (environmentTypesCache.length) return environmentTypesCache;
@@ -339,6 +372,96 @@ async function enrichOrderProjectsForList(projects) {
     return enriched;
 }
 
+function getOrderProjectsListTopLevel(projects = orderProjectsCache) {
+    return (projects || []).filter(
+        project => !(typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project))
+    );
+}
+
+function appendOrderProjectGridItem(container, project, orderId, actionContext, options = {}) {
+    const {
+        nested = false,
+        hideActions = false,
+        aggregatorChildCount = 0,
+        aggregatorExpanded = false
+    } = options;
+    const hasPhases = typeof orderHasDeliveryPhases === 'function'
+        && orderHasDeliveryPhases(orderId);
+    const statusName = getOrderProjectStatusName(project);
+    const statusClass = getOrderProjectStatusBadgeClass(statusName);
+    const phaseDisplay = typeof getOrderProjectPhaseDisplay === 'function'
+        ? getOrderProjectPhaseDisplay(project, orderId)
+        : null;
+    const phaseCellHtml = hasPhases
+        ? (phaseDisplay
+            ? `<span class="order-projects-grid__cell text-[10px] text-slate-600 whitespace-nowrap" title="${escapeHtml(`${phaseDisplay.name} · ${phaseDisplay.dateLabel}`)}"><span class="block font-medium text-slate-700">${escapeHtml(phaseDisplay.name)}</span><span class="block text-[9px] text-slate-500">${escapeHtml(phaseDisplay.dateLabel)}</span></span>`
+            : '<span class="order-projects-grid__cell"></span>')
+        : '';
+    const designerName = project.designer?.name || '—';
+    const projectId = Number(project.id);
+    const approval = actionContext.approvalsByProject?.[projectId] || null;
+    const revisions = actionContext.revisionsByProject?.[projectId] || [];
+    const implantacao = actionContext.implantacaoByProjectId?.[projectId] || null;
+    const medicao = actionContext.medicaoByProject?.[projectId] || null;
+    const conferencia = actionContext.conferenciaByProject?.[projectId] || null;
+    const actions = hideActions || (typeof canActOnOrderProject === 'function' && !canActOnOrderProject(project))
+        ? []
+        : (typeof getOrderProjectActions === 'function'
+            ? getOrderProjectActions(project, { orderId, approval, revisions, implantacao, medicao, conferencia })
+            : []);
+    const aggregatorBadge = !nested && typeof renderAggregatorProjectNoticeHtml === 'function'
+        ? renderAggregatorProjectNoticeHtml(project)
+        : '';
+    const detailsButtonHtml = hideActions
+        ? ''
+        : `<button type="button"
+                class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
+                data-project-id="${projectId}">
+                Detalhes
+            </button>`;
+    const aggregatorToggleHtml = !nested && aggregatorChildCount > 0
+        ? `<button type="button"
+                class="order-project-aggregator-toggle inline-flex items-center gap-0.5 shrink-0 text-[10px] font-semibold text-violet-800 bg-violet-50 border border-violet-200 hover:bg-violet-100 px-1.5 py-0.5 rounded-md"
+                data-aggregator-id="${projectId}"
+                aria-expanded="${aggregatorExpanded ? 'true' : 'false'}"
+                title="${aggregatorExpanded ? 'Recolher ambientes' : 'Expandir ambientes'}">
+                <span class="order-project-aggregator-toggle__icon leading-none">${aggregatorExpanded ? '▼' : '▶'}</span>
+                <span class="leading-none">${aggregatorChildCount}</span>
+            </button>`
+        : '';
+    const item = document.createElement('div');
+    item.className = nested
+        ? 'order-projects-grid__item order-projects-grid__item--nested'
+        : 'order-projects-grid__item';
+    item.dataset.projectId = String(projectId);
+    item.innerHTML = `
+        <div class="order-projects-grid__row${nested ? ' order-projects-grid__row--nested' : ''}">
+            <div class="order-projects-grid__cell order-projects-grid__cell--project min-w-0${nested ? ' order-projects-grid__cell--project-nested' : ''}">
+                <div class="flex flex-wrap items-center gap-1.5">
+                    ${aggregatorToggleHtml}
+                    <span class="text-xs ${nested ? 'font-medium text-slate-600' : 'font-semibold text-slate-800'} truncate" title="${escapeHtml(project.name)}">${escapeHtml(project.name)}</span>
+                    ${detailsButtonHtml}
+                    ${aggregatorBadge}
+                    ${renderComplementarProjectNoticeHtml(project)}
+                    ${renderReplacedProjectNoticeHtml(project)}
+                    ${renderReplacementProjectNoticeHtml(project)}
+                </div>
+            </div>
+            <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
+            ${phaseCellHtml}
+            <span class="order-projects-grid__cell order-projects-grid__cell--status text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+            <div class="order-projects-grid__cell order-projects-grid__cell--actions">
+                ${hideActions
+        ? '<span class="text-xs text-slate-300">—</span>'
+        : (typeof renderOrderProjectActionButtons === 'function'
+            ? renderOrderProjectActionButtons(actions)
+            : '<span class="text-xs text-slate-300">—</span>')}
+            </div>
+        </div>
+    `;
+    container.appendChild(item);
+}
+
 async function loadOrderProjects(orderId) {
     const list = document.getElementById('order-projects-list');
 
@@ -386,55 +509,36 @@ async function loadOrderProjects(orderId) {
     `;
     grid.appendChild(header);
 
-    orderProjectsCache.forEach(p => {
-            const statusName = getOrderProjectStatusName(p);
-            const statusClass = getOrderProjectStatusBadgeClass(statusName);
-            const phaseDisplay = typeof getOrderProjectPhaseDisplay === 'function'
-                ? getOrderProjectPhaseDisplay(p, orderId)
-                : null;
-            const phaseCellHtml = phaseDisplay
-                ? `<span class="order-projects-grid__cell text-[10px] text-slate-600 whitespace-nowrap" title="${escapeHtml(`${phaseDisplay.name} · ${phaseDisplay.dateLabel}`)}"><span class="block font-medium text-slate-700">${escapeHtml(phaseDisplay.name)}</span><span class="block text-[9px] text-slate-500">${escapeHtml(phaseDisplay.dateLabel)}</span></span>`
-                : '';
-            const designerName = p.designer?.name || '—';
-            const projectId = Number(p.id);
-            const approval = actionContext.approvalsByProject?.[projectId] || null;
-            const revisions = actionContext.revisionsByProject?.[projectId] || [];
-            const implantacao = actionContext.implantacaoByProjectId?.[projectId] || null;
-            const medicao = actionContext.medicaoByProject?.[projectId] || null;
-            const conferencia = actionContext.conferenciaByProject?.[projectId] || null;
-            const actions = typeof getOrderProjectActions === 'function'
-                ? getOrderProjectActions(p, { orderId, approval, revisions, implantacao, medicao, conferencia })
-                : [];
-            const item = document.createElement('div');
-            item.className = 'order-projects-grid__item';
-            item.dataset.projectId = String(projectId);
-            item.innerHTML = `
-                <div class="order-projects-grid__row">
-                    <div class="order-projects-grid__cell order-projects-grid__cell--project min-w-0">
-                        <div class="flex flex-wrap items-center gap-1.5">
-                            <span class="text-xs font-semibold text-slate-800 truncate" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
-                            <button type="button"
-                                class="order-project-details-btn text-[10px] bg-white border border-violet-200 text-violet-800 hover:bg-violet-50 px-2 py-0.5 rounded-md font-medium whitespace-nowrap"
-                                data-project-id="${projectId}">
-                                Detalhes
-                            </button>
-                            ${renderComplementarProjectNoticeHtml(p)}
-                            ${renderReplacedProjectNoticeHtml(p)}
-                            ${renderReplacementProjectNoticeHtml(p)}
-                        </div>
-                    </div>
-                    <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
-                    ${phaseCellHtml}
-                    <span class="order-projects-grid__cell order-projects-grid__cell--status text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
-                    <div class="order-projects-grid__cell order-projects-grid__cell--actions">
-                        ${typeof renderOrderProjectActionButtons === 'function'
-                            ? renderOrderProjectActionButtons(actions)
-                            : '<span class="text-xs text-slate-300">—</span>'}
-                    </div>
-                </div>
-            `;
-            grid.appendChild(item);
+    const orderProjectsForList = { projects: orderProjectsCache };
+
+    getOrderProjectsListTopLevel(orderProjectsCache).forEach(project => {
+        const aggregatorId = Number(project.id);
+        const children = typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)
+            && typeof getOrderProjectAggregatorChildProjects === 'function'
+            ? getOrderProjectAggregatorChildProjects(orderProjectsForList, project.id)
+            : [];
+        const aggregatorExpanded = orderProjectsAggregatorExpandedIds.has(aggregatorId);
+
+        appendOrderProjectGridItem(grid, project, orderId, actionContext, {
+            aggregatorChildCount: children.length,
+            aggregatorExpanded
         });
+
+        if (!children.length) return;
+
+        const childrenWrapper = document.createElement('div');
+        childrenWrapper.className = `order-projects-grid__children${aggregatorExpanded ? '' : ' is-collapsed'}`;
+        childrenWrapper.dataset.aggregatorId = String(aggregatorId);
+
+        children.forEach(child => {
+            appendOrderProjectGridItem(childrenWrapper, child, orderId, actionContext, {
+                nested: true,
+                hideActions: true
+            });
+        });
+
+        grid.appendChild(childrenWrapper);
+    });
 
     if (typeof refreshOrdersListSummary === 'function') {
         await refreshOrdersListSummary();
@@ -449,6 +553,16 @@ function bindOrderProjectEvents() {
             if (typeof handleOrderProjectAction === 'function') {
                 await handleOrderProjectAction(actionBtn);
             }
+            return;
+        }
+
+        const aggregatorToggle = event.target.closest('.order-project-aggregator-toggle');
+        if (aggregatorToggle) {
+            event.stopPropagation();
+            const grid = document.querySelector('#order-projects-list .order-projects-grid');
+            const aggregatorId = Number(aggregatorToggle.dataset.aggregatorId);
+            const expanded = aggregatorToggle.getAttribute('aria-expanded') !== 'true';
+            setOrderProjectAggregatorChildrenExpanded(grid, aggregatorId, expanded);
             return;
         }
 

@@ -17,7 +17,7 @@ function getProgramacoesProjectsSelect() {
         projectStatus:OrderProjectStatus(id, name)
     `;
 
-    return `${base}, isComplementary, isReplaced, productionMonth`;
+    return `${base}, isComplementary, isReplaced, productionMonth, saleValue`;
 }
 
 function formatProgramacoesDateLabel(dateStr) {
@@ -92,9 +92,11 @@ async function fetchProgramacoesProjectsQueue() {
         .filter(Boolean);
 
     const projects = rows.map(row => row.orderProject);
-    const activeProjects = typeof excludeInactivePendenciasProjects === 'function'
-        ? excludeInactivePendenciasProjects(projects)
-        : projects;
+    const activeProjects = typeof prepareProgramacoesVisibleOrderProjects === 'function'
+        ? prepareProgramacoesVisibleOrderProjects(projects)
+        : (typeof excludeInactivePendenciasProjects === 'function'
+            ? excludeInactivePendenciasProjects(projects)
+            : projects);
     const activeIds = new Set(activeProjects.map(project => Number(project.id)));
 
     return {

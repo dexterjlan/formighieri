@@ -421,7 +421,7 @@ function computeGestaoPerformanceMetric(timelineByProjectId, metric, cutoffDate)
 }
 
 const GESTAO_PERFORMANCE_PROJECT_SELECT = [
-    'id, orderId, name, saleValue, statusId, internalAssemblyEndDate, isComplementary, parentProjectId, isReplaced, isReplacement, replacesProjectId, replaces:replacesProjectId(saleValue), order:salesOrders(orderCode, client:Client(name)), projectStatus:OrderProjectStatus(id, name)',
+    'id, orderId, name, saleValue, statusId, internalAssemblyEndDate, isComplementary, parentProjectId, isReplaced, isReplacement, replacesProjectId, isAggregator, aggregatorOrderProjectId, replaces:replacesProjectId(saleValue), order:salesOrders(orderCode, client:Client(name)), projectStatus:OrderProjectStatus(id, name)',
     'id, orderId, name, saleValue, statusId, internalAssemblyEndDate, isComplementary, parentProjectId, isReplaced, isReplacement, replacesProjectId, order:salesOrders(orderCode, client:Client(name)), projectStatus:OrderProjectStatus(id, name)',
     'id, orderId, name, saleValue, statusId, internalAssemblyEndDate, isComplementary, parentProjectId, isReplaced, isReplacement, replacesProjectId, order:salesOrders(orderCode, client:Client(name))',
     'id, orderId, name, saleValue, statusId, internalAssemblyEndDate, isComplementary, parentProjectId, projectStatus:OrderProjectStatus(id, name)',
@@ -435,7 +435,10 @@ const GESTAO_PERFORMANCE_PROJECT_SELECT = [
 ];
 
 function enrichGestaoPerformanceProjects(projects, statusById) {
-    return (projects || []).map(project => ({
+    const visibleProjects = (projects || []).filter(
+        project => !(typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project))
+    );
+    return visibleProjects.map(project => ({
         ...project,
         projectStatus: project.projectStatus || statusById[project.statusId] || null
     }));

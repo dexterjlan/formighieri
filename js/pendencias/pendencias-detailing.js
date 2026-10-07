@@ -1,3 +1,5 @@
+let pendenciasGestorDetalhamentoRowsCache = [];
+
 const DETALHAMENTO_PENDENCIAS_SELECT = `
     id, orderProjectId, status, projectFilePath, serverFolderPath, designerId, startedAt, completedAt,
     designer:appUsers!Detailing_designerId_fkey(id, name),
@@ -101,6 +103,166 @@ async function loadPendenciasGestorDetalhamento() {
     renderPendenciasGestorDetalhamentoList(records.map(mapPendenciasDetalhamentoRow));
 }
 
+function getPendenciasGestorDetalhamentoTableElement() {
+    return document.querySelector('table[data-table-id="pendencias-gestor-detalhamento"]');
+}
+
+function collectPendenciasGestorDetalhamentoSelectionsFromDom() {
+    const table = getPendenciasGestorDetalhamentoTableElement();
+    if (!table) return [];
+
+    const selections = [];
+
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const select = row.querySelector('.pendencias-detalhamento-designer-select');
+        const designerId = Number(select?.value);
+        if (!designerId) return;
+
+        const detalhamentoId = Number(select?.dataset.detalhamentoId);
+        const orderProjectId = Number(select?.dataset.projectId);
+        if (!detalhamentoId) return;
+
+        const cached = pendenciasGestorDetalhamentoRowsCache.find(item => Number(item.detalhamentoId) === detalhamentoId);
+
+        selections.push({
+            detalhamentoId,
+            orderProjectId,
+            designerId,
+            orderCode: cached?.orderCode || '—',
+            projectName: cached?.projectName || '—',
+            projetistaName: detalhamentoProjetistasCache.find(item => Number(item.id) === designerId)?.name || '—'
+        });
+    });
+
+    return selections;
+}
+
+function setPendenciasGestorDetalhamentoSaveButtonState(button, state = 'idle', pendingCount = 0) {
+    if (!button) return;
+
+    if (state === 'saving') {
+        button.dataset.originalLabel = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Associando...';
+        return;
+    }
+
+    button.disabled = pendingCount === 0;
+    button.textContent = pendingCount > 0
+        ? `Associar selecionados (${pendingCount})`
+        : (button.dataset.originalLabel || 'Associar selecionados');
+}
+
+function syncPendenciasGestorDetalhamentoSaveButton() {
+    const button = document.getElementById('pendencias-gestor-detalhamento-save-all');
+    setPendenciasGestorDetalhamentoSaveButtonState(
+        button,
+        'idle',
+        collectPendenciasGestorDetalhamentoSelectionsFromDom().length
+    );
+}
+
+function ensurePendenciasGestorDetalhamentoScreenEventsBound(content) {
+    if (!content || content.dataset.gestorDetalhamentoEventsBound === '1') return;
+    content.dataset.gestorDetalhamentoEventsBound = '1';
+
+    content.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!target?.closest('table[data-table-id="pendencias-gestor-detalhamento"]')) return;
+        if (!target.matches('.pendencias-detalhamento-designer-select')) return;
+        syncPendenciasGestorDetalhamentoSaveButton();
+    });
+
+    content.querySelector('#pendencias-gestor-detalhamento-save-all')
+        ?.addEventListener('click', () => savePendenciasGestorDetalhamentoAssociationsBatch());
+}
+
+async function savePendenciasGestorDetalhamentoAssociationsBatch() {
+    if (!canActDetalhamentoGestor()) {
+        alertAppDialog('Sem permissão para associar projetistas de detalhamento.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const selections = collectPendenciasGestorDetalhamentoSelectionsFromDom();
+    if (!selections.length) {
+        alertAppDialog('Selecione ao menos um projetista.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    for (const item of selections) {
+        if (!detalhamentoProjetistasCache.find(user => Number(user.id) === Number(item.designerId))) {
+            alertAppDialog(`Projetista inválido para o projeto ${item.projectName}.`);
+            return;
+        }
+    }
+
+    const summaryLines = selections.slice(0, 8).map(item => (
+        `• ${item.orderCode} — ${item.projectName}: ${item.projetistaName}`
+    ));
+    const extraCount = selections.length - summaryLines.length;
+    const extraLine = extraCount > 0 ? `\n... e mais ${extraCount} projeto(s).` : '';
+
+    if (!(await confirmAppDialog(
+        `Associar ${selections.length} projeto(s) aos projetistas de detalhamento?\n\n${summaryLines.join('\n')}${extraLine}`
+    ))) {
+        return;
+    }
+
+    const saveButton = document.getElementById('pendencias-gestor-detalhamento-save-all');
+    const now = new Date().toISOString();
+    const errors = [];
+
+    try {
+        setPendenciasGestorDetalhamentoSaveButtonState(saveButton, 'saving');
+        if (typeof setPendenciasActionLoading === 'function') {
+            setPendenciasActionLoading(true, `Associando ${selections.length} projeto(s)...`);
+        }
+
+        for (const item of selections) {
+            const { data, error } = await supabaseClient
+                .from('Detailing')
+                .update({
+                    designerId: item.designerId,
+                    updatedById: currentUser?.id || null,
+                    updatedAt: now
+                })
+                .eq('id', item.detalhamentoId)
+                .select('orderProjectId, projectFilePath')
+                .maybeSingle();
+
+            if (error) {
+                errors.push(`${item.projectName}: ${error.message}`);
+                continue;
+            }
+
+            const resolvedOrderProjectId = item.orderProjectId || data?.orderProjectId;
+            if (typeof notifyDetalhamentoProjetistaAssociadoEmail === 'function' && resolvedOrderProjectId) {
+                await notifyDetalhamentoProjetistaAssociadoEmail({
+                    orderProjectId: resolvedOrderProjectId,
+                    designerId: item.designerId,
+                    projectFilePath: data?.projectFilePath || ''
+                });
+            }
+        }
+
+        if (errors.length) {
+            alertAppDialog(
+                `Algumas associações falharam:\n\n${errors.slice(0, 6).join('\n')}${errors.length > 6 ? `\n... e mais ${errors.length - 6}.` : ''}`,
+                { variant: 'warning', title: 'Aviso' }
+            );
+        }
+
+        await loadPendenciasGestorDetalhamento();
+    } catch (error) {
+        alertAppDialog(`Erro ao associar: ${error.message}`);
+    } finally {
+        if (typeof setPendenciasActionLoading === 'function') {
+            setPendenciasActionLoading(false);
+        }
+        syncPendenciasGestorDetalhamentoSaveButton();
+    }
+}
+
 function renderPendenciasGestorDetalhamentoList(records) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
@@ -116,9 +278,15 @@ function renderPendenciasGestorDetalhamentoList(records) {
         deliveryDate: record.deliveryDate
     }));
 
+    pendenciasGestorDetalhamentoRowsCache = rows;
+
     renderPendenciasInteractiveTableScreen(content, {
         title: 'Aguardando Detalhamento',
-        subtitle: 'Projetos em produção sem projetista de detalhamento.',
+        subtitle: 'Selecione o projetista em cada linha; use o botão no topo para associar todos de uma vez.',
+        headerActionsHtml: `<button type="button" id="pendencias-gestor-detalhamento-save-all" disabled
+            class="text-xs bg-violet-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-violet-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+            Associar selecionados
+        </button>`,
         refreshButtonId: 'btn-pendencias-refresh-gestor-detalhamento',
         refreshButtonClass: 'text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700',
         onRefresh: loadPendenciasGestorDetalhamento,
@@ -152,78 +320,15 @@ function renderPendenciasGestorDetalhamentoList(records) {
                     <option value="">Selecione...</option>
                     ${getDetalhamentoProjetistaOptionsHtml()}
                 </select>`
-            },
-            getPendenciasInteractiveActionColumn({
-                render: (row) => `<button type="button"
-                    class="pendencias-detalhamento-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
-                    data-detalhamento-id="${row.detalhamentoId}"
-                    data-project-id="${row.id}">
-                    Associar
-                </button>`
-            })
+            }
         ],
-        onBind(tbody) {
-            tbody?.querySelectorAll('.pendencias-detalhamento-associar-btn').forEach(button => {
-                button.addEventListener('click', () => {
-                    const detalhamentoId = Number(button.dataset.detalhamentoId);
-                    const orderProjectId = Number(button.dataset.projectId);
-                    const row = button.closest('tr');
-                    const designerId = Number(row?.querySelector('.pendencias-detalhamento-designer-select')?.value || 0);
-                    associarPendenciaDetalhamentoProjetista(detalhamentoId, designerId, orderProjectId);
-                });
-            });
+        onBind() {
+            syncPendenciasGestorDetalhamentoSaveButton();
         }
     });
-}
 
-async function associarPendenciaDetalhamentoProjetista(detalhamentoId, designerId, orderProjectId = null) {
-    if (!detalhamentoId || !designerId) {
-        alertAppDialog('Selecione o projetista de detalhamento.');
-        return;
-    }
-
-    const projetista = detalhamentoProjetistasCache.find(item => Number(item.id) === designerId);
-    if (!projetista) {
-        alertAppDialog('Projetista inválido ou sem permissão de detalhamento.');
-        return;
-    }
-
-    try {
-        if (typeof setPendenciasActionLoading === 'function') {
-            setPendenciasActionLoading(true, 'Associando projetista...');
-        }
-
-        const now = new Date().toISOString();
-        const { data, error } = await supabaseClient
-            .from('Detailing')
-            .update({
-                designerId,
-                updatedById: currentUser?.id || null,
-                updatedAt: now
-            })
-            .eq('id', detalhamentoId)
-            .select('orderProjectId, projectFilePath')
-            .maybeSingle();
-
-        if (error) throw error;
-
-        const resolvedOrderProjectId = orderProjectId || data?.orderProjectId;
-        if (typeof notifyDetalhamentoProjetistaAssociadoEmail === 'function' && resolvedOrderProjectId) {
-            await notifyDetalhamentoProjetistaAssociadoEmail({
-                orderProjectId: resolvedOrderProjectId,
-                designerId,
-                projectFilePath: data?.projectFilePath || ''
-            });
-        }
-
-        await loadPendenciasGestorDetalhamento();
-    } catch (error) {
-        alertAppDialog(`Erro ao associar: ${error.message}`);
-    } finally {
-        if (typeof setPendenciasActionLoading === 'function') {
-            setPendenciasActionLoading(false);
-        }
-    }
+    ensurePendenciasGestorDetalhamentoScreenEventsBound(content);
+    syncPendenciasGestorDetalhamentoSaveButton();
 }
 
 async function loadPendenciasProjetistaDetalhamento() {

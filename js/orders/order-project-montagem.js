@@ -60,6 +60,14 @@ async function persistMontagemInicioProject(entry, montagemInternaStatusId) {
     if (error) {
         throw new Error(`"${entry.label}": ${error.message}`);
     }
+
+    if (typeof replicateOrderProjectAggregatorChildFields === 'function') {
+        await replicateOrderProjectAggregatorChildFields(entry.projectId, {
+            cabinetMakerId: entry.cabinetMakerId,
+            internalAssemblyStartDate: entry.internalAssemblyStartDate,
+            statusId: montagemInternaStatusId
+        }, { updatedById: currentUser.id, updatedAt: now });
+    }
 }
 
 async function persistMontagemFimProject(entry, expedicaoStatusId) {
@@ -76,6 +84,13 @@ async function persistMontagemFimProject(entry, expedicaoStatusId) {
 
     if (error) {
         throw new Error(`"${entry.label}": ${error.message}`);
+    }
+
+    if (typeof replicateOrderProjectAggregatorChildFields === 'function') {
+        await replicateOrderProjectAggregatorChildFields(entry.projectId, {
+            internalAssemblyEndDate: entry.internalAssemblyEndDate,
+            statusId: expedicaoStatusId
+        }, { updatedById: currentUser.id, updatedAt: now });
     }
 }
 

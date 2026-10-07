@@ -1669,6 +1669,26 @@ async function associateGestaoProjectSchedulingAssignee(row) {
             return false;
         }
 
+        if (assigneeKind === ORDER_PROJECT_FORECAST_ASSIGNEE_DESIGNER
+            && typeof applyOrderProjectDesignerAssignmentToAggregatorChildren === 'function') {
+            try {
+                await applyOrderProjectDesignerAssignmentToAggregatorChildren(
+                    projectId,
+                    values.assigneeId,
+                    { updatedById: currentUser.id, updatedAt: now },
+                    project
+                );
+            } catch (replicateError) {
+                setGestaoProjectSchedulingActionLoading(
+                    true,
+                    `Projetista associado, mas falhou ao replicar nos ambientes agrupados: ${replicateError.message}`,
+                    'error'
+                );
+                await waitGestaoProjectSchedulingStatus(2200);
+                return false;
+            }
+        }
+
         if (assigneeKind === ORDER_PROJECT_FORECAST_ASSIGNEE_CABINET_MAKER) {
             project.cabinetMakerId = values.assigneeId;
             project.cabinetMaker = { id: values.assigneeId, name: assigneeName };
@@ -1708,11 +1728,14 @@ async function associateGestaoProjectSchedulingAssignee(row) {
 
         if (assigneeKind === ORDER_PROJECT_FORECAST_ASSIGNEE_DESIGNER) {
             const orderId = project.orderId || entry?.order?.id;
-            if (orderId && typeof notifyDesignerAssignedToProjectEmail === 'function') {
+            const emailProjectIds = typeof resolveDesignerAssignmentNotificationProjectIds === 'function'
+                ? resolveDesignerAssignmentNotificationProjectIds(projectId, project)
+                : [projectId];
+            if (orderId && emailProjectIds.length && typeof notifyDesignerAssignedToProjectEmail === 'function') {
                 setGestaoProjectSchedulingActionLoading(true, 'Enviando notificação por e-mail...');
                 await notifyDesignerAssignedToProjectEmail({
                     orderId,
-                    orderProjectIds: [projectId],
+                    orderProjectIds: emailProjectIds,
                     designerId: values.assigneeId
                 });
             }

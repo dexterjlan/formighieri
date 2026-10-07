@@ -40,7 +40,9 @@ function getPendenciasProjectSelect(options = {}) {
         'deliveryDate',
         'deliveryPhaseId',
         'technicalProjectForecastStartDate',
-        'technicalProjectForecastEndDate'
+        'technicalProjectForecastEndDate',
+        'isAggregator',
+        'aggregatorOrderProjectId'
     ];
 
     if (includeAwaitingConstructionNote) {
@@ -67,7 +69,9 @@ function getPendenciasFabricaProjectSelect(options = {}) {
         'deliveryPhaseId',
         'cabinetMakerId',
         'internalAssemblyStartDate',
-        'internalAssemblyEndDate'
+        'internalAssemblyEndDate',
+        'isAggregator',
+        'aggregatorOrderProjectId'
     ];
 
     const embeds = [getOrderSalesOrderEmbed('clientDeliveryDate')];

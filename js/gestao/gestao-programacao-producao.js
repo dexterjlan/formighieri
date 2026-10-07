@@ -2,7 +2,8 @@ const PROGRAMACAO_PRODUCAO_END_STATUS = 'Montagem Interna';
 
 const PROGRAMACAO_PRODUCAO_PROJECT_SELECT = `
     id, orderId, projectCode, name, saleValue, statusId, deliveryPhaseId, productionMonth, internalAssemblyEndDate,
-    isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId,
+    isComplementary, parentProjectId, isAggregator, aggregatorOrderProjectId,
+    isReplaced, replacedByProjectId, isReplacement, replacesProjectId,
     parentProject:parentProjectId(id, deliveryPhaseId),
     replacedBy:replacedByProjectId(id, projectCode),
     order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
@@ -11,7 +12,8 @@ const PROGRAMACAO_PRODUCAO_PROJECT_SELECT = `
 
 const PROGRAMACAO_PRODUCAO_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, saleValue, statusId, deliveryPhaseId,
-    isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId,
+    isComplementary, parentProjectId, isAggregator, aggregatorOrderProjectId,
+    isReplaced, replacedByProjectId, isReplacement, replacesProjectId,
     order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     projectStatus:OrderProjectStatus(id, name)
 `;
@@ -70,6 +72,13 @@ function getProgramacaoProducaoEffectiveProductionMonth(project, projectsById) {
     if (!project) return null;
 
     const byId = projectsById || programacaoProducaoCache.projectsById || {};
+    const allProjects = programacaoProducaoCache.projects || [];
+
+    if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+        const aggregatorId = Number(project.aggregatorOrderProjectId);
+        const aggregator = aggregatorId ? byId[aggregatorId] : null;
+        return aggregator?.productionMonth || project.productionMonth || null;
+    }
 
     if (isProgramacaoProducaoComplementarProject(project)) {
         const parentId = getProgramacaoProducaoParentProjectId(project);
@@ -77,7 +86,17 @@ function getProgramacaoProducaoEffectiveProductionMonth(project, projectsById) {
         return parent?.productionMonth || project.productionMonth || null;
     }
 
-    return project.productionMonth || null;
+    if (project.productionMonth) return project.productionMonth;
+
+    if (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)) {
+        const children = allProjects.filter(
+            item => Number(item.aggregatorOrderProjectId) === Number(project.id)
+        );
+        const childMonths = children.map(item => item.productionMonth).filter(Boolean);
+        if (childMonths.length) return childMonths[0];
+    }
+
+    return null;
 }
 
 function getProgramacaoProducaoProjectProductionMonthKey(project, projectsById) {
@@ -120,6 +139,9 @@ function getProgramacaoProducaoProjectStageKey(project, statusById) {
 }
 
 function isProgramacaoProducaoScheduleRootProject(project) {
+    if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+        return false;
+    }
     if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
         return false;
     }
@@ -215,6 +237,7 @@ function getProgramacaoProducaoRealizadoClientGroupRenderOptions() {
     return {
         includeProjectCode: false,
         projectsById: programacaoProducaoCache.projectsById || {},
+        includeOrderProjectAggregators: true,
         getRealizadoAssemblyMonthMismatch: isProgramacaoProducaoRealizadoAssemblyEndMonthMismatch
     };
 }
@@ -225,6 +248,20 @@ function getProgramacaoProducaoRealizadoGroupingMonthKey(project, projectsById, 
         : project;
 
     return getProgramacaoProducaoProjectProductionMonthKey(anchor, projectsById);
+}
+
+function getProgramacaoProducaoScheduleRootUnitCount(project) {
+    if (typeof getOrderProjectScheduleUnitCount === 'function') {
+        return getOrderProjectScheduleUnitCount(project, programacaoProducaoCache.projects || []);
+    }
+    return 1;
+}
+
+function sumProgramacaoProducaoRootProjectsUnitCount(projects) {
+    return (projects || []).reduce(
+        (sum, project) => sum + getProgramacaoProducaoScheduleRootUnitCount(project),
+        0
+    );
 }
 
 function computeProgramacaoProducaoMonthStageSummary(monthKey) {
@@ -241,19 +278,21 @@ function computeProgramacaoProducaoMonthStageSummary(monthKey) {
         if (!stageKey || stageKey === 'realizado') return;
 
         const safeValue = getProgramacaoProducaoScheduleRootSaleValue(project, monthKey);
+        const unitCount = getProgramacaoProducaoScheduleRootUnitCount(project);
 
-        stageCounts[stageKey] += 1;
+        stageCounts[stageKey] += unitCount;
         stageValues[stageKey] += safeValue;
-        programadoCount += 1;
+        programadoCount += unitCount;
         programadoValue += safeValue;
     });
 
     getProgramacaoProducaoRealizadoRootProjects(monthKey).forEach(project => {
         const safeValue = getProgramacaoProducaoScheduleRootSaleValue(project, monthKey);
+        const unitCount = getProgramacaoProducaoScheduleRootUnitCount(project);
 
-        stageCounts.realizado += 1;
+        stageCounts.realizado += unitCount;
         stageValues.realizado += safeValue;
-        realizadoCount += 1;
+        realizadoCount += unitCount;
         realizadoValue += safeValue;
     });
 
@@ -324,6 +363,9 @@ function getProgramacaoProducaoSummaryMonthGroupOptions(context, scheduleRootPro
         sortByDeliveryDate: true,
         attachReplacedUnderReplacementOrder: true,
         scheduleRootProjectIds,
+        includeOrderProjectAggregators: true,
+        countAggregatorScheduleUnits: true,
+        projectsForUnitCount: programacaoProducaoCache.projects || [],
         context
     };
 }
@@ -385,11 +427,21 @@ function buildProgramacaoProducaoSummaryMonthRealizadoClients(monthKey, context)
 
     return clients.map(clientGroup => {
         const projectTree = typeof buildGestaoRelatorioFechamentoProducaoProjectTree === 'function'
-            ? buildGestaoRelatorioFechamentoProducaoProjectTree(clientGroup.projects, projectsById)
+            ? buildGestaoRelatorioFechamentoProducaoProjectTree(
+                clientGroup.projects,
+                projectsById,
+                { includeOrderProjectAggregators: true }
+            )
             : [];
+
+        const scheduleProjectCount = (clientGroup.projects || []).reduce(
+            (sum, project) => sum + getProgramacaoProducaoScheduleRootUnitCount(project),
+            0
+        );
 
         return {
             ...clientGroup,
+            scheduleProjectCount,
             totalSaleValue: typeof sumGestaoRelatorioPedidosPendentesProjectTreeSaleValues === 'function'
                 ? sumGestaoRelatorioPedidosPendentesProjectTreeSaleValues(projectTree)
                 : clientGroup.totalSaleValue
@@ -472,7 +524,9 @@ async function fetchProgramacaoProducaoProjects() {
         || result.error?.message?.includes('isReplacement')
         || result.error?.message?.includes('clientDeliveryDate')
         || result.error?.message?.includes('projectStatus')
-        || result.error?.message?.includes('sortOrder')) {
+        || result.error?.message?.includes('sortOrder')
+        || result.error?.message?.includes('isAggregator')
+        || result.error?.message?.includes('aggregatorOrderProjectId')) {
         result = await supabaseClient
             .from('OrderProject')
             .select(PROGRAMACAO_PRODUCAO_PROJECT_SELECT_FALLBACK)
@@ -513,11 +567,14 @@ function getProgramacaoProducaoFilteredProjects() {
 }
 
 function getProgramacaoProducaoOrderDeliveryDates(projects, context) {
-    const parentProjects = (projects || []).filter(project =>
-        typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
+    const parentProjects = (projects || []).filter(project => {
+        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+            return false;
+        }
+        return typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
             ? !isGestaoRelatorioPedidosPendentesComplementaryProject(project)
-            : !project.isComplementary
-    );
+            : !project.isComplementary;
+    });
     const resolveDelivery = typeof getGestaoRelatorioPedidosPendentesProjectDeliveryDate === 'function'
         ? getGestaoRelatorioPedidosPendentesProjectDeliveryDate
         : () => null;
@@ -541,7 +598,10 @@ function getProgramacaoProducaoOrderDeliveryDatesLabel(projects, context) {
 }
 
 function getProgramacaoProducaoOrderMonthInputValue(projects) {
-    const parentProjects = (projects || []).filter(project => !isProgramacaoProducaoComplementarProject(project));
+    const parentProjects = (projects || []).filter(project =>
+        !isProgramacaoProducaoComplementarProject(project)
+        && !(typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project))
+    );
     const values = [...new Set(parentProjects
         .map(project => toProgramacaoProducaoMonthInputValue(getProgramacaoProducaoEffectiveProductionMonth(project)))
         .filter(Boolean))];
@@ -643,6 +703,10 @@ function buildProgramacaoProducaoOrders() {
                 complementarProjects: [],
                 replacedProjects: []
             };
+        }
+
+        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+            return;
         }
 
         if (typeof isGestaoRelatorioPedidosPendentesComplementaryProject === 'function'
@@ -808,11 +872,14 @@ function renderProgramacaoProducaoProjectTreeRows(projectTree) {
         const label = typeof getGestaoRelatorioProjectLabel === 'function'
             ? getGestaoRelatorioProjectLabel(project)
             : (project?.name || '—');
+        const labelHtml = parentPending && typeof renderAggregatorProjectNoticeHtml === 'function'
+            ? `<span class="inline-flex flex-wrap items-center gap-1.5 min-w-0"><span class="truncate">${escapeHtml(label)}</span>${renderAggregatorProjectNoticeHtml(project)}</span>`
+            : escapeHtml(label);
 
         const parentRow = `
             <div class="flex flex-wrap items-center justify-between gap-2 py-2 border-b border-slate-100 last:border-0">
                 <div class="flex items-center gap-2 min-w-0">
-                    <span class="text-xs ${parentPending ? 'font-medium text-slate-800' : 'text-slate-500'} truncate">${escapeHtml(label)}</span>
+                    <span class="text-xs ${parentPending ? 'font-medium text-slate-800' : 'text-slate-500'} truncate">${labelHtml}</span>
                     ${parentPending ? `
                         <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
                             ${escapeHtml(statusName || '—')}
@@ -964,8 +1031,12 @@ function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel)
     const programadoRoots = getProgramacaoProducaoProgramadoRootProjects(monthKey);
     const realizadoRoots = getProgramacaoProducaoRealizadoRootProjects(monthKey);
     const stageSummary = computeProgramacaoProducaoMonthStageSummary(monthKey);
-    const programadoCount = stageSummary.total ? stageSummary.programadoCount : programadoRoots.length;
-    const realizadoCount = stageSummary.total ? stageSummary.realizadoCount : realizadoRoots.length;
+    const programadoCount = stageSummary.total
+        ? stageSummary.programadoCount
+        : sumProgramacaoProducaoRootProjectsUnitCount(programadoRoots);
+    const realizadoCount = stageSummary.total
+        ? stageSummary.realizadoCount
+        : sumProgramacaoProducaoRootProjectsUnitCount(realizadoRoots);
     const programadoSaleValue = stageSummary.total
         ? stageSummary.programadoValue
         : sumProgramacaoProducaoRootProjectsSaleValue(programadoRoots, monthKey);
@@ -1074,7 +1145,10 @@ function getProgramacaoProducaoVisibleSummaryMonthGroups(projects) {
             typeof getGestaoRelatorioPedidosPendentesProjectDeliveryDate === 'function'
                 ? getGestaoRelatorioPedidosPendentesProjectDeliveryDate(project, groupContext)
                 : null,
-        sortByDeliveryDate: true
+        sortByDeliveryDate: true,
+        includeOrderProjectAggregators: true,
+        countAggregatorScheduleUnits: true,
+        projectsForUnitCount: programacaoProducaoCache.projects || []
     });
     const mergedGroups = mergeProgramacaoProducaoSummaryMonthGroups(
         pendingGroups,
@@ -1188,11 +1262,23 @@ async function persistProgramacaoProducaoProjectMonth(projectId, monthInputValue
     const normalizedId = Number(projectId);
     if (!normalizedId) return;
 
+    const project = programacaoProducaoCache.projectsById[normalizedId];
     const complementarIds = getProgramacaoProducaoComplementarChildren(normalizedId)
-        .map(project => Number(project.id))
+        .map(item => Number(item.id))
         .filter(Boolean);
+    const aggregatorChildIds = typeof isOrderProjectAggregator === 'function'
+        && isOrderProjectAggregator(project)
+        && typeof getOrderProjectAggregatorChildProjects === 'function'
+        ? getOrderProjectAggregatorChildProjects(
+            { projects: programacaoProducaoCache.projects || [] },
+            normalizedId
+        ).map(item => Number(item.id)).filter(Boolean)
+        : [];
 
-    await persistProgramacaoProducaoProjectsMonth([normalizedId, ...complementarIds], monthInputValue);
+    await persistProgramacaoProducaoProjectsMonth(
+        [normalizedId, ...complementarIds, ...aggregatorChildIds],
+        monthInputValue
+    );
 }
 
 async function persistProgramacaoProducaoOrderMonth(orderId, monthInputValue, projectIds = []) {
@@ -1220,6 +1306,9 @@ async function loadProgramacaoProducao() {
     let { data: projects, error } = await fetchProgramacaoProducaoProjects();
     if (!error && projects?.length && typeof enrichOrderProjectsWithSubstitutionRelations === 'function') {
         projects = await enrichOrderProjectsWithSubstitutionRelations(projects);
+    }
+    if (!error && projects?.length && typeof enrichOrderProjectsWithAggregatorChildrenSaleValue === 'function') {
+        projects = enrichOrderProjectsWithAggregatorChildrenSaleValue(projects);
     }
     if (error) {
         const message = `<p class="text-xs text-red-500 text-center py-4">Erro ao carregar: ${escapeHtml(error.message)}</p>`;

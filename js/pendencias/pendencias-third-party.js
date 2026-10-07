@@ -1,4 +1,5 @@
 let pendenciasThirdPartyProjectsCache = [];
+let pendenciasThirdPartySemProjetistaRowsCache = [];
 
 function filterPendenciasThirdPartyForProjetista(projects = []) {
     return projects.filter(project =>
@@ -54,14 +55,138 @@ function renderPendenciasThirdPartyGestorDesignerSelect(project, designers = [])
     `;
 }
 
-function renderPendenciasThirdPartyGestorActionButton(project) {
-    return `
-        <button type="button"
-            class="pendencias-third-party-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-2.5 py-1 rounded-lg font-medium"
-            data-third-party-project-id="${project.id}">
-            Associar
-        </button>
-    `;
+function getPendenciasThirdPartySemProjetistaTableElement() {
+    return document.querySelector('table[data-table-id="pendencias-third-party-sem-projetista"]');
+}
+
+function collectPendenciasThirdPartySemProjetistaSelectionsFromDom() {
+    const table = getPendenciasThirdPartySemProjetistaTableElement();
+    if (!table) return [];
+
+    const selections = [];
+
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const select = row.querySelector('.pendencias-third-party-designer-select');
+        const designerId = Number(select?.value);
+        if (!designerId) return;
+
+        const thirdPartyProjectId = Number(select?.dataset.thirdPartyProjectId);
+        if (!thirdPartyProjectId) return;
+
+        const cached = pendenciasThirdPartySemProjetistaRowsCache.find(item => Number(item.thirdPartyProjectId) === thirdPartyProjectId);
+
+        selections.push({
+            thirdPartyProjectId,
+            designerId,
+            orderCode: cached?.orderCode || '—',
+            projectName: cached?.projectName || '—',
+            projetistaName: pendenciasProjetistasCache.find(item => Number(item.id) === designerId)?.name || '—'
+        });
+    });
+
+    return selections;
+}
+
+function setPendenciasThirdPartySemProjetistaSaveButtonState(button, state = 'idle', pendingCount = 0) {
+    if (!button) return;
+
+    if (state === 'saving') {
+        button.dataset.originalLabel = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Associando...';
+        return;
+    }
+
+    button.disabled = pendingCount === 0;
+    button.textContent = pendingCount > 0
+        ? `Associar selecionados (${pendingCount})`
+        : (button.dataset.originalLabel || 'Associar selecionados');
+}
+
+function syncPendenciasThirdPartySemProjetistaSaveButton() {
+    const button = document.getElementById('pendencias-third-party-sem-projetista-save-all');
+    setPendenciasThirdPartySemProjetistaSaveButtonState(
+        button,
+        'idle',
+        collectPendenciasThirdPartySemProjetistaSelectionsFromDom().length
+    );
+}
+
+function ensurePendenciasThirdPartySemProjetistaScreenEventsBound(content) {
+    if (!content || content.dataset.thirdPartySemProjetistaEventsBound === '1') return;
+    content.dataset.thirdPartySemProjetistaEventsBound = '1';
+
+    content.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!target?.closest('table[data-table-id="pendencias-third-party-sem-projetista"]')) return;
+        if (!target.matches('.pendencias-third-party-designer-select')) return;
+        syncPendenciasThirdPartySemProjetistaSaveButton();
+    });
+
+    content.querySelector('#pendencias-third-party-sem-projetista-save-all')
+        ?.addEventListener('click', () => savePendenciasThirdPartySemProjetistaAssociationsBatch());
+}
+
+async function savePendenciasThirdPartySemProjetistaAssociationsBatch() {
+    if (!canAssignThirdPartyProjectDesigner()) {
+        alertAppDialog('Somente Gestor de Projetos pode associar responsáveis.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const selections = collectPendenciasThirdPartySemProjetistaSelectionsFromDom();
+    if (!selections.length) {
+        alertAppDialog('Selecione ao menos um projetista.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    for (const item of selections) {
+        if (!pendenciasProjetistasCache.find(user => Number(user.id) === Number(item.designerId))) {
+            alertAppDialog(`Projetista inválido para o projeto ${item.projectName}.`);
+            return;
+        }
+    }
+
+    const summaryLines = selections.slice(0, 8).map(item => (
+        `• ${item.orderCode} — ${item.projectName}: ${item.projetistaName}`
+    ));
+    const extraCount = selections.length - summaryLines.length;
+    const extraLine = extraCount > 0 ? `\n... e mais ${extraCount} projeto(s).` : '';
+
+    if (!(await confirmAppDialog(
+        `Associar ${selections.length} projeto(s) de terceiros aos projetistas selecionados?\n\n${summaryLines.join('\n')}${extraLine}`
+    ))) {
+        return;
+    }
+
+    const saveButton = document.getElementById('pendencias-third-party-sem-projetista-save-all');
+    const errors = [];
+
+    try {
+        setPendenciasThirdPartySemProjetistaSaveButtonState(saveButton, 'saving');
+        setPendenciasActionLoading(true, `Associando ${selections.length} projeto(s)...`);
+
+        for (const item of selections) {
+            try {
+                await assignThirdPartyProjectDesigner(item.thirdPartyProjectId, item.designerId);
+            } catch (error) {
+                errors.push(`${item.projectName}: ${error.message}`);
+            }
+        }
+
+        if (errors.length) {
+            alertAppDialog(
+                `Algumas associações falharam:\n\n${errors.slice(0, 6).join('\n')}${errors.length > 6 ? `\n... e mais ${errors.length - 6}.` : ''}`,
+                { variant: 'warning', title: 'Aviso' }
+            );
+        }
+
+        await loadPendenciasThirdPartySemProjetista();
+    } catch (error) {
+        alertAppDialog('Erro ao associar projetistas: ' + error.message);
+    } finally {
+        setPendenciasActionLoading(false);
+        syncPendenciasThirdPartySemProjetistaSaveButton();
+    }
 }
 
 function renderPendenciasThirdPartyProjetistaActions(project) {
@@ -132,17 +257,6 @@ function renderPendenciasThirdPartyConsultorActions(project) {
     `;
 }
 
-function bindPendenciasThirdPartyGestorActions(content) {
-    content.querySelectorAll('.pendencias-third-party-associar-btn').forEach(button => {
-        button.addEventListener('click', async () => {
-            const projectId = Number(button.dataset.thirdPartyProjectId);
-            const row = button.closest('tr');
-            const designerId = Number(row?.querySelector('.pendencias-third-party-designer-select')?.value);
-            await associarPendenciaThirdPartyProjectProjetista(projectId, designerId);
-        });
-    });
-}
-
 function bindPendenciasThirdPartyProjetistaActions(content) {
     content.querySelectorAll('.pendencias-third-party-history-btn').forEach(button => {
         button.addEventListener('click', () => {
@@ -191,36 +305,6 @@ function bindPendenciasThirdPartyConsultorActions(content) {
     bindPendenciasThirdPartyDetailActions(content);
 }
 
-async function associarPendenciaThirdPartyProjectProjetista(thirdPartyProjectId, designerId) {
-    if (!canAssignThirdPartyProjectDesigner()) {
-        alertAppDialog('Somente Gestor de Projetos pode associar responsáveis.', { variant: 'warning', title: 'Aviso' });
-        return;
-    }
-
-    if (!thirdPartyProjectId || !designerId) {
-        alertAppDialog('Selecione um projetista.');
-        return;
-    }
-
-    const projetista = pendenciasProjetistasCache.find(item => Number(item.id) === Number(designerId));
-    if (!projetista) {
-        alertAppDialog('Projetista inválido.');
-        return;
-    }
-
-    if (!(await confirmAppDialog(`Associar este projeto de terceiros a ${projetista.name}?`))) return;
-
-    try {
-        setPendenciasActionLoading(true, 'Associando projetista...');
-        await assignThirdPartyProjectDesigner(thirdPartyProjectId, designerId);
-        await loadPendenciasThirdPartySemProjetista();
-    } catch (error) {
-        alertAppDialog('Erro ao associar projetista: ' + error.message);
-    } finally {
-        setPendenciasActionLoading(false);
-    }
-}
-
 async function loadPendenciasThirdPartySemProjetista() {
     const content = document.getElementById('pendencias-content');
     if (content) {
@@ -245,11 +329,19 @@ function renderPendenciasThirdPartySemProjetistaList(projects, designers = []) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const rows = (projects || []).map(project => mapPendenciasThirdPartyInteractiveRow(project));
+    const rows = (projects || []).map(project => mapPendenciasThirdPartyInteractiveRow(project, {
+        thirdPartyProjectId: project.id
+    }));
+
+    pendenciasThirdPartySemProjetistaRowsCache = rows;
 
     renderPendenciasInteractiveTableScreen(content, {
         title: 'Projetos de Terceiros sem Projetista',
-        subtitle: 'Associe um projetista responsável por cada projeto de terceiros em aberto.',
+        subtitle: 'Selecione o projetista em cada linha; use o botão no topo para associar todos de uma vez.',
+        headerActionsHtml: `<button type="button" id="pendencias-third-party-sem-projetista-save-all" disabled
+            class="text-xs bg-violet-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-violet-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+            Associar selecionados
+        </button>`,
         refreshButtonId: 'btn-pendencias-refresh-third-party-sem-projetista',
         onRefresh: loadPendenciasThirdPartySemProjetista,
         tableId: 'pendencias-third-party-sem-projetista',
@@ -269,18 +361,15 @@ function renderPendenciasThirdPartySemProjetistaList(projects, designers = []) {
                 thClass: 'min-w-[12rem]',
                 cellClass: 'p-3',
                 render: (row) => renderPendenciasThirdPartyGestorDesignerSelect(row.project, designers)
-            },
-            getPendenciasInteractiveActionColumn({
-                label: 'Ações',
-                thClass: 'w-28',
-                cellClass: 'p-3',
-                render: (row) => renderPendenciasThirdPartyGestorActionButton(row.project)
-            })
+            }
         ],
-        onBind(tbody) {
-            bindPendenciasThirdPartyGestorActions(tbody);
+        onBind() {
+            syncPendenciasThirdPartySemProjetistaSaveButton();
         }
     });
+
+    ensurePendenciasThirdPartySemProjetistaScreenEventsBound(content);
+    syncPendenciasThirdPartySemProjetistaSaveButton();
 }
 
 async function loadPendenciasThirdPartyProjetista() {

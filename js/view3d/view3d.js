@@ -177,15 +177,26 @@ async function fetchView3dProjectsForOrders(orders) {
     const orderIds = [...new Set((orders || []).map(order => Number(order.id)).filter(Boolean))];
     if (!orderIds.length) return [];
 
-    const { data, error } = await supabaseClient
+    let result = await supabaseClient
         .from('OrderProject')
-        .select('id, name, projectCode, orderId, parentProjectId, isComplementary, isReplaced')
+        .select('id, name, projectCode, orderId, parentProjectId, isComplementary, isReplaced, aggregatorOrderProjectId')
         .in('orderId', orderIds)
         .order('name', { ascending: true });
 
-    if (error) throw error;
+    if (result.error?.message?.includes('aggregatorOrderProjectId')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, projectCode, orderId, parentProjectId, isComplementary, isReplaced')
+            .in('orderId', orderIds)
+            .order('name', { ascending: true });
+    }
 
-    return (data || []).filter(project => {
+    if (result.error) throw result.error;
+
+    return (result.data || []).filter(project => {
+        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+            return false;
+        }
         if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) return false;
         if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
             return false;

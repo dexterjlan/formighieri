@@ -139,10 +139,21 @@ async function fetchOrderSummaryApprovals() {
     });
 }
 
+function shouldExcludeOrderSummaryProjectFromStatusCount(project) {
+    return typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project);
+}
+
 async function fetchOrderSummaryProjects() {
     let result = await supabaseClient
         .from('OrderProject')
-        .select('orderId, statusId, projectStatus:OrderProjectStatus(name)');
+        .select('orderId, statusId, isAggregator, projectStatus:OrderProjectStatus(name)');
+
+    if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')
+        || result.error?.message?.includes('isAggregator')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('orderId, statusId, isAggregator');
+    }
 
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('OrderProjectStatus')) {
         result = await supabaseClient
@@ -214,6 +225,7 @@ async function loadOrderSummaryCounts() {
 
     projects.forEach(project => {
         if (!project.orderId) return;
+        if (shouldExcludeOrderSummaryProjectFromStatusCount(project)) return;
         const entry = ensureOrderCounts(project.orderId);
         const statusName = getOrderProjectStatusName(project);
         entry.projectStatuses[statusName] = (entry.projectStatuses[statusName] || 0) + 1;

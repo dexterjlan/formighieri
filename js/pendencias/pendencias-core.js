@@ -478,16 +478,21 @@ function getPendenciasInteractiveIdentityColumns(options = {}) {
     columns.push({
         key: 'projectName',
         label: options.projectLabel || 'Projeto',
-        cellClass: options.projectCellClass || 'p-3 text-xs font-medium text-slate-800'
+        cellClass: options.projectCellClass || 'p-3 text-xs font-medium text-slate-800',
+        render: row => (typeof renderPendenciasProjectNameHtml === 'function'
+            ? renderPendenciasProjectNameHtml(row.project, row.projectName)
+            : escapeHtml(row.projectName || '—'))
     });
     return columns;
 }
 
 function mapPendenciasInteractiveIdentity(record, extras = {}) {
     const order = extras.order || record?.order || record?.project?.order || record?.orderProject?.order;
+    const project = extras.project
+        || (record?.orderProject ? record.orderProject : record);
     const projectName = extras.projectName
-        || (typeof getPendenciasProjectLabel === 'function' && record && !record.orderProject
-            ? getPendenciasProjectLabel(record)
+        || (typeof getPendenciasProjectLabel === 'function' && project
+            ? getPendenciasProjectLabel(project)
             : null)
         || record?.orderProject?.name
         || record?.project?.name
@@ -502,6 +507,7 @@ function mapPendenciasInteractiveIdentity(record, extras = {}) {
             || record?.clientName
             || '—',
         projectName,
+        project,
         designerName: extras.designerName || record?.designer?.name || '—',
         ...extras
     };
@@ -740,7 +746,7 @@ function sortPendenciasByEffectiveDeliveryDate(projects, phasesByOrderId = {}) {
 async function countPendenciasProjects(filters = {}) {
     const { statusId, statusIds, designerId, unassignedOnly = false, assignedOnly = false } = filters;
 
-    const buildQuery = (withInactiveFilter = true) => {
+    const buildQuery = (filterMode = 'full') => {
         let query = supabaseClient
             .from('OrderProject')
             .select('id', { count: 'exact', head: true });
@@ -750,16 +756,23 @@ async function countPendenciasProjects(filters = {}) {
         if (designerId) query = query.eq('designerId', designerId);
         if (unassignedOnly) query = query.is('designerId', null);
         if (assignedOnly) query = query.not('designerId', 'is', null);
-        if (withInactiveFilter) {
+        if (filterMode === 'full' && typeof applyPendenciasExcludedOrderProjectQueryFilters === 'function') {
+            query = applyPendenciasExcludedOrderProjectQueryFilters(query);
+        } else if (filterMode === 'legacy') {
             query = query.eq('isComplementary', false).eq('isReplaced', false);
         }
         return query;
     };
 
-    let result = await buildQuery(true);
+    let result = await buildQuery('full');
+
+    if (result.error?.message && typeof isPendenciasAggregatorColumnQueryError === 'function'
+        && isPendenciasAggregatorColumnQueryError(result.error.message)) {
+        result = await buildQuery('legacy');
+    }
 
     if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
-        result = await buildQuery(false);
+        result = await buildQuery('none');
     }
 
     if (result.error) {
@@ -773,20 +786,27 @@ async function countPendenciasProjects(filters = {}) {
 async function queryPendenciasProjects(filters = {}) {
     const { statusId, statusIds, designerId, unassignedOnly = false, assignedOnly = false } = filters;
 
-    const buildQuery = (selectColumns, withInactiveFilter = true) => {
+    const buildQuery = (selectColumns, filterMode = 'full') => {
         let query = supabaseClient.from('OrderProject').select(selectColumns);
         if (statusId) query = query.eq('statusId', statusId);
         if (statusIds?.length) query = query.in('statusId', statusIds);
         if (designerId) query = query.eq('designerId', designerId);
         if (unassignedOnly) query = query.is('designerId', null);
         if (assignedOnly) query = query.not('designerId', 'is', null);
-        if (withInactiveFilter) {
+        if (filterMode === 'full' && typeof applyPendenciasExcludedOrderProjectQueryFilters === 'function') {
+            query = applyPendenciasExcludedOrderProjectQueryFilters(query);
+        } else if (filterMode === 'legacy') {
             query = query.eq('isComplementary', false).eq('isReplaced', false);
         }
         return query;
     };
 
-    let result = await buildQuery(PENDENCIAS_PROJECT_SELECT);
+    let result = await buildQuery(PENDENCIAS_PROJECT_SELECT, 'full');
+
+    if (result.error?.message && typeof isPendenciasAggregatorColumnQueryError === 'function'
+        && isPendenciasAggregatorColumnQueryError(result.error.message)) {
+        result = await buildQuery(PENDENCIAS_PROJECT_SELECT, 'legacy');
+    }
 
     if (result.error?.message && isOrderProjectTechnicalForecastColumnError(result.error.message)) {
         result = await buildQuery(`
@@ -794,30 +814,39 @@ async function queryPendenciasProjects(filters = {}) {
             order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
             designer:appUsers!OrderProject_designerId_fkey(id, name),
             projectStatus:OrderProjectStatus(id, name)
-        `, true);
+        `, 'full');
+        if (result.error?.message && typeof isPendenciasAggregatorColumnQueryError === 'function'
+            && isPendenciasAggregatorColumnQueryError(result.error.message)) {
+            result = await buildQuery(`
+                id, orderId, projectCode, name, designerId, statusId, deliveryDate, awaitingConstructionNote,
+                order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
+                designer:appUsers!OrderProject_designerId_fkey(id, name),
+                projectStatus:OrderProjectStatus(id, name)
+            `, 'legacy');
+        }
         if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
             result = await buildQuery(`
                 id, orderId, projectCode, name, designerId, statusId, deliveryDate, awaitingConstructionNote,
                 order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
                 designer:appUsers!OrderProject_designerId_fkey(id, name),
                 projectStatus:OrderProjectStatus(id, name)
-            `, false);
+            `, 'none');
         }
     }
 
     if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
-        result = await buildQuery(PENDENCIAS_PROJECT_SELECT, false);
+        result = await buildQuery(PENDENCIAS_PROJECT_SELECT, 'none');
     }
 
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('designer')) {
-        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK, false);
+        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK, 'none');
     }
 
     if (result.error?.message?.includes('awaitingConstructionNote')
         || isOrderProjectTechnicalForecastColumnError(result.error?.message)) {
         result = await buildQuery(`
             ${getPendenciasProjectSelect({ includeStatus: false, includeDesigner: false, includeAwaitingConstructionNote: false })}
-        `, false);
+        `, 'none');
     }
 
     if (result.error) return result;

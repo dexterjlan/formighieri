@@ -101,6 +101,9 @@ async function requisicoesOrderArchitectLabel(order) {
 }
 
 function isRequisicoesProjectRequestAllowed(project, statuses) {
+    if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+        return false;
+    }
     if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
         return false;
     }
@@ -225,9 +228,12 @@ async function renderRequisicoesOrderDetail(orderId) {
     const projects = typeof fetchOrderProjectsForOrder === 'function'
         ? await fetchOrderProjectsForOrder(orderId)
         : [];
-    requisicoesOrderProjectsCache = typeof enrichOrderProjectsForList === 'function'
+    let enrichedProjects = typeof enrichOrderProjectsForList === 'function'
         ? await enrichOrderProjectsForList(projects)
         : projects;
+    requisicoesOrderProjectsCache = typeof excludeGroupedChildPendenciasProjects === 'function'
+        ? excludeGroupedChildPendenciasProjects(enrichedProjects)
+        : enrichedProjects.filter(project => !Number(project?.aggregatorOrderProjectId));
     const projectStatuses = typeof loadConvProjectStatusesForFilter === 'function'
         ? await loadConvProjectStatusesForFilter()
         : [];
@@ -279,6 +285,10 @@ async function renderRequisicoesOrderDetail(orderId) {
 
 async function openRequisicoesProjectRequest(project) {
     if (!project || !requisicoesProjectsOrderId) return;
+    if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+        alertAppDialog('Ambiente vinculado a um agrupador não recebe requisição. Use o projeto agrupador.');
+        return;
+    }
     if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
         alertAppDialog('Projeto complementar não recebe requisição.');
         return;

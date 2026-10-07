@@ -111,7 +111,9 @@ async function fetchProgramacoesDeliveriesProjects() {
     if (typeof enrichPendenciasProjectsWithConsultantUserId === 'function') {
         projects = await enrichPendenciasProjectsWithConsultantUserId(projects);
     }
-    if (typeof excludeInactivePendenciasProjects === 'function') {
+    if (typeof prepareProgramacoesVisibleOrderProjects === 'function') {
+        projects = prepareProgramacoesVisibleOrderProjects(projects);
+    } else if (typeof excludeInactivePendenciasProjects === 'function') {
         projects = excludeInactivePendenciasProjects(projects);
     }
 

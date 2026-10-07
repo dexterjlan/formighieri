@@ -41,6 +41,7 @@ const SCRIPTS = [
     'js/core/utils-sales-order.js',
     'js/core/utils-permissions.js',
     'js/core/utils-order-project.js',
+    'js/core/order-project-aggregator.js',
     'js/core/order-project-status-cache.js',
     'js/core/order-project-status-forecast.js',
     'js/core/revision-core.js',
@@ -88,6 +89,7 @@ const SCRIPTS = [
     'js/gestao/gestao-cadastros-architects.js',
     'js/gestao/gestao-cadastros-contacts.js',
     'js/gestao/gestao-alterar-status-projeto.js',
+    'js/gestao/gestao-agrupar-projetos.js',
     'js/gestao/gestao-create-detailing.js',
     'js/gestao/gestao-dashboard.js',
     'js/gestao/gestao-relatorios.js',
@@ -196,14 +198,21 @@ let appShellLoaded = false;
 let deferredPartialsLoaded = false;
 let modalsPartialLoaded = false;
 
-function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement('script');
-        script.src = src;
-        script.onload = resolve;
-        script.onerror = () => reject(new Error(`Falha ao carregar ${src}`));
-        document.body.appendChild(script);
-    });
+function appendScriptSource(src, source) {
+    const script = document.createElement('script');
+    const sourceUrl = `${src}?v=${APP_CACHE_VERSION}`;
+    script.textContent = `${source}\n//# sourceURL=${sourceUrl}\n`;
+    script.dataset.appScript = src;
+    document.body.appendChild(script);
+}
+
+async function fetchScriptSource(src) {
+    const url = `${src}?v=${APP_CACHE_VERSION}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+        throw new Error(`Falha ao carregar ${src}`);
+    }
+    return response.text();
 }
 
 async function fetchPartial(url) {
@@ -212,9 +221,20 @@ async function fetchPartial(url) {
     return response.text();
 }
 
-async function loadScriptsSequential(scripts) {
-    for (const src of scripts) {
-        await loadScript(`${src}?v=${APP_CACHE_VERSION}`);
+/**
+ * Baixa todos os scripts em paralelo e executa na ordem (globals dependem da sequência).
+ * Na primeira visita evita centenas de round-trips HTTP em série.
+ */
+async function loadScriptsSequential(scripts, onProgress) {
+    if (!scripts?.length) return;
+
+    const sources = await Promise.all(scripts.map(src => fetchScriptSource(src)));
+
+    for (let index = 0; index < scripts.length; index++) {
+        appendScriptSource(scripts[index], sources[index]);
+        if (typeof onProgress === 'function') {
+            onProgress(index + 1, scripts.length, scripts[index]);
+        }
     }
 }
 
@@ -259,9 +279,15 @@ async function ensureDeferredPartials(mount) {
     await loadAppVersion();
 }
 
+function updateAppShellLoadProgress(done, total) {
+    const detailEl = document.getElementById('app-session-loading-detail');
+    if (!detailEl || !total) return;
+    detailEl.textContent = `Módulos ${done}/${total}`;
+}
+
 async function loadAppShell(mount) {
     await ensureDeferredPartials(mount);
-    await loadScriptsSequential(APP_SCRIPTS);
+    await loadScriptsSequential(APP_SCRIPTS, updateAppShellLoadProgress);
     if (typeof initAppEvents === 'function') {
         initAppEvents();
     }
@@ -307,11 +333,12 @@ async function bootstrap() {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (!session?.user && shouldShowLoginScreen()) {
             showLoginScreen();
+        } else if (session?.user) {
+            // Sessão ativa: pré-carrega o app em paralelo com o fluxo de auth (enterApp reutiliza a mesma promise).
+            ensureAppScriptsLoaded().catch(error => {
+                console.error('loadAppShell:', error);
+            });
         }
-
-        ensureAppScriptsLoaded().catch(error => {
-            console.error('loadAppShell:', error);
-        });
     } catch (error) {
         console.error('bootstrap:', error);
         mount.innerHTML = `

@@ -2495,6 +2495,24 @@ body.gestao-kanban-fullscreen-active {
     background: rgb(245 243 255 / 0.4);
 }
 
+.order-projects-grid__row--nested {
+    margin-left: 0.75rem;
+    border-left: 2px solid rgb(221 214 254);
+    background: rgb(248 250 252 / 0.9);
+}
+
+.order-projects-grid__cell--project-nested {
+    padding-left: 0.5rem;
+}
+
+.order-projects-grid__children:not(.is-collapsed) {
+    display: contents;
+}
+
+.order-projects-grid__children.is-collapsed {
+    display: none;
+}
+
 .order-projects-characteristics-chips {
     display: flex;
     flex-wrap: wrap;

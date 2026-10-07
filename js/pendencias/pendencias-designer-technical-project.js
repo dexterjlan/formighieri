@@ -149,6 +149,90 @@ function validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, delivery
     return true;
 }
 
+function isPendenciasAssociacaoPrevisaoValid(inicioDate, previsaoDate, deliveryDate) {
+    if (!inicioDate || !previsaoDate) return false;
+    return isTechnicalProjectForecastRangeValid(inicioDate, previsaoDate, deliveryDate);
+}
+
+function getPendenciasSemProjetistaTableElement() {
+    return document.querySelector('table[data-table-id="pendencias-projetos-sem-projetistas"]');
+}
+
+function collectPendenciasSemProjetistaSelectionsFromDom() {
+    const table = getPendenciasSemProjetistaTableElement();
+    if (!table) return [];
+
+    const selections = [];
+
+    table.querySelectorAll('tbody tr').forEach(row => {
+        const select = row.querySelector('.pendencias-gestor-designer-select');
+        const designerId = Number(select?.value);
+        if (!designerId) return;
+
+        const projectId = Number(select?.dataset.projectId);
+        if (!projectId) return;
+
+        const cached = pendenciasSemProjetistaRowsCache.find(item => Number(item.id) === projectId);
+        const previsaoValues = getPendenciasPrevisaoValuesFromContainer(row);
+        const deliveryDate = row.dataset.deliveryDateMax || cached?.deliveryDateMax || '';
+
+        selections.push({
+            projectId,
+            designerId,
+            inicioDate: previsaoValues.inicioDate,
+            previsaoDate: previsaoValues.previsaoDate,
+            deliveryDate,
+            orderCode: cached?.orderCode || '—',
+            projectName: cached?.projectName || '—',
+            projetistaName: pendenciasProjetistasCache.find(item => Number(item.id) === designerId)?.name || '—'
+        });
+    });
+
+    return selections;
+}
+
+function setPendenciasSemProjetistaSaveButtonState(button, state = 'idle', pendingCount = 0) {
+    if (!button) return;
+
+    if (state === 'saving') {
+        button.dataset.originalLabel = button.textContent;
+        button.disabled = true;
+        button.textContent = 'Associando...';
+        return;
+    }
+
+    button.disabled = pendingCount === 0;
+    button.textContent = pendingCount > 0
+        ? `Associar selecionados (${pendingCount})`
+        : (button.dataset.originalLabel || 'Associar selecionados');
+}
+
+function syncPendenciasSemProjetistaSaveButton() {
+    const button = document.getElementById('pendencias-sem-projetista-save-all');
+    setPendenciasSemProjetistaSaveButtonState(
+        button,
+        'idle',
+        collectPendenciasSemProjetistaSelectionsFromDom().length
+    );
+}
+
+function ensurePendenciasSemProjetistaScreenEventsBound(content) {
+    if (!content || content.dataset.semProjetistaEventsBound === '1') return;
+    content.dataset.semProjetistaEventsBound = '1';
+
+    content.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!target?.closest('table[data-table-id="pendencias-projetos-sem-projetistas"]')) return;
+        if (!target.matches('.pendencias-gestor-designer-select, .pendencias-previsao-inicio-input, .pendencias-previsao-fim-input')) {
+            return;
+        }
+        syncPendenciasSemProjetistaSaveButton();
+    });
+
+    content.querySelector('#pendencias-sem-projetista-save-all')
+        ?.addEventListener('click', () => savePendenciasSemProjetistaAssociationsBatch());
+}
+
 function getPendenciasPrevisaoValuesFromContainer(container) {
     return {
         inicioDate: container?.querySelector('.pendencias-previsao-inicio-input')?.value || '',
@@ -284,6 +368,7 @@ function normalizePendenciasWorkloadStatusName(statusName) {
 }
 
 let pendenciasProjetistasCache = [];
+let pendenciasSemProjetistaRowsCache = [];
 
 async function fetchPendenciasActiveProjetistas() {
     const { data, error } = await supabaseClient
@@ -309,7 +394,11 @@ function getPendenciasProjectDetailLabel(project) {
 }
 
 function getPendenciasProjectLabel(project) {
-    return getPendenciasProjectDetailLabel(project);
+    const name = getPendenciasProjectDetailLabel(project);
+    if (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)) {
+        return `${name} (Agrupador)`;
+    }
+    return name;
 }
 
 function getPendenciasWorkloadAssigneeId(project, implementationDesignerByProjectId = {}) {
@@ -1007,7 +1096,9 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                                     </p>
                                     <div class="flex items-center gap-1.5 min-w-0">
                                         <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
-                                            ${escapeHtml(projectName)}
+                                            ${typeof renderPendenciasProjectNameHtml === 'function'
+                                                ? renderPendenciasProjectNameHtml(project, projectName)
+                                                : escapeHtml(projectName)}
                                         </p>
                                         ${isRevisionInProgress
                                             ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0">Em andamento</span>'
@@ -1179,6 +1270,7 @@ function renderPendenciasProjetosSemProjetistas(projects, characteristicsMap = n
             : 'Nenhuma';
 
         return mapPendenciasInteractiveIdentity(project, {
+            orderId: project.orderId,
             deliveryLabel: formatPendenciasDeliveryDate(project.deliveryDate),
             deliveryDate: project.deliveryDate,
             deliveryDateMax: getPendenciasPrevisaoInputMaxDate(project.deliveryDate),
@@ -1189,15 +1281,22 @@ function renderPendenciasProjetosSemProjetistas(projects, characteristicsMap = n
         });
     });
 
+    pendenciasSemProjetistaRowsCache = rows;
+
     renderPendenciasInteractiveTableScreen(content, {
         title: 'Aguardando Projeto Técnico sem responsável',
-        subtitle: 'Associe um projetista e informe a previsão do projeto técnico.',
+        subtitle: 'Selecione o projetista e a previsão em cada linha; use o botão no topo para associar todos de uma vez.',
+        headerActionsHtml: `<button type="button" id="pendencias-sem-projetista-save-all" disabled
+            class="text-xs bg-violet-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-violet-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+            Associar selecionados
+        </button>`,
         refreshButtonId: 'btn-pendencias-refresh-sem-projetistas',
         onRefresh: loadPendenciasProjetosSemProjetistas,
         tableId: 'pendencias-projetos-sem-projetistas',
         rows,
         minWidth: '72rem',
         emptyMessage: 'Nenhum projeto aguardando projeto técnico sem responsável.',
+        getRowAttrs: (row) => `data-delivery-date-max="${escapeHtml(row.deliveryDateMax || '')}"`,
         columns: [
             ...getPendenciasInteractiveIdentityColumns(),
             getPendenciasInteractiveDateColumn({
@@ -1238,36 +1337,15 @@ function renderPendenciasProjetosSemProjetistas(projects, characteristicsMap = n
                     <option value="">Selecione...</option>
                     ${getPendenciasProjetistaOptionsHtml()}
                 </select>`
-            },
-            getPendenciasInteractiveActionColumn({
-                thClass: 'w-28',
-                render: (row) => `<button type="button"
-                    class="pendencias-gestor-associar-btn text-xs bg-violet-700 text-white hover:bg-violet-800 px-3 py-1.5 rounded-lg font-medium whitespace-nowrap"
-                    data-project-id="${row.id}"
-                    data-delivery-date="${escapeHtml(row.deliveryDateMax || '')}">
-                    Associar
-                </button>`
-            })
+            }
         ],
-        onBind(tbody) {
-            tbody?.querySelectorAll('.pendencias-gestor-associar-btn').forEach(button => {
-                button.addEventListener('click', () => {
-                    const projectId = Number(button.dataset.projectId);
-                    const row = button.closest('tr');
-                    const select = row?.querySelector('.pendencias-gestor-designer-select')
-                        || tbody.querySelector(`.pendencias-gestor-designer-select[data-project-id="${projectId}"]`);
-                    const previsaoValues = getPendenciasPrevisaoValuesFromContainer(row);
-                    associarPendenciaProjetoAProjetista(
-                        projectId,
-                        Number(select?.value),
-                        previsaoValues.inicioDate,
-                        previsaoValues.previsaoDate,
-                        button.dataset.deliveryDate || ''
-                    );
-                });
-            });
+        onBind() {
+            syncPendenciasSemProjetistaSaveButton();
         }
     });
+
+    ensurePendenciasSemProjetistaScreenEventsBound(content);
+    syncPendenciasSemProjetistaSaveButton();
 }
 
 async function loadPendenciasCargaPorProjetista() {
@@ -1440,17 +1518,30 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
                     return;
                 }
 
-                if (typeof notifyDesignerAssignedToProjectEmail === 'function') {
-                    const { data: projectMeta } = await supabaseClient
-                        .from('OrderProject')
-                        .select('orderId')
-                        .eq('id', projectId)
-                        .maybeSingle();
+                const { data: projectMeta } = await supabaseClient
+                    .from('OrderProject')
+                    .select('orderId, isAggregator')
+                    .eq('id', projectId)
+                    .maybeSingle();
 
-                    if (projectMeta?.orderId) {
+                if (typeof applyOrderProjectDesignerAssignmentToAggregatorChildren === 'function') {
+                    await applyOrderProjectDesignerAssignmentToAggregatorChildren(
+                        projectId,
+                        newDesignerId,
+                        { updatedById: currentUser.id, updatedAt: now },
+                        projectMeta
+                    );
+                }
+
+                if (typeof notifyDesignerAssignedToProjectEmail === 'function') {
+                    const emailProjectIds = typeof resolveDesignerAssignmentNotificationProjectIds === 'function'
+                        ? resolveDesignerAssignmentNotificationProjectIds(projectId, projectMeta)
+                        : [projectId];
+
+                    if (projectMeta?.orderId && emailProjectIds.length) {
                         await notifyDesignerAssignedToProjectEmail({
                             orderId: projectMeta.orderId,
-                            orderProjectIds: [projectId],
+                            orderProjectIds: emailProjectIds,
                             designerId: newDesignerId
                         });
                     }
@@ -1578,80 +1669,141 @@ async function atualizarPendenciaDetalhamentoWorkload(detalhamentoId, newDesigne
     }
 }
 
-async function associarPendenciaProjetoAProjetista(projectId, designerId, inicioDate, previsaoDate, deliveryDate = '') {
+async function savePendenciasSemProjetistaAssociationsBatch() {
     if (!canSeePendenciasGestorProjetosMenu()) {
         alertAppDialog('Somente Gestor de Projetos pode associar responsáveis.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (!projectId || !designerId) {
-        alertAppDialog('Selecione um projetista.');
+    const selections = collectPendenciasSemProjetistaSelectionsFromDom();
+    if (!selections.length) {
+        alertAppDialog('Selecione ao menos um projetista.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
-    if (!validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
-        return;
-    }
-
-    const projetista = pendenciasProjetistasCache.find(item => Number(item.id) === Number(designerId));
-    if (!projetista) {
-        alertAppDialog('Projetista inválido.');
-        return;
-    }
-
-    if (!(await confirmAppDialog(`Associar este projeto a ${projetista.name}?`))) return;
-
-    const now = new Date().toISOString();
-
-    try {
-        setPendenciasActionLoading(true, 'Associando projetista...');
-
-        const { error } = await supabaseClient
-            .from('OrderProject')
-            .update({
-                designerId,
-                updatedById: currentUser.id,
-                updatedAt: now
-            })
-            .eq('id', projectId);
-
-        if (error) {
-            alertAppDialog('Erro ao associar projetista: ' + error.message);
+    for (const item of selections) {
+        if (!pendenciasProjetistasCache.find(user => Number(user.id) === Number(item.designerId))) {
+            alertAppDialog(`Projetista inválido para o projeto ${item.projectName}.`);
             return;
         }
+        if (!isPendenciasAssociacaoPrevisaoValid(item.inicioDate, item.previsaoDate, item.deliveryDate)) {
+            alertAppDialog(
+                `Informe início e previsão válidos para ${item.orderCode} — ${item.projectName}.`,
+                { variant: 'warning', title: 'Aviso' }
+            );
+            return;
+        }
+    }
 
-        const { error: forecastError } = await savePendenciasTechnicalProjectForecast(
-            projectId,
-            inicioDate,
-            previsaoDate,
-            designerId
-        );
-        if (forecastError) {
-            if (isOrderProjectStatusForecastTableError(forecastError.message)) {
-                alertAppDialog('Projetista associado, mas a tabela de previsão ainda não existe. Execute supabase/feats/add-order-project-status-forecast.sql no Supabase.', { variant: 'warning', title: 'Aviso' });
-            } else {
-                alertAppDialog('Erro ao salvar previsão: ' + forecastError.message);
-                return;
+    const summaryLines = selections.slice(0, 8).map(item => (
+        `• ${item.orderCode} — ${item.projectName}: ${item.projetistaName}`
+    ));
+    const extraCount = selections.length - summaryLines.length;
+    const extraLine = extraCount > 0 ? `\n... e mais ${extraCount} projeto(s).` : '';
+
+    if (!(await confirmAppDialog(
+        `Associar ${selections.length} projeto(s) aos projetistas selecionados?\n\n${summaryLines.join('\n')}${extraLine}`
+    ))) {
+        return;
+    }
+
+    const saveButton = document.getElementById('pendencias-sem-projetista-save-all');
+    const now = new Date().toISOString();
+    const errors = [];
+    const emailByOrderAndDesigner = new Map();
+
+    try {
+        setPendenciasSemProjetistaSaveButtonState(saveButton, 'saving');
+        setPendenciasActionLoading(true, `Associando ${selections.length} projeto(s)...`);
+
+        for (const item of selections) {
+            const { error } = await supabaseClient
+                .from('OrderProject')
+                .update({
+                    designerId: item.designerId,
+                    updatedById: currentUser.id,
+                    updatedAt: now
+                })
+                .eq('id', item.projectId);
+
+            if (error) {
+                errors.push(`${item.projectName}: ${error.message}`);
+                continue;
+            }
+
+            const cached = pendenciasSemProjetistaRowsCache.find(row => Number(row.id) === Number(item.projectId));
+            const cachedProject = cached?.project || cached;
+            try {
+                if (typeof applyOrderProjectDesignerAssignmentToAggregatorChildren === 'function') {
+                    await applyOrderProjectDesignerAssignmentToAggregatorChildren(
+                        item.projectId,
+                        item.designerId,
+                        { updatedById: currentUser.id, updatedAt: now },
+                        cachedProject
+                    );
+                }
+            } catch (replicateError) {
+                errors.push(`${item.projectName}: ${replicateError.message}`);
+                continue;
+            }
+
+            const { error: forecastError } = await savePendenciasTechnicalProjectForecast(
+                item.projectId,
+                item.inicioDate,
+                item.previsaoDate,
+                item.designerId
+            );
+
+            if (forecastError) {
+                if (isOrderProjectStatusForecastTableError(forecastError.message)) {
+                    errors.push(`${item.projectName}: previsão não salva (tabela ausente no banco)`);
+                } else {
+                    errors.push(`${item.projectName}: ${forecastError.message}`);
+                    continue;
+                }
+            }
+
+            const orderId = Number(cached?.orderId);
+            if (orderId) {
+                const bucketKey = `${orderId}:${item.designerId}`;
+                const bucket = emailByOrderAndDesigner.get(bucketKey) || {
+                    orderId,
+                    designerId: item.designerId,
+                    orderProjectIds: []
+                };
+                const emailIds = typeof resolveDesignerAssignmentNotificationProjectIds === 'function'
+                    ? resolveDesignerAssignmentNotificationProjectIds(item.projectId, cachedProject)
+                    : [item.projectId];
+                emailIds.forEach(projectIdForEmail => {
+                    if (!bucket.orderProjectIds.includes(projectIdForEmail)) {
+                        bucket.orderProjectIds.push(projectIdForEmail);
+                    }
+                });
+                emailByOrderAndDesigner.set(bucketKey, bucket);
             }
         }
 
-        const { data: projectMeta } = await supabaseClient
-            .from('OrderProject')
-            .select('orderId')
-            .eq('id', projectId)
-            .maybeSingle();
+        if (typeof notifyDesignerAssignedToProjectEmail === 'function') {
+            for (const bucket of emailByOrderAndDesigner.values()) {
+                await notifyDesignerAssignedToProjectEmail({
+                    orderId: bucket.orderId,
+                    orderProjectIds: bucket.orderProjectIds,
+                    designerId: bucket.designerId
+                });
+            }
+        }
 
-        if (typeof notifyDesignerAssignedToProjectEmail === 'function' && projectMeta?.orderId) {
-            await notifyDesignerAssignedToProjectEmail({
-                orderId: projectMeta.orderId,
-                orderProjectIds: [projectId],
-                designerId
-            });
+        if (errors.length) {
+            alertAppDialog(
+                `Algumas associações falharam:\n\n${errors.slice(0, 6).join('\n')}${errors.length > 6 ? `\n... e mais ${errors.length - 6}.` : ''}`,
+                { variant: 'warning', title: 'Aviso' }
+            );
         }
 
         await loadPendenciasProjetosSemProjetistas();
     } finally {
         setPendenciasActionLoading(false);
+        syncPendenciasSemProjetistaSaveButton();
     }
 }
 

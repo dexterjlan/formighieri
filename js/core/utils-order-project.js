@@ -116,7 +116,9 @@ function isComplementaryOrderProject(project) {
 }
 
 function canActOnOrderProject(project) {
-    return !isComplementaryOrderProject(project) && !isReplacedOrderProject(project);
+    if (isComplementaryOrderProject(project) || isReplacedOrderProject(project)) return false;
+    if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) return false;
+    return true;
 }
 
 function getComplementarParentProjectCode(project) {
@@ -276,7 +278,11 @@ function excludeReplacedPendenciasProjects(projects) {
 }
 
 function excludeInactivePendenciasProjects(projects) {
-    return excludeReplacedPendenciasProjects(excludeComplementarPendenciasProjects(projects));
+    let filtered = excludeReplacedPendenciasProjects(excludeComplementarPendenciasProjects(projects));
+    if (typeof excludeGroupedChildPendenciasProjects === 'function') {
+        filtered = excludeGroupedChildPendenciasProjects(filtered);
+    }
+    return filtered;
 }
 
 function applyComplementarReadOnlyToElement(root, project) {

@@ -1032,27 +1032,23 @@ async function fetchPendenciasImplantacoesAbertas(options = {}) {
     }
 
     const projectsById = Object.fromEntries(
-        (await enrichPendenciasProjectsWithStatus(projectResult.data || []))
-            .map(project => [project.id, project])
+        excludeInactivePendenciasProjects(
+            await enrichPendenciasProjectsWithStatus(projectResult.data || [])
+        ).map(project => [project.id, project])
     );
 
     const projects = implantacoes.map(implantacao => {
         const project = projectsById[implantacao.orderProjectId];
-        const base = project || {
-            id: implantacao.orderProjectId,
-            name: `Projeto #${implantacao.orderProjectId}`,
-            order: null,
-            deliveryDate: null
-        };
+        if (!project) return null;
 
         return {
-            ...base,
+            ...project,
             implementationId: implantacao.id,
             implantacaoStatus: implantacao.status,
             implementationDesignerId: implantacao.designerId || null,
             implementationDesignerName: implantacao.designer?.name || '—'
         };
-    });
+    }).filter(Boolean);
 
     return {
         error: null,
@@ -1160,21 +1156,28 @@ function renderPendenciasImplantacaoList(projects, overviewMode = false) {
 }
 
 async function queryPendenciasFabricaProjects(statusId) {
-    const buildQuery = (selectColumns, withInactiveFilter = true) => {
+    const buildQuery = (selectColumns, filterMode = 'full') => {
         let query = supabaseClient
             .from('OrderProject')
             .select(selectColumns)
             .eq('statusId', statusId);
-        if (withInactiveFilter) {
+        if (filterMode === 'full' && typeof applyPendenciasExcludedOrderProjectQueryFilters === 'function') {
+            query = applyPendenciasExcludedOrderProjectQueryFilters(query);
+        } else if (filterMode === 'legacy') {
             query = query.eq('isComplementary', false).eq('isReplaced', false);
         }
         return query;
     };
 
-    let result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT);
+    let result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT, 'full');
+
+    if (result.error?.message && typeof isPendenciasAggregatorColumnQueryError === 'function'
+        && isPendenciasAggregatorColumnQueryError(result.error.message)) {
+        result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT, 'legacy');
+    }
 
     if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
-        result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT, false);
+        result = await buildQuery(PENDENCIAS_FABRICA_PROJECT_SELECT, 'none');
     }
 
     if (result.error?.message?.includes('marceneiro')

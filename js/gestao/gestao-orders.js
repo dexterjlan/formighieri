@@ -465,7 +465,7 @@ async function fetchGestaoProjectsByOrderIds(orderIds) {
     if (!normalizedIds.length) return {};
 
     const selectVariants = [
-        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
+        'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, isAggregator, aggregatorOrderProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, parentProject:parentProjectId(projectCode, order:salesOrders(orderCode)), replacedBy:replacedByProjectId(projectCode, order:salesOrders(orderCode)), replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode)), environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
         'id, orderId, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)',
@@ -523,7 +523,7 @@ async function fetchGestaoOrders(filters = {}) {
     const orderRelations = `client:Client(id, name, isActive), consultor:appUsers!consultantUserId(id, name)`;
     const orderRelationsWithArchitect = `${orderRelations}, architect:Architect(id, name)`;
     const orderSelectVariants = [
-        `*, ${orderRelationsWithArchitect}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, cabinetMakerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
+        `*, ${orderRelationsWithArchitect}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, cabinetMakerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, isAggregator, aggregatorOrderProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, technicalProjectForecastStartDate, technicalProjectForecastEndDate, statusId, designerId, cabinetMakerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, cabinetMakerId, deliveryPhaseId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
         `*, ${orderRelations}, projects:OrderProject(id, projectCode, name, environmentTypeId, saleValue, deliveryDate, statusId, designerId, approvalNetworkPath, conferenceNetworkPath, isComplementary, parentProjectId, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name))`,
@@ -812,7 +812,15 @@ async function insertGestaoProject(orderId, project, now) {
     throw lastError;
 }
 
+function shouldSkipGestaoProjectPersistUpdate(project) {
+    return typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project);
+}
+
 async function updateGestaoProject(project, now) {
+    if (shouldSkipGestaoProjectPersistUpdate(project)) {
+        throw new Error('Projetos agrupadores não podem ser editados.');
+    }
+
     const statusId = project.statusId || getDefaultProjectStatusId();
     const deliveryPhaseId = typeof resolveGestaoDeliveryPhaseIdForPersist === 'function'
         ? resolveGestaoDeliveryPhaseIdForPersist(project.deliveryPhaseId)
@@ -996,10 +1004,14 @@ async function persistGestaoProjects(orderId, projects) {
         if (project._pendingParentCode) continue;
 
         if (project.id) {
-            await updateGestaoProject(project, now);
-            if (project.projectCode) idByCode[project.projectCode] = project.id;
-            if (Array.isArray(project.characteristicIds) && typeof replaceOrderProjectCharacteristics === 'function') {
-                await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
+            if (shouldSkipGestaoProjectPersistUpdate(project)) {
+                if (project.projectCode) idByCode[project.projectCode] = project.id;
+            } else {
+                await updateGestaoProject(project, now);
+                if (project.projectCode) idByCode[project.projectCode] = project.id;
+                if (Array.isArray(project.characteristicIds) && typeof replaceOrderProjectCharacteristics === 'function') {
+                    await replaceOrderProjectCharacteristics(project.id, project.characteristicIds);
+                }
             }
             continue;
         }
@@ -1028,12 +1040,18 @@ async function persistGestaoProjects(orderId, projects) {
         }
 
         if (item.project.id) {
-            await updateGestaoProject(item.project, now);
-            if (item.project.projectCode) {
-                idByCode[item.project.projectCode] = item.project.id;
-            }
-            if (Array.isArray(item.project.characteristicIds) && typeof replaceOrderProjectCharacteristics === 'function') {
-                await replaceOrderProjectCharacteristics(item.project.id, item.project.characteristicIds);
+            if (shouldSkipGestaoProjectPersistUpdate(item.project)) {
+                if (item.project.projectCode) {
+                    idByCode[item.project.projectCode] = item.project.id;
+                }
+            } else {
+                await updateGestaoProject(item.project, now);
+                if (item.project.projectCode) {
+                    idByCode[item.project.projectCode] = item.project.id;
+                }
+                if (Array.isArray(item.project.characteristicIds) && typeof replaceOrderProjectCharacteristics === 'function') {
+                    await replaceOrderProjectCharacteristics(item.project.id, item.project.characteristicIds);
+                }
             }
             continue;
         }

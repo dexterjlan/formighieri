@@ -4,7 +4,7 @@ const GESTAO_RELATORIO_STATUS_CHART_EXCLUDED = ['Expedição', 'Entregue'];
 
 const GESTAO_RELATORIO_PROJECT_SELECT = `
     id, orderId, projectCode, name, saleValue, deliveryDate, internalAssemblyEndDate, productionMonth, statusId,
-    deliveryPhaseId, isComplementary, parentProjectId,
+    deliveryPhaseId, isComplementary, parentProjectId, isAggregator, aggregatorOrderProjectId,
     isReplacement, replacesProjectId,
     replaces:replacesProjectId(projectCode, saleValue, order:salesOrders(orderCode)),
     parentProject:parentProjectId(id, deliveryPhaseId),
@@ -14,7 +14,7 @@ const GESTAO_RELATORIO_PROJECT_SELECT = `
 
 const GESTAO_RELATORIO_PROJECT_SELECT_FALLBACK = `
     id, orderId, projectCode, name, saleValue, deliveryDate, statusId,
-    deliveryPhaseId, isComplementary, parentProjectId,
+    deliveryPhaseId, isComplementary, parentProjectId, isAggregator, aggregatorOrderProjectId,
     isReplacement, replacesProjectId,
     order:salesOrders(${getSalesOrderMinimalEmbedSelect('clientDeliveryDate')}),
     projectStatus:OrderProjectStatus(id, name)
@@ -70,7 +70,9 @@ async function fetchGestaoRelatorioProjects() {
         || result.error?.message?.includes('parentProject')
         || result.error?.message?.includes('substitui')
         || result.error?.message?.includes('isReplacement')
-        || result.error?.message?.includes('replacesProjectId')) {
+        || result.error?.message?.includes('replacesProjectId')
+        || result.error?.message?.includes('isAggregator')
+        || result.error?.message?.includes('aggregatorOrderProjectId')) {
         result = await supabaseClient
             .from('OrderProject')
             .select(GESTAO_RELATORIO_PROJECT_SELECT_FALLBACK)
@@ -79,7 +81,7 @@ async function fetchGestaoRelatorioProjects() {
 
     if (result.error) return result;
 
-    const projects = result.data || [];
+    let projects = result.data || [];
     const needsEnrich = projects.some(project => project.statusId && !project.projectStatus);
 
     if (!needsEnrich) return { data: projects, error: null };
@@ -217,6 +219,8 @@ function buildGestaoRelatorioStatusCounts(projects, statuses) {
 
     const countByStatusId = {};
     (projects || []).forEach(project => {
+        if (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)) return;
+        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) return;
         if (isGestaoRelatorioStatusChartExcluded(getGestaoRelatorioStatusName(project))) return;
 
         const statusId = project.statusId;
@@ -228,6 +232,8 @@ function buildGestaoRelatorioStatusCounts(projects, statuses) {
     const extras = {};
 
     (projects || []).forEach(project => {
+        if (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)) return;
+        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) return;
         if (isGestaoRelatorioStatusChartExcluded(getGestaoRelatorioStatusName(project))) return;
         if (!project.statusId || knownIds.has(project.statusId)) return;
         const name = getGestaoRelatorioStatusName(project) || 'Sem status';
@@ -561,14 +567,28 @@ function sumGestaoRelatorioPedidosPendentesProjectTreeSaleValues(projectTree) {
 
 function countGestaoRelatorioPedidosPendentesOrderProjects(projectTree, options = {}) {
     const scheduleRootProjectIds = options.scheduleRootProjectIds;
+    const projectsForUnitCount = options.projectsForUnitCount || [];
+    const resolveUnitCount = (project) => (
+        options.countAggregatorScheduleUnits
+        && typeof getOrderProjectScheduleUnitCount === 'function'
+    )
+        ? getOrderProjectScheduleUnitCount(project, projectsForUnitCount)
+        : 1;
 
     if (scheduleRootProjectIds) {
-        return (projectTree || []).filter(entry =>
-            entry.parentPending && scheduleRootProjectIds.has(Number(entry.project.id))
-        ).length;
+        return (projectTree || []).reduce((sum, entry) => {
+            if (!entry.parentPending || !scheduleRootProjectIds.has(Number(entry.project.id))) {
+                return sum;
+            }
+            return sum + resolveUnitCount(entry.project);
+        }, 0);
     }
 
-    return (projectTree || []).filter(entry => entry.parentPending || (entry.children || []).length > 0).length;
+    return (projectTree || []).reduce((sum, entry) => {
+        if (!entry.parentPending && !(entry.children || []).length) return sum;
+        if (entry.parentPending) return sum + resolveUnitCount(entry.project);
+        return sum + 1;
+    }, 0);
 }
 
 function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context = {}, options = {}) {
@@ -578,6 +598,14 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
     const replacedProjects = [];
 
     (projects || []).forEach(project => {
+        if (!options.includeOrderProjectAggregators
+            && typeof isOrderProjectAggregator === 'function'
+            && isOrderProjectAggregator(project)) {
+            return;
+        }
+        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+            return;
+        }
         if (isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
             complementarProjects.push(project);
             return;
@@ -655,9 +683,17 @@ function groupGestaoRelatorioPedidosPendentesByMonthAndClient(projects, context 
                                     ? orderReplacedProjects
                                     : (orderGroup.replacedProjects || []))
                             ];
-                            const countOptions = options.scheduleRootProjectIds
-                                ? { scheduleRootProjectIds: options.scheduleRootProjectIds }
-                                : {};
+                            const countOptions = {
+                                ...(options.scheduleRootProjectIds
+                                    ? { scheduleRootProjectIds: options.scheduleRootProjectIds }
+                                    : {}),
+                                ...(options.countAggregatorScheduleUnits
+                                    ? {
+                                        countAggregatorScheduleUnits: true,
+                                        projectsForUnitCount: options.projectsForUnitCount || projects
+                                    }
+                                    : {})
+                            };
                             const totalSaleValue = options.attachReplacedUnderReplacementOrder
                                 ? sumGestaoRelatorioPedidosPendentesProjectTreeSaleValues(projectTree)
                                 : sumGestaoRelatorioSaleValues(valueProjects);
@@ -727,6 +763,10 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
     const saleValue = formatGestaoRelatorioSaleValue(getProjectEffectiveSaleValue(project));
     const labelPrefix = nested ? '↳ ' : '';
     const nestedKindLabel = nested ? getGestaoRelatorioPedidosPendentesNestedProjectKindLabel(project) : '';
+    const aggregatorBadge = !nested
+        && typeof renderAggregatorProjectNoticeHtml === 'function'
+        ? renderAggregatorProjectNoticeHtml(project)
+        : '';
     const cellPadding = nested ? 'p-2 pl-8' : 'p-2 pl-6';
     const rowClass = nested
         ? 'border-b border-slate-50 last:border-0 bg-slate-50/20'
@@ -737,6 +777,7 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
             <td class="${cellPadding} text-xs ${nested ? 'text-slate-600' : 'text-slate-700'}">
                 <div class="flex flex-wrap items-center gap-1.5 min-w-0">
                     <span>${escapeHtml(`${labelPrefix}${getGestaoRelatorioProjectLabel(project, options)}`)}</span>
+                    ${aggregatorBadge}
                     ${nestedKindLabel ? `<span class="text-[10px] text-slate-400 shrink-0">${escapeHtml(nestedKindLabel)}</span>` : ''}
                 </div>
             </td>
@@ -898,6 +939,9 @@ function getGestaoRelatorioFechamentoProducaoProjectMonthKey(project) {
 }
 
 function isGestaoRelatorioFechamentoProducaoRootProject(project, statuses = []) {
+    if (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)) {
+        return false;
+    }
     if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
         return false;
     }
@@ -1126,12 +1170,18 @@ function groupGestaoRelatorioFechamentoProducaoByMonthAndClient(projects, option
         });
 }
 
-function buildGestaoRelatorioFechamentoProducaoProjectTree(projects, projectsById = {}) {
+function buildGestaoRelatorioFechamentoProducaoProjectTree(projects, projectsById = {}, options = {}) {
     const parentProjects = [];
     const complementarProjects = [];
     const replacedProjects = [];
 
     (projects || []).forEach(project => {
+        if (!options.includeOrderProjectAggregators
+            && typeof isOrderProjectAggregator === 'function'
+            && isOrderProjectAggregator(project)) {
+            return;
+        }
+        // Ambientes vinculados ao agrupador entram como linhas próprias (agrupador continua oculto).
         if (isGestaoRelatorioPedidosPendentesComplementaryProject(project)) {
             complementarProjects.push(project);
             return;
@@ -1206,6 +1256,9 @@ function renderGestaoRelatorioFechamentoProducaoProjectTreeRows(projectTree, opt
 
 function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options = {}) {
     const totalLabel = formatGestaoRelatorioSaleValue(clientGroup.totalSaleValue);
+    const projectCount = Number.isFinite(clientGroup.scheduleProjectCount)
+        ? clientGroup.scheduleProjectCount
+        : clientGroup.projects.length;
 
     return `
         <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -1214,7 +1267,7 @@ function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options
                     <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                         aria-label="Expandir">▶</button>
                     <span class="text-xs font-medium text-slate-800 truncate">${escapeHtml(clientGroup.clientName)}</span>
-                    <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.projects.length} projeto${clientGroup.projects.length === 1 ? '' : 's'}</span>
+                    <span class="text-[10px] text-slate-500 shrink-0">${projectCount} projeto${projectCount === 1 ? '' : 's'}</span>
                 </div>
                 <span class="text-xs font-semibold text-emerald-700 shrink-0">${escapeHtml(totalLabel)}</span>
             </div>
@@ -1232,7 +1285,8 @@ function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options
                         <tbody>${renderGestaoRelatorioFechamentoProducaoProjectTreeRows(
                             buildGestaoRelatorioFechamentoProducaoProjectTree(
                                 clientGroup.projects,
-                                options.projectsById || {}
+                                options.projectsById || {},
+                                options
                             ),
                             options
                         )}</tbody>
@@ -1277,20 +1331,33 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
     const content = document.getElementById('gestao-relatorios-content');
     if (!content) return;
 
-    const statusCounts = buildGestaoRelatorioStatusCounts(projects, statuses);
-    const pedidosPendentesProjects = filterGestaoRelatorioPedidosPendentesProjects(projects, statuses);
+    const allProjects = projects || [];
+    const statusCounts = buildGestaoRelatorioStatusCounts(allProjects, statuses);
+    const projectsForPedidosPendentes = typeof enrichOrderProjectsWithAggregatorChildrenSaleValue === 'function'
+        ? enrichOrderProjectsWithAggregatorChildrenSaleValue(allProjects)
+        : allProjects;
+    const pedidosPendentesProjects = filterGestaoRelatorioPedidosPendentesProjects(
+        projectsForPedidosPendentes,
+        statuses
+    ).filter(project => !(typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)));
+    const pedidosPendentesGroupOptions = {
+        includeOrderProjectAggregators: true,
+        countAggregatorScheduleUnits: true,
+        projectsForUnitCount: allProjects
+    };
     const pedidosPendentesGroups = groupGestaoRelatorioPedidosPendentesByMonthAndClient(
         pedidosPendentesProjects,
-        pedidosPendentesContext
+        pedidosPendentesContext,
+        pedidosPendentesGroupOptions
     );
     const pedidosPendentesGrandTotal = pedidosPendentesGroups.reduce((sum, group) => sum + group.totalSaleValue, 0);
     const pedidosPendentesGrandTotalLabel = formatGestaoRelatorioSaleValue(pedidosPendentesGrandTotal);
-    const projectsById = buildGestaoRelatorioProjectsById(projects);
-    const fechamentoRoots = projects.filter(project =>
+    const projectsById = buildGestaoRelatorioProjectsById(allProjects);
+    const fechamentoRoots = allProjects.filter(project =>
         isGestaoRelatorioFechamentoProducaoRootProject(project, statuses)
     );
     const fechamentoRootIds = new Set(fechamentoRoots.map(project => Number(project.id)).filter(Boolean));
-    const fechamentoProjects = expandGestaoRelatorioFechamentoProducaoProjects(fechamentoRoots, projects);
+    const fechamentoProjects = expandGestaoRelatorioFechamentoProducaoProjects(fechamentoRoots, allProjects);
     const fechamentoRenderOptions = { projectsById };
     const fechamentoGroups = groupGestaoRelatorioFechamentoProducaoByMonthAndClient(fechamentoProjects, {
         projectsById,
@@ -1313,7 +1380,7 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Pedidos Pendentes</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos em todos os status até ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega (fase do pedido ou data do cliente) e, dentro de cada mês, por cliente. Projetos complementares aparecem como filhos do pai e não entram na contagem, mas seu valor compõe o total.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos em todos os status até ${escapeHtml(GESTAO_RELATORIO_PEDIDOS_PENDENTES_END)}, agrupados pelo mês de entrega (fase do pedido ou data do cliente) e, dentro de cada mês, por cliente. Complementares aparecem como filhos do pai e não entram na contagem, mas seu valor compõe o total. Agrupadores substituem os ambientes vinculados: a contagem usa a quantidade de filhos e o valor é a soma deles.</p>
                 </div>
                 <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg">
                     Total: ${escapeHtml(pedidosPendentesGrandTotalLabel)}
@@ -1328,7 +1395,7 @@ function renderGestaoRelatoriosPanel(projects, statuses, pedidosPendentesContext
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h4 class="text-sm font-bold text-slate-900">Fechamento Produção</h4>
-                    <p class="text-xs text-slate-400 mt-0.5">Projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} ou em status posteriores, agrupados pelo mês do fim da montagem interna e, dentro de cada mês, por cliente. Complementares e substituídos aparecem como filhos do projeto pai e entram na contagem e no valor total.</p>
+                    <p class="text-xs text-slate-400 mt-0.5">Projetos em ${escapeHtml(GESTAO_RELATORIO_EXPEDICAO_STATUS)} ou em status posteriores, agrupados pelo mês do fim da montagem interna e, dentro de cada mês, por cliente. Complementares e substituídos aparecem como filhos do projeto pai e entram na contagem e no valor total. Projetos agrupadores são ignorados; ambientes vinculados seguem listados normalmente.</p>
                 </div>
                 <span class="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-lg">
                     Total: ${escapeHtml(fechamentoGrandTotalLabel)}
@@ -1399,6 +1466,7 @@ function bindGestaoRelatoriosEvents() {
 }
 
 window.filterGestaoRelatorioPedidosPendentesProjects = filterGestaoRelatorioPedidosPendentesProjects;
+window.filterGestaoRelatorioOrderProjects = filterGestaoRelatorioOrderProjects;
 window.buildGestaoRelatorioProjectsById = buildGestaoRelatorioProjectsById;
 window.groupGestaoRelatorioPedidosPendentesByMonthAndClient = groupGestaoRelatorioPedidosPendentesByMonthAndClient;
 window.getGestaoRelatorioReplacedProjectParentId = getGestaoRelatorioReplacedProjectParentId;

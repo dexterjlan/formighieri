@@ -145,10 +145,12 @@ async function fetchGestaoAlterarStatusProjects(filters = {}) {
         throw new Error(projectResult.error.message);
     }
 
-    const projects = (projectResult.data || []).map(project => ({
-        ...project,
-        order: orderById[Number(project.orderId)] || null
-    }));
+    const projects = (projectResult.data || [])
+        .filter(project => !(typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)))
+        .map(project => ({
+            ...project,
+            order: orderById[Number(project.orderId)] || null
+        }));
 
     return { projects, requiresFilter: false };
 }

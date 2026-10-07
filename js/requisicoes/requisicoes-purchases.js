@@ -27,6 +27,22 @@ async function loadRequisicoesPurchaseReasons() {
     return data || [];
 }
 
+function isRequisicoesPurchaseImplantacaoReason(reason) {
+    const name = String(reason?.name || '').trim().toLocaleLowerCase('pt-BR');
+    return name === 'implantação' || name === 'implantacao';
+}
+
+/** Motivos exibidos em Requisições → Compra (Implantação só na tela de implantação). */
+function filterRequisicoesPurchaseReasonsForComprasScreen(reasons = []) {
+    return (reasons || []).filter(reason => !isRequisicoesPurchaseImplantacaoReason(reason));
+}
+
+async function resolveRequisicoesImplantacaoPurchaseReasonId() {
+    const reasons = await loadRequisicoesPurchaseReasons();
+    const match = reasons.find(isRequisicoesPurchaseImplantacaoReason);
+    return match?.id ? Number(match.id) : null;
+}
+
 async function loadRequisicoesPurchaseSubtypes() {
     const { data, error } = await supabaseClient
         .from('ThirdPartySubtype')
@@ -121,7 +137,7 @@ function renderRequisicoesPurchaseForm(draft) {
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="requisicoes-purchase-subtype">Subtipo de terceiro</label>
                     <select id="requisicoes-purchase-subtype" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"></select>
                 </div>
-                <div>
+                <div class="${locked ? 'hidden' : ''}">
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="requisicoes-purchase-reason">Motivo</label>
                     <select id="requisicoes-purchase-reason" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white"></select>
                 </div>
@@ -298,14 +314,29 @@ async function fillRequisicoesPurchaseProjects(orderId, selectedProjectId) {
         select.innerHTML = '<option value="">Selecione o projeto</option>';
         return;
     }
-    const { data, error } = await supabaseClient
+    let result = await supabaseClient
         .from('OrderProject')
-        .select('id, name, projectCode')
+        .select('id, name, projectCode, aggregatorOrderProjectId')
         .eq('orderId', orderId)
         .order('projectCode', { ascending: true });
+
+    if (result.error?.message?.includes('aggregatorOrderProjectId')) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, projectCode')
+            .eq('orderId', orderId)
+            .order('projectCode', { ascending: true });
+    }
+
+    const { data, error } = result;
     if (error) throw error;
+
+    const projects = typeof excludeGroupedChildPendenciasProjects === 'function'
+        ? excludeGroupedChildPendenciasProjects(data || [])
+        : (data || []).filter(project => !Number(project?.aggregatorOrderProjectId));
+
     const selected = selectedProjectId ? String(selectedProjectId) : '';
-    select.innerHTML = '<option value="">Selecione o projeto</option>' + (data || []).map(project => {
+    select.innerHTML = '<option value="">Selecione o projeto</option>' + projects.map(project => {
         const isSelected = String(project.id) === selected ? ' selected' : '';
         return `<option value="${project.id}"${isSelected}>${escapeHtml(project.name || 'Projeto')}</option>`;
     }).join('');
@@ -335,19 +366,11 @@ async function loadRequisicoesPurchases() {
         }
         const reasons = await loadRequisicoesPurchaseReasons();
         const reasonSelect = document.getElementById('requisicoes-purchase-reason');
-        if (reasonSelect) {
-            reasonSelect.innerHTML = '<option value="">Selecione o motivo</option>' + reasons.map(item => (
+        if (reasonSelect && draft?.origin !== 'implementation') {
+            const reasonsForSelect = filterRequisicoesPurchaseReasonsForComprasScreen(reasons);
+            reasonSelect.innerHTML = '<option value="">Selecione o motivo</option>' + reasonsForSelect.map(item => (
                 `<option value="${item.id}">${escapeHtml(item.name)}</option>`
             )).join('');
-            if (draft?.origin === 'implementation') {
-                const implantacaoReason = reasons.find(reason => {
-                    const name = String(reason.name || '').trim().toLocaleLowerCase('pt-BR');
-                    return name === 'implantação' || name === 'implantacao';
-                });
-                if (implantacaoReason) {
-                    reasonSelect.value = String(implantacaoReason.id);
-                }
-            }
         }
     } catch (error) {
         if (hint) {
@@ -370,7 +393,6 @@ async function submitRequisicoesPurchase(draft) {
     const orderProjectId = Number(document.getElementById('requisicoes-purchase-project')?.value);
     const purchaseType = document.getElementById('requisicoes-purchase-type')?.value;
     const subtypeId = Number(document.getElementById('requisicoes-purchase-subtype')?.value) || null;
-    const reasonId = Number(document.getElementById('requisicoes-purchase-reason')?.value) || null;
     const observation = document.getElementById('requisicoes-purchase-observation')?.value?.trim() || '';
     const file = document.getElementById('requisicoes-purchase-file')?.files?.[0] || null;
     const locked = draft?.origin === 'implementation';
@@ -391,13 +413,26 @@ async function submitRequisicoesPurchase(draft) {
         alertAppDialog('Selecione o subtipo de terceiro.');
         return;
     }
-    if (!reasonId) {
-        alertAppDialog(`Selecione o motivo. ${requisicoesPurchaseSqlHint()}`);
-        return;
-    }
-
     const form = document.getElementById('requisicoes-purchase-form');
     const send = async () => {
+        let reasonId = null;
+        if (locked) {
+            reasonId = await resolveRequisicoesImplantacaoPurchaseReasonId();
+            if (!reasonId) {
+                throw new Error(`Motivo "Implantação" não encontrado no cadastro. ${requisicoesPurchaseSqlHint()}`);
+            }
+        } else {
+            reasonId = Number(document.getElementById('requisicoes-purchase-reason')?.value) || null;
+            if (!reasonId) {
+                throw new Error(`Selecione o motivo. ${requisicoesPurchaseSqlHint()}`);
+            }
+            const reasons = await loadRequisicoesPurchaseReasons();
+            const selected = reasons.find(item => Number(item.id) === reasonId);
+            if (isRequisicoesPurchaseImplantacaoReason(selected)) {
+                throw new Error('O motivo Implantação só pode ser usado pelo fluxo de implantação.');
+            }
+        }
+
         const uploaded = await uploadRequisicoesPurchaseFile(file, orderProjectId);
         const extras = {
             purchaseReasonId: reasonId,

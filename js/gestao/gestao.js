@@ -28,7 +28,7 @@ function setGestaoProjectFormLoading(active, message = 'Processando...', status 
 function waitGestaoProjectFormStatus(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons'];
 
 function resolveGestaoCadastroSaveHost(anchor) {
     const element = anchor?.nodeType === 1 ? anchor : document.getElementById(anchor);
@@ -116,6 +116,7 @@ function setGestaoNavActive(navKey) {
     const navMap = {
         pedido: document.getElementById('gestao-nav-pedido'),
         'alterar-status-projeto': document.getElementById('gestao-nav-alterar-status-projeto'),
+        'agrupar-projetos': document.getElementById('gestao-nav-agrupar-projetos'),
         clientes: document.getElementById('gestao-nav-clientes'),
         architects: document.getElementById('gestao-nav-architects'),
         addr: document.getElementById('gestao-nav-addr'),
@@ -183,6 +184,14 @@ function updateGestaoCadastrosNavVisibility() {
     }
     if (typeof updateGestaoCommercialFinanceNavVisibility === 'function') {
         updateGestaoCommercialFinanceNavVisibility();
+    }
+
+    const agruparBtn = document.getElementById('gestao-nav-agrupar-projetos');
+    if (agruparBtn) {
+        const canAgrupar = typeof canManageOrderProjectAggregator === 'function'
+            && canManageOrderProjectAggregator();
+        agruparBtn.classList.toggle('hidden', !canAgrupar);
+        agruparBtn.style.display = canAgrupar ? '' : 'none';
     }
 }
 
@@ -314,6 +323,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-project-form-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-alterar-status-projeto-panel')?.classList.add('hidden');
+    document.getElementById('gestao-agrupar-projetos-panel')?.classList.add('hidden');
     document.getElementById('gestao-create-detailing-panel')?.classList.add('hidden');
     document.getElementById('gestao-clientes-panel')?.classList.add('hidden');
     document.getElementById('gestao-architects-panel')?.classList.add('hidden');
@@ -875,10 +885,16 @@ function renderGestaoProjectsSummaryList() {
         const phaseDeliveryLabel = isPhasedOrder && typeof getGestaoProjectPhaseDeliveryDisplay === 'function'
             ? getGestaoProjectPhaseDeliveryDisplay(project)
             : '—';
+        const isAggregator = typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project);
+        const aggregatorBadge = typeof renderAggregatorProjectNoticeHtml === 'function'
+            ? renderAggregatorProjectNoticeHtml(project)
+            : '';
         const tr = document.createElement('tr');
         tr.className = 'gestao-project-summary-row';
         tr.innerHTML = `
-            <td class="p-3 font-medium text-slate-800">${escapeHtml(project.name || '—')}</td>
+            <td class="p-3 font-medium text-slate-800">
+                <span class="inline-flex flex-wrap items-center gap-1.5">${escapeHtml(project.name || '—')}${aggregatorBadge}</span>
+            </td>
             <td class="p-3">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>
             </td>
@@ -890,9 +906,10 @@ function renderGestaoProjectsSummaryList() {
                     <button type="button" class="gestao-view-project-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium">
                         Detalhes
                     </button>
+                    ${isAggregator ? '' : `
                     <button type="button" class="gestao-edit-project-btn text-xs bg-white border border-indigo-200 text-indigo-800 hover:bg-indigo-50 px-2.5 py-1 rounded-lg font-medium">
                         Editar
-                    </button>
+                    </button>`}
                 </div>
             </td>
         `;
@@ -925,6 +942,14 @@ function setGestaoOrderProjectsDraft(projects = []) {
 
 async function openGestaoProjectForm(index = null) {
     if (!canAccessGestao()) return;
+
+    if (index != null
+        && gestaoOrderProjectsDraft[index]
+        && typeof isOrderProjectAggregator === 'function'
+        && isOrderProjectAggregator(gestaoOrderProjectsDraft[index])) {
+        alertAppDialog('Projetos agrupadores não podem ser editados. Altere status e demais fluxos pelo agrupador nas pendências.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
 
     editingGestaoProjectDraftIndex = index;
     await loadGestaoFormOptions();
@@ -976,6 +1001,16 @@ function saveGestaoProjectDraft(event) {
 
 async function saveGestaoProjectDraftAsync() {
     const project = collectGestaoProjectFormData();
+    const existingDraft = editingGestaoProjectDraftIndex != null
+        ? gestaoOrderProjectsDraft[editingGestaoProjectDraftIndex]
+        : null;
+
+    if (existingDraft
+        && typeof isOrderProjectAggregator === 'function'
+        && isOrderProjectAggregator(existingDraft)) {
+        alertAppDialog('Projetos agrupadores não podem ser editados.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
 
     if (typeof collectGestaoProjectCharacteristicsFormSelection === 'function'
         && typeof validateGestaoProjectCharacteristicsSelection === 'function') {
@@ -1310,6 +1345,20 @@ function showGestaoAlterarStatusProjetoPanel() {
     }
 }
 
+function showGestaoAgruparProjetosPanel() {
+    if (typeof canManageOrderProjectAggregator === 'function' && !canManageOrderProjectAggregator()) {
+        alertAppDialog('Sem permissão para agrupar projetos.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    hideAllGestaoPanels();
+    document.getElementById('gestao-agrupar-projetos-panel')?.classList.remove('hidden');
+    setGestaoNavActive('agrupar-projetos');
+    if (typeof initGestaoAgruparProjetosPanel === 'function') {
+        initGestaoAgruparProjetosPanel();
+    }
+}
+
 function showGestaoClientesPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-clientes-panel')?.classList.remove('hidden');
@@ -1563,6 +1612,10 @@ function bindGestaoEvents() {
     document.getElementById('gestao-nav-alterar-status-projeto')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoAlterarStatusProjetoPanel();
+    });
+    document.getElementById('gestao-nav-agrupar-projetos')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoAgruparProjetosPanel();
     });
     document.getElementById('gestao-nav-clientes')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
