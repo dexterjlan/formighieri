@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '1.0.94';
+const APP_CACHE_VERSION = '1.0.95';
 
 const AUTH_PARTIALS = [
     'partials/login.html',
