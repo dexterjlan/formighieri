@@ -1,5 +1,23 @@
 const PROGRAMACOES_DELIVERIES_STATUS_START = 'Aguardando Projeto Técnico';
 const PROGRAMACOES_DELIVERIES_STATUS_END = 'Expedição';
+const PROGRAMACOES_DELIVERIES_TABLE_ID = 'programacoes-entregas';
+
+const PROGRAMACOES_DELIVERIES_EXPORT_HEADERS = [
+    'Pedido',
+    'Cliente',
+    'Projeto',
+    'Status',
+    'Data Entrega',
+    'Consultor',
+    'Projetista',
+    'Mês Prog. Prod.'
+];
+
+let programacoesDeliveriesTableCache = {
+    rows: [],
+    columns: [],
+    defaultSort: []
+};
 
 async function getProgramacoesDeliveriesStatusRange() {
     const { data: statuses, error } = await supabaseClient
@@ -122,6 +140,134 @@ async function fetchProgramacoesDeliveriesProjects() {
     return { ...result, data: projects };
 }
 
+function mapProgramacoesDeliveriesTableRow(project, phasesByOrderId = {}) {
+    const statusName = typeof getPendenciasProjectStatusName === 'function'
+        ? getPendenciasProjectStatusName(project)
+        : (project?.projectStatus?.name || '—');
+    const clientDeliveryDate = typeof getProgramacoesClientDeliveryDate === 'function'
+        ? getProgramacoesClientDeliveryDate(project, phasesByOrderId)
+        : (project?.order?.clientDeliveryDate || null);
+    const deliveryLabel = formatProgramacoesDeliveriesDeliveryLabel(project, phasesByOrderId);
+    const clientDeliveryPhase = typeof getProgramacoesClientDeliveryPhase === 'function'
+        ? getProgramacoesClientDeliveryPhase(project, phasesByOrderId)
+        : null;
+    const clientDeliveryPhaseName = clientDeliveryPhase?.name
+        || (phasesByOrderId[Number(project?.orderId)]?.length === 1
+            ? phasesByOrderId[Number(project.orderId)][0]?.name
+            : '');
+    const productionMonth = project?.productionMonth || null;
+    const productionMonthLabel = typeof formatProgramacoesProductionMonthLabel === 'function'
+        ? formatProgramacoesProductionMonthLabel(productionMonth)
+        : '—';
+    const consultantName = typeof getOrderConsultantNameFromRecord === 'function'
+        ? (getOrderConsultantNameFromRecord(project?.order) || '—')
+        : (project?.order?.consultor?.name || '—');
+
+    const base = {
+        id: project.id,
+        orderCode: project?.order?.orderCode || '—',
+        clientName: project?.order?.client?.name || '—',
+        projectName: project?.name || '—',
+        statusName,
+        deliveryLabel,
+        deliveryDate: clientDeliveryDate,
+        clientDeliveryPhaseName: String(clientDeliveryPhaseName || '').trim(),
+        consultantName,
+        designerName: project?.designer?.name || '—',
+        productionMonth,
+        productionMonthLabel
+    };
+
+    return typeof mapPendenciasInteractiveIdentity === 'function'
+        ? mapPendenciasInteractiveIdentity(project, base)
+        : base;
+}
+
+function buildProgramacoesDeliveriesTableRows(projects = [], phasesByOrderId = {}) {
+    return (projects || []).map(project => mapProgramacoesDeliveriesTableRow(project, phasesByOrderId));
+}
+
+function buildProgramacoesDeliveriesExportRow(row) {
+    return [
+        row.orderCode === '—' ? '' : (row.orderCode || ''),
+        row.clientName === '—' ? '' : (row.clientName || ''),
+        row.projectName === '—' ? '' : (row.projectName || ''),
+        row.statusName === '—' ? '' : (row.statusName || ''),
+        row.deliveryLabel === '—' ? '' : (row.deliveryLabel || ''),
+        row.consultantName === '—' ? '' : (row.consultantName || ''),
+        row.designerName === '—' ? '' : (row.designerName || ''),
+        row.productionMonthLabel === '—' ? '' : (row.productionMonthLabel || '')
+    ];
+}
+
+function getProgramacoesDeliveriesExportFilename() {
+    const today = typeof getTodayInputDate === 'function'
+        ? getTodayInputDate()
+        : new Date().toISOString().slice(0, 10);
+    return `fgp-programacoes-entregas-${today}.xlsx`;
+}
+
+function getProgramacoesDeliveriesExportVisibleRows() {
+    const { rows, columns, defaultSort } = programacoesDeliveriesTableCache;
+    if (!rows.length) return [];
+
+    const state = typeof getInteractiveTableState === 'function'
+        ? getInteractiveTableState(PROGRAMACOES_DELIVERIES_TABLE_ID, defaultSort, columns)
+        : { filters: {}, sorts: defaultSort || [] };
+
+    return typeof getInteractiveTableVisibleRows === 'function'
+        ? getInteractiveTableVisibleRows(rows, columns, state)
+        : rows;
+}
+
+async function exportProgramacoesDeliveriesToExcel() {
+    const button = document.getElementById('btn-programacoes-deliveries-export');
+    const originalLabel = button?.textContent || 'Exportar Excel';
+
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Exportando...';
+    }
+
+    try {
+        if (typeof loadSheetJsLibrary !== 'function') {
+            throw new Error('Módulo de Excel não carregado.');
+        }
+
+        const visibleRows = getProgramacoesDeliveriesExportVisibleRows();
+        if (!visibleRows.length) {
+            alertAppDialog('Nenhum registro para exportar.', { variant: 'warning', title: 'Aviso' });
+            return;
+        }
+
+        const dataRows = visibleRows.map(buildProgramacoesDeliveriesExportRow);
+        const XLSX = await loadSheetJsLibrary();
+        const sheet = XLSX.utils.aoa_to_sheet([PROGRAMACOES_DELIVERIES_EXPORT_HEADERS, ...dataRows]);
+        sheet['!cols'] = [
+            { wch: 12 },
+            { wch: 28 },
+            { wch: 28 },
+            { wch: 24 },
+            { wch: 22 },
+            { wch: 20 },
+            { wch: 20 },
+            { wch: 16 }
+        ];
+
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, sheet, 'Entregas');
+        XLSX.writeFile(workbook, getProgramacoesDeliveriesExportFilename());
+    } catch (error) {
+        console.error('exportProgramacoesDeliveriesToExcel:', error);
+        alertAppDialog(`Erro ao exportar Excel: ${error.message}`, { variant: 'error', title: 'Erro' });
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = originalLabel;
+        }
+    }
+}
+
 function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) {
     const content = document.getElementById('programacoes-content');
     if (!content) return;
@@ -130,48 +276,7 @@ function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) 
         ? getProgramacoesLockedDesigner()
         : null;
 
-    const rows = projects.map(project => {
-        const statusName = typeof getPendenciasProjectStatusName === 'function'
-            ? getPendenciasProjectStatusName(project)
-            : (project?.projectStatus?.name || '—');
-        const clientDeliveryDate = typeof getProgramacoesClientDeliveryDate === 'function'
-            ? getProgramacoesClientDeliveryDate(project, phasesByOrderId)
-            : (project?.order?.clientDeliveryDate || null);
-        const deliveryLabel = formatProgramacoesDeliveriesDeliveryLabel(project, phasesByOrderId);
-        const clientDeliveryPhase = typeof getProgramacoesClientDeliveryPhase === 'function'
-            ? getProgramacoesClientDeliveryPhase(project, phasesByOrderId)
-            : null;
-        const clientDeliveryPhaseName = clientDeliveryPhase?.name
-            || (phasesByOrderId[Number(project?.orderId)]?.length === 1
-                ? phasesByOrderId[Number(project.orderId)][0]?.name
-                : '');
-        const productionMonth = project?.productionMonth || null;
-        const productionMonthLabel = typeof formatProgramacoesProductionMonthLabel === 'function'
-            ? formatProgramacoesProductionMonthLabel(productionMonth)
-            : '—';
-        const consultantName = typeof getOrderConsultantNameFromRecord === 'function'
-            ? (getOrderConsultantNameFromRecord(project?.order) || '—')
-            : (project?.order?.consultor?.name || '—');
-
-        const base = {
-            id: project.id,
-            orderCode: project?.order?.orderCode || '—',
-            clientName: project?.order?.client?.name || '—',
-            projectName: project?.name || '—',
-            statusName,
-            deliveryLabel,
-            deliveryDate: clientDeliveryDate,
-            clientDeliveryPhaseName: String(clientDeliveryPhaseName || '').trim(),
-            consultantName,
-            designerName: project?.designer?.name || '—',
-            productionMonth,
-            productionMonthLabel
-        };
-
-        return typeof mapPendenciasInteractiveIdentity === 'function'
-            ? mapPendenciasInteractiveIdentity(project, base)
-            : base;
-    });
+    const rows = buildProgramacoesDeliveriesTableRows(projects, phasesByOrderId);
 
     const columns = [
         {
@@ -247,6 +352,15 @@ function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) 
         }
     ];
 
+    const defaultSort = [
+        { key: 'deliveryLabel', direction: 'asc' },
+        { key: 'clientName', direction: 'asc' },
+        { key: 'orderCode', direction: 'asc' },
+        { key: 'projectName', direction: 'asc' }
+    ];
+
+    programacoesDeliveriesTableCache = { rows, columns, defaultSort };
+
     if (typeof renderPendenciasInteractiveTableScreen !== 'function') {
         content.innerHTML = '<p class="text-xs text-red-500 text-center py-8 px-4">Componente de tabela indisponível.</p>';
         return;
@@ -258,19 +372,18 @@ function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) 
             ? 'Projetos em andamento (do aguardando projeto técnico até expedição) sob sua responsabilidade.'
             : 'Projetos entre Aguardando Projeto Técnico e Expedição.',
         refreshButtonId: 'btn-programacoes-refresh-deliveries',
-        headerActionsHtml: typeof PROGRAMACOES_FULLSCREEN_BUTTON_HTML === 'string'
-            ? PROGRAMACOES_FULLSCREEN_BUTTON_HTML
-            : '',
+        headerActionsHtml: `
+            <button type="button" id="btn-programacoes-deliveries-export"
+                class="order-tab-action-btn text-xs bg-white border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-50">
+                Exportar Excel
+            </button>
+            ${typeof PROGRAMACOES_FULLSCREEN_BUTTON_HTML === 'string' ? PROGRAMACOES_FULLSCREEN_BUTTON_HTML : ''}
+        `,
         onRefresh: loadProgramacoesDeliveries,
-        tableId: 'programacoes-entregas',
+        tableId: PROGRAMACOES_DELIVERIES_TABLE_ID,
         rows,
         columns,
-        defaultSort: [
-            { key: 'deliveryLabel', direction: 'asc' },
-            { key: 'clientName', direction: 'asc' },
-            { key: 'orderCode', direction: 'asc' },
-            { key: 'projectName', direction: 'asc' }
-        ],
+        defaultSort,
         minWidth: '72rem',
         emptyMessage: lockedDesigner
             ? 'Nenhum projeto seu nesta faixa de status.'
@@ -281,6 +394,9 @@ function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) 
             }
         }
     });
+
+    document.getElementById('btn-programacoes-deliveries-export')
+        ?.addEventListener('click', exportProgramacoesDeliveriesToExcel);
 }
 
 async function loadProgramacoesDeliveries(options = {}) {
