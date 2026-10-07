@@ -773,15 +773,17 @@ function orderProgramacaoProducaoHasMonthDefined(orderGroup) {
 }
 
 function applyProgramacaoProducaoOrderFilters(orders) {
-    const clientTerm = getProgramacaoProducaoClientFilter().toLocaleLowerCase('pt-BR');
+    const searchTerm = getProgramacaoProducaoClientFilter().toLocaleLowerCase('pt-BR');
     const hideWithMonth = getProgramacaoProducaoHideWithMonth();
 
     return (orders || []).filter(order => {
         if (hideWithMonth && orderProgramacaoProducaoHasMonthDefined(order)) return false;
-        if (clientTerm) {
+        if (searchTerm) {
             const name = String(order.clientName || getOrderClientName(order.order) || '')
                 .toLocaleLowerCase('pt-BR');
-            if (!name.includes(clientTerm)) return false;
+            const orderCode = String(order.orderCode || order.order?.orderCode || '')
+                .toLocaleLowerCase('pt-BR');
+            if (!name.includes(searchTerm) && !orderCode.includes(searchTerm)) return false;
         }
         return true;
     });
@@ -870,7 +872,7 @@ function renderProgramacaoProducaoProjectTreeRows(projectTree) {
             ? getOrderProjectStatusBadgeClass(statusName)
             : 'bg-slate-100 text-slate-700';
         const label = typeof getGestaoRelatorioProjectLabel === 'function'
-            ? getGestaoRelatorioProjectLabel(project)
+            ? getGestaoRelatorioProjectLabel(project, { includeProjectCode: false })
             : (project?.name || '—');
         const labelHtml = parentPending && typeof renderAggregatorProjectNoticeHtml === 'function'
             ? `<span class="inline-flex flex-wrap items-center gap-1.5 min-w-0"><span class="truncate">${escapeHtml(label)}</span>${renderAggregatorProjectNoticeHtml(project)}</span>`
