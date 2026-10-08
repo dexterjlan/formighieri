@@ -1574,7 +1574,7 @@
                     <div id="gestao-agrupar-projetos-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h3 class="font-bold text-sm text-slate-900">Agrupar Projetos</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Crie um agrupador no pedido e vincule ambientes no mesmo status e na mesma data de entrega (de Aguardando Projeto Técnico até Aguardando Aprovação). O agrupador não possui valor de venda.</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Crie um agrupador no pedido e vincule ambientes com o mesmo projetista, o mesmo status e a mesma data de entrega do pedido, ou da fase quando houver (de Aguardando Projeto Técnico até Aguardando Aprovação). O agrupador não possui valor de venda.</p>
                         </div>
                         <div class="p-4 md:p-5 space-y-4">
                             <div class="relative z-30 max-w-xl border border-slate-200 rounded-xl p-3 bg-slate-50/40" id="gestao-agrupar-projetos-order-wrap">
@@ -1600,7 +1600,7 @@
                                 <div class="p-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-2">
                                     <div class="space-y-0.5">
                                         <span class="text-xs text-slate-500 block" id="gestao-agrupar-projetos-count">Nenhum pedido carregado</span>
-                                        <span class="text-[10px] text-slate-400 block" id="gestao-agrupar-projetos-status-hint">Selecione ao menos dois projetos com o mesmo status.</span>
+                                        <span class="text-[10px] text-slate-400 block" id="gestao-agrupar-projetos-status-hint">Selecione ao menos dois projetos com o mesmo projetista, o mesmo status e a mesma data de entrega.</span>
                                     </div>
                                     <button type="button" id="gestao-agrupar-projetos-save" disabled
                                         class="text-xs bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -1612,14 +1612,15 @@
                                         <tr>
                                             <th class="p-3 font-semibold w-10"></th>
                                             <th class="text-left p-3 font-semibold">Ambiente</th>
+                                            <th class="text-left p-3 font-semibold">Projetista</th>
                                             <th class="text-left p-3 font-semibold">Código</th>
-                                            <th class="text-left p-3 font-semibold">Entrega</th>
+                                            <th class="text-left p-3 font-semibold">Entrega pedido</th>
                                             <th class="text-left p-3 font-semibold">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody id="gestao-agrupar-projetos-list" class="divide-y divide-slate-100">
                                         <tr>
-                                            <td colspan="5" class="p-6 text-center text-xs text-slate-500">
+                                            <td colspan="6" class="p-6 text-center text-xs text-slate-500">
                                                 Selecione um pedido para ver os ambientes.
                                             </td>
                                         </tr>

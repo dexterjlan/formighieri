@@ -2,17 +2,7 @@ let medicoesCache = [];
 let editingMedicaoId = null;
 let medicaoPickerPreselectProjectId = null;
 
-const MEDICAO_ELIGIBLE_STATUSES_UP_TO_PT = [
-    'Vendido',
-    'Aguardando Obra',
-    'Aguardando Medição',
-    'Medição Realizada',
-    'Planta Levantada',
-    'Conferência Enviada',
-    'Conferência Realizada',
-    'Aguardando Projeto Técnico',
-    'Projeto Técnico'
-];
+const MEDICAO_EXPEDICAO_SORT_ORDER = 20;
 const MEDICAO_EDITABLE_PROJECT_STATUSES = ['Medição Realizada', 'Planta Levantada'];
 const MEDICAO_REALIZADA_SOURCE_STATUSES = [
     'Vendido',
@@ -29,19 +19,21 @@ function getProjectStatusName(project) {
 }
 
 function isProjectEligibleForNewMedicaoPicker(project) {
-    const statusName = getProjectStatusName(project);
-    if (statusName) {
-        return MEDICAO_ELIGIBLE_STATUSES_UP_TO_PT.includes(statusName);
-    }
     const sortOrder = Number(project?.projectStatus?.sortOrder);
-    if (sortOrder > 0) {
-        return sortOrder <= 9;
+    if (Number.isFinite(sortOrder) && sortOrder > 0) {
+        // Expedição (20) e qualquer status posterior.
+        return sortOrder <= MEDICAO_EXPEDICAO_SORT_ORDER || sortOrder > MEDICAO_EXPEDICAO_SORT_ORDER;
     }
     return true;
 }
 
 function filterProjectsForMedicaoPicker(projects) {
-    return projects.filter(isProjectEligibleForNewMedicaoPicker);
+    return projects.filter(project => {
+        if (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)) {
+            return false;
+        }
+        return isProjectEligibleForNewMedicaoPicker(project);
+    });
 }
 
 async function getMedicaoRealizadaStatusId() {
@@ -93,7 +85,7 @@ async function enrichProjectsWithStatus(projects) {
 
     const { data: statuses, error } = await supabaseClient
         .from('OrderProjectStatus')
-        .select('id, name')
+        .select('id, name, sortOrder')
         .in('id', statusIds);
 
     if (error) {
@@ -114,7 +106,7 @@ async function fetchOrderProjectsWithStatusForMedicao(orderId) {
 
     let result = await supabaseClient
         .from('OrderProject')
-        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name)')
+        .select('*, environmentType:EnvironmentType(name), projectStatus:OrderProjectStatus(id, name, sortOrder)')
         .eq('orderId', normalizedId)
         .order('name', { ascending: true });
 
@@ -513,6 +505,12 @@ function renderMeasurementProjectEditRow(project, medicaoProject) {
     return row;
 }
 
+function isMedicaoProjectPickerLocked(project) {
+    if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) return true;
+    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) return true;
+    return false;
+}
+
 function renderMeasurementProjectPickerRow(project, selected = null, defaultDate = '', allowPlantaLevantada = false) {
     const env = project.environmentType?.name ? ` (${project.environmentType.name})` : '';
     const checked = Boolean(selected);
@@ -545,7 +543,7 @@ function renderMeasurementProjectPickerRow(project, selected = null, defaultDate
         <div class="flex flex-wrap items-center gap-2">
             <label class="flex items-center gap-2 flex-1 min-w-[180px] text-xs text-slate-700">
                 <input type="checkbox" class="medicao-project-check h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                    ${checked ? 'checked' : ''} ${!canActOnOrderProject(project) ? 'disabled' : ''}>
+                    ${checked ? 'checked' : ''} ${isMedicaoProjectPickerLocked(project) ? 'disabled' : ''}>
                 <span class="font-medium">${escapeHtml(project.name)}${escapeHtml(env)}</span>
                 ${renderComplementarProjectNoticeHtml(project)}
                 ${renderReplacedProjectNoticeHtml(project)}
@@ -660,7 +658,7 @@ async function populateMeasurementProjectsPicker(medicao = null) {
     if (!projects.length) {
         emptyMsg?.classList.remove('hidden');
         if (emptyMsg) {
-            emptyMsg.textContent = 'Nenhum projeto com status até Projeto Técnico neste pedido.';
+            emptyMsg.textContent = 'Nenhum projeto disponível para medição neste pedido.';
         }
         return;
     }
@@ -778,7 +776,7 @@ async function openMeasurementModal(measurementId = null, options = {}) {
     if (hintEl) {
         hintEl.textContent = medicao
             ? 'Altere a observação e marque planta levantada nos projetos já medidos nesta medição.'
-            : 'Marque os projetos com status até Projeto Técnico e informe a data da medição de cada um.';
+            : 'Marque os projetos e informe a data da medição de cada um. Projetos agrupadores não entram na lista.';
     }
 
     toggleModal('medicao-modal', true);

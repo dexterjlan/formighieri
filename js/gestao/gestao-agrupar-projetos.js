@@ -1,7 +1,9 @@
 let gestaoAgruparProjetosOrderCache = null;
+let gestaoAgruparProjetosPhases = [];
 let gestaoAgruparProjetosEligibleCache = [];
 let gestaoAgruparProjetosSelectedStatusId = null;
 let gestaoAgruparProjetosSelectedDeliveryKey = null;
+let gestaoAgruparProjetosSelectedDesignerKey = null;
 const gestaoAgruparProjetosSelectedIds = new Set();
 let gestaoAgruparProjetosOrders = [];
 let gestaoAgruparProjetosSelectedOrderId = null;
@@ -83,15 +85,66 @@ async function loadGestaoAgruparProjetosOrderOptions() {
     renderGestaoAgruparProjetosOrderOptions();
 }
 
+function getGestaoAgruparProjetosDesignerKey(project) {
+    const designerId = Number(project?.designerId);
+    return designerId > 0 ? String(designerId) : '';
+}
+
 function clearGestaoAgruparProjetosProjectSelection() {
     gestaoAgruparProjetosSelectedStatusId = null;
     gestaoAgruparProjetosSelectedDeliveryKey = null;
+    gestaoAgruparProjetosSelectedDesignerKey = null;
     gestaoAgruparProjetosSelectedIds.clear();
+}
+
+function getGestaoAgruparProjetosDelivery(project) {
+    const phases = gestaoAgruparProjetosPhases || [];
+    if (phases.length) {
+        const phaseId = Number(project?.deliveryPhaseId);
+        const phase = phases.find(item => Number(item.id) === phaseId)
+            || (phases.length === 1 ? phases[0] : null);
+        return {
+            date: phase?.deliveryDate || null,
+            phase
+        };
+    }
+
+    return {
+        date: gestaoAgruparProjetosOrderCache?.clientDeliveryDate || null,
+        phase: null
+    };
+}
+
+function getGestaoAgruparProjetosDeliveryKey(project) {
+    return normalizeOrderProjectDeliveryDateKey(getGestaoAgruparProjetosDelivery(project).date);
+}
+
+async function loadGestaoAgruparProjetosDeliveryContext(orderId) {
+    const normalizedOrderId = Number(orderId);
+    gestaoAgruparProjetosPhases = [];
+    if (!normalizedOrderId) return;
+
+    const [phases, orderResult] = await Promise.all([
+        typeof fetchGestaoOrderPhases === 'function'
+            ? fetchGestaoOrderPhases(normalizedOrderId)
+            : Promise.resolve([]),
+        supabaseClient
+            .from('salesOrders')
+            .select('id, clientDeliveryDate')
+            .eq('id', normalizedOrderId)
+            .maybeSingle()
+    ]);
+
+    gestaoAgruparProjetosPhases = phases || [];
+    if (gestaoAgruparProjetosOrderCache && !orderResult.error && orderResult.data) {
+        gestaoAgruparProjetosOrderCache.clientDeliveryDate = orderResult.data.clientDeliveryDate || null;
+    }
 }
 
 function clearGestaoAgruparProjetosOrderSelection() {
     gestaoAgruparProjetosSelectedOrderId = null;
     gestaoAgruparProjetosOrderCache = null;
+    gestaoAgruparProjetosPhases = [];
     gestaoAgruparProjetosEligibleCache = [];
     clearGestaoAgruparProjetosProjectSelection();
     const summaryEl = document.getElementById('gestao-agrupar-projetos-order-summary');
@@ -122,8 +175,10 @@ function getGestaoAgruparProjetosIneligibleReason(project, eligibleStatusIds) {
     if (!isOrderProjectEligibleForAggregation(project, eligibleStatusIds)) {
         return `Fora do intervalo ${ORDER_PROJECT_AGGREGATOR_STATUS_START} até ${ORDER_PROJECT_AGGREGATOR_STATUS_END}`;
     }
-    if (!normalizeOrderProjectDeliveryDateKey(project.deliveryDate)) {
-        return 'Sem data de entrega';
+    if (!getGestaoAgruparProjetosDeliveryKey(project)) {
+        return gestaoAgruparProjetosPhases.length
+            ? 'Sem data de entrega da fase'
+            : 'Sem data de entrega do pedido';
     }
     return '';
 }
@@ -145,7 +200,7 @@ function renderGestaoAgruparProjetosList() {
 
     if (hintEl) {
         if (!gestaoAgruparProjetosSelectedStatusId) {
-            hintEl.textContent = 'Selecione ao menos dois projetos com o mesmo status e a mesma data de entrega.';
+            hintEl.textContent = 'Selecione ao menos dois projetos com o mesmo projetista, o mesmo status e a mesma data de entrega do pedido ou da fase.';
         } else {
             const statusName = orderProjectAggregatorEligibleStatusIdsCache?.statusById?.[gestaoAgruparProjetosSelectedStatusId]?.name
                 || '—';
@@ -154,14 +209,16 @@ function renderGestaoAgruparProjetosList() {
                     ? formatGestaoDate(gestaoAgruparProjetosSelectedDeliveryKey)
                     : gestaoAgruparProjetosSelectedDeliveryKey)
                 : '—';
-            hintEl.textContent = `Somente projetos em "${statusName}" com entrega em ${deliveryLabel} podem ser selecionados.`;
+            const selectedProject = projects.find(project => gestaoAgruparProjetosSelectedIds.has(Number(project.id)));
+            const designerName = selectedProject?.designer?.name || 'sem projetista';
+            hintEl.textContent = `Somente projetos de ${designerName}, em "${statusName}", com entrega em ${deliveryLabel} podem ser selecionados.`;
         }
     }
 
     if (!gestaoAgruparProjetosOrderCache) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" class="p-6 text-center text-xs text-slate-500">
+                <td colspan="6" class="p-6 text-center text-xs text-slate-500">
                     ${escapeHtml(GESTAO_AGRUPAR_PROJETOS_EMPTY_ORDER_MESSAGE)}
                 </td>
             </tr>
@@ -173,7 +230,7 @@ function renderGestaoAgruparProjetosList() {
     if (!projects.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" class="p-6 text-center text-xs text-slate-500">
+                <td colspan="6" class="p-6 text-center text-xs text-slate-500">
                     Nenhum projeto encontrado neste pedido.
                 </td>
             </tr>
@@ -186,15 +243,20 @@ function renderGestaoAgruparProjetosList() {
         const reason = getGestaoAgruparProjetosIneligibleReason(project, eligibleStatusIds);
         const statusName = getOrderProjectStatusName(project);
         const statusId = Number(project.statusId || project.projectStatus?.id);
-        const deliveryKey = normalizeOrderProjectDeliveryDateKey(project.deliveryDate);
+        const delivery = getGestaoAgruparProjetosDelivery(project);
+        const deliveryKey = normalizeOrderProjectDeliveryDateKey(delivery.date);
         const deliveryLabel = typeof formatGestaoDate === 'function'
-            ? formatGestaoDate(project.deliveryDate)
+            ? formatGestaoDate(delivery.date)
             : (deliveryKey || '—');
+        const phaseLabel = delivery.phase?.name || '';
+        const designerKey = getGestaoAgruparProjetosDesignerKey(project);
         const statusMismatch = gestaoAgruparProjetosSelectedStatusId
             && statusId !== gestaoAgruparProjetosSelectedStatusId;
         const deliveryMismatch = gestaoAgruparProjetosSelectedDeliveryKey
             && deliveryKey !== gestaoAgruparProjetosSelectedDeliveryKey;
-        const disabled = Boolean(reason) || statusMismatch || deliveryMismatch;
+        const designerMismatch = gestaoAgruparProjetosSelectedDesignerKey !== null
+            && designerKey !== gestaoAgruparProjetosSelectedDesignerKey;
+        const disabled = Boolean(reason) || statusMismatch || deliveryMismatch || designerMismatch;
         const checked = !disabled && gestaoAgruparProjetosSelectedIds.has(Number(project.id));
 
         return `
@@ -205,12 +267,17 @@ function renderGestaoAgruparProjetosList() {
                         data-project-id="${project.id}"
                         data-status-id="${statusId}"
                         data-delivery-key="${escapeHtml(deliveryKey)}"
+                        data-designer-key="${escapeHtml(designerKey)}"
                         ${disabled ? 'disabled' : ''}
                         ${checked ? 'checked' : ''}>
                 </td>
                 <td class="p-3 text-xs text-slate-800">${escapeHtml(project.name || '—')}</td>
+                <td class="p-3 text-xs text-slate-600">${escapeHtml(project.designer?.name || '—')}</td>
                 <td class="p-3 font-mono text-xs text-slate-600">${escapeHtml(project.projectCode || '—')}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(deliveryLabel)}</td>
+                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">
+                    ${escapeHtml(deliveryLabel)}
+                    ${phaseLabel ? `<div class="text-[10px] text-slate-400 mt-0.5">${escapeHtml(phaseLabel)}</div>` : ''}
+                </td>
                 <td class="p-3 text-xs text-slate-600">
                     ${escapeHtml(statusName)}
                     ${reason ? `<div class="text-[10px] text-amber-700 mt-0.5">${escapeHtml(reason)}</div>` : ''}
@@ -224,13 +291,17 @@ function renderGestaoAgruparProjetosList() {
             const projectId = Number(input.dataset.projectId);
             const statusId = Number(input.dataset.statusId);
             const deliveryKey = String(input.dataset.deliveryKey || '').trim();
+            const designerKey = input.dataset.designerKey || '';
 
             if (input.checked) {
                 if (!gestaoAgruparProjetosSelectedStatusId) {
                     gestaoAgruparProjetosSelectedStatusId = statusId;
                 }
-                if (!gestaoAgruparProjetosSelectedDeliveryKey && deliveryKey) {
+                if (gestaoAgruparProjetosSelectedDeliveryKey === null && deliveryKey) {
                     gestaoAgruparProjetosSelectedDeliveryKey = deliveryKey;
+                }
+                if (gestaoAgruparProjetosSelectedDesignerKey === null) {
+                    gestaoAgruparProjetosSelectedDesignerKey = designerKey;
                 }
                 gestaoAgruparProjetosSelectedIds.add(projectId);
             } else {
@@ -238,6 +309,7 @@ function renderGestaoAgruparProjetosList() {
                 if (!gestaoAgruparProjetosSelectedIds.size) {
                     gestaoAgruparProjetosSelectedStatusId = null;
                     gestaoAgruparProjetosSelectedDeliveryKey = null;
+                    gestaoAgruparProjetosSelectedDesignerKey = null;
                 }
             }
 
@@ -256,7 +328,8 @@ async function fetchGestaoAgruparProjetosProjectsForOrder(orderId) {
     }
 
     const selectVariants = [
-        'id, orderId, projectCode, name, statusId, deliveryDate, environmentTypeId, designerId, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, isAggregator, aggregatorOrderProjectId, projectStatus:OrderProjectStatus(id, name, sortOrder)',
+        'id, orderId, projectCode, name, statusId, deliveryDate, deliveryPhaseId, environmentTypeId, designerId, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, isAggregator, aggregatorOrderProjectId, designer:appUsers!OrderProject_designerId_fkey(id, name), projectStatus:OrderProjectStatus(id, name, sortOrder)',
+        'id, orderId, projectCode, name, statusId, deliveryDate, deliveryPhaseId, environmentTypeId, designerId, isComplementary, parentProjectId, isReplaced, replacedByProjectId, isReplacement, replacesProjectId, isAggregator, aggregatorOrderProjectId, projectStatus:OrderProjectStatus(id, name, sortOrder)',
         'id, orderId, projectCode, name, statusId, deliveryDate, environmentTypeId, designerId, isComplementary, parentProjectId, isReplaced, isReplacement, projectStatus:OrderProjectStatus(id, name, sortOrder)',
         'id, orderId, projectCode, name, statusId, deliveryDate, environmentTypeId, designerId, isComplementary, parentProjectId, projectStatus:OrderProjectStatus(id, name, sortOrder)'
     ];
@@ -283,7 +356,34 @@ async function fetchGestaoAgruparProjetosProjectsForOrder(orderId) {
         throw new Error(lastError.message);
     }
 
-    return projects;
+    return enrichGestaoAgruparProjetosDesigners(projects);
+}
+
+async function enrichGestaoAgruparProjetosDesigners(projects = []) {
+    const missingIds = [...new Set(projects
+        .filter(project => project.designerId && !project.designer?.name)
+        .map(project => Number(project.designerId))
+        .filter(Boolean))];
+
+    if (!missingIds.length) return projects;
+
+    const { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, name')
+        .in('id', missingIds);
+
+    if (error) {
+        console.warn('enrichGestaoAgruparProjetosDesigners:', error);
+        return projects;
+    }
+
+    const designerById = Object.fromEntries((data || []).map(designer => [Number(designer.id), designer]));
+    return projects.map(project => ({
+        ...project,
+        designer: project.designer?.name
+            ? project.designer
+            : (designerById[Number(project.designerId)] || null)
+    }));
 }
 
 async function selectGestaoAgruparProjetosOrder(orderId) {
@@ -310,10 +410,11 @@ async function selectGestaoAgruparProjetosOrder(orderId) {
     }
 
     gestaoAgruparProjetosOrderCache = order;
+    await loadGestaoAgruparProjetosDeliveryContext(order.id);
     if (tbody) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" class="p-6 text-center text-xs text-slate-400">Carregando projetos...</td>
+                <td colspan="6" class="p-6 text-center text-xs text-slate-400">Carregando projetos...</td>
             </tr>
         `;
     }
@@ -384,7 +485,7 @@ async function saveGestaoAgruparProjetos() {
     }
 
     if (selectedIds.length < 2) {
-        alertAppDialog('Selecione pelo menos dois projetos no mesmo status e com a mesma data de entrega.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Selecione pelo menos dois projetos com o mesmo projetista, o mesmo status e a mesma data de entrega do pedido ou da fase.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -400,10 +501,16 @@ async function saveGestaoAgruparProjetos() {
     }
 
     const deliveryKeys = [...new Set(
-        selectedProjects.map(project => normalizeOrderProjectDeliveryDateKey(project.deliveryDate))
+        selectedProjects.map(project => getGestaoAgruparProjetosDeliveryKey(project))
     )];
     if (deliveryKeys.length !== 1 || !deliveryKeys[0]) {
-        alertAppDialog('Todos os projetos selecionados devem ter a mesma data de entrega.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Todos os projetos selecionados devem ter a mesma data de entrega do pedido ou da fase.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const designerKeys = [...new Set(selectedProjects.map(project => getGestaoAgruparProjetosDesignerKey(project)))];
+    if (designerKeys.length !== 1) {
+        alertAppDialog('Todos os projetos selecionados devem ter o mesmo projetista.', { variant: 'warning', title: 'Aviso' });
         return;
     }
 
@@ -459,6 +566,14 @@ async function saveGestaoAgruparProjetos() {
         };
         if (sharedDesignerId) {
             insertPayload.designerId = sharedDesignerId;
+        }
+        if (gestaoAgruparProjetosPhases.length) {
+            const phaseIds = [...new Set(selectedProjects
+                .map(project => Number(getGestaoAgruparProjetosDelivery(project).phase?.id) || 0)
+                .filter(Boolean))];
+            if (phaseIds.length === 1) {
+                insertPayload.deliveryPhaseId = phaseIds[0];
+            }
         }
 
         let insertResult = await supabaseClient
@@ -519,6 +634,7 @@ async function saveGestaoAgruparProjetos() {
         if (nameInput) nameInput.value = '';
         gestaoAgruparProjetosSelectedStatusId = null;
         gestaoAgruparProjetosSelectedDeliveryKey = null;
+        gestaoAgruparProjetosSelectedDesignerKey = null;
         gestaoAgruparProjetosSelectedIds.clear();
         await reloadGestaoAgruparProjetosProjectsForSelectedOrder();
     });
