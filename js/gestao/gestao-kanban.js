@@ -115,6 +115,9 @@ function renderGestaoKanbanProjectRow(project, options = {}) {
         <div class="flex items-start justify-between gap-2 ${nested ? 'ml-4 pl-2 border-l border-indigo-100' : ''}">
             <div class="flex items-baseline gap-1.5 min-w-0 flex-wrap">
                 <span class="text-[11px] leading-snug ${nested ? 'text-slate-600' : 'text-slate-700'}"${aggregatorTooltip ? ` title="${escapeHtml(aggregatorTooltip)}"` : ''}>${escapeHtml(displayName)}</span>
+                ${typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(project)
+                    ? renderOrderProjectAwaitingRequestFlagHtml()
+                    : ''}
                 ${daysInStatusLabel
                     ? `<span class="text-[10px] text-slate-400 whitespace-nowrap" title="Dias no status atual">${escapeHtml(daysInStatusLabel)}</span>`
                     : ''}
@@ -1203,6 +1206,11 @@ async function loadGestaoKanban() {
     }
 
     gestaoOrdersCache = orders;
+
+    if (typeof attachOpenOrderProjectSubstatuses === 'function') {
+        const kanbanProjects = orders.flatMap(order => order.projects || []);
+        await attachOpenOrderProjectSubstatuses(kanbanProjects);
+    }
 
     const visibleStatuses = statuses.filter(status => !isReplacedStatusName(status.name));
 

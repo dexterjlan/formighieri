@@ -332,6 +332,9 @@ async function fetchPendenciasProjetoTecnicoProjects() {
     if (overviewMode) {
         projects = await enrichPendenciasProjectsWithDesigner(projects);
     }
+    if (typeof attachOpenOrderProjectSubstatuses === 'function') {
+        await attachOpenOrderProjectSubstatuses(projects);
+    }
 
     const approvalsByProject = await fetchCommercialApprovalsByProjectIds(
         projects.map(project => project.id),
@@ -352,11 +355,18 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
 
     const rows = (projects || []).map(project => {
         const approval = approvalsByProject[project.id];
+        const canManageSubstatus = typeof canManageOrderProjectAwaitingRequest === 'function'
+            && canManageOrderProjectAwaitingRequest(project);
+        const awaitingRequest = typeof isOrderProjectAwaitingRequest === 'function'
+            && isOrderProjectAwaitingRequest(project);
         return mapPendenciasInteractiveIdentity(project, {
             deliveryLabel: formatPendenciasDeliveryDate(project.deliveryDate),
             deliveryDate: project.deliveryDate,
             canSubmit: canSubmitCommercialApprovalFromPendencias(project, approval),
-            hasOpenApproval: Boolean(approval && !isCommercialApprovalApproved(approval))
+            hasOpenApproval: Boolean(approval && !isCommercialApprovalApproved(approval)),
+            canManageSubstatus,
+            awaitingRequest,
+            awaitingRequestSubstatusId: project.awaitingRequestSubstatusId || null
         });
     });
 
@@ -372,7 +382,7 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
         emptyMessage: overviewMode
             ? 'Nenhum projeto em projeto técnico.'
             : 'Nenhum projeto em projeto técnico associado a você.',
-        minWidth: overviewMode ? '920px' : '820px',
+        minWidth: overviewMode ? '1040px' : '960px',
         columns: [
             ...getPendenciasInteractiveIdentityColumns({ includeDesigner: overviewMode }),
             getPendenciasInteractiveDateColumn({
@@ -382,13 +392,28 @@ function renderPendenciasProjetoTecnicoList(projects, approvalsByProject, overvi
             }),
             getPendenciasInteractiveActionColumn({
                 label: 'Ações',
-                thClass: 'w-44',
-                render: (row) => row.canSubmit
-                    ? `<button type="button" onclick="submitCommercialApprovalFromPendencias(${row.id})"
-                        class="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium">Enviar para Aprovação</button>`
-                    : row.hasOpenApproval
-                        ? '<span class="text-xs text-amber-700">Aprovação em aberto</span>'
-                        : '<span class="text-xs text-slate-300">—</span>'
+                thClass: 'min-w-[18rem]',
+                render: (row) => {
+                    const approvalAction = row.awaitingRequest
+                        ? ''
+                        : row.canSubmit
+                            ? `<button type="button" onclick="submitCommercialApprovalFromPendencias(${row.id})"
+                                class="text-xs bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-2.5 py-1 rounded-lg font-medium">Enviar para Aprovação</button>`
+                            : row.hasOpenApproval
+                                ? '<span class="text-xs text-amber-700">Aprovação em aberto</span>'
+                                : '';
+                    const substatusAction = row.canManageSubstatus
+                        ? (row.awaitingRequest
+                            ? `<button type="button" onclick="promptEndOrderProjectAwaitingRequest({ id: ${row.id}, awaitingRequestSubstatusId: ${row.awaitingRequestSubstatusId || 'null'} })"
+                                class="text-xs bg-emerald-700 text-white hover:bg-emerald-800 px-2.5 py-1 rounded-lg font-medium">Reiniciar Projeto</button>`
+                            : `<button type="button" onclick="promptStartOrderProjectAwaitingRequest(${row.id})"
+                                class="text-xs bg-amber-600 text-white hover:bg-amber-700 px-2.5 py-1 rounded-lg font-medium">Aguardando Requisição</button>`)
+                        : '';
+                    const actions = [approvalAction, substatusAction].filter(Boolean);
+                    return actions.length
+                        ? `<div class="flex flex-wrap justify-end gap-1">${actions.join('')}</div>`
+                        : '<span class="text-xs text-slate-300">—</span>';
+                }
             })
         ]
     });

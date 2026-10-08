@@ -28,7 +28,7 @@ function setGestaoProjectFormLoading(active, message = 'Processando...', status 
 function waitGestaoProjectFormStatus(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'alterar-status-terceiros', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons'];
 
 function resolveGestaoCadastroSaveHost(anchor) {
     const element = anchor?.nodeType === 1 ? anchor : document.getElementById(anchor);
@@ -116,6 +116,7 @@ function setGestaoNavActive(navKey) {
     const navMap = {
         pedido: document.getElementById('gestao-nav-pedido'),
         'alterar-status-projeto': document.getElementById('gestao-nav-alterar-status-projeto'),
+        'alterar-status-terceiros': document.getElementById('gestao-nav-alterar-status-terceiros'),
         'agrupar-projetos': document.getElementById('gestao-nav-agrupar-projetos'),
         clientes: document.getElementById('gestao-nav-clientes'),
         architects: document.getElementById('gestao-nav-architects'),
@@ -323,6 +324,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-project-form-panel')?.classList.add('hidden');
     document.getElementById('gestao-project-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-alterar-status-projeto-panel')?.classList.add('hidden');
+    document.getElementById('gestao-alterar-status-terceiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-agrupar-projetos-panel')?.classList.add('hidden');
     document.getElementById('gestao-create-detailing-panel')?.classList.add('hidden');
     document.getElementById('gestao-clientes-panel')?.classList.add('hidden');
@@ -1345,6 +1347,15 @@ function showGestaoAlterarStatusProjetoPanel() {
     }
 }
 
+function showGestaoAlterarStatusTerceirosPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-alterar-status-terceiros-panel')?.classList.remove('hidden');
+    setGestaoNavActive('alterar-status-terceiros');
+    if (typeof loadGestaoAlterarStatusTerceirosList === 'function') {
+        loadGestaoAlterarStatusTerceirosList();
+    }
+}
+
 function showGestaoAgruparProjetosPanel() {
     if (typeof canManageOrderProjectAggregator === 'function' && !canManageOrderProjectAggregator()) {
         alertAppDialog('Sem permissão para agrupar projetos.', { variant: 'warning', title: 'Aviso' });
@@ -1612,6 +1623,10 @@ function bindGestaoEvents() {
     document.getElementById('gestao-nav-alterar-status-projeto')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoAlterarStatusProjetoPanel();
+    });
+    document.getElementById('gestao-nav-alterar-status-terceiros')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoAlterarStatusTerceirosPanel();
     });
     document.getElementById('gestao-nav-agrupar-projetos')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;

@@ -229,8 +229,11 @@ function ensurePendenciasSemProjetistaScreenEventsBound(content) {
         syncPendenciasSemProjetistaSaveButton();
     });
 
-    content.querySelector('#pendencias-sem-projetista-save-all')
-        ?.addEventListener('click', () => savePendenciasSemProjetistaAssociationsBatch());
+    content.addEventListener('click', (event) => {
+        const button = event.target.closest('#pendencias-sem-projetista-save-all');
+        if (!button || button.disabled) return;
+        savePendenciasSemProjetistaAssociationsBatch();
+    });
 }
 
 function getPendenciasPrevisaoValuesFromContainer(container) {
@@ -1075,6 +1078,9 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
         const revisionInProgressCount = isPendenciasWorkloadRevisionProjStatus(statusName)
             ? statusProjects.filter(project => revisionInProgressIds.has(Number(project.id))).length
             : 0;
+        const awaitingRequestCount = statusProjects.filter(project =>
+            typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(project)
+        ).length;
         const projectsHtml = statusProjects.length
             ? statusProjects.map(project => {
                 const clientName = getOrderClientName(project.order) || '—';
@@ -1102,6 +1108,9 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                                         </p>
                                         ${isRevisionInProgress
                                             ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0">Em andamento</span>'
+                                            : ''}
+                                        ${typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(project)
+                                            ? renderOrderProjectAwaitingRequestFlagHtml()
                                             : ''}
                                     </div>
                                 </div>
@@ -1149,6 +1158,10 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                         ${revisionInProgressCount > 0
                             ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0"
                                 title="Revisão técnica em andamento">${revisionInProgressCount} em andamento</span>`
+                            : ''}
+                        ${awaitingRequestCount > 0
+                            ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0"
+                                title="Projetos aguardando requisição">${awaitingRequestCount} aguardando requisição</span>`
                             : ''}
                     </div>
                 </div>
@@ -1365,6 +1378,9 @@ async function loadPendenciasCargaPorProjetista() {
 
     const workloadProjects = (workloadResult.workload || []).flatMap(row => row.projects || []);
     await enrichPendenciasProjectsWithTechnicalForecast(workloadProjects);
+    if (typeof attachOpenOrderProjectSubstatuses === 'function') {
+        await attachOpenOrderProjectSubstatuses(workloadProjects);
+    }
 
     const commercialReviewProjIds = collectPendenciasWorkloadProjectIdsByStatus(
         workloadResult.workload,

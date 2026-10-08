@@ -1102,6 +1102,14 @@ async function submitCommercialApprovalFromPendencias(projectId) {
         return;
     }
 
+    if (typeof attachOpenOrderProjectSubstatuses === 'function') {
+        await attachOpenOrderProjectSubstatuses([enrichedProject]);
+    }
+    if (typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(enrichedProject)) {
+        alertAppDialog('Reinicie o projeto antes de enviar para aprovação. Ele está aguardando requisição.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
     const statusName = getCommercialApprovalProjectStatusName(enrichedProject);
 
     if (statusName !== COMMERCIAL_APPROVAL_PROJECT_STATUS) {

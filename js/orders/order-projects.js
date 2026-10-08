@@ -473,6 +473,9 @@ async function loadOrderProjects(orderId) {
     projects = [...projects].sort((a, b) =>
         String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR', { sensitivity: 'base' })
     );
+    if (typeof attachOpenOrderProjectSubstatuses === 'function') {
+        await attachOpenOrderProjectSubstatuses(projects);
+    }
     const hasPhases = typeof orderHasDeliveryPhases === 'function'
         && orderHasDeliveryPhases(orderId);
     orderProjectsCache = projects;

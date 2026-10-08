@@ -143,6 +143,9 @@ async function restoreGestaoView(state) {
         'alterar-status-projeto': () => {
             if (typeof showGestaoAlterarStatusProjetoPanel === 'function') showGestaoAlterarStatusProjetoPanel();
         },
+        'alterar-status-terceiros': () => {
+            if (typeof showGestaoAlterarStatusTerceirosPanel === 'function') showGestaoAlterarStatusTerceirosPanel();
+        },
         'agrupar-projetos': () => {
             if (typeof showGestaoAgruparProjetosPanel === 'function') showGestaoAgruparProjetosPanel();
         },

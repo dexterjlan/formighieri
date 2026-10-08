@@ -287,20 +287,31 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
             label: 'Projeto',
             cellClass: 'p-3 text-xs font-medium text-slate-800'
         },
-        typeof getPendenciasInteractiveStatusColumn === 'function'
-            ? getPendenciasInteractiveStatusColumn({
-                thClass: 'whitespace-nowrap',
-                cellClass: 'p-3 whitespace-nowrap',
-                render: (row) => {
-                    const statusName = row.statusName || '—';
-                    const statusClass = row.statusClass
-                        || (typeof getPendenciasProjectStatusBadgeClass === 'function'
-                            ? getPendenciasProjectStatusBadgeClass(statusName)
-                            : 'bg-slate-100 text-slate-600');
-                    return `<span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>`;
-                }
-            })
-            : { key: 'statusName', label: 'Status', cellClass: 'p-3 whitespace-nowrap' },
+        {
+            key: 'statusName',
+            label: 'Status',
+            thClass: 'whitespace-nowrap',
+            cellClass: 'p-3 whitespace-nowrap',
+            getFilterValue: row => [
+                row.statusName,
+                typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(row.project)
+                    ? 'Aguardando requisição'
+                    : ''
+            ].filter(Boolean).join(' '),
+            render: (row) => {
+                const statusName = row.statusName || '—';
+                const statusClass = row.statusClass
+                    || (typeof getPendenciasProjectStatusBadgeClass === 'function'
+                        ? getPendenciasProjectStatusBadgeClass(statusName)
+                        : 'bg-slate-100 text-slate-600');
+                const flag = typeof isOrderProjectAwaitingRequest === 'function'
+                    && isOrderProjectAwaitingRequest(row.project)
+                    && typeof renderOrderProjectAwaitingRequestFlagHtml === 'function'
+                    ? renderOrderProjectAwaitingRequestFlagHtml()
+                    : '';
+                return `<span class="inline-flex flex-col items-start gap-1"><span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>${flag ? `<span class="pl-3">${flag}</span>` : ''}</span>`;
+            }
+        },
         {
             key: 'designerName',
             label: 'Projetista',
@@ -490,7 +501,10 @@ async function loadProgramacoesProjects(options = {}) {
     }
 
     const queueRows = result.data || [];
-    const projects = queueRows.map(row => row.orderProject);
+    const projects = queueRows.map(row => row.orderProject).filter(Boolean);
+    if (typeof attachOpenOrderProjectSubstatuses === 'function') {
+        await attachOpenOrderProjectSubstatuses(projects);
+    }
     const phasesByOrderId = typeof fetchPhasesByOrderIdForPendenciasProjects === 'function'
         ? await fetchPhasesByOrderIdForPendenciasProjects(projects)
         : {};

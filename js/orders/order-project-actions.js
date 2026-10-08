@@ -517,7 +517,11 @@ function getOrderProjectActions(project, context = {}) {
         });
     }
 
-    if (statusName === 'Projeto Técnico' || isOrderProjectEmRevisaoComercialProjStatus(statusName)) {
+    const awaitingRequest = typeof isOrderProjectAwaitingRequest === 'function'
+        && isOrderProjectAwaitingRequest(project);
+
+    if ((statusName === 'Projeto Técnico' || isOrderProjectEmRevisaoComercialProjStatus(statusName))
+        && !awaitingRequest) {
         const canSubmit = typeof canSubmitCommercialApprovalFromPendencias === 'function'
             && canSubmitCommercialApprovalFromPendencias(project, approval);
         actions.push({
@@ -526,6 +530,26 @@ function getOrderProjectActions(project, context = {}) {
             enabled: canSubmit,
             projectId: project.id
         });
+    }
+
+    if (statusName === 'Projeto Técnico'
+        && typeof canManageOrderProjectAwaitingRequest === 'function'
+        && canManageOrderProjectAwaitingRequest(project)) {
+        actions.push(awaitingRequest
+            ? {
+                id: 'restart-project',
+                label: 'Reiniciar Projeto',
+                enabled: true,
+                projectId: project.id,
+                buttonClass: 'bg-emerald-700 text-white hover:bg-emerald-800'
+            }
+            : {
+                id: 'awaiting-request',
+                label: 'Aguardando Requisição',
+                enabled: true,
+                projectId: project.id,
+                buttonClass: 'bg-amber-600 text-white hover:bg-amber-700'
+            });
     }
 
     if (statusName === 'Aguardando Projeto Técnico' && project.designerId) {
@@ -683,8 +707,10 @@ function renderOrderProjectActionButtons(actions) {
         if (action.deliveryDate) attrs.push(`data-delivery-date="${escapeHtml(String(action.deliveryDate).slice(0, 10))}"`);
         if (action.readOnly) attrs.push('data-read-only="1"');
 
+        const buttonClass = action.buttonClass
+            || 'bg-violet-700 text-white hover:bg-violet-800';
         return `<button type="button"
-            class="order-project-action-btn text-[10px] px-2 py-0.5 rounded-md font-medium whitespace-nowrap bg-violet-700 text-white hover:bg-violet-800"
+            class="order-project-action-btn text-[10px] px-2 py-0.5 rounded-md font-medium whitespace-nowrap ${buttonClass}"
             ${attrs.join(' ')}>
             ${escapeHtml(action.label)}
         </button>`;
@@ -740,6 +766,18 @@ async function handleOrderProjectAction(button) {
             if (typeof submitCommercialApprovalFromPendencias === 'function' && projectId) {
                 await submitCommercialApprovalFromPendencias(projectId);
                 await refreshOrderProjectListAfterAction();
+            }
+            break;
+        case 'awaiting-request':
+            if (typeof promptStartOrderProjectAwaitingRequest === 'function' && projectId) {
+                await promptStartOrderProjectAwaitingRequest(projectId);
+            }
+            break;
+        case 'restart-project':
+            if (typeof promptEndOrderProjectAwaitingRequest === 'function' && projectId) {
+                const project = (typeof orderProjectsCache !== 'undefined' ? orderProjectsCache : [])
+                    .find(item => Number(item.id) === projectId);
+                await promptEndOrderProjectAwaitingRequest(project || { id: projectId });
             }
             break;
         case 'iniciar-pt':

@@ -173,8 +173,11 @@ function ensurePendenciasGestorDetalhamentoScreenEventsBound(content) {
         syncPendenciasGestorDetalhamentoSaveButton();
     });
 
-    content.querySelector('#pendencias-gestor-detalhamento-save-all')
-        ?.addEventListener('click', () => savePendenciasGestorDetalhamentoAssociationsBatch());
+    content.addEventListener('click', (event) => {
+        const button = event.target.closest('#pendencias-gestor-detalhamento-save-all');
+        if (!button || button.disabled) return;
+        savePendenciasGestorDetalhamentoAssociationsBatch();
+    });
 }
 
 async function savePendenciasGestorDetalhamentoAssociationsBatch() {

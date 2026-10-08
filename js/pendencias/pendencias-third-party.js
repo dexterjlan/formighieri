@@ -123,8 +123,11 @@ function ensurePendenciasThirdPartySemProjetistaScreenEventsBound(content) {
         syncPendenciasThirdPartySemProjetistaSaveButton();
     });
 
-    content.querySelector('#pendencias-third-party-sem-projetista-save-all')
-        ?.addEventListener('click', () => savePendenciasThirdPartySemProjetistaAssociationsBatch());
+    content.addEventListener('click', (event) => {
+        const button = event.target.closest('#pendencias-third-party-sem-projetista-save-all');
+        if (!button || button.disabled) return;
+        savePendenciasThirdPartySemProjetistaAssociationsBatch();
+    });
 }
 
 async function savePendenciasThirdPartySemProjetistaAssociationsBatch() {
