@@ -449,7 +449,12 @@ function appendOrderProjectGridItem(container, project, orderId, actionContext, 
             </div>
             <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
             ${phaseCellHtml}
-            <span class="order-projects-grid__cell order-projects-grid__cell--status text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+            <div class="order-projects-grid__cell order-projects-grid__cell--status flex flex-wrap items-center gap-1 min-w-0">
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+                ${typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(project) && typeof renderOrderProjectAwaitingRequestFlagHtml === 'function'
+                    ? renderOrderProjectAwaitingRequestFlagHtml()
+                    : ''}
+            </div>
             <div class="order-projects-grid__cell order-projects-grid__cell--actions">
                 ${hideActions
         ? '<span class="text-xs text-slate-300">—</span>'

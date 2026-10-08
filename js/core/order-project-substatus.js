@@ -18,7 +18,7 @@ function formatOrderProjectSubstatusError(error) {
 }
 
 function isOrderProjectAwaitingRequest(project) {
-    return Boolean(project?.awaitingRequestStartedAt);
+    return Boolean(project?.awaitingRequestStartedAt) && !project?.awaitingRequestEndedAt;
 }
 
 function canManageOrderProjectAwaitingRequest(project) {
@@ -43,7 +43,7 @@ async function fetchOpenAwaitingRequestByProjectIds(projectIds = []) {
 
     const { data, error } = await supabaseClient
         .from('OrderProjectSubstatus')
-        .select('id, orderProjectId, kind, startedAt')
+        .select('id, orderProjectId, kind, startedAt, endedAt')
         .in('orderProjectId', ids)
         .eq('kind', ORDER_PROJECT_SUBSTATUS_AWAITING_REQUEST)
         .is('endedAt', null);
@@ -68,6 +68,7 @@ async function attachOpenOrderProjectSubstatuses(projects = []) {
         const open = byProjectId[Number(project.id)];
         project.awaitingRequestSubstatusId = open?.id || null;
         project.awaitingRequestStartedAt = open?.startedAt || null;
+        project.awaitingRequestEndedAt = open?.endedAt || null;
     });
     return list;
 }
