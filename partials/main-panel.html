@@ -157,8 +157,23 @@
         <div class="app-shell__body">
         <button type="button" id="app-mobile-menu-backdrop" class="app-mobile-menu-backdrop hidden"
             tabindex="-1" aria-hidden="true"></button>
-        <button type="button" id="btn-mobile-menu" class="app-sidebar-toggle"
-            aria-controls="app-sidebar" aria-expanded="true" aria-label="Ocultar submenu">
+        <header class="app-mobile-topbar" aria-label="Barra de navegação">
+            <button type="button" id="btn-mobile-menu" class="app-mobile-topbar__menu-btn"
+                aria-controls="app-sidebar" aria-expanded="false" aria-label="Abrir menu">
+                <svg class="app-mobile-topbar__icon app-mobile-topbar__icon--menu" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                </svg>
+                <svg class="app-mobile-topbar__icon app-mobile-topbar__icon--close" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <div class="app-mobile-topbar__brand">
+                <img src="images/fgp_logo.png" alt="" class="app-mobile-topbar__logo" width="28" height="28">
+                <span id="app-mobile-topbar-title" class="app-mobile-topbar__title">FGP</span>
+            </div>
+        </header>
+        <button type="button" id="btn-desktop-sidebar-toggle" class="app-sidebar-toggle app-sidebar-toggle--desktop"
+            aria-controls="app-sidebar" aria-expanded="true" aria-label="Mostrar submenu" hidden>
             <svg class="app-sidebar-toggle__chevron" viewBox="0 0 20 20" aria-hidden="true">
                 <path d="M12.5 4.5 7 10l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>

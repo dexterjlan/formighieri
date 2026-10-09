@@ -546,7 +546,7 @@ function setupCommercialRevisionModalHeader(approval) {
 async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica', options = {}) {
     currentRevisionType = revisionType;
     revisionModalViewOnly = false;
-    const approval = await ensureApprovalInCache(approvalId);
+    const approval = await ensureApprovalInCache(approvalId, true);
     if (!approval) return;
 
     const forceNew = Boolean(options?.forceNew);
@@ -636,9 +636,7 @@ function closeCommercialRevisionsHistoryModal() {
 async function openCommercialRevisionsHistoryView(approvalId, prefetched = null, options = {}) {
     const forceRefresh = Boolean(options?.forceRefresh);
     const readOnly = Boolean(options?.readOnly);
-    const approval = (prefetched?.approval && !forceRefresh)
-        ? prefetched.approval
-        : await ensureApprovalInCache(approvalId, forceRefresh);
+    const approval = await ensureApprovalInCache(approvalId, true);
     if (!approval) return;
 
     const historyProject = {
@@ -729,7 +727,7 @@ async function openCommercialRevisionView(approvalId) {
 }
 
 async function openCommercialRevisionForRevision(approvalId, revisionId, viewOnly = true) {
-    const approval = await ensureApprovalInCache(approvalId);
+    const approval = await ensureApprovalInCache(approvalId, true);
     if (!approval) return;
     if (!viewOnly && !canViewCommercialRevision(approval)) return;
     if (viewOnly && !canViewCommercialRevision(approval) && !currentUser?.id) return;
@@ -1016,6 +1014,11 @@ async function saveCommercialRevision() {
         refreshCommercialApprovalViews();
         if (result.createdRevision && typeof loadOrderProjects === 'function' && activeOrderId) {
             await loadOrderProjects(activeOrderId);
+        }
+
+        const historyModal = document.getElementById('commercial-revisions-history-modal');
+        if (historyModal && !historyModal.classList.contains('hidden') && approval?.id) {
+            await openCommercialRevisionsHistoryView(approval.id, null, { forceRefresh: true });
         }
 
         setCommercialRevisionModalLoading(true, 'Revisão salva com sucesso!', 'success');

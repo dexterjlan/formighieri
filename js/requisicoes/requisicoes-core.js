@@ -44,6 +44,10 @@ async function loadRequisicoesContent() {
         if (typeof loadRequisicoesPurchases === 'function') await loadRequisicoesPurchases();
         return;
     }
+    if (requisicoesActiveSection === 'assistance') {
+        if (typeof loadAssistanceRequests === 'function') await loadAssistanceRequests();
+        return;
+    }
     if (typeof renderRequisicoesConstruction === 'function') {
         renderRequisicoesConstruction(requisicoesActiveSection);
     }
@@ -141,6 +145,8 @@ function bindRequisicoesEvents() {
         if (button.dataset.requisicoesSection === 'purchases') clearRequisicoesPurchaseDraft();
         selectRequisicoesSection(button.dataset.requisicoesSection);
     });
+
+    if (typeof bindAssistanceEvents === 'function') bindAssistanceEvents();
 }
 
 window.showRequisicoes = showRequisicoes;

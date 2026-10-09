@@ -35,6 +35,14 @@ function doPost(e) {
   try {
     var body = parseWebAppPostBody_(e);
 
+    // Aquecimento (FGP chama ao login / antes de upload). Resposta imediata, sem Drive.
+    if (body.action === 'drive_warm') {
+      if (!body || body.secret !== getNotificationScriptSecret_()) {
+        return jsonResponse_({ ok: false, error: 'Unauthorized' }, 401);
+      }
+      return jsonResponse_({ ok: true });
+    }
+
     if (body.action && String(body.action).indexOf('drive_') === 0) {
       return handleDrivePostRequest_(body);
     }

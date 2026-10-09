@@ -500,6 +500,26 @@ function updateAdminNav() {
     if (typeof updateCalendarGoogleSyncControls === 'function') updateCalendarGoogleSyncControls();
 }
 
+const APP_MOBILE_TOPBAR_TITLES = {
+    home: 'Início',
+    dashboard: 'Pedidos',
+    requests: 'Requisições',
+    approvals: 'Aprovações',
+    calendar: 'Calendário',
+    comercial: 'Comercial',
+    kanban: 'Kanban',
+    programacoes: 'Programações',
+    requisicoes: 'Requisições',
+    'project-scheduling': 'Programações',
+    'programacao-montagem': 'Programação montagem',
+    gestao: 'Gestão',
+    performance: 'Performance',
+    pendencias: 'Pendências',
+    pesquisas: 'Pesquisas',
+    view3d: '3D',
+    settings: 'Configurações'
+};
+
 function updateMainNavActive(activeView) {
     const buttons = {
         home: document.getElementById('btn-inicio'),
@@ -534,6 +554,9 @@ function updateMainNavActive(activeView) {
         if (isGroup) btn.open = groupActive;
     });
     clearInactiveSubnavSelection(activeView);
+    if (typeof setAppMobileTopbarTitle === 'function') {
+        setAppMobileTopbarTitle(APP_MOBILE_TOPBAR_TITLES[activeView] || 'FGP');
+    }
 }
 
 function clearInactiveSubnavSelection(activeView) {

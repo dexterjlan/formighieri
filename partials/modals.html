@@ -2372,6 +2372,137 @@
         </div>
     </div>
 
+    <!-- MODAL: CADASTRO DE ASSISTÊNCIA -->
+    <div id="assistance-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto relative">
+            <div id="assistance-modal-loading"
+                class="hidden absolute inset-0 bg-white/90 rounded-2xl flex flex-col items-center justify-center gap-3 z-10 px-6 text-center">
+                <div id="assistance-modal-loading-spinner"
+                    class="h-8 w-8 border-2 border-slate-300 border-t-amber-600 rounded-full animate-spin"></div>
+                <div id="assistance-modal-loading-success"
+                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
+                <div id="assistance-modal-loading-error"
+                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
+                <p id="assistance-modal-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+            </div>
+            <h3 id="assistance-modal-title" class="font-bold text-base text-slate-900 mb-4">Nova assistência</h3>
+            <form id="assistance-form" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-client-name">Cliente <span class="text-red-500">*</span></label>
+                    <div class="flex gap-2">
+                        <input type="text" id="assistance-client-name" readonly
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 cursor-pointer"
+                            placeholder="Selecione o cliente">
+                        <input type="hidden" id="assistance-client-id">
+                        <button type="button" id="btn-assistance-client-picker" title="Buscar cliente"
+                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">...</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-order-code">Pedido</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="assistance-order-code" readonly
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50"
+                            placeholder="Opcional">
+                        <button type="button" id="btn-assistance-order-picker" title="Buscar pedido"
+                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200">...</button>
+                        <button type="button" id="btn-assistance-order-clear" title="Limpar pedido"
+                            class="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50">Limpar</button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-addr">Endereço <span class="text-red-500">*</span></label>
+                    <div class="flex gap-2">
+                        <input type="text" id="assistance-addr" readonly
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 cursor-pointer"
+                            placeholder="Selecione o cliente para buscar o endereço">
+                        <input type="hidden" id="assistance-addr-id">
+                        <button type="button" id="btn-assistance-addr-picker" title="Buscar endereço" disabled
+                            class="px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed">...</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-warranty">Garantia <span class="text-red-500">*</span></label>
+                        <select id="assistance-warranty" required
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400">
+                            <option value="">Selecione</option>
+                            <option value="true">Sim</option>
+                            <option value="false">Não</option>
+                        </select>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-semibold text-slate-500 mb-1">Status</span>
+                        <div id="assistance-status-label" class="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700">Aberto</div>
+                    </div>
+                </div>
+                <div id="assistance-quote-section" class="hidden space-y-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+                    <p class="text-xs font-semibold text-amber-900">Orçamento</p>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-total-value">Valor total</label>
+                        <input type="text" id="assistance-total-value" inputmode="numeric" autocomplete="off"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400"
+                            placeholder="R$ 0,00">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-quote-file-display">Arquivo PDF</label>
+                        <input type="file" id="assistance-quote-file" accept="application/pdf,.pdf" class="hidden">
+                        <div id="assistance-quote-edit-controls" class="flex flex-wrap gap-2">
+                            <input type="text" id="assistance-quote-file-display" readonly placeholder="Nenhum arquivo selecionado"
+                                class="flex-1 min-w-[8rem] px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white text-slate-600">
+                            <button type="button" id="btn-assistance-quote-select"
+                                class="text-xs bg-white border border-slate-200 text-slate-700 px-3 py-2 rounded-lg font-medium hover:bg-slate-50">Escolher PDF</button>
+                            <button type="button" id="btn-assistance-quote-upload" disabled
+                                class="text-xs bg-teal-700 text-white px-3 py-2 rounded-lg font-medium hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed">Upload</button>
+                        </div>
+                        <p id="assistance-quote-drive-path" class="text-[10px] text-slate-400 font-mono break-all mt-2 empty:hidden"></p>
+                        <div class="flex flex-wrap items-center gap-2 mt-1 min-w-0">
+                            <span id="assistance-quote-file-name" class="text-[11px] text-slate-500 truncate flex-1 min-w-[8rem]">Nenhum PDF enviado.</span>
+                            <button type="button" id="btn-assistance-quote-view" disabled
+                                class="shrink-0 text-xs bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Abrir o PDF no visualizador do navegador">
+                                Ver
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div id="assistance-scheduling-section" class="hidden space-y-3 rounded-xl border border-indigo-200 bg-indigo-50/30 p-3">
+                    <p class="text-xs font-semibold text-indigo-900">Agendamento</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-scheduled-at">Data agendada</label>
+                            <input type="date" id="assistance-scheduled-at"
+                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400">
+                            <p id="assistance-scheduled-at-readonly" class="hidden px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700">—</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-assignee">Montador / marceneiro</label>
+                            <select id="assistance-assignee"
+                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400">
+                                <option value="">Selecione...</option>
+                            </select>
+                            <p id="assistance-assignee-readonly" class="hidden px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700">—</p>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="assistance-description">Descrição <span class="text-red-500">*</span></label>
+                    <textarea id="assistance-description" rows="4" required
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 resize-y"
+                        placeholder="Descreva a assistência"></textarea>
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button type="button" onclick="toggleModal('assistance-modal', false)"
+                        class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Cancelar</button>
+                    <div class="flex-1"></div>
+                    <button type="submit" id="btn-assistance-save"
+                        class="text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-800">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL: SELEÇÃO DE CLIENTE (BUSCAR CLIENTES ATIVOS) -->
     <div id="cliente-picker-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[95]">

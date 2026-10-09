@@ -147,17 +147,61 @@ async function ensureProjectWorkflowInCache(projectId, forceRefresh = false) {
         }
     }
 
-    if (context?.orderProjectId && (!context.projectStatus || forceRefresh)) {
-        const { data: proj } = await supabaseClient
+    if (context?.orderProjectId) {
+        let result = await supabaseClient
             .from('OrderProject')
-            .select('id, projectStatus:OrderProjectStatus(name)')
+            .select(`
+                id, designerId, statusId,
+                projectStatus:OrderProjectStatus(id, name),
+                order:salesOrders(consultantUserId, consultor:appUsers!consultantUserId(id, name))
+            `)
             .eq('id', context.orderProjectId)
             .maybeSingle();
 
-        if (proj?.projectStatus) {
-            context.projectStatus = proj.projectStatus;
-            context.status = getCommercialWorkflowStatusLabel(proj.projectStatus.name);
-            context.approved = isCommercialWorkflowApprovedStatus(proj.projectStatus.name);
+        if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('order:')) {
+            result = await supabaseClient
+                .from('OrderProject')
+                .select('id, designerId, statusId')
+                .eq('id', context.orderProjectId)
+                .maybeSingle();
+        }
+
+        const proj = result.data;
+        if (proj) {
+            if (proj.designerId) context.designerId = proj.designerId;
+            if (proj.projectStatus) {
+                context.projectStatus = proj.projectStatus;
+                context.status = getCommercialWorkflowStatusLabel(proj.projectStatus.name);
+                context.approved = isCommercialWorkflowApprovedStatus(proj.projectStatus.name);
+            } else if (proj.statusId && typeof enrichCommercialApprovalProjectsWithStatus === 'function') {
+                const [enriched] = await enrichCommercialApprovalProjectsWithStatus([proj]);
+                if (enriched?.projectStatus) {
+                    context.projectStatus = enriched.projectStatus;
+                    context.status = getCommercialWorkflowStatusLabel(enriched.projectStatus.name);
+                    context.approved = isCommercialWorkflowApprovedStatus(enriched.projectStatus.name);
+                }
+            }
+            if (proj.order) {
+                context.order = { ...(context.order || {}), ...proj.order };
+                const consultantName = getOrderConsultantNameFromRecord(proj.order);
+                if (consultantName) context.orderConsultantName = consultantName;
+            }
+        } else if (context.orderId && (!context.orderConsultantName || !context.order?.consultantUserId)) {
+            const { data: orderInfo } = await supabaseClient
+                .from('salesOrders')
+                .select('consultantUserId, consultor:appUsers!consultantUserId(id, name)')
+                .eq('id', context.orderId)
+                .maybeSingle();
+            if (orderInfo) {
+                context.order = { ...(context.order || {}), ...orderInfo };
+                const consultantName = getOrderConsultantNameFromRecord(orderInfo);
+                if (consultantName) context.orderConsultantName = consultantName;
+            }
+        }
+
+        const cacheIdx = commercialApprovalsCache.findIndex(item => Number(item.id) === normalizedId);
+        if (cacheIdx !== -1) {
+            commercialApprovalsCache[cacheIdx] = { ...commercialApprovalsCache[cacheIdx], ...context };
         }
     }
 

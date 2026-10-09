@@ -347,7 +347,8 @@ function getPendenciasSidebarSections() {
             label: 'Compras',
             visible: canSeePendenciasComprasMenu(),
             items: [
-                { id: 'enviados-compras', label: 'Enviados para Compras' }
+                { id: 'enviados-compras', label: 'Enviados para Compras' },
+                { id: 'assistencias', label: 'Assistências' }
             ]
         }
     ].filter(section => section.visible);
@@ -1083,6 +1084,11 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'compras' && pendenciasActiveItem === 'enviados-compras') {
         loadPendenciasEnviadosCompras();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'compras' && pendenciasActiveItem === 'assistencias') {
+        if (typeof loadPendenciasAssistencias === 'function') loadPendenciasAssistencias();
         return;
     }
 

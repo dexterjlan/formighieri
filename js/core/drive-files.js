@@ -8,7 +8,8 @@ const DRIVE_FILE_FOLDER_KIND = {
     DESCRIPTIVE: 'descriptive',
     THIRD_PARTY: 'thirdParty',
     MODEL_3D: 'model3d',
-    IMPLEMENTATION_LIST: 'implementationList'
+    IMPLEMENTATION_LIST: 'implementationList',
+    ASSISTANCE_QUOTE: 'assistanceQuote'
 };
 
 const DRIVE_FILE_ENTITY_TYPE = {
@@ -19,7 +20,8 @@ const DRIVE_FILE_ENTITY_TYPE = {
     SALES_ORDER: 'SalesOrder',
     THIRD_PARTY_PROJECT: 'ThirdPartyProject',
     ORDER_PROJECT: 'OrderProject',
-    IMPLEMENTATION_PURCHASE_ITEM: 'ImplementationPurchaseItem'
+    IMPLEMENTATION_PURCHASE_ITEM: 'ImplementationPurchaseItem',
+    ASSISTANCE_REQUEST: 'AssistanceRequest'
 };
 
 const DRIVE_FILE_FOLDER_NAMES = {
@@ -29,7 +31,8 @@ const DRIVE_FILE_FOLDER_NAMES = {
     [DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE]: 'descritivo',
     [DRIVE_FILE_FOLDER_KIND.THIRD_PARTY]: 'terceiros',
     [DRIVE_FILE_FOLDER_KIND.MODEL_3D]: '3d',
-    [DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST]: 'Listas'
+    [DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST]: 'Listas',
+    [DRIVE_FILE_FOLDER_KIND.ASSISTANCE_QUOTE]: 'orcamento'
 };
 
 const DRIVE_FILE_IMPLEMENTATION_LIST_EXTENSIONS = ['pdf'];
@@ -92,7 +95,8 @@ function isImageDriveFolderKind(folderKind) {
 
 function allowedDriveExtensionsForFolderKind(folderKind) {
     if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE
-        || folderKind === DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST) {
+        || folderKind === DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST
+        || folderKind === DRIVE_FILE_FOLDER_KIND.ASSISTANCE_QUOTE) {
         return DRIVE_FILE_IMPLEMENTATION_LIST_EXTENSIONS;
     }
     if (folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D) {
@@ -319,7 +323,8 @@ function validateDriveUploadFiles(files, folderKind = DRIVE_FILE_FOLDER_KIND.DET
     const invalidType = list.find(file => !allowed.includes(getDriveFileExtension(file?.name)));
     if (invalidType) {
         if (folderKind === DRIVE_FILE_FOLDER_KIND.DESCRIPTIVE
-            || folderKind === DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST) {
+            || folderKind === DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST
+            || folderKind === DRIVE_FILE_FOLDER_KIND.ASSISTANCE_QUOTE) {
             return `O arquivo "${invalidType.name}" não é permitido. Envie apenas PDF.`;
         }
         if (isImageDriveFolderKind(folderKind)) {
@@ -386,10 +391,18 @@ function driveFileMissingSetupMessage(error) {
         || message.includes('ImplementationPurchaseItem')) {
         return 'Execute no SQL Editor (DEV): supabase/feats/drive-file-implementation-list.sql';
     }
+    if (message.includes('assistanceQuote') || message.includes('AssistanceRequest')) {
+        return 'Execute no SQL Editor (DEV): supabase/feats/drive-file-assistance-quote.sql';
+    }
     return message || 'Erro ao enviar arquivo.';
 }
 
 const GOOGLE_APPS_SCRIPT_DRIVE_TIMEOUT_MS = 25000;
+const DRIVE_FILE_POLL_MS_INITIAL = 180;
+const DRIVE_FILE_POLL_MS_MAX = 480;
+const GOOGLE_DRIVE_APPS_SCRIPT_PRIME_TTL_MS = 4 * 60 * 1000;
+
+let googleDriveAppsScriptPrimedAt = 0;
 
 function buildGoogleAppsScriptRequestBody(payload) {
     return {
@@ -403,6 +416,27 @@ function buildGoogleAppsScriptRequestBody(payload) {
 function googleAppsScriptUnavailableMessage(statusCode) {
     const status = statusCode ? ` (HTTP ${statusCode})` : '';
     return `Google Apps Script indisponível${status}. Republicar o Web App do projeto Notificações em script.google.com e atualizar GOOGLE_APPS_SCRIPT_URL em js/core/config.js.`;
+}
+
+/** Aquece a instância do Apps Script (cold start) sem bloquear a UI. */
+function primeGoogleDriveAppsScript() {
+    if (!isGoogleDriveAppsScriptConfigured()) return;
+    const now = Date.now();
+    if (googleDriveAppsScriptPrimedAt && now - googleDriveAppsScriptPrimedAt < GOOGLE_DRIVE_APPS_SCRIPT_PRIME_TTL_MS) {
+        return;
+    }
+    googleDriveAppsScriptPrimedAt = now;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    void fetch(GOOGLE_APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(buildGoogleAppsScriptRequestBody({ action: 'drive_warm' })),
+        signal: controller.signal
+    }).catch(() => {}).finally(() => clearTimeout(timeoutId));
 }
 
 async function postGoogleDriveAction(payload) {
@@ -426,7 +460,22 @@ async function postGoogleDriveAction(payload) {
             throw new Error(googleAppsScriptUnavailableMessage(response.status));
         }
 
-        return response;
+        const text = await response.text();
+        let data = null;
+        if (text && String(text).trim()) {
+            try {
+                data = JSON.parse(text);
+            } catch {
+                data = null;
+            }
+        }
+        if (data && typeof data === 'object' && data.ok === false) {
+            throw new Error(
+                String(data.error || data.message || 'Falha no Google Drive.')
+            );
+        }
+
+        return { data };
     } catch (error) {
         if (error?.name === 'AbortError') {
             throw new Error(
@@ -463,10 +512,20 @@ async function fetchDriveFileRow(rowId) {
     return data || null;
 }
 
-async function waitForDriveFileRow(rowId, isDone, timeoutMs = 60000) {
+function driveActionResponseHintsReady(data) {
+    if (!data || typeof data !== 'object') return false;
+    if (data.ingestStatus === 'ready' && data.driveFileId) return true;
+    if (data.driveFileId && (data.ok === true || data.success === true)) return true;
+    return false;
+}
+
+async function waitForDriveFileRow(rowId, isDone, timeoutMs = 60000, options = {}) {
+    const pollMsInitial = options.pollMsInitial ?? DRIVE_FILE_POLL_MS_INITIAL;
+    const pollMsMax = options.pollMsMax ?? DRIVE_FILE_POLL_MS_MAX;
     const started = Date.now();
     let unchangedSince = started;
     let lastSnapshot = '';
+    let pollMs = pollMsInitial;
 
     while (Date.now() - started < timeoutMs) {
         const row = await fetchDriveFileRow(rowId);
@@ -480,6 +539,7 @@ async function waitForDriveFileRow(rowId, isDone, timeoutMs = 60000) {
         if (snapshot !== lastSnapshot) {
             lastSnapshot = snapshot;
             unchangedSince = Date.now();
+            pollMs = pollMsInitial;
         } else if (
             Date.now() - unchangedSince > 20000
             && (row.ingestStatus === 'pending' || String(row.ingestError || '').startsWith('uploading:'))
@@ -487,9 +547,18 @@ async function waitForDriveFileRow(rowId, isDone, timeoutMs = 60000) {
             throw new Error(googleAppsScriptUnavailableMessage());
         }
 
-        await waitDriveMs(800);
+        await waitDriveMs(pollMs);
+        pollMs = Math.min(pollMsMax, Math.round(pollMs * 1.2));
     }
     throw new Error(googleAppsScriptUnavailableMessage());
+}
+
+async function waitForDriveFileRowAfterAction(rowId, isDone, timeoutMs, actionResult) {
+    if (driveActionResponseHintsReady(actionResult?.data)) {
+        const hinted = await fetchDriveFileRow(rowId);
+        if (hinted && isDone(hinted)) return hinted;
+    }
+    return waitForDriveFileRow(rowId, isDone, timeoutMs);
 }
 
 function readBlobAsBase64(blob) {
@@ -771,6 +840,10 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
     );
     const mimeType = mimeTypeForDriveUpload(file.name, file.type);
     const fileSizeBytes = Number(file.size) || 0;
+    const directUploadBase64Promise = fileSizeBytes <= DRIVE_FILE_DIRECT_MAX_BYTES
+        ? readBlobAsBase64(file)
+        : null;
+
     const { row, previousDriveFileId } = await upsertPendingDriveFile(
         fileName,
         mimeType,
@@ -781,11 +854,17 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
         folderKind: context.folderKind,
         orderCode: context.orderCode,
         projectName: context.projectName,
+        folderLeafName: context.folderLeafName || driveFolderLeafName(context.folderKind),
         fileName,
         mimeType,
         fileSizeBytes,
         driveFileRowId: row.id,
-        previousDriveFileId
+        previousDriveFileId,
+        folderPath: context.folderPath || buildDriveFolderPath(
+            context.orderCode,
+            context.projectName,
+            context.folderKind
+        )
     };
 
     const storageMirrorPromise = context.folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D
@@ -804,31 +883,33 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
     if (typeof onProgress === 'function') onProgress(0, fileSizeBytes);
 
     if (fileSizeBytes <= DRIVE_FILE_DIRECT_MAX_BYTES) {
-        const contentBase64 = await readBlobAsBase64(file);
-        await postGoogleDriveAction({
+        const contentBase64 = await directUploadBase64Promise;
+        const actionResult = await postGoogleDriveAction({
             action: 'drive_upload',
             ...driveContext,
             contentBase64
         });
-        const ready = await waitForDriveFileRow(
+        const ready = await waitForDriveFileRowAfterAction(
             row.id,
             item => item.ingestStatus === 'ready' && item.driveFileId,
-            90000
+            90000,
+            actionResult
         );
         if (typeof onProgress === 'function') onProgress(fileSizeBytes, fileSizeBytes);
         return finalizeDriveFileUploadRow(ready, storageMirrorPromise, context.folderKind);
     }
 
     const uploadId = newDriveUploadId();
-    await postGoogleDriveAction({
+    const startResult = await postGoogleDriveAction({
         action: 'drive_start',
         uploadId,
         ...driveContext
     });
-    await waitForDriveFileRow(
+    await waitForDriveFileRowAfterAction(
         row.id,
         item => String(item.ingestError || '') === 'session:ready',
-        45000
+        45000,
+        startResult
     );
 
     let offset = 0;
@@ -837,18 +918,19 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
         const end = Math.min(offset + DRIVE_FILE_CHUNK_BYTES, fileSizeBytes);
         const expectedOffset = end;
         const contentBase64 = await readBlobAsBase64(file.slice(offset, end));
-        await postGoogleDriveAction({
+        const chunkResult = await postGoogleDriveAction({
             action: 'drive_chunk',
             uploadId,
             driveFileRowId: row.id,
             start: offset,
             contentBase64
         });
-        const updated = await waitForDriveFileRow(
+        const updated = await waitForDriveFileRowAfterAction(
             row.id,
             item => item.ingestStatus === 'ready'
                 || String(item.ingestError || '') === `uploading:${expectedOffset}`,
-            90000
+            90000,
+            chunkResult
         );
         if (updated.ingestStatus === 'ready') {
             if (typeof onProgress === 'function') onProgress(fileSizeBytes, fileSizeBytes);
@@ -910,6 +992,7 @@ window.DRIVE_FILE_IMAGE_MAX_BYTES = DRIVE_FILE_IMAGE_MAX_BYTES;
 window.DRIVE_FILE_INPUT_ACCEPT = DRIVE_FILE_INPUT_ACCEPT;
 window.DRIVE_FILE_IMAGE_INPUT_ACCEPT = DRIVE_FILE_IMAGE_INPUT_ACCEPT;
 window.isGoogleDriveAppsScriptConfigured = isGoogleDriveAppsScriptConfigured;
+window.primeGoogleDriveAppsScript = primeGoogleDriveAppsScript;
 window.buildDriveFolderPath = buildDriveFolderPath;
 window.buildDescriptiveDriveFileName = buildDescriptiveDriveFileName;
 window.buildDetailingDriveFileName = buildDetailingDriveFileName;

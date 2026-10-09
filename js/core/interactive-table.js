@@ -128,6 +128,7 @@ function columnMatchesInteractiveTableSortSpec(column, spec) {
 }
 
 function resolveInteractiveTableDefaultSort(defaultSort = null, columns = []) {
+    if (Array.isArray(defaultSort) && defaultSort.length === 0) return [];
     const explicit = normalizeInteractiveTableSorts(defaultSort);
     if (explicit.length) return explicit;
 

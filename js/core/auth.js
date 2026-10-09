@@ -56,6 +56,9 @@ async function enterApp(authUserId, authUser = null) {
         }
         await showAppSessionLoading('Carregando...', 'Abrindo sua última tela');
         await showMainPanel();
+        if (typeof primeGoogleDriveAppsScript === 'function') {
+            primeGoogleDriveAppsScript();
+        }
         if (typeof scheduleAppDocumentTitlePendenciasCountRefresh === 'function') {
             scheduleAppDocumentTitlePendenciasCountRefresh(0);
         }

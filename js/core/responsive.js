@@ -11,26 +11,50 @@ function isAppSubnavCollapsed() {
 }
 
 function updateMobileMenuButtonState(open) {
-    const btn = document.getElementById('btn-mobile-menu');
+    const mobile = isMobileViewport();
+    document.body.classList.toggle('is-mobile-menu-open', mobile && open);
+
+    const mobileBtn = document.getElementById('btn-mobile-menu');
+    if (mobileBtn) {
+        mobileBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        mobileBtn.setAttribute('aria-label', open ? 'Fechar menu' : 'Abrir menu');
+    }
+
+    const sidebar = document.getElementById('app-sidebar');
+    if (sidebar) {
+        sidebar.setAttribute('aria-hidden', mobile && !open ? 'true' : 'false');
+    }
+
+    updateDesktopSidebarToggleState();
+}
+
+function updateDesktopSidebarToggleState() {
+    const btn = document.getElementById('btn-desktop-sidebar-toggle');
     if (!btn) return;
 
-    const subnavHidden = !isMobileViewport() && isAppSubnavCollapsed();
-    const shown = isMobileViewport() ? open : !subnavHidden;
+    const mobile = isMobileViewport();
+    if (mobile) {
+        btn.hidden = true;
+        return;
+    }
+
+    const subnavHidden = isAppSubnavCollapsed();
+    const shown = !subnavHidden;
+    btn.hidden = false;
     btn.setAttribute('aria-expanded', shown ? 'true' : 'false');
-    btn.setAttribute('aria-label', isMobileViewport()
-        ? (shown ? 'Ocultar menu' : 'Abrir menu')
-        : (shown ? 'Ocultar submenu' : 'Mostrar submenu'));
+    btn.setAttribute('aria-label', shown ? 'Ocultar submenu' : 'Mostrar submenu');
     btn.classList.toggle('is-collapsed', !shown);
 }
 
 function applyAppSubnavCollapsed(collapsed) {
+    if (isMobileViewport()) return;
     document.body.classList.toggle('app-subnav-collapsed', Boolean(collapsed));
     try {
         localStorage.setItem(APP_SUBNAV_COLLAPSED_KEY, collapsed ? '1' : '0');
     } catch (error) {
         console.warn('applyAppSubnavCollapsed:', error);
     }
-    updateMobileMenuButtonState(document.body.classList.contains('is-mobile-menu-open'));
+    updateDesktopSidebarToggleState();
 }
 
 function showAppSubnav() {
@@ -47,20 +71,41 @@ function setMobileMenuBackdropVisible(visible) {
 }
 
 function closeMobileMenu() {
-    document.body.classList.remove('is-mobile-menu-open');
     setMobileMenuBackdropVisible(false);
     updateMobileMenuButtonState(false);
 }
 
 function toggleMobileMenu() {
-    if (isMobileViewport()) {
-        const open = !document.body.classList.contains('is-mobile-menu-open');
-        document.body.classList.toggle('is-mobile-menu-open', open);
-        setMobileMenuBackdropVisible(open);
-        updateMobileMenuButtonState(open);
-        return;
-    }
+    if (!isMobileViewport()) return;
+    const open = !document.body.classList.contains('is-mobile-menu-open');
+    setMobileMenuBackdropVisible(open);
+    updateMobileMenuButtonState(open);
+}
+
+function toggleDesktopSidebarSubnav() {
+    if (isMobileViewport()) return;
     applyAppSubnavCollapsed(!isAppSubnavCollapsed());
+}
+
+function setAppMobileTopbarTitle(title) {
+    const el = document.getElementById('app-mobile-topbar-title');
+    if (!el) return;
+    const next = String(title || '').trim();
+    el.textContent = next || 'FGP';
+}
+
+function bindMobileNavAccordion() {
+    const nav = document.getElementById('app-header-nav');
+    if (!nav || nav.dataset.mobileAccordionBound === '1') return;
+    nav.dataset.mobileAccordionBound = '1';
+
+    nav.addEventListener('toggle', event => {
+        const group = event.target;
+        if (!isMobileViewport() || !group?.matches?.('.app-nav-group') || !group.open) return;
+        nav.querySelectorAll('.app-nav-group[open]').forEach(other => {
+            if (other !== group) other.open = false;
+        });
+    }, true);
 }
 
 function syncDashboardMobileDetailState(showDetail) {
@@ -80,11 +125,23 @@ function showDashboardMobileOrderList() {
 function syncMobileLayoutState() {
     const mobile = isMobileViewport();
     document.body.classList.toggle('is-mobile', mobile);
+    document.body.classList.toggle('app-mobile-nav-mode', mobile);
 
-    if (!mobile) {
+    if (mobile) {
+        document.body.classList.remove('is-rail-expanded', 'app-subnav-collapsed');
+    } else {
         closeMobileMenu();
         document.getElementById('dashboard-view')?.classList.remove('fm-dashboard--mobile-detail');
+        try {
+            if (localStorage.getItem(APP_SUBNAV_COLLAPSED_KEY) === '1') {
+                document.body.classList.add('app-subnav-collapsed');
+            }
+        } catch (error) {
+            console.warn('syncMobileLayoutState:', error);
+        }
     }
+
+    updateDesktopSidebarToggleState();
 }
 
 function bindSidebarRailHover() {
@@ -134,13 +191,6 @@ function bindSidebarRailHover() {
 }
 
 function bindResponsiveLayout() {
-    try {
-        if (localStorage.getItem(APP_SUBNAV_COLLAPSED_KEY) === '1') {
-            document.body.classList.add('app-subnav-collapsed');
-        }
-    } catch (error) {
-        console.warn('bindResponsiveLayout sidebar:', error);
-    }
     syncMobileLayoutState();
     updateMobileMenuButtonState(false);
 
@@ -151,6 +201,7 @@ function bindResponsiveLayout() {
     }
 
     document.getElementById('btn-mobile-menu')?.addEventListener('click', toggleMobileMenu);
+    document.getElementById('btn-desktop-sidebar-toggle')?.addEventListener('click', toggleDesktopSidebarSubnav);
     document.getElementById('app-mobile-menu-backdrop')?.addEventListener('click', closeMobileMenu);
     document.getElementById('btn-dashboard-mobile-back-list')?.addEventListener('click', showDashboardMobileOrderList);
     bindSidebarRailHover();
@@ -158,14 +209,33 @@ function bindResponsiveLayout() {
     document.getElementById('app-header-nav')?.addEventListener('click', event => {
         if (event.target.closest('summary')) {
             showAppSubnav();
+            return;
         }
-        if (event.target.closest('button')) {
+        const navButton = event.target.closest('button');
+        if (!navButton || navButton.id === 'btn-logout') return;
+        if (navButton.classList.contains('pendencias-section-btn')
+            || navButton.classList.contains('gestao-nav-cadastros-toggle')
+            || navButton.classList.contains('gestao-nav-comercial-financeiro-toggle')
+            || navButton.id === 'settings-nav-cadastros-toggle') {
+            return;
+        }
+        if (isMobileViewport()) {
+            closeMobileMenu();
+        }
+    });
+
+    bindMobileNavAccordion();
+
+    window.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && isMobileViewport()) {
             closeMobileMenu();
         }
     });
 
     window.addEventListener('resize', syncMobileLayoutState, { passive: true });
 }
+
+window.setAppMobileTopbarTitle = setAppMobileTopbarTitle;
 
 window.isMobileViewport = isMobileViewport;
 window.closeMobileMenu = closeMobileMenu;

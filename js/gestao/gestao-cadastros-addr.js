@@ -215,6 +215,10 @@ function applyAddrPickerSelection(record) {
         if (typeof setMontagemProgSelectedAddr === 'function') {
             setMontagemProgSelectedAddr(record);
         }
+    } else if (addrPickerMode === 'assistance') {
+        if (typeof setAssistanceSelectedAddr === 'function') {
+            setAssistanceSelectedAddr(record);
+        }
     } else {
         setGestaoOrderSelectedAddr(record);
     }
@@ -222,12 +226,13 @@ function applyAddrPickerSelection(record) {
 }
 
 function isAddrPickerStandaloneCreateMode(mode = addrPickerMode) {
-    return mode === 'calendar' || mode === 'assembly';
+    return mode === 'calendar' || mode === 'assembly' || mode === 'assistance';
 }
 
 function getAddrPickerMissingClientMessage(mode) {
     if (mode === 'calendar') return 'Selecione o cliente do evento primeiro.';
     if (mode === 'assembly') return 'Selecione o cliente da montagem primeiro.';
+    if (mode === 'assistance') return 'Selecione o cliente da assistência primeiro.';
     return 'Selecione o cliente do pedido primeiro.';
 }
 
@@ -350,6 +355,18 @@ async function openCalendarEventAddrPicker() {
     await openAddrPickerForClient(client, 'calendar');
 }
 
+async function openAssistanceAddrPicker() {
+    if (typeof assistanceAddressIsLocked === 'function' && assistanceAddressIsLocked()) {
+        alertAppDialog('Com pedido informado, o endereço vem do pedido.');
+        return;
+    }
+
+    const client = typeof getAssistanceFormClient === 'function'
+        ? getAssistanceFormClient()
+        : null;
+    await openAddrPickerForClient(client, 'assistance');
+}
+
 async function openMontagemProgAddrPicker() {
     const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
     if (orderCode) {
@@ -374,6 +391,9 @@ async function openAddrPickerCreate() {
         || (addrPickerMode === 'assembly' && typeof getMontagemProgFormClient === 'function'
             ? getMontagemProgFormClient()
             : null)
+        || (addrPickerMode === 'assistance' && typeof getAssistanceFormClient === 'function'
+            ? getAssistanceFormClient()
+            : null)
         || (addrPickerMode === 'order' ? getGestaoOrderFormClient() : null);
 
     if (!client?.id) {
@@ -394,6 +414,10 @@ async function openAddrPickerCreate() {
                 }
                 if (savedMode === 'assembly' && typeof setMontagemProgSelectedAddr === 'function') {
                     setMontagemProgSelectedAddr(record);
+                    return;
+                }
+                if (savedMode === 'assistance' && typeof setAssistanceSelectedAddr === 'function') {
+                    setAssistanceSelectedAddr(record);
                 }
             }
         });
@@ -1166,6 +1190,7 @@ window.bindGestaoAddrEvents = bindGestaoAddrEvents;
 window.resetGestaoAddrForm = resetGestaoAddrForm;
 window.openGestaoOrderAddrPicker = openGestaoOrderAddrPicker;
 window.openCalendarEventAddrPicker = openCalendarEventAddrPicker;
+window.openAssistanceAddrPicker = openAssistanceAddrPicker;
 window.openMontagemProgAddrPicker = openMontagemProgAddrPicker;
 window.openAddrCreateModal = openAddrCreateModal;
 window.fetchGestaoClientAddrs = fetchGestaoClientAddrs;

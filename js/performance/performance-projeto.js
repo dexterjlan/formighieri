@@ -8,21 +8,21 @@ const PERFORMANCE_PROJETO_EXIT_METRICS = [
         label: 'Entrega de Projetos',
         statusNames: ['Projeto Técnico'],
         countMode: 'projects',
-        description: 'Projetos que saíram de Projeto Técnico (primeira saída do status).'
+        description: 'Projetos que saíram de Projeto Técnico (primeira saída do status). O projeto agrupador não entra; ambientes vinculados e projetos avulsos sim.'
     },
     {
         id: 'revisoes',
         label: 'Revisões',
         statusNames: [ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ],
         countMode: 'revision-activities',
-        description: 'Cada saída de Em Revisão Comercial Proj. conta uma revisão (o mesmo projeto pode aparecer em semanas diferentes). Entre parênteses na tabela, soma das atividades; na lista, o número da revisão técnica comercial do projeto.'
+        description: 'Cada saída de Em Revisão Comercial Proj. conta uma revisão (o mesmo projeto pode aparecer em semanas diferentes). Ambientes vinculados a um agrupador não entram; a métrica usa o projeto agrupador. Entre parênteses na tabela, soma das atividades; na lista, o número da revisão técnica comercial.'
     },
     {
         id: 'lancamentos',
         label: 'Lançamentos',
         statusNames: ['Implantação'],
         countMode: 'projects',
-        description: 'Projetos que saíram de Implantação (primeira saída do status).'
+        description: 'Projetos que saíram de Implantação (primeira saída do status). O projeto agrupador não entra; ambientes vinculados e projetos avulsos sim.'
     }
 ];
 
@@ -36,6 +36,52 @@ function isPerformanceProjetoComplementaryProject(project) {
         return isComplementaryOrderProject(project);
     }
     return project.isComplementary === true;
+}
+
+function isPerformanceProjetoGroupedChildProject(project) {
+    return typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project);
+}
+
+function isPerformanceProjetoAggregatorProject(project) {
+    return typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project);
+}
+
+/** Projetos para lookup (inclui agrupador; exclui complementares). */
+function buildPerformanceProjetoProjectsById(rawProjects, statusById) {
+    return Object.fromEntries(
+        (rawProjects || [])
+            .filter(project => !isPerformanceProjetoComplementaryProject(project))
+            .map(project => {
+                const id = Number(project.id);
+                if (!id) return null;
+                return [id, {
+                    ...project,
+                    projectStatus: project.projectStatus || statusById?.[project.statusId] || null
+                }];
+            })
+            .filter(Boolean)
+    );
+}
+
+/** Métricas de entrega/lançamento: mesma visibilidade da gestão (sem agrupador). */
+function filterPerformanceProjetoStandardMetricProjects(projectsById) {
+    return Object.values(projectsById || {}).filter(
+        project => !isPerformanceProjetoAggregatorProject(project)
+    );
+}
+
+/** IDs de OrderProject onde buscar Revision (agrupador + ambientes vinculados). */
+function collectPerformanceProjetoRevisionOrderProjectIds(referenceProjectId, projectsById = {}) {
+    const normalizedId = Number(referenceProjectId);
+    if (!normalizedId) return [];
+
+    const ids = new Set([normalizedId]);
+    Object.values(projectsById || {}).forEach(project => {
+        if (Number(project?.aggregatorOrderProjectId) === normalizedId) {
+            ids.add(Number(project.id));
+        }
+    });
+    return [...ids].filter(Boolean);
 }
 
 function getPerformanceProjetoWeeksInput() {
@@ -185,6 +231,78 @@ function buildCommercialRevisionNumberById(revisionsByProjectId) {
     return revisionNumberById;
 }
 
+/** Numeração 1..n por agrupador (união das revisões do pai e dos filhos). */
+function buildPerformanceProjetoRevisionNumberById(revisionsByProjectId, projectsById) {
+    const revisionNumberById = buildCommercialRevisionNumberById(revisionsByProjectId);
+
+    Object.values(projectsById || {}).forEach(project => {
+        if (!isPerformanceProjetoAggregatorProject(project)) return;
+
+        const lookupIds = collectPerformanceProjetoRevisionOrderProjectIds(project.id, projectsById);
+        const merged = [];
+        const seenRevisionIds = new Set();
+
+        lookupIds.forEach(projectId => {
+            (revisionsByProjectId[projectId] || []).forEach(revision => {
+                if (!revision?.id || seenRevisionIds.has(revision.id)) return;
+                seenRevisionIds.add(revision.id);
+                merged.push(revision);
+            });
+        });
+
+        merged.sort((left, right) => {
+            const leftTime = new Date(left.createdAt || left.revisionStartedAt || 0).getTime();
+            const rightTime = new Date(right.createdAt || right.revisionStartedAt || 0).getTime();
+            if (leftTime !== rightTime) return leftTime - rightTime;
+            return Number(left.id || 0) - Number(right.id || 0);
+        });
+
+        merged.forEach((revision, index) => {
+            revisionNumberById[revision.id] = index + 1;
+        });
+    });
+
+    return revisionNumberById;
+}
+
+function collapsePerformanceProjetoRevisionAssignments(assigned) {
+    const byRevisionId = new Map();
+
+    (assigned || []).forEach(entry => {
+        const revisionId = entry.revision?.id;
+        if (!revisionId) return;
+
+        if (!byRevisionId.has(revisionId)) {
+            byRevisionId.set(revisionId, entry);
+            return;
+        }
+
+        const existing = byRevisionId.get(revisionId);
+        const existingActivities = existing.activityCount || 0;
+        const nextActivities = entry.activityCount || 0;
+
+        if (nextActivities > existingActivities) {
+            byRevisionId.set(revisionId, entry);
+            return;
+        }
+
+        if (
+            nextActivities === existingActivities
+            && entry.exitAt instanceof Date
+            && existing.exitAt instanceof Date
+            && entry.exitAt.getTime() < existing.exitAt.getTime()
+        ) {
+            byRevisionId.set(revisionId, entry);
+        }
+    });
+
+    return [...byRevisionId.values()].sort((left, right) => {
+        const leftTime = left.exitAt instanceof Date ? left.exitAt.getTime() : 0;
+        const rightTime = right.exitAt instanceof Date ? right.exitAt.getTime() : 0;
+        return leftTime - rightTime;
+    });
+}
+
 function findAllPerformanceStatusExitsAt(timeline, statusNames, shared) {
     if (!timeline?.length || !shared) return [];
 
@@ -204,11 +322,31 @@ function findAllPerformanceStatusExitsAt(timeline, statusNames, shared) {
     return exits;
 }
 
-function pickCommercialRevisionForProjectExit(revisionsByProjectId, projectId, exitAt, usedRevisionIds) {
+function pickCommercialRevisionForProjectExit(
+    revisionsByProjectId,
+    projectId,
+    exitAt,
+    usedRevisionIds,
+    projectsById = null
+) {
     const exitTime = exitAt instanceof Date ? exitAt.getTime() : NaN;
     if (!Number.isFinite(exitTime)) return null;
 
-    const candidates = (revisionsByProjectId[Number(projectId)] || [])
+    const lookupProjectIds = projectsById
+        ? collectPerformanceProjetoRevisionOrderProjectIds(projectId, projectsById)
+        : [Number(projectId)];
+
+    const seenRevisionIds = new Set();
+    const mergedRevisions = [];
+    lookupProjectIds.forEach(lookupId => {
+        (revisionsByProjectId[lookupId] || []).forEach(revision => {
+            if (!revision?.id || seenRevisionIds.has(revision.id)) return;
+            seenRevisionIds.add(revision.id);
+            mergedRevisions.push(revision);
+        });
+    });
+
+    const candidates = mergedRevisions
         .filter(revision => {
             if (usedRevisionIds.has(revision.id)) return false;
             const startedAt = revision.revisionStartedAt
@@ -232,7 +370,7 @@ function pickCommercialRevisionForProjectExit(revisionsByProjectId, projectId, e
     return completedBeforeExit || candidates[0];
 }
 
-function assignCommercialRevisionsToExits(revisionExits, revisionContext) {
+function assignCommercialRevisionsToExits(revisionExits, revisionContext, projectsById = null) {
     const { revisionsByProjectId, countByRevisionId, revisionNumberById } = revisionContext || {};
     const exitsByProjectId = new Map();
 
@@ -256,7 +394,8 @@ function assignCommercialRevisionsToExits(revisionExits, revisionContext) {
                 revisionsByProjectId,
                 projectId,
                 exit.exitAt,
-                usedRevisionIds
+                usedRevisionIds,
+                projectsById
             );
             if (revision?.id) usedRevisionIds.add(revision.id);
 
@@ -276,7 +415,7 @@ function assignCommercialRevisionsToExits(revisionExits, revisionContext) {
 function computePerformanceProjetoExitsByWeek(
     historyRows,
     timelineByProjectId,
-    projects,
+    projectsById,
     statusById,
     revisionContext,
     weekKeys
@@ -292,11 +431,7 @@ function computePerformanceProjetoExitsByWeek(
         findGestaoPerformanceStatusExitAt
     } = shared;
 
-    const projectsById = Object.fromEntries(
-        (projects || [])
-            .map(project => [Number(project.id), project])
-            .filter(([projectId]) => projectId)
-    );
+    const standardMetricProjects = filterPerformanceProjetoStandardMetricProjects(projectsById);
     const firstExitByKey = new Map();
     const revisionExits = [];
     const revisoesMetric = PERFORMANCE_PROJETO_EXIT_METRICS.find(metric => metric.id === 'revisoes');
@@ -342,31 +477,43 @@ function computePerformanceProjetoExitsByWeek(
 
             if (revisoesMetric
                 && isGestaoPerformanceStatusNameMatch(previousStatusName, revisoesMetric.statusNames)) {
+                if (isPerformanceProjetoGroupedChildProject(project)) return;
                 revisionExits.push({ referenceId, exitAt: changedAt });
             }
 
             PERFORMANCE_PROJETO_EXIT_METRICS.forEach(metric => {
                 if (metric.id === 'revisoes') return;
+                if (isPerformanceProjetoAggregatorProject(project)) return;
                 if (!isGestaoPerformanceStatusNameMatch(previousStatusName, metric.statusNames)) return;
                 registerStatusExit(referenceId, metric, changedAt);
             });
         });
     } else {
-        const seenReferenceIds = new Set();
+        const seenRevisionReferenceIds = new Set();
+        const seenStandardReferenceIds = new Set();
 
-        (projects || []).forEach(project => {
+        Object.values(projectsById || {}).forEach(project => {
             if (isPerformanceProjetoComplementaryProject(project)) return;
 
             const referenceId = Number(project.id);
-            if (!referenceId || seenReferenceIds.has(referenceId)) return;
+            if (!referenceId) return;
 
-            seenReferenceIds.add(referenceId);
             const timeline = timelineByProjectId[referenceId] || [];
 
-            if (revisoesMetric) {
+            if (revisoesMetric && !isPerformanceProjetoGroupedChildProject(project)) {
+                if (seenRevisionReferenceIds.has(referenceId)) return;
+                seenRevisionReferenceIds.add(referenceId);
                 findAllPerformanceStatusExitsAt(timeline, revisoesMetric.statusNames, shared)
                     .forEach(exitAt => revisionExits.push({ referenceId, exitAt }));
             }
+        });
+
+        standardMetricProjects.forEach(project => {
+            const referenceId = Number(project.id);
+            if (!referenceId || seenStandardReferenceIds.has(referenceId)) return;
+
+            seenStandardReferenceIds.add(referenceId);
+            const timeline = timelineByProjectId[referenceId] || [];
 
             PERFORMANCE_PROJETO_EXIT_METRICS.forEach(metric => {
                 if (metric.id === 'revisoes') return;
@@ -393,7 +540,13 @@ function computePerformanceProjetoExitsByWeek(
         ])
     );
 
-    const assignedRevisionExits = assignCommercialRevisionsToExits(revisionExits, revisionContext);
+    const assignedRevisionExits = collapsePerformanceProjetoRevisionAssignments(
+        assignCommercialRevisionsToExits(
+            revisionExits,
+            revisionContext,
+            projectsById
+        )
+    );
 
     assignedRevisionExits.forEach(entry => {
         const weekKey = getPerformanceWeekKey(entry.exitAt);
@@ -745,18 +898,18 @@ async function loadPerformanceProjeto() {
             : [];
         const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
         const timelineByProjectId = shared.buildGestaoPerformanceTimeline(historyRows, statusById);
-        const enrichedProjects = shared.enrichGestaoPerformanceProjects(projects, statusById);
-        performanceProjetoProjectsById = Object.fromEntries(
-            enrichedProjects
-                .filter(project => !isPerformanceProjetoComplementaryProject(project))
-                .map(project => [Number(project.id), project])
-                .filter(([projectId]) => projectId)
+        const projectsById = buildPerformanceProjetoProjectsById(projects, statusById);
+        performanceProjetoProjectsById = { ...projectsById };
+
+        revisionContext.revisionNumberById = buildPerformanceProjetoRevisionNumberById(
+            revisionContext.revisionsByProjectId,
+            projectsById
         );
 
         const statusExitByWeek = computePerformanceProjetoExitsByWeek(
             historyRows,
             timelineByProjectId,
-            enrichedProjects,
+            projectsById,
             statusById,
             revisionContext,
             weekKeys

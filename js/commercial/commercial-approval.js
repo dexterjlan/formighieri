@@ -2,9 +2,28 @@ function getOrderConsultantNameForApproval(approval) {
     if (!approval) return null;
     if (approval.orderConsultantName) return approval.orderConsultantName;
     if (approval.order) return getOrderConsultantNameFromRecord(approval.order) || null;
+    if (approval.orderId && typeof getOrderConsultantName === 'function') {
+        const name = getOrderConsultantName(approval.orderId);
+        if (name) return name;
+    }
     if (approval.orderId && typeof ordersCache !== 'undefined') {
         const order = ordersCache.find(o => o.id === approval.orderId);
         return getOrderConsultantNameFromRecord(order) || null;
+    }
+    return null;
+}
+
+function getOrderConsultantUserIdForApproval(approval) {
+    if (!approval) return null;
+    const fromOrder = approval.order?.consultantUserId ?? approval.order?.consultor?.id;
+    if (fromOrder != null && fromOrder !== '') return Number(fromOrder);
+    if (approval.orderId && typeof getOrderConsultantUserId === 'function') {
+        const userId = getOrderConsultantUserId(approval.orderId);
+        if (userId) return userId;
+    }
+    if (approval.orderId && typeof ordersCache !== 'undefined') {
+        const order = ordersCache.find(o => Number(o.id) === Number(approval.orderId));
+        if (order?.consultantUserId != null) return Number(order.consultantUserId);
     }
     return null;
 }
@@ -15,7 +34,7 @@ function isAdminOrOrderConsultorForApproval(approval) {
 
     return isCurrentUserOrderConsultor(
         getOrderConsultantNameForApproval(approval),
-        approval.order?.consultantUserId ?? null
+        getOrderConsultantUserIdForApproval(approval)
     );
 }
 
@@ -1627,6 +1646,15 @@ function renderCommercialApprovalCard(approval, context) {
         showRequestRevision,
         showEdit
     });
+
+    const approvalForRevisions = {
+        ...approval,
+        projectStatus: approval.projectStatus || linkedProject?.projectStatus || null,
+        designerId: approval.designerId || linkedProject?.designerId || null
+    };
+    const revisionsHtml = revisions.length && typeof renderCommercialRevisionsSection === 'function'
+        ? renderCommercialRevisionsSection(revisions, approvalForRevisions)
+        : '';
 
     const cardBgClass = getCommercialApprovalHighlightBgClass(approval);
     const div = document.createElement('div');

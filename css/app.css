@@ -3272,6 +3272,36 @@ body.installer-only-nav #btn-logout {
         -webkit-text-size-adjust: 100%;
     }
 
+    .interactive-table-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.35rem;
+        padding: 0.5rem 0.65rem;
+    }
+
+    .interactive-table-toolbar-actions {
+        justify-content: flex-start;
+        gap: 0.5rem;
+    }
+
+    .interactive-table-sort-row th {
+        padding: 0.45rem 0.5rem;
+        font-size: 0.625rem;
+    }
+
+    .interactive-table-filter-row th {
+        padding: 0.25rem 0.35rem;
+    }
+
+    .interactive-table-filter-input {
+        min-height: 2.25rem;
+        font-size: 16px;
+    }
+
+    .interactive-table-sort-btn {
+        font-size: 0.625rem;
+    }
+
     .app-panel-height {
         height: auto;
         max-height: none;
@@ -3304,30 +3334,6 @@ body.installer-only-nav #btn-logout {
         min-height: auto;
         max-height: none;
         display: flex;
-    }
-
-    .app-header-menu-btn {
-        display: inline-flex;
-    }
-
-    .app-header-nav {
-        display: none;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.5rem;
-        padding: 0 1rem 1rem;
-        border-top: 1px solid rgb(51 65 85);
-    }
-
-    body.is-mobile-menu-open .app-header-nav {
-        display: flex;
-    }
-
-    .app-header-nav button {
-        width: 100%;
-        text-align: left;
-        padding: 0.625rem 0.875rem;
-        font-size: 0.8125rem;
     }
 
     .order-detail-tabs-shell {
