@@ -360,7 +360,9 @@ async function openView3dViewerModal(file, title = 'Modelo 3D') {
         setView3dNavigationToolbar('orbit');
         toggleView3dToolbarActive(document.getElementById('btn-view3d-toggle-edges'), view3dThreeViewer?.edgesEnabled);
         if (hintEl) {
-            const narrow = window.matchMedia('(max-width: 767px)').matches;
+            const narrow = typeof isMobileViewport === 'function'
+                ? isMobileViewport()
+                : window.matchMedia('(max-width: 767px)').matches;
             if (narrow) {
                 hintEl.textContent = file?.fileName
                     ? `${file.fileName} · pinça ou ícones à direita`

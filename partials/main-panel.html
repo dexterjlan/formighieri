@@ -11,6 +11,30 @@
                 <p id="user-display" class="app-sidebar__user">Logado como: -</p>
                 <span id="app-version" class="app-sidebar__version"></span>
             </div>
+            <div id="app-mobile-menu" class="app-mobile-menu" hidden aria-hidden="true">
+                <header class="app-mobile-menu__header">
+                    <div class="app-mobile-menu__header-leading">
+                        <button type="button" id="btn-mobile-menu-stack-back"
+                            class="app-mobile-menu__back app-mobile-shell-btn app-mobile-shell-btn--back hidden"
+                            aria-label="Voltar ao menu anterior">
+                            <svg class="app-mobile-shell-btn__icon" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M14 7l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="app-mobile-menu__brand">
+                        <img src="images/fgp_logo.png" alt="" class="app-mobile-topbar__logo" width="28" height="28">
+                        <span id="app-mobile-menu-title" class="app-mobile-topbar__title">Menu</span>
+                    </div>
+                    <button type="button" id="btn-mobile-menu-close"
+                        class="app-mobile-menu__close app-mobile-shell-btn" aria-label="Fechar menu">
+                        <svg class="app-mobile-shell-btn__icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </header>
+                <div id="app-mobile-menu-grid" class="app-mobile-menu__grid" role="list"></div>
+            </div>
             <nav id="app-header-nav" class="app-sidebar__nav" aria-label="Navegação principal">
                 <button type="button" id="btn-inicio" class="app-nav-item is-active"><svg class="app-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z"/></svg><span>Início</span></button>
                 <button type="button" id="btn-back-dashboard" class="app-nav-item"><svg class="app-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M8 4h8a1 1 0 0 1 1 1v15H7V5a1 1 0 0 1 1-1Z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><span>Pedidos</span></button>
@@ -118,6 +142,7 @@
                         <p class="app-subnav__title">Performance</p>
                         <nav id="performance-sidebar-nav" aria-label="Seções de performance">
                             <button type="button" id="performance-nav-projeto" class="app-nav-item app-nav-item--nested">Projeto</button>
+                            <button type="button" id="performance-nav-montagem-externa" class="app-nav-item app-nav-item--nested">Montagem Externa</button>
                         </nav>
                     </div>
                 </details>
@@ -158,6 +183,13 @@
         <button type="button" id="app-mobile-menu-backdrop" class="app-mobile-menu-backdrop hidden"
             tabindex="-1" aria-hidden="true"></button>
         <header class="app-mobile-topbar" aria-label="Barra de navegação">
+            <button type="button" id="btn-mobile-topbar-back"
+                class="app-mobile-topbar__menu-btn app-mobile-shell-btn app-mobile-shell-btn--back hidden"
+                aria-label="Voltar">
+                <svg class="app-mobile-shell-btn__icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M14 7l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
             <button type="button" id="btn-mobile-menu" class="app-mobile-topbar__menu-btn"
                 aria-controls="app-sidebar" aria-expanded="false" aria-label="Abrir menu">
                 <svg class="app-mobile-topbar__icon app-mobile-topbar__icon--menu" viewBox="0 0 24 24" aria-hidden="true">
@@ -512,6 +544,33 @@
                         </form>
                     </div>
                     <div id="performance-projeto-content" class="flex-1 min-h-0 overflow-auto p-4 space-y-4 bg-slate-50/30">
+                        <p class="text-xs text-slate-400 text-center py-8">Carregando...</p>
+                    </div>
+                </div>
+                <div id="performance-montagem-externa-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[calc(100vh-180px)]">
+                    <div class="app-panel-header p-4 border-b border-slate-100 bg-slate-50/50 shrink-0 space-y-3">
+                        <h2 class="font-bold text-sm text-slate-900 w-full">Performance — Montagem Externa</h2>
+                        <div class="flex flex-wrap items-end justify-between gap-3 w-full">
+                            <p class="text-xs text-slate-400 min-w-0 flex-1 self-center">Dias de status (21→22) e dias trabalhando, por pedido/fase de entrega do pedido.</p>
+                            <form id="performance-montagem-externa-filter-form" class="flex flex-wrap items-end gap-2 shrink-0">
+                                <div>
+                                    <label for="performance-montagem-externa-days-back" class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Dias p/ trás do fim</label>
+                                    <input type="number" id="performance-montagem-externa-days-back" min="1" max="3650" value="30"
+                                        class="w-24 px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="text-xs bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-800">
+                                    Aplicar
+                                </button>
+                                <button type="button" id="btn-performance-montagem-externa-refresh"
+                                    class="order-tab-action-btn text-xs bg-white border border-indigo-200 text-indigo-800 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-50">
+                                    <svg class="order-tab-action-btn__icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                    <span>Atualizar</span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    <div id="performance-montagem-externa-content" class="flex-1 min-h-0 overflow-auto p-4 space-y-4 bg-slate-50/30">
                         <p class="text-xs text-slate-400 text-center py-8">Carregando...</p>
                     </div>
                 </div>
@@ -1046,6 +1105,7 @@
                                     <li>Se o pedido já existir, apenas os projetos novos serão criados; projeto duplicado gera erro.</li>
                                     <li>Opcional: <span class="font-mono text-[10px]">endereco_cep</span> (8 dígitos — o sistema consulta logradouro, bairro, cidade e UF), <span class="font-mono text-[10px]">endereco_numero</span> e <span class="font-mono text-[10px]">endereco_complemento</span> vinculam o endereço ao pedido (cadastra no cliente se necessário).</li>
                                     <li>Opcional: <span class="font-mono text-[10px]">arquiteto</span>, <span class="font-mono text-[10px]">arquiteto_telefone</span> e <span class="font-mono text-[10px]">arquiteto_email</span> cadastram o arquiteto (se novo) e vinculam ao pedido — inclusive em pedidos já existentes.</li>
+                                    <li>Opcional: <span class="font-mono text-[10px]">orcamento</span> — código do orçamento WPS do pedido (repita o mesmo valor em todas as linhas do pedido).</li>
                                     <li>Todos os projetos importados entram com status <strong>Vendido</strong> (não há coluna de status na planilha).</li>
                                     <li><span class="font-mono text-[10px]">consultor</span> usa nome WPS; o sistema converte via <span class="font-mono text-[10px]">importConsultorWPS</span>.</li>
                                     <li>Use o nome cadastrado no sistema para <span class="font-mono text-[10px]">ambiente</span>.</li>

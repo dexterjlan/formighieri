@@ -1,4 +1,6 @@
-const MOBILE_LAYOUT_MEDIA = window.matchMedia('(max-width: 767px)');
+/** Portrait (≤767px) ou celular deitado (altura baixa + touch). Manter alinhado ao CSS mobile. */
+const FM_MOBILE_LAYOUT_MEDIA_QUERY = '(max-width: 767px), (max-height: 520px) and (max-width: 1024px) and (pointer: coarse)';
+const MOBILE_LAYOUT_MEDIA = window.matchMedia(FM_MOBILE_LAYOUT_MEDIA_QUERY);
 
 function isMobileViewport() {
     return MOBILE_LAYOUT_MEDIA.matches;
@@ -23,6 +25,14 @@ function updateMobileMenuButtonState(open) {
     const sidebar = document.getElementById('app-sidebar');
     if (sidebar) {
         sidebar.setAttribute('aria-hidden', mobile && !open ? 'true' : 'false');
+    }
+
+    if (mobile && open && typeof openMobileMenuGrid === 'function') {
+        openMobileMenuGrid();
+    }
+
+    if (typeof syncMobileTopbarContentActions === 'function') {
+        syncMobileTopbarContentActions();
     }
 
     updateDesktopSidebarToggleState();
@@ -72,6 +82,7 @@ function setMobileMenuBackdropVisible(visible) {
 
 function closeMobileMenu() {
     setMobileMenuBackdropVisible(false);
+    if (typeof resetMobileMenuStack === 'function') resetMobileMenuStack();
     updateMobileMenuButtonState(false);
 }
 
@@ -116,6 +127,9 @@ function syncDashboardMobileDetailState(showDetail) {
         return;
     }
     dashboard.classList.toggle('fm-dashboard--mobile-detail', Boolean(showDetail));
+    if (typeof syncMobileTopbarContentActions === 'function') {
+        syncMobileTopbarContentActions();
+    }
 }
 
 function showDashboardMobileOrderList() {
@@ -139,6 +153,13 @@ function syncMobileLayoutState() {
         } catch (error) {
             console.warn('syncMobileLayoutState:', error);
         }
+    }
+
+    if (typeof syncMobileMenuVisibility === 'function') {
+        syncMobileMenuVisibility();
+    }
+    if (typeof syncMobileTopbarContentActions === 'function') {
+        syncMobileTopbarContentActions();
     }
 
     updateDesktopSidebarToggleState();
@@ -192,6 +213,7 @@ function bindSidebarRailHover() {
 
 function bindResponsiveLayout() {
     syncMobileLayoutState();
+    if (typeof syncMobileMenuVisibility === 'function') syncMobileMenuVisibility();
     updateMobileMenuButtonState(false);
 
     if (typeof MOBILE_LAYOUT_MEDIA.addEventListener === 'function') {
@@ -225,6 +247,7 @@ function bindResponsiveLayout() {
     });
 
     bindMobileNavAccordion();
+    if (typeof bindMobileMenu === 'function') bindMobileMenu();
 
     window.addEventListener('keydown', event => {
         if (event.key === 'Escape' && isMobileViewport()) {
@@ -233,6 +256,9 @@ function bindResponsiveLayout() {
     });
 
     window.addEventListener('resize', syncMobileLayoutState, { passive: true });
+    window.addEventListener('orientationchange', () => {
+        window.setTimeout(syncMobileLayoutState, 100);
+    });
 }
 
 window.setAppMobileTopbarTitle = setAppMobileTopbarTitle;

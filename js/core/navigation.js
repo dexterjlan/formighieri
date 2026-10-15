@@ -319,6 +319,11 @@ async function restoreAppNavState() {
                 await restoreGestaoView(state);
                 return true;
             case 'performance':
+                if (state.performanceSection === 'montagem-externa'
+                    && typeof showPerformanceMontagemExterna === 'function') {
+                    showPerformanceMontagemExterna();
+                    return true;
+                }
                 if (typeof showPerformanceProjeto === 'function') {
                     showPerformanceProjeto();
                     return true;
@@ -498,6 +503,7 @@ function updateAdminNav() {
     if (typeof updateRequisicoesNav === 'function') updateRequisicoesNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
     if (typeof updateCalendarGoogleSyncControls === 'function') updateCalendarGoogleSyncControls();
+    if (typeof refreshMobileMenuIfOpen === 'function') refreshMobileMenuIfOpen();
 }
 
 const APP_MOBILE_TOPBAR_TITLES = {
@@ -551,7 +557,11 @@ function updateMainNavActive(activeView) {
             activeView === 'programacao-montagem' || activeView === 'programacao-producao'
         ));
         item.classList.toggle('is-active', isGroup ? groupActive : active);
-        if (isGroup) btn.open = groupActive;
+        if (isGroup) {
+            const openSubnav = groupActive
+                && !(typeof isMobileViewport === 'function' && isMobileViewport());
+            btn.open = openSubnav;
+        }
     });
     clearInactiveSubnavSelection(activeView);
     if (typeof setAppMobileTopbarTitle === 'function') {
@@ -598,6 +608,9 @@ function hideSubViews() {
     }
     if (typeof setProgramacoesFullscreen === 'function') {
         setProgramacoesFullscreen(false);
+    }
+    if (typeof hideAllGestaoPanels === 'function') {
+        hideAllGestaoPanels();
     }
 
     document.getElementById("welcome-view").classList.add("hidden");

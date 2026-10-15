@@ -69,6 +69,33 @@ async function loadDetailingDescriptiveSection() {
     }
 }
 
+function openDetailingDriveFileView(file) {
+    if (!file) {
+        alertAppDialog('Não foi possível abrir o arquivo.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    let url = '';
+    if (typeof resolveDriveFilePdfBrowserOpenUrl === 'function') {
+        url = resolveDriveFilePdfBrowserOpenUrl(file);
+    }
+    if (!url && typeof resolveDriveFileViewUrl === 'function') {
+        url = resolveDriveFileViewUrl(file);
+    }
+    if (!url) {
+        url = String(file?.url || '').trim();
+    }
+    if (!url) {
+        alertAppDialog('Não foi possível abrir o arquivo.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function viewDetailingDescriptiveFile() {
+    openDetailingDriveFileView(detailingDescriptiveFileCache);
+}
+
 function downloadDetailingDescriptiveFile() {
     const file = detailingDescriptiveFileCache;
     const url = typeof resolveDriveFileDownloadUrl === 'function'
@@ -174,14 +201,26 @@ function renderDetailingDriveFiles(files = []) {
                     <p class="text-xs font-medium text-slate-800 truncate" title="${name}">${name}</p>
                     <p class="text-[10px] text-slate-400">${size}${updated ? ` · ${updated}` : ''}</p>
                 </div>
-                <button type="button"
-                    data-drive-file-download="${Number(file.id) || 0}"
-                    class="shrink-0 text-xs bg-white border border-indigo-200 text-indigo-800 px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-50">
-                    Baixar
-                </button>
+                <div class="flex shrink-0 flex-wrap gap-1">
+                    <button type="button"
+                        data-drive-file-view="${Number(file.id) || 0}"
+                        class="text-xs bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-800">
+                        Ver
+                    </button>
+                    <button type="button"
+                        data-drive-file-download="${Number(file.id) || 0}"
+                        class="text-xs bg-white border border-indigo-200 text-indigo-800 px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-50">
+                        Baixar
+                    </button>
+                </div>
             </div>
         `;
     }).join('');
+}
+
+function viewDetailingDriveFile(fileId) {
+    const file = detailingDriveFilesCache.find(item => Number(item.id) === Number(fileId));
+    openDetailingDriveFileView(file);
 }
 
 function downloadDetailingDriveFile(fileId) {
@@ -301,6 +340,7 @@ async function uploadDetailingDriveFiles(fileList) {
 }
 
 function bindDetailingDriveEvents() {
+    document.getElementById('btn-detalhamento-descriptive-view')?.addEventListener('click', viewDetailingDescriptiveFile);
     document.getElementById('btn-detalhamento-descriptive-download')?.addEventListener('click', downloadDetailingDescriptiveFile);
     document.getElementById('btn-detalhamento-drive-refresh')?.addEventListener('click', () => {
         loadDetailingDriveFiles();
@@ -314,9 +354,14 @@ function bindDetailingDriveEvents() {
         input.value = '';
     });
     document.getElementById('detalhamento-drive-list')?.addEventListener('click', (event) => {
-        const button = event.target.closest('[data-drive-file-download]');
-        if (!button) return;
-        downloadDetailingDriveFile(button.dataset.driveFileDownload);
+        const viewButton = event.target.closest('[data-drive-file-view]');
+        if (viewButton) {
+            viewDetailingDriveFile(viewButton.dataset.driveFileView);
+            return;
+        }
+        const downloadButton = event.target.closest('[data-drive-file-download]');
+        if (!downloadButton) return;
+        downloadDetailingDriveFile(downloadButton.dataset.driveFileDownload);
     });
 }
 

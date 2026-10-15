@@ -20,7 +20,8 @@ const GESTAO_IMPORT_COLUMNS = [
     { key: 'projectCode', header: 'codigo_projeto', label: 'Código do projeto', required: true },
     { key: 'projectName', header: 'nome_projeto', label: 'Nome do projeto', required: true },
     { key: 'environmentName', header: 'ambiente', label: 'Ambiente', required: true },
-    { key: 'saleValue', header: 'valor_venda', label: 'Valor de venda', required: false }
+    { key: 'saleValue', header: 'valor_venda', label: 'Valor de venda', required: false },
+    { key: 'wpsQuoteCode', header: 'orcamento', label: 'Código do orçamento (pedido)', required: false }
 ];
 
 const GESTAO_IMPORT_HEADER_ALIASES = {
@@ -61,7 +62,13 @@ const GESTAO_IMPORT_HEADER_ALIASES = {
     ambiente: 'environmentName',
     environment: 'environmentName',
     valor_venda: 'saleValue',
-    sale_value: 'saleValue'
+    sale_value: 'saleValue',
+    orcamento: 'wpsQuoteCode',
+    codigo_orcamento: 'wpsQuoteCode',
+    orcamento_pedido: 'wpsQuoteCode',
+    wps_quote_code: 'wpsQuoteCode',
+    wpsquotecode: 'wpsQuoteCode',
+    quote_code: 'wpsQuoteCode'
 };
 
 const gestaoImportViaCepCache = new Map();
@@ -249,6 +256,33 @@ async function resolveGestaoImportOrderAddrId(clientId, order) {
     }
 
     return { addrId: data?.id ? Number(data.id) : null };
+}
+
+async function persistGestaoImportOrderWpsQuoteCode(orderId, wpsQuoteCode, orderCode, now) {
+    const normalizedOrderId = Number(orderId);
+    const code = String(wpsQuoteCode || '').trim();
+    if (!normalizedOrderId || !code) return { ok: true };
+
+    const payload = {
+        wpsQuoteCode: code,
+        updatedById: currentUser?.id || null,
+        updatedAt: now
+    };
+
+    let { error } = await supabaseClient
+        .from('salesOrders')
+        .update(payload)
+        .eq('id', normalizedOrderId);
+
+    if (error?.message?.includes('wpsQuoteCode')) {
+        return { ok: true, skipped: true };
+    }
+
+    if (error) {
+        return { ok: false, error: `Pedido ${orderCode}: não foi possível gravar o orçamento — ${error.message}` };
+    }
+
+    return { ok: true };
 }
 
 async function persistGestaoImportOrderAddrId(orderId, clientId, order, now) {
@@ -483,7 +517,8 @@ function getGestaoImportExampleRow(consultantName = '') {
         projectCode: '101',
         projectName: 'Cozinha Principal',
         environmentName: environment,
-        saleValue: '15000,00'
+        saleValue: '15000,00',
+        wpsQuoteCode: 'ORC-12345'
     };
 }
 
@@ -590,6 +625,7 @@ function mapGestaoImportRow(rawRow, rowNumber) {
     mapped.addrNumber = String(mapped.addrNumber || '').trim();
     mapped.addrComplement = String(mapped.addrComplement || '').trim();
     mapped.saleValue = parseGestaoImportSaleValue(mapped.saleValue);
+    mapped.wpsQuoteCode = String(mapped.wpsQuoteCode || '').trim();
 
     if (!mapped.orderCode) mapped.errors.push('Código do pedido é obrigatório.');
     if (!mapped.clientName) mapped.errors.push('Cliente é obrigatório.');
@@ -685,6 +721,7 @@ function groupGestaoImportRowsByOrder(rows) {
                 addrNumber: '',
                 addrComplement: '',
                 _addrKey: '',
+                wpsQuoteCode: '',
                 projects: [],
                 rowNumbers: []
             });
@@ -731,6 +768,15 @@ function groupGestaoImportRowsByOrder(rows) {
                 order._addrKey = rowKey;
             } else if (rowKey && order._addrKey && rowKey !== order._addrKey) {
                 row.errors.push(`Endereço diverge do pedido ${key} (linha ${order.rowNumbers[0]}).`);
+                return;
+            }
+        }
+
+        if (row.wpsQuoteCode) {
+            if (!order.wpsQuoteCode) {
+                order.wpsQuoteCode = row.wpsQuoteCode;
+            } else if (order.wpsQuoteCode !== row.wpsQuoteCode) {
+                row.errors.push(`Orçamento diverge do pedido ${key} (linha ${order.rowNumbers[0]}).`);
                 return;
             }
         }
@@ -1009,6 +1055,7 @@ async function createGestaoImportOrder(order, lookups, now) {
             saleDate: order.saleDate || undefined,
             clientDeliveryDate: order.clientDeliveryDate || undefined,
             addrId: addrResult.addrId || undefined,
+            wpsQuoteCode: order.wpsQuoteCode || undefined,
             createdById: currentUser.id,
             updatedById: currentUser.id,
             updatedAt: now
@@ -1023,8 +1070,16 @@ async function createGestaoImportOrder(order, lookups, now) {
         if (error?.message?.includes('saleDate')
             || error?.message?.includes('clientDeliveryDate')
             || error?.message?.includes('updatedAt')
-            || error?.message?.includes('addrId')) {
-            const { saleDate: _s, clientDeliveryDate: _d, updatedAt: _u, addrId: _a, ...fallback } = orderPayload;
+            || error?.message?.includes('addrId')
+            || error?.message?.includes('wpsQuoteCode')) {
+            const {
+                saleDate: _s,
+                clientDeliveryDate: _d,
+                updatedAt: _u,
+                addrId: _a,
+                wpsQuoteCode: _q,
+                ...fallback
+            } = orderPayload;
             ({ data: created, error } = await supabaseClient
                 .from('salesOrders')
                 .insert(fallback)
@@ -1066,6 +1121,22 @@ async function createGestaoImportOrder(order, lookups, now) {
         });
         if (architectId && typeof persistSalesOrderArchitectId === 'function') {
             await persistSalesOrderArchitectId(orderId, architectId);
+        }
+    }
+
+    if (order.wpsQuoteCode) {
+        const quoteResult = await persistGestaoImportOrderWpsQuoteCode(
+            orderId,
+            order.wpsQuoteCode,
+            order.orderCode,
+            now
+        );
+        if (quoteResult.error) {
+            if (createdNewOrder) {
+                await supabaseClient.from('salesOrders').delete().eq('id', orderId);
+                return { ok: false, message: quoteResult.error };
+            }
+            projectErrors.push(quoteResult.error);
         }
     }
 
@@ -1243,6 +1314,10 @@ function validateGestaoImportOrder(order, lookups, context) {
 
     if (gestaoImportOrderHasAddrFields(order)) {
         notes.push(`Pedido ${order.orderCode}: endereço (CEP ${order.addrPostalCode}) será consultado e vinculado ao pedido.`);
+    }
+
+    if (order.wpsQuoteCode) {
+        notes.push(`Pedido ${order.orderCode}: orçamento ${order.wpsQuoteCode} será gravado no pedido.`);
     }
 
     const existingProjectCodes = existingOrder
