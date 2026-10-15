@@ -211,6 +211,12 @@ function getProgramacoesDeliveriesExportVisibleRows() {
     const { rows, columns, defaultSort } = programacoesDeliveriesTableCache;
     if (!rows.length) return [];
 
+    if (typeof isMobileViewport === 'function' && isMobileViewport()) {
+        const searchInput = document.getElementById('programacoes-deliveries-mobile-search');
+        const queryNorm = normalizeProgramacoesMobileSearchText(searchInput?.value || '');
+        return rows.filter(row => programacoesDeliveriesRowMatchesMobileSearch(row, queryNorm));
+    }
+
     const state = typeof getInteractiveTableState === 'function'
         ? getInteractiveTableState(PROGRAMACOES_DELIVERIES_TABLE_ID, defaultSort, columns)
         : { filters: {}, sorts: defaultSort || [] };
@@ -268,6 +274,79 @@ async function exportProgramacoesDeliveriesToExcel() {
     }
 }
 
+function programacoesDeliveriesRowMatchesMobileSearch(row, queryNorm) {
+    if (!queryNorm) return true;
+    const haystack = normalizeProgramacoesMobileSearchText([
+        row.orderCode,
+        row.clientName,
+        row.projectName,
+        row.statusName,
+        row.deliveryLabel,
+        row.clientDeliveryPhaseName,
+        row.consultantName,
+        row.designerName,
+        row.productionMonthLabel
+    ].join(' '));
+    return haystack.includes(queryNorm);
+}
+
+function renderProgramacoesDeliveriesMobileCard(row) {
+    const detailFields = [
+        renderProgramacoesMobileInlineField('Data entrega', row.deliveryLabel),
+        renderProgramacoesMobileInlineField('Consultor', row.consultantName),
+        renderProgramacoesMobileInlineField('Projetista', row.designerName),
+        renderProgramacoesMobileInlineField('Mês prog. prod.', row.productionMonthLabel)
+    ].join('');
+
+    return `
+        <article class="programacoes-projects-mobile__card programacoes-deliveries-mobile__card" data-order-project-id="${Number(row.id)}">
+            <div class="programacoes-projects-mobile__headline programacoes-deliveries-mobile__headline">
+                ${renderProgramacoesMobileHeadlineHtml(row)}
+            </div>
+            ${renderProgramacoesMobileStatusHtml(row)}
+            <div class="programacoes-projects-mobile__details">
+                ${detailFields}
+            </div>
+        </article>
+    `;
+}
+
+function renderProgramacoesDeliveriesMobileScreen(content, config = {}) {
+    const {
+        rows = [],
+        subtitle = '',
+        lockedDesigner = false,
+        onRefresh
+    } = config;
+
+    const headerActionsHtml = `
+        <button type="button" id="btn-programacoes-deliveries-export"
+            class="order-tab-action-btn text-xs bg-white border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-lg font-medium hover:bg-emerald-50">
+            Exportar Excel
+        </button>
+        ${typeof PROGRAMACOES_FULLSCREEN_BUTTON_HTML === 'string' ? PROGRAMACOES_FULLSCREEN_BUTTON_HTML : ''}
+    `;
+
+    renderProgramacoesMobileListScreen(content, {
+        screenId: 'programacoes-deliveries',
+        title: 'Entregas',
+        subtitle,
+        refreshButtonId: 'btn-programacoes-refresh-deliveries',
+        headerActionsHtml,
+        onRefresh,
+        rows,
+        emptyMessage: lockedDesigner
+            ? 'Nenhum projeto seu nesta faixa de status.'
+            : 'Nenhum projeto entre Aguardando Projeto Técnico e Expedição.',
+        rowMatchesSearch: programacoesDeliveriesRowMatchesMobileSearch,
+        renderCard: renderProgramacoesDeliveriesMobileCard,
+        onScreenReady(screenContent) {
+            screenContent.querySelector('#btn-programacoes-deliveries-export')
+                ?.addEventListener('click', exportProgramacoesDeliveriesToExcel);
+        }
+    });
+}
+
 function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) {
     const content = document.getElementById('programacoes-content');
     if (!content) return;
@@ -277,6 +356,29 @@ function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) 
         : null;
 
     const rows = buildProgramacoesDeliveriesTableRows(projects, phasesByOrderId);
+    const subtitle = lockedDesigner
+        ? 'Projetos em andamento (do aguardando projeto técnico até expedição) sob sua responsabilidade.'
+        : 'Projetos entre Aguardando Projeto Técnico e Expedição.';
+
+    if (typeof isMobileViewport === 'function' && isMobileViewport()) {
+        renderProgramacoesDeliveriesMobileScreen(content, {
+            rows,
+            subtitle,
+            lockedDesigner: Boolean(lockedDesigner),
+            onRefresh: loadProgramacoesDeliveries
+        });
+        programacoesDeliveriesTableCache = {
+            rows,
+            columns: [],
+            defaultSort: [
+                { key: 'deliveryLabel', direction: 'asc' },
+                { key: 'clientName', direction: 'asc' },
+                { key: 'orderCode', direction: 'asc' },
+                { key: 'projectName', direction: 'asc' }
+            ]
+        };
+        return;
+    }
 
     const columns = [
         {
@@ -368,9 +470,7 @@ function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) 
 
     renderPendenciasInteractiveTableScreen(content, {
         title: 'Entregas',
-        subtitle: lockedDesigner
-            ? 'Projetos em andamento (do aguardando projeto técnico até expedição) sob sua responsabilidade.'
-            : 'Projetos entre Aguardando Projeto Técnico e Expedição.',
+        subtitle,
         refreshButtonId: 'btn-programacoes-refresh-deliveries',
         headerActionsHtml: `
             <button type="button" id="btn-programacoes-deliveries-export"

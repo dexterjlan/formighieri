@@ -573,6 +573,11 @@ body:not(.is-mobile):not(.app-subnav-collapsed):has(.app-nav-group[open]) .app-s
     margin-left: var(--app-subnav-width);
 }
 
+body.is-mobile .app-shell__body,
+body.app-mobile-nav-mode .app-shell__body {
+    margin-left: 0;
+}
+
 body.app-subnav-collapsed .app-nav-group[open] > .app-subnav {
     display: none;
 }
@@ -851,7 +856,7 @@ body.installer-only-nav #app-header-nav button:not(#btn-view3d):not(#btn-logout)
 }
 
 /* Mesma condição que FM_MOBILE_LAYOUT_MEDIA_QUERY em js/core/responsive.js */
-@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and (pointer: coarse) {
+@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
     body.app-mobile-nav-mode .app-shell {
         display: block;
     }
@@ -869,8 +874,8 @@ body.installer-only-nav #app-header-nav button:not(#btn-view3d):not(#btn-logout)
         z-index: 44;
         flex-shrink: 0;
         min-height: calc(3.25rem + env(safe-area-inset-top, 0px));
-        padding: env(safe-area-inset-top, 0px) max(0.75rem, env(safe-area-inset-right, 0px)) 0.5rem
-            max(0.75rem, env(safe-area-inset-left, 0px));
+        /* Safe area horizontal só no .app-shell__body — evita faixa dupla no landscape (iPhone). */
+        padding: env(safe-area-inset-top, 0px) 0.75rem 0.5rem 0.75rem;
         background: #fcfcfb;
         border-bottom: 1px solid #ecefea;
         box-shadow: 0 1px 0 rgb(23 23 23 / 0.04);
@@ -1282,7 +1287,7 @@ body.installer-only-nav #app-header-nav button:not(#btn-view3d):not(#btn-logout)
         line-height: 1;
     }
 
-    @media (orientation: landscape) and (max-height: 520px) and (pointer: coarse) {
+    @media (orientation: landscape) and (max-height: 520px) and ((hover: none) or (pointer: coarse)) {
         .app-mobile-menu__grid {
             --fm-mobile-menu-tile: min(
                 6.25rem,

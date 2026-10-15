@@ -138,6 +138,7 @@ const SCRIPTS = [
     'js/requisicoes/requisicoes-projects.js',
     'js/requisicoes/requisicoes-purchases.js',
     'js/requisicoes/requisicoes-construction.js',
+    'js/programacoes/programacoes-mobile-ui.js',
     'js/requisicoes/requisicoes-assistance.js',
     'js/programacoes/programacoes-projects.js',
     'js/programacoes/programacoes-deliveries.js',

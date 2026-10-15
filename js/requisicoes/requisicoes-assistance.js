@@ -216,6 +216,87 @@ function mountRequisicoesAssistanceInteractiveTable(container) {
     });
 }
 
+function requisicoesAssistanceRowMatchesMobileSearch(row, queryNorm) {
+    if (!queryNorm) return true;
+    const haystack = normalizeProgramacoesMobileSearchText([
+        row.clientName,
+        row.orderCode,
+        row.isWarrantyLabel,
+        row.scheduledLabel,
+        row.finishedLabel,
+        row.description,
+        row.statusLabel
+    ].join(' '));
+    return haystack.includes(queryNorm);
+}
+
+function renderRequisicoesAssistanceMobileCard(row) {
+    const description = row.description || '—';
+    const detailFields = [
+        renderProgramacoesMobileInlineField('Garantia', row.isWarrantyLabel),
+        renderProgramacoesMobileInlineField('Data agendamento', row.scheduledLabel),
+        renderProgramacoesMobileInlineField('Data finalização', row.finishedLabel)
+    ].join('');
+
+    const actionsHtml = `
+        <div class="requisicoes-assistance-mobile__actions">
+            <div class="flex flex-wrap gap-1.5">${renderAssistanceListActionButtons(row.record)}</div>
+            <button type="button"
+                class="assistance-history-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-white border border-indigo-200 text-indigo-800 hover:bg-indigo-50"
+                data-assistance-id="${Number(row.id)}">Histórico</button>
+        </div>
+    `;
+
+    return `
+        <article class="programacoes-projects-mobile__card requisicoes-assistance-mobile__card" data-assistance-id="${Number(row.id)}">
+            <div class="programacoes-projects-mobile__headline requisicoes-assistance-mobile__headline">
+                <p class="programacoes-projects-mobile__order">
+                    <span class="font-mono text-slate-500">${escapeHtml(String(row.orderCode || '—'))}</span>
+                    <span class="text-slate-300" aria-hidden="true">·</span>
+                    <span class="font-semibold text-slate-900">${escapeHtml(String(row.clientName || '—'))}</span>
+                </p>
+                <p class="programacoes-projects-mobile__client requisicoes-assistance-mobile__description">${escapeHtml(description)}</p>
+            </div>
+            <div class="programacoes-projects-mobile__status">${renderAssistanceStatusBadge(row.status)}</div>
+            <div class="programacoes-projects-mobile__details">${detailFields}</div>
+            ${actionsHtml}
+        </article>
+    `;
+}
+
+function renderRequisicoesAssistanceMobileScreen(content, options = {}) {
+    const rows = (assistanceRequestsCache || []).map(mapAssistanceInteractiveRow);
+    const headerActionsHtml = `
+        <button type="button" id="btn-assistance-new"
+            class="text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-800 w-full sm:w-auto justify-center">
+            Nova assistência
+        </button>
+    `;
+
+    renderProgramacoesMobileListScreen(content, {
+        screenId: 'requisicoes-assistencia',
+        title: 'Assistência',
+        subtitle: 'Cadastre o cliente, o pedido quando houver, o endereço, se é garantia e a descrição.',
+        headerActionsHtml,
+        rows,
+        emptyMessage: 'Nenhuma assistência cadastrada.',
+        searchPlaceholder: 'Buscar cliente, pedido, descrição, status…',
+        rowMatchesSearch: requisicoesAssistanceRowMatchesMobileSearch,
+        renderCard: renderRequisicoesAssistanceMobileCard,
+        onScreenReady(screenContent) {
+            if (!options.sqlError) return;
+            const shell = screenContent.querySelector('.programacoes-projects-mobile');
+            const header = shell?.querySelector('.p-4.border-b');
+            if (!header) return;
+            const hint = document.createElement('div');
+            hint.id = 'assistance-sql-hint';
+            hint.className = 'text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2';
+            hint.textContent = options.sqlError;
+            header.appendChild(hint);
+        }
+    });
+}
+
 function assistanceSqlHint() {
     return 'Execute os scripts de assistência em supabase/feats/ (create, quote, status-history, scheduling) no Supabase SQL Editor.';
 }
@@ -861,6 +942,11 @@ function renderAssistanceScreen(options = {}) {
     const content = document.getElementById('requisicoes-content');
     if (!content) return;
 
+    if (typeof isMobileViewport === 'function' && isMobileViewport()) {
+        renderRequisicoesAssistanceMobileScreen(content, options);
+        return;
+    }
+
     content.innerHTML = `
         <section class="space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -884,9 +970,9 @@ function renderAssistanceScreen(options = {}) {
     mountRequisicoesAssistanceInteractiveTable(document.getElementById('assistance-table-mount'));
 }
 
-async function loadAssistanceRequests() {
+async function loadAssistanceRequests(options = {}) {
     const content = document.getElementById('requisicoes-content');
-    if (content) {
+    if (content && !options.silent) {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando assistências...</p>';
     }
 

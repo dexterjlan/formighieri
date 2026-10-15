@@ -1,5 +1,5 @@
 /** Portrait (≤767px) ou celular deitado (altura baixa + touch). Manter alinhado ao CSS mobile. */
-const FM_MOBILE_LAYOUT_MEDIA_QUERY = '(max-width: 767px), (max-height: 520px) and (max-width: 1024px) and (pointer: coarse)';
+const FM_MOBILE_LAYOUT_MEDIA_QUERY = '(max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse))';
 const MOBILE_LAYOUT_MEDIA = window.matchMedia(FM_MOBILE_LAYOUT_MEDIA_QUERY);
 
 function isMobileViewport() {
@@ -143,6 +143,9 @@ function syncMobileLayoutState() {
 
     if (mobile) {
         document.body.classList.remove('is-rail-expanded', 'app-subnav-collapsed');
+        document.querySelectorAll('details.app-nav-group[open]').forEach(details => {
+            details.open = false;
+        });
     } else {
         closeMobileMenu();
         document.getElementById('dashboard-view')?.classList.remove('fm-dashboard--mobile-detail');

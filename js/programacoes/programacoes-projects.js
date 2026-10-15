@@ -164,30 +164,84 @@ function bindProgramacoesSequenceInputs(tbody) {
     });
 }
 
-function renderProgramacoesMoveButtons(row, options = {}) {
-    const { isFirst, isLast } = options;
+function programacoesProjectRowMatchesMobileSearch(row, queryNorm) {
+    if (!queryNorm) return true;
+    const haystack = normalizeProgramacoesMobileSearchText([
+        row.orderCode,
+        row.clientName,
+        row.projectName,
+        row.statusName,
+        row.designerName,
+        row.clientDeliveryLabel,
+        row.clientDeliveryPhaseName,
+        row.productionMonthLabel,
+        row.characteristicFilterText
+    ].join(' '));
+    return haystack.includes(queryNorm);
+}
+
+function renderProgramacoesProjectsMobileCard(row, options = {}) {
+    const { canReorder, maxSequence } = options;
+    const seqHtml = canReorder
+        ? renderProgramacoesSequenceCell(row, { canReorder, maxSequence })
+        : `<span class="programacoes-projects-mobile__seq">${escapeHtml(String(row.sequence || '—'))}</span>`;
+    const phaseName = String(row.clientDeliveryPhaseName || '').trim();
+    const deliveryValue = phaseName
+        ? `${phaseName}: ${row.clientDeliveryLabel || '—'}`
+        : (row.clientDeliveryLabel || '—');
+
+    const characteristicsBlock = row.characteristicHtml && row.characteristicHtml !== '—'
+        ? `<div class="programacoes-projects-mobile__chips">${row.characteristicHtml}</div>`
+        : '';
+
+    const detailFields = [
+        renderProgramacoesMobileInlineField('Dt entrg. cli.', deliveryValue),
+        renderProgramacoesMobileInlineField('Projetista', row.designerName),
+        renderProgramacoesMobileInlineField('Mês prog. prod.', row.productionMonthLabel)
+    ].join('');
+
     return `
-        <div class="programacoes-priority-actions">
-            <button type="button"
-                class="programacoes-move-btn"
-                data-direction="up"
-                data-order-project-id="${Number(row.orderProjectId)}"
-                ${isFirst ? 'disabled' : ''}
-                title="Subir prioridade"
-                aria-label="Subir prioridade">
-                ▲
-            </button>
-            <button type="button"
-                class="programacoes-move-btn"
-                data-direction="down"
-                data-order-project-id="${Number(row.orderProjectId)}"
-                ${isLast ? 'disabled' : ''}
-                title="Descer prioridade"
-                aria-label="Descer prioridade">
-                ▼
-            </button>
-        </div>
+        <article class="programacoes-projects-mobile__card" data-order-project-id="${Number(row.orderProjectId)}">
+            <div class="programacoes-projects-mobile__card-top">
+                <div class="programacoes-projects-mobile__seq-wrap">${seqHtml}</div>
+                <div class="programacoes-projects-mobile__headline">
+                    ${renderProgramacoesMobileHeadlineHtml(row)}
+                </div>
+            </div>
+            ${renderProgramacoesMobileStatusHtml(row)}
+            <div class="programacoes-projects-mobile__details">
+                ${detailFields}
+            </div>
+            ${characteristicsBlock}
+        </article>
     `;
+}
+
+function bindProgramacoesProjectsMobileList(root, options = {}) {
+    if (options.canReorder) {
+        bindProgramacoesSequenceInputs(root);
+    }
+}
+
+function renderProgramacoesProjectsMobileScreen(content, config = {}) {
+    const { rows = [], canReorder = false, maxSequence = 1, onRefresh } = config;
+    renderProgramacoesMobileListScreen(content, {
+        screenId: 'programacoes-projects',
+        title: 'Projetos',
+        subtitle: 'Prioridade do time de projetos para entregar à produção. Quanto mais acima, maior a prioridade.',
+        refreshButtonId: 'btn-programacoes-refresh-projects',
+        headerActionsHtml: typeof PROGRAMACOES_FULLSCREEN_BUTTON_HTML === 'string'
+            ? PROGRAMACOES_FULLSCREEN_BUTTON_HTML
+            : '',
+        onRefresh,
+        rows,
+        emptyMessage: 'Nenhum projeto na fila de programação.',
+        rowMatchesSearch: programacoesProjectRowMatchesMobileSearch,
+        renderCard: (row) => renderProgramacoesProjectsMobileCard(row, { canReorder, maxSequence }),
+        onListRendered(mountEl) {
+            bindProgramacoesProjectsMobileList(mountEl, { canReorder });
+        }
+    });
 }
 
 function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, characteristicsMap = new Map()) {
@@ -252,6 +306,16 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
                 productionMonthLabel
             });
     });
+
+    if (typeof isMobileViewport === 'function' && isMobileViewport()) {
+        renderProgramacoesProjectsMobileScreen(content, {
+            rows,
+            canReorder,
+            maxSequence,
+            onRefresh: loadProgramacoesProjects
+        });
+        return;
+    }
 
     const columns = [
         {
@@ -359,21 +423,6 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
         }
     ];
 
-    if (canReorder) {
-        columns.push({
-            key: 'priority',
-            label: 'Prioridade',
-            type: 'action',
-            align: 'right',
-            thClass: 'w-24',
-            cellClass: 'p-3 text-right whitespace-nowrap',
-            render: (row) => renderProgramacoesMoveButtons(row, {
-                isFirst: Number(row.sequence) <= 1,
-                isLast: Number(row.sequence) >= maxSequence
-            })
-        });
-    }
-
     if (typeof renderPendenciasInteractiveTableScreen !== 'function') {
         content.innerHTML = '<p class="text-xs text-red-500 text-center py-8 px-4">Componente de tabela indisponível.</p>';
         return;
@@ -397,50 +446,13 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
             if (typeof syncProgramacoesFullscreenButton === 'function') {
                 syncProgramacoesFullscreenButton();
             }
-            if (!canReorder) return;
-            bindProgramacoesSequenceInputs(tbody);
-            tbody?.querySelectorAll('.programacoes-move-btn').forEach(button => {
-                button.addEventListener('click', () => {
-                    const orderProjectId = Number(button.dataset.orderProjectId);
-                    const direction = button.dataset.direction;
-                    if (!orderProjectId || !direction) return;
-                    moveProgramacoesProject(orderProjectId, direction);
-                });
-            });
+            if (canReorder) {
+                bindProgramacoesSequenceInputs(tbody);
+            }
         }
     });
     if (typeof syncProgramacoesFullscreenButton === 'function') {
         syncProgramacoesFullscreenButton();
-    }
-}
-
-async function moveProgramacoesProject(orderProjectId, direction) {
-    if (typeof canReorderProgramacoesProjects === 'function' && !canReorderProgramacoesProjects()) {
-        return;
-    }
-
-    if (typeof setProgramacoesActionLoading === 'function') {
-        setProgramacoesActionLoading(true, 'Atualizando prioridade...');
-    }
-
-    try {
-        const { error } = await supabaseClient.rpc('reorder_project_production_queue', {
-            p_order_project_id: Number(orderProjectId),
-            p_direction: direction
-        });
-        if (error) throw error;
-        await loadProgramacoesProjects({ silent: true });
-    } catch (error) {
-        console.error('moveProgramacoesProject:', error);
-        const message = isMissingProjectProductionQueueError(error)
-            || /could not find the function/i.test(String(error?.message || ''))
-            ? 'Execute o SQL pendente da fila de programações no SQL Editor do DEV.'
-            : (error?.message || 'Não foi possível reordenar o projeto.');
-        alertAppDialog(message);
-    } finally {
-        if (typeof setProgramacoesActionLoading === 'function') {
-            setProgramacoesActionLoading(false);
-        }
     }
 }
 

@@ -3155,6 +3155,182 @@ body.gestao-kanban-fullscreen-active {
     cursor: not-allowed;
 }
 
+/* Programações → Projetos: lista em cartões (preview mobile) */
+.programacoes-projects-mobile__preview-hint {
+    display: none;
+}
+
+@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
+    .programacoes-projects-mobile__preview-hint {
+        display: block;
+    }
+}
+
+.programacoes-projects-mobile__search-wrap {
+    display: block;
+    width: 100%;
+}
+
+.programacoes-projects-mobile__search {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.625rem;
+    background: #fff;
+    font-size: 16px;
+    color: rgb(30 41 59);
+}
+
+.programacoes-projects-mobile__search:focus {
+    outline: none;
+    border-color: rgb(79 70 229);
+    box-shadow: 0 0 0 3px rgb(79 70 229 / 0.12);
+}
+
+.programacoes-projects-mobile__count {
+    margin: 0;
+    font-size: 0.75rem;
+    color: rgb(100 116 139);
+}
+
+.programacoes-projects-mobile__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.75rem;
+    background: rgb(248 250 252 / 0.35);
+}
+
+.programacoes-projects-mobile__card {
+    background: #fff;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.75rem;
+    padding: 0.75rem 0.85rem;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
+}
+
+.programacoes-projects-mobile__card-top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.5rem 0.65rem;
+    align-items: start;
+}
+
+.programacoes-projects-mobile__seq-wrap .programacoes-seq-input {
+    width: 3rem;
+    min-height: 2.5rem;
+    font-size: 1rem;
+}
+
+.programacoes-projects-mobile__seq {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.25rem;
+    min-height: 2.25rem;
+    padding: 0 0.35rem;
+    border-radius: 0.5rem;
+    background: rgb(238 242 255);
+    color: rgb(67 56 202);
+    font-size: 0.8125rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.programacoes-projects-mobile__headline {
+    min-width: 0;
+}
+
+.programacoes-projects-mobile__order {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.programacoes-projects-mobile__client {
+    margin: 0.2rem 0 0;
+    font-size: 0.75rem;
+    color: rgb(100 116 139);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.programacoes-projects-mobile__details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgb(241 245 249);
+}
+
+.programacoes-projects-mobile__detail-line {
+    margin: 0;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: rgb(71 85 105);
+    word-break: break-word;
+}
+
+.programacoes-projects-mobile__detail-label {
+    font-weight: 700;
+    color: rgb(51 65 85);
+    margin-right: 0.35rem;
+}
+
+.programacoes-projects-mobile__detail-value {
+    font-weight: 400;
+    color: rgb(71 85 105);
+}
+
+.programacoes-projects-mobile__status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.55rem;
+}
+
+.programacoes-projects-mobile__chips {
+    margin-top: 0.5rem;
+    font-size: 0.6875rem;
+}
+
+.programacoes-deliveries-mobile__card .programacoes-deliveries-mobile__headline {
+    margin-bottom: 0.15rem;
+}
+
+.requisicoes-assistance-mobile__description {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.requisicoes-assistance-mobile__actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid rgb(241 245 249);
+}
+
+.view3d-mobile__actions {
+    margin-top: 0.65rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid rgb(241 245 249);
+}
+
+.programacoes-projects-mobile__chips .programacoes-project-characteristics-chips {
+    flex-wrap: wrap;
+}
+
 .programacoes-col-seq {
     width: 3.5rem;
     max-width: 4.25rem;
@@ -3268,36 +3444,6 @@ body.programacoes-fullscreen-active {
 
 .pendencias-sem-projetista-designer {
     min-width: 11rem;
-}
-
-.programacoes-priority-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.programacoes-move-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    border: 1px solid rgb(199 210 254);
-    border-radius: 0.5rem;
-    background: rgb(238 242 255);
-    color: rgb(55 48 163);
-    font-size: 0.65rem;
-    line-height: 1;
-    cursor: pointer;
-}
-
-.programacoes-move-btn:hover:not(:disabled) {
-    background: rgb(199 210 254);
-}
-
-.programacoes-move-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
 }
 
 .programacoes-col-characteristics {
@@ -3457,7 +3603,7 @@ body.installer-only-nav #btn-logout {
     flex-shrink: 0;
 }
 
-@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and (pointer: coarse) {
+@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
     body {
         -webkit-text-size-adjust: 100%;
     }

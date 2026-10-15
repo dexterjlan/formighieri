@@ -238,6 +238,9 @@ async function searchView3dProjects() {
             });
         }
 
+        const mobileSearch = document.getElementById('view3d-mobile-search');
+        if (mobileSearch) mobileSearch.value = '';
+
         view3dSearchRows = projects.map(project => {
             const order = orderById[Number(project.orderId)] || {};
             const driveFile = driveByProjectId[String(project.id)] || null;
@@ -261,10 +264,100 @@ async function searchView3dProjects() {
     }
 }
 
+function view3dRowMatchesMobileSearch(row, queryNorm) {
+    if (!queryNorm) return true;
+    const haystack = normalizeProgramacoesMobileSearchText([
+        row.orderCode,
+        row.clientName,
+        row.projectLabel
+    ].join(' '));
+    return haystack.includes(queryNorm);
+}
+
+function renderView3dRowActionsHtml(row, options = {}) {
+    const { showAdminUpload = false, alignEnd = false } = options;
+    const projectId = Number(row.project.id);
+    const hasModel = Boolean(row.driveFile?.driveFileId || row.driveFile?.url);
+
+    const openBtn = hasModel
+        ? `<button type="button" class="view3d-open-btn text-xs bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1 rounded-lg font-medium"
+            data-order-project-id="${projectId}">
+            Abrir 3D
+        </button>`
+        : '<span class="text-xs text-slate-300">—</span>';
+
+    const uploadBtn = showAdminUpload
+        ? `<button type="button" class="view3d-upload-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium"
+            data-order-project-id="${projectId}">
+            ${hasModel ? 'Substituir' : 'Upload'}
+        </button>`
+        : '';
+
+    const wrapClass = alignEnd
+        ? 'flex flex-wrap justify-end gap-1'
+        : 'view3d-mobile__actions flex flex-wrap gap-1.5';
+
+    return `<div class="${wrapClass}">${openBtn}${uploadBtn}</div>`;
+}
+
+function renderView3dMobileCard(row, options = {}) {
+    return `
+        <article class="programacoes-projects-mobile__card view3d-mobile__card" data-order-project-id="${Number(row.project.id)}">
+            <div class="programacoes-projects-mobile__headline view3d-mobile__headline">
+                <p class="programacoes-projects-mobile__order">
+                    <span class="font-mono text-slate-500">${escapeHtml(String(row.orderCode || '—'))}</span>
+                    <span class="text-slate-300" aria-hidden="true">·</span>
+                    <span class="font-semibold text-slate-900">${escapeHtml(String(row.projectLabel || '—'))}</span>
+                </p>
+                <p class="programacoes-projects-mobile__client">${escapeHtml(String(row.clientName || '—'))}</p>
+            </div>
+            ${renderView3dRowActionsHtml(row, options)}
+        </article>
+    `;
+}
+
+let view3dMobileSearchBound = false;
+
+function bindView3dMobileSearchInput() {
+    if (view3dMobileSearchBound) return;
+    const input = document.getElementById('view3d-mobile-search');
+    if (!input) return;
+    view3dMobileSearchBound = true;
+    input.addEventListener('input', () => renderView3dMobileResultsList());
+}
+
+function renderView3dMobileResultsList() {
+    const listEl = document.getElementById('view3d-results-mobile-list');
+    const countEl = document.getElementById('view3d-mobile-count');
+    if (!listEl) return;
+
+    const showAdminUpload = isAdmin();
+    const queryNorm = normalizeProgramacoesMobileSearchText(
+        document.getElementById('view3d-mobile-search')?.value || ''
+    );
+    const visible = view3dSearchRows.filter(row => view3dRowMatchesMobileSearch(row, queryNorm));
+
+    if (!visible.length) {
+        listEl.innerHTML = '<p class="text-xs text-slate-400 text-center py-10 px-4">Nenhum projeto encontrado com o filtro.</p>';
+    } else {
+        listEl.innerHTML = visible.map(row => renderView3dMobileCard(row, { showAdminUpload })).join('');
+    }
+
+    if (countEl) {
+        const total = view3dSearchRows.length;
+        const shown = visible.length;
+        countEl.textContent = shown === total
+            ? `${total} registro${total === 1 ? '' : 's'}`
+            : `${shown} de ${total} registros`;
+    }
+}
+
 function renderView3dResults() {
     const tbody = document.getElementById('view3d-results-body');
     const emptyEl = document.getElementById('view3d-results-empty');
     const tableWrap = document.getElementById('view3d-results-table-wrap');
+    const mobileShell = document.getElementById('view3d-results-mobile-shell');
+    const mobile = typeof isMobileViewport === 'function' && isMobileViewport();
     if (!tbody) return;
 
     const showAdminUpload = isAdmin();
@@ -274,48 +367,33 @@ function renderView3dResults() {
         tbody.innerHTML = '';
         emptyEl?.classList.remove('hidden');
         tableWrap?.classList.add('hidden');
+        mobileShell?.classList.add('hidden');
         return;
     }
 
     emptyEl?.classList.add('hidden');
+
+    if (mobile) {
+        tableWrap?.classList.add('hidden');
+        mobileShell?.classList.remove('hidden');
+        bindView3dMobileSearchInput();
+        renderView3dMobileResultsList();
+        return;
+    }
+
+    mobileShell?.classList.add('hidden');
     tableWrap?.classList.remove('hidden');
 
-    tbody.innerHTML = view3dSearchRows.map(row => {
-        const projectId = Number(row.project.id);
-        const hasModel = Boolean(row.driveFile?.driveFileId || row.driveFile?.url);
-        const fileLabel = hasModel
-            ? escapeHtml(row.driveFile.fileName || 'modelo.glb')
-            : '<span class="text-slate-400">—</span>';
-
-        const openBtn = hasModel
-            ? `<button type="button" class="view3d-open-btn text-xs bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1 rounded-lg font-medium"
-                data-order-project-id="${projectId}">
-                Abrir 3D
-            </button>`
-            : '<span class="text-xs text-slate-300">—</span>';
-
-        const uploadBtn = showAdminUpload
-            ? `<button type="button" class="view3d-upload-btn text-xs bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 px-2.5 py-1 rounded-lg font-medium"
-                data-order-project-id="${projectId}">
-                ${hasModel ? 'Substituir' : 'Upload'}
-            </button>`
-            : '';
-
-        return `
+    tbody.innerHTML = view3dSearchRows.map(row => `
             <tr class="border-b border-slate-100 last:border-0">
                 <td class="p-3 text-xs font-mono text-slate-800">${escapeHtml(row.orderCode)}</td>
                 <td class="p-3 text-xs text-slate-700">${escapeHtml(row.clientName)}</td>
                 <td class="p-3 text-xs text-slate-800 font-medium">${escapeHtml(row.projectLabel)}</td>
-                <td class="p-3 text-xs text-slate-600">${fileLabel}</td>
                 <td class="p-3 text-right">
-                    <div class="flex flex-wrap justify-end gap-1">
-                        ${openBtn}
-                        ${uploadBtn}
-                    </div>
+                    ${renderView3dRowActionsHtml(row, { showAdminUpload, alignEnd: true })}
                 </td>
             </tr>
-        `;
-    }).join('');
+        `).join('');
 }
 
 function findView3dRowByProjectId(orderProjectId) {
@@ -439,8 +517,6 @@ async function handleView3dUploadClick(orderProjectId) {
             return;
         }
 
-        context.fileName = file.name;
-
         setView3dLoading(true, 'Enviando modelo 3D...');
         try {
             const saved = await saveDriveFileUpload(file, context);
@@ -500,7 +576,7 @@ function bindView3dEvents() {
         event.preventDefault();
         searchView3dProjects();
     });
-    document.getElementById('view3d-results-body')?.addEventListener('click', event => {
+    document.getElementById('view3d-view')?.addEventListener('click', event => {
         const openBtn = event.target.closest('.view3d-open-btn');
         if (openBtn) {
             handleView3dOpenClick(Number(openBtn.dataset.orderProjectId));
@@ -574,6 +650,7 @@ function exitView3dMeasureModeForNavigation() {
 }
 
 window.canAccessView3d = canAccessView3d;
+window.renderView3dResults = renderView3dResults;
 window.showView3d = showView3d;
 window.updateView3dNav = updateView3dNav;
 window.restoreView3dView = restoreView3dView;

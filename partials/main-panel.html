@@ -3198,18 +3198,31 @@
                         Informe pedido ou cliente e clique em Buscar.
                     </p>
                     <div id="view3d-results-table-wrap" class="hidden overflow-x-auto">
-                        <table class="w-full text-sm min-w-[640px]">
+                        <table class="w-full text-sm min-w-[480px]">
                             <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
                                 <tr>
                                     <th class="text-left p-3 font-semibold w-28">Pedido</th>
                                     <th class="text-left p-3 font-semibold">Cliente</th>
                                     <th class="text-left p-3 font-semibold">Projeto</th>
-                                    <th class="text-left p-3 font-semibold">Arquivo 3D</th>
                                     <th class="text-right p-3 font-semibold w-44">Ações</th>
                                 </tr>
                             </thead>
                             <tbody id="view3d-results-body" class="divide-y divide-slate-100"></tbody>
                         </table>
+                    </div>
+                    <div id="view3d-results-mobile-shell" class="hidden border-t border-slate-100">
+                        <div class="p-3 flex flex-col gap-2 bg-slate-50/40">
+                            <label class="programacoes-projects-mobile__search-wrap">
+                                <span class="sr-only">Filtrar resultados</span>
+                                <input type="search" id="view3d-mobile-search"
+                                    class="programacoes-projects-mobile__search"
+                                    placeholder="Filtrar pedido, cliente, projeto…"
+                                    autocomplete="off"
+                                    enterkeyhint="search">
+                            </label>
+                            <p id="view3d-mobile-count" class="programacoes-projects-mobile__count" aria-live="polite"></p>
+                        </div>
+                        <div id="view3d-results-mobile-list" class="programacoes-projects-mobile__list"></div>
                     </div>
                 </div>
                 <input type="file" id="view3d-upload-input" class="hidden" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">

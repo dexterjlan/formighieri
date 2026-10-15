@@ -288,6 +288,26 @@ function buildDescriptiveDriveFileName(orderCode, clientName, maxLength = DESCRI
     return name;
 }
 
+function sanitizeView3dProjectFileSlug(projectName) {
+    return stripDiacriticsForDriveFileName(projectName)
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^\w.\-]+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+}
+
+function buildView3dDriveFileName(orderCode, projectName, sourceFileName) {
+    const ext = getDriveFileExtension(sourceFileName);
+    const safeExt = DRIVE_FILE_MODEL_3D_EXTENSIONS.includes(ext) ? ext : 'glb';
+    const order = String(orderCode || '').trim().replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_') || 'Pedido';
+    const project = sanitizeView3dProjectFileSlug(projectName) || 'Projeto';
+    return sanitizeDriveUploadFileName(
+        `3D_${order}_${project}.${safeExt}`,
+        DRIVE_FILE_FOLDER_KIND.MODEL_3D
+    );
+}
+
 const DETAILING_DRIVE_CLIENT_FILE_NAME_MAX_LENGTH = 100;
 
 const IMPLEMENTATION_LIST_PURCHASE_TYPE_FILE_LABEL = {
@@ -834,10 +854,9 @@ async function finalizeDriveFileUploadRow(row, storageMirrorPromise, folderKind)
 }
 
 async function saveDriveFileUpload(file, context = {}, onProgress) {
-    const fileName = sanitizeDriveUploadFileName(
-        context.fileName || file.name,
-        context.folderKind
-    );
+    const fileName = context.folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D && context.orderCode
+        ? buildView3dDriveFileName(context.orderCode, context.projectName, file.name)
+        : sanitizeDriveUploadFileName(context.fileName || file.name, context.folderKind);
     const mimeType = mimeTypeForDriveUpload(file.name, file.type);
     const fileSizeBytes = Number(file.size) || 0;
     const directUploadBase64Promise = fileSizeBytes <= DRIVE_FILE_DIRECT_MAX_BYTES
@@ -995,6 +1014,7 @@ window.isGoogleDriveAppsScriptConfigured = isGoogleDriveAppsScriptConfigured;
 window.primeGoogleDriveAppsScript = primeGoogleDriveAppsScript;
 window.buildDriveFolderPath = buildDriveFolderPath;
 window.buildDescriptiveDriveFileName = buildDescriptiveDriveFileName;
+window.buildView3dDriveFileName = buildView3dDriveFileName;
 window.buildDetailingDriveFileName = buildDetailingDriveFileName;
 window.buildImplementationListDriveFileName = buildImplementationListDriveFileName;
 window.DRIVE_FILE_IMPLEMENTATION_LIST_INPUT_ACCEPT = DRIVE_FILE_IMPLEMENTATION_LIST_INPUT_ACCEPT;
