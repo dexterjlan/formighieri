@@ -1,4 +1,5 @@
 let appDialogResolver = null;
+let appDialogValidate = null;
 
 const APP_DIALOG_VARIANTS = {
     confirm: {
@@ -71,16 +72,40 @@ function handleAppDialogKeydown(event) {
     }
 }
 
+function readAppDialogCheckboxSelection() {
+    const listEl = document.getElementById('app-dialog-checkbox-list');
+    if (!listEl || listEl.classList.contains('hidden')) return null;
+    return [...listEl.querySelectorAll('input[type="checkbox"]:checked')]
+        .map(input => input.value);
+}
+
+function resetAppDialogCheckboxList() {
+    const listEl = document.getElementById('app-dialog-checkbox-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    listEl.classList.add('hidden');
+}
+
 function closeAppDialog(result) {
     const modal = document.getElementById('app-dialog-modal');
     const inputEl = document.getElementById('app-dialog-input');
+    const checkboxSelection = readAppDialogCheckboxSelection();
+
+    if (result === true && checkboxSelection) {
+        if (typeof appDialogValidate === 'function' && !appDialogValidate(checkboxSelection)) {
+            return;
+        }
+    }
+
     if (modal) modal.classList.add('hidden');
 
     document.getElementById('app-dialog-icon-wrap')?.classList.add('hidden');
     document.removeEventListener('keydown', handleAppDialogKeydown);
 
     let resolved = result;
-    if (result === true && inputEl && !inputEl.classList.contains('hidden')) {
+    if (result === true && checkboxSelection) {
+        resolved = checkboxSelection;
+    } else if (result === true && inputEl && !inputEl.classList.contains('hidden')) {
         resolved = inputEl.value;
     }
 
@@ -88,6 +113,9 @@ function closeAppDialog(result) {
         inputEl.value = '';
         inputEl.classList.add('hidden');
     }
+
+    resetAppDialogCheckboxList();
+    appDialogValidate = null;
 
     if (appDialogResolver) {
         const resolve = appDialogResolver;
@@ -109,7 +137,9 @@ function showAppDialog(options = {}) {
         inputPlaceholder = '',
         inputValue = '',
         confirmClass = '',
-        focusCancel = variant === 'danger'
+        focusCancel = variant === 'danger',
+        checkboxItems = null,
+        validate = null
     } = options;
 
     return new Promise(resolve => {
@@ -117,6 +147,7 @@ function showAppDialog(options = {}) {
         const titleEl = document.getElementById('app-dialog-title');
         const messageEl = document.getElementById('app-dialog-message');
         const inputEl = document.getElementById('app-dialog-input');
+        const checkboxListEl = document.getElementById('app-dialog-checkbox-list');
         const cancelBtn = document.getElementById('btn-app-dialog-cancel');
         const confirmBtn = document.getElementById('btn-app-dialog-confirm');
         const iconWrap = document.getElementById('app-dialog-icon-wrap');
@@ -127,6 +158,7 @@ function showAppDialog(options = {}) {
         }
 
         appDialogResolver = resolve;
+        appDialogValidate = typeof validate === 'function' ? validate : null;
 
         titleEl.textContent = title;
         messageEl.textContent = message;
@@ -141,6 +173,23 @@ function showAppDialog(options = {}) {
             inputEl.classList.toggle('hidden', !showInput);
             inputEl.placeholder = inputPlaceholder;
             inputEl.value = inputValue || '';
+        }
+
+        resetAppDialogCheckboxList();
+        if (checkboxListEl && Array.isArray(checkboxItems) && checkboxItems.length) {
+            checkboxListEl.classList.remove('hidden');
+            checkboxListEl.innerHTML = checkboxItems.map(item => {
+                const id = String(item.id);
+                const label = String(item.label || id);
+                const checked = item.checked !== false;
+                return `
+                    <label class="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
+                        <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+                            value="${escapeHtml(id)}" ${checked ? 'checked' : ''}>
+                        <span>${escapeHtml(label)}</span>
+                    </label>
+                `;
+            }).join('');
         }
 
         if (iconWrap) {
@@ -208,6 +257,26 @@ function alertAppDialog(message, options = {}) {
     });
 }
 
+function selectCheckboxAppDialog(message, checkboxItems, options = {}) {
+    return showAppDialog({
+        title: options.title || 'Seleção',
+        message,
+        confirmLabel: options.confirmLabel || 'Confirmar',
+        cancelLabel: options.cancelLabel || 'Cancelar',
+        variant: options.variant || 'confirm',
+        showCancel: true,
+        checkboxItems,
+        validate: (selectedValues) => {
+            if (selectedValues.length) return true;
+            alertAppDialog(options.emptyMessage || 'Selecione ao menos um item.');
+            return false;
+        }
+    }).then(result => {
+        if (result === false || result == null) return null;
+        return Array.isArray(result) ? result : null;
+    });
+}
+
 function promptAppDialog(message, options = {}) {
     return showAppDialog({
         ...options,
@@ -244,4 +313,5 @@ window.showAppDialog = showAppDialog;
 window.confirmAppDialog = confirmAppDialog;
 window.alertAppDialog = alertAppDialog;
 window.promptAppDialog = promptAppDialog;
+window.selectCheckboxAppDialog = selectCheckboxAppDialog;
 window.bindAppDialogEvents = bindAppDialogEvents;

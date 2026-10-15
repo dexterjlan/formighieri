@@ -728,6 +728,74 @@ async function notifyPlantaLevantadaEmail(options = {}) {
     }
 }
 
+async function notifyDesignerPlantaBaseChangedEmail(options = {}) {
+    const { orderId, projects = [], observation = null } = options;
+    if (!NOTIFICATIONS_ENABLED || !orderId || !projects.length) return;
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyDesignerPlantaBaseChangedEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    const byDesigner = new Map();
+    projects.forEach(project => {
+        const designerId = project.designerId;
+        const orderProjectId = Number(project.orderProjectId);
+        if (!designerId || !orderProjectId) return;
+        if (!byDesigner.has(designerId)) byDesigner.set(designerId, []);
+        byDesigner.get(designerId).push(project);
+    });
+
+    const measurementDates = Object.fromEntries(
+        projects.map(project => [Number(project.orderProjectId), project.measurementDate])
+    );
+    const plantaDates = Object.fromEntries(
+        projects.map(project => [Number(project.orderProjectId), project.floorPlanRaisedDate])
+    );
+
+    const extraFields = [{
+        label: 'Informação',
+        value: 'A planta/base do projeto foi alterada nesta medição. Revise o material conforme os dados abaixo.'
+    }];
+    const observationText = String(observation || '').trim();
+    if (observationText) {
+        extraFields.push({ label: 'Observação da medição', value: observationText });
+    }
+
+    for (const [designerId, designerProjects] of byDesigner.entries()) {
+        try {
+            const recipientEmail = await fetchDesignerEmailById(designerId);
+            if (!recipientEmail) continue;
+
+            const orderProjectIds = designerProjects.map(project => project.orderProjectId);
+            await sendProcessNotificationEmail('planta_base_alterada', {
+                orderId,
+                orderProjectIds,
+                designerId,
+                recipientEmails: [recipientEmail],
+                includeProjetista: true,
+                projectSectionTitle: 'Projetos com planta levantada nesta medição',
+                accentColor: '#0891b2',
+                extraFields,
+                buildProjectDetails: (orderProjectId) => {
+                    const details = [];
+                    const measurementDate = measurementDates[Number(orderProjectId)];
+                    const plantaDate = plantaDates[Number(orderProjectId)];
+                    if (measurementDate) {
+                        details.push(`Data da medição: ${formatNotificationDate(measurementDate)}`);
+                    }
+                    if (plantaDate) {
+                        details.push(`Data da planta: ${formatNotificationDate(plantaDate)}`);
+                    }
+                    return details;
+                }
+            });
+        } catch (err) {
+            console.warn('notifyDesignerPlantaBaseChangedEmail:', err);
+        }
+    }
+}
+
 function readConferenceObservationText(observation) {
     if (typeof getObservationConferenteText === 'function') {
         return String(getObservationConferenteText(observation) || '').trim();
@@ -838,6 +906,7 @@ async function notifyConferenciaEnviadaEmail(options = {}) {
 
 window.notifyMedicaoRealizadaEmail = notifyMedicaoRealizadaEmail;
 window.notifyPlantaLevantadaEmail = notifyPlantaLevantadaEmail;
+window.notifyDesignerPlantaBaseChangedEmail = notifyDesignerPlantaBaseChangedEmail;
 window.notifyConferenciaEnviadaEmail = notifyConferenciaEnviadaEmail;
 
 async function notifyConferenciaConfirmadaEmail(options = {}) {

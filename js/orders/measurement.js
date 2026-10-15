@@ -904,6 +904,92 @@ async function persistMeasurementProjects(measurementId, projects) {
     }
 }
 
+async function fetchOrderProjectIdsWithPriorFloorPlanRaised(orderProjectIds) {
+    if (!orderProjectIds.length) return new Set();
+
+    const { data, error } = await supabaseClient
+        .from('MeasurementProject')
+        .select('orderProjectId')
+        .in('orderProjectId', orderProjectIds)
+        .eq('isFloorPlanRaised', true);
+
+    if (error) throw error;
+
+    return new Set((data || []).map(row => Number(row.orderProjectId)));
+}
+
+async function resolveDesignerPlantaBaseEmailProjects(medicao, projects, newlyPlantaProjects) {
+    if (!medicao?.id || !newlyPlantaProjects.length) return null;
+
+    const newlyIds = newlyPlantaProjects.map(project => Number(project.orderProjectId));
+    const priorForNewly = await fetchOrderProjectIdsWithPriorFloorPlanRaised(newlyIds);
+    const recurringNewly = newlyPlantaProjects.filter(project => (
+        priorForNewly.has(Number(project.orderProjectId))
+    ));
+    if (!recurringNewly.length) return null;
+
+    const plantaProjects = projects.filter(project => project.isFloorPlanRaised);
+    const plantaIds = plantaProjects.map(project => Number(project.orderProjectId));
+    if (!plantaIds.length) return null;
+
+    const { data: orderProjects, error } = await supabaseClient
+        .from('OrderProject')
+        .select('id, name, designerId')
+        .in('id', plantaIds);
+    if (error) throw error;
+
+    const metaById = Object.fromEntries((orderProjects || []).map(row => [Number(row.id), row]));
+    const hasEligibleNewly = recurringNewly.some(project => (
+        metaById[Number(project.orderProjectId)]?.designerId
+    ));
+    if (!hasEligibleNewly) return null;
+
+    const wantsEmail = await confirmAppDialog(
+        'Deseja enviar e-mail ao projetista informando que a base do projeto foi alterada?',
+        { title: 'E-mail ao projetista' }
+    );
+    if (!wantsEmail) return null;
+
+    const priorForPlanta = await fetchOrderProjectIdsWithPriorFloorPlanRaised(plantaIds);
+    const selectable = plantaProjects
+        .map(project => {
+            const orderProjectId = Number(project.orderProjectId);
+            const meta = metaById[orderProjectId];
+            if (!meta?.designerId) return null;
+            if (!priorForPlanta.has(orderProjectId)) return null;
+
+            const isNewlyMarked = newlyPlantaProjects.some(item => (
+                Number(item.orderProjectId) === orderProjectId
+            ));
+            return {
+                id: orderProjectId,
+                label: meta.name || `Projeto ${orderProjectId}`,
+                checked: isNewlyMarked,
+                designerId: meta.designerId,
+                orderProjectId,
+                measurementDate: project.measurementDate,
+                floorPlanRaisedDate: project.floorPlanRaisedDate
+            };
+        })
+        .filter(Boolean);
+
+    if (!selectable.length) return null;
+
+    const selectedValues = await selectCheckboxAppDialog(
+        'Selecione os projetos com planta levantada desta medição para incluir no e-mail:',
+        selectable,
+        {
+            title: 'Projetos no e-mail',
+            confirmLabel: 'Enviar',
+            emptyMessage: 'Selecione ao menos um projeto.'
+        }
+    );
+    if (!selectedValues?.length) return null;
+
+    const selectedIds = new Set(selectedValues.map(value => Number(value)));
+    return selectable.filter(item => selectedIds.has(item.id));
+}
+
 async function saveMedicao() {
     if (!activeOrderId) return;
 
@@ -982,7 +1068,24 @@ async function saveMedicao() {
         project.isFloorPlanRaised
         && !previousPlantaProjectIds.has(Number(project.orderProjectId))
     ));
-    const willSendEmail = !medicao || newlyPlantaProjects.length > 0;
+
+    let designerPlantaEmailProjects = null;
+    if (medicao && newlyPlantaProjects.length) {
+        try {
+            designerPlantaEmailProjects = await resolveDesignerPlantaBaseEmailProjects(
+                medicao,
+                projects,
+                newlyPlantaProjects
+            );
+        } catch (error) {
+            alertAppDialog(`Erro ao preparar e-mail ao projetista: ${error.message}`);
+            return;
+        }
+    }
+
+    const willSendEmail = !medicao
+        || newlyPlantaProjects.length > 0
+        || Boolean(designerPlantaEmailProjects?.length);
 
     try {
         setMedicaoModalLoading(true, medicao ? 'Salvando medição...' : 'Registrando medição...');
@@ -1043,6 +1146,14 @@ async function saveMedicao() {
                 await notifyPlantaLevantadaEmail({
                     orderId: activeOrderId,
                     projects: newlyPlantaProjects
+                });
+            }
+            if (designerPlantaEmailProjects?.length && typeof notifyDesignerPlantaBaseChangedEmail === 'function') {
+                setMedicaoModalLoading(true, 'Enviando e-mail ao projetista...');
+                await notifyDesignerPlantaBaseChangedEmail({
+                    orderId: activeOrderId,
+                    projects: designerPlantaEmailProjects,
+                    observation
                 });
             }
         }

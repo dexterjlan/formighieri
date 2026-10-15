@@ -666,6 +666,7 @@ function buildCompraLiberacaoEmailHtml(payload) {
 const PROCESS_EMAIL_TITLE = {
     medicao_realizada: 'Medição Realizada',
     planta_levantada: 'Planta Levantada',
+    planta_base_alterada: 'Planta Base Alterada',
     conferencia_enviada: 'Conferência Enviada',
     conferencia_confirmada: 'Conferência Confirmada',
     conferencia_aprovada: 'Conferência Aprovada',
