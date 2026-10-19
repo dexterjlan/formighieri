@@ -6491,6 +6491,32 @@ body.view3d-viewer-modal-open {
     left: max(0.5rem, env(safe-area-inset-left, 0));
 }
 
+.view3d-section-cut-panel--collapsed {
+    padding: 0.375rem 0.5rem;
+}
+
+.view3d-section-cut-panel--collapsed .view3d-section-cut-panel__header {
+    margin-bottom: 0;
+}
+
+.view3d-section-cut-panel--collapsed .view3d-section-cut-panel__body {
+    display: none;
+}
+
+.view3d-section-cut-panel--collapsed .view3d-section-cut-panel-toggle-icon {
+    transform: rotate(180deg);
+}
+
+.view3d-section-cut-panel-toggle {
+    width: 2.75rem;
+    height: 2.75rem;
+    touch-action: manipulation;
+}
+
+.view3d-section-cut-panel-toggle-icon {
+    transition: transform 0.15s ease;
+}
+
 .view3d-section-cut-slider {
     height: 1.25rem;
     touch-action: pan-y;

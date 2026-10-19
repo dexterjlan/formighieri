@@ -633,6 +633,15 @@ function bindView3dEvents() {
         const enabled = viewer.toggleSectionCut();
         toggleView3dToolbarActive(event.currentTarget, enabled);
         syncView3dSectionCutPanelVisibility(enabled);
+        if (enabled) {
+            setView3dSectionCutPanelCollapsed(false);
+        }
+    });
+    document.getElementById('btn-view3d-section-cut-panel-toggle')?.addEventListener('click', event => {
+        event.stopPropagation();
+        const panel = document.getElementById('view3d-section-cut-panel');
+        const collapsed = panel?.classList.contains('view3d-section-cut-panel--collapsed');
+        setView3dSectionCutPanelCollapsed(!collapsed);
     });
     document.getElementById('view3d-section-cut-panel')?.addEventListener('click', event => {
         const axisBtn = event.target.closest('[data-view3d-section-axis]');
@@ -659,10 +668,24 @@ function syncView3dSectionCutPanelVisibility(enabled) {
 
 function resetView3dSectionCutPanel() {
     syncView3dSectionCutPanelVisibility(false);
+    setView3dSectionCutPanelCollapsed(false);
     const slider = document.getElementById('view3d-section-cut-slider');
     if (slider) slider.value = '55';
     setView3dSectionCutAxisUi('y');
     setView3dSectionCutInvertUi(false);
+}
+
+function setView3dSectionCutPanelCollapsed(collapsed) {
+    const panel = document.getElementById('view3d-section-cut-panel');
+    const toggle = document.getElementById('btn-view3d-section-cut-panel-toggle');
+    if (!panel) return;
+    const isCollapsed = Boolean(collapsed);
+    panel.classList.toggle('view3d-section-cut-panel--collapsed', isCollapsed);
+    if (toggle) {
+        toggle.setAttribute('aria-expanded', String(!isCollapsed));
+        toggle.title = isCollapsed ? 'Expandir painel' : 'Recolher painel';
+        toggle.setAttribute('aria-label', toggle.title);
+    }
 }
 
 function setView3dSectionCutInvertUi(inverted) {

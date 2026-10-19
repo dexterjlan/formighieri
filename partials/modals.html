@@ -3267,7 +3267,22 @@
                 </div>
                 <div id="view3d-section-cut-panel"
                     class="view3d-section-cut-panel hidden absolute z-20 left-2 bottom-2 max-w-[min(16rem,calc(100%-5.5rem))] p-3 rounded-xl border border-slate-600/80 bg-slate-900/90 backdrop-blur-sm shadow-lg text-slate-100">
-                    <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Plano de corte</p>
+                    <div class="view3d-section-cut-panel__header flex items-center justify-between gap-2 mb-2">
+                        <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-0 min-w-0 flex-1">
+                            Plano de corte
+                        </p>
+                        <button type="button" id="btn-view3d-section-cut-panel-toggle"
+                            class="view3d-section-cut-panel-toggle shrink-0 inline-flex items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                            aria-expanded="true" aria-controls="view3d-section-cut-panel-body"
+                            title="Recolher painel" aria-label="Recolher painel de corte">
+                            <svg class="view3d-section-cut-panel-toggle-icon w-4 h-4" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                aria-hidden="true">
+                                <path d="M6 9l6 6 6-6"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="view3d-section-cut-panel-body" class="view3d-section-cut-panel__body">
                     <p class="text-[10px] text-slate-500 mb-1">Eixo do plano</p>
                     <div class="flex gap-1 mb-2" role="group" aria-label="Eixo do corte">
                         <button type="button" data-view3d-section-axis="x"
@@ -3288,6 +3303,7 @@
                         title="Trocar qual metade do modelo permanece visível">
                         Inverter lado
                     </button>
+                    </div>
                 </div>
             </div>
         </div>
