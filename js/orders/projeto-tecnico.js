@@ -19,72 +19,13 @@ function formatOrderProjetoTecnicoDate(dateStr) {
     return new Date(dateStr).toLocaleDateString('pt-BR');
 }
 
-function getOrderProjetoTecnicoPrevisaoInputMaxDate(deliveryDate) {
-    if (!deliveryDate) return '';
-    return String(deliveryDate).slice(0, 10);
-}
-
-function getOrderProjetoTecnicoPrevisaoInputValue(dateStr) {
-    if (!dateStr) return '';
-    return String(dateStr).slice(0, 10);
-}
-
-function validateOrderProjetoTecnicoPrevisao(inicioDate, previsaoDate, deliveryDate) {
-    if (!inicioDate) {
-        alertAppDialog('Informe o início previsto do projeto técnico.');
-        return false;
-    }
-    if (!previsaoDate) {
-        alertAppDialog('Informe a previsão de conclusão do projeto técnico.');
-        return false;
-    }
-    if (!isTechnicalProjectForecastRangeValid(inicioDate, previsaoDate, deliveryDate)) {
-        alertAppDialog(
-            'O início deve ser anterior ou igual à previsão de conclusão.',
-            { variant: 'warning', title: 'Aviso' }
-        );
-        return false;
-    }
-    return true;
-}
-
 function getOrderProjetoTecnicoStatusName(project) {
     return project?.projectStatus?.name || getOrderProjectStatusName(project) || '—';
-}
-
-function isProjetoTecnicoOrderTabVisible() {
-    const panel = document.getElementById('order-tab-panel-projeto-tecnico');
-    return Boolean(panel && !panel.classList.contains('hidden'));
 }
 
 function isPendenciasViewVisibleForProjetoTecnico() {
     const view = document.getElementById('pendencias-view');
     return Boolean(view && !view.classList.contains('hidden'));
-}
-
-function waitProjetoTecnicoStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function setProjetoTecnicoTabActionLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('projeto-tecnico-tab-action-loading');
-    const messageEl = document.getElementById('projeto-tecnico-tab-action-loading-msg');
-    const spinner = document.getElementById('projeto-tecnico-tab-action-loading-spinner');
-    const successIcon = document.getElementById('projeto-tecnico-tab-action-loading-success');
-    const errorIcon = document.getElementById('projeto-tecnico-tab-action-loading-error');
-    const show = Boolean(active);
-
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
 }
 
 function setProjetoTecnicoTableButtonsDisabled(disabled) {
@@ -101,23 +42,19 @@ function isOrderProjectsPanelVisible() {
     return Boolean(content && !content.classList.contains('hidden'));
 }
 
-function setOrderProjectsActionLoading(active, message = 'Processando...', status = 'loading') {
-    setOrderProjectsPanelActionLoading(active, message, status);
-}
-
 function setProjetoTecnicoActionLoading(active, message = 'Processando...', status = 'loading') {
     if (isPendenciasViewVisibleForProjetoTecnico() && typeof setPendenciasActionLoading === 'function') {
         setPendenciasActionLoading(active, message, status);
         return;
     }
 
-    if (isProjetoTecnicoOrderTabVisible()) {
-        setProjetoTecnicoTabActionLoading(active, message, status);
+    if (isOrderProjectsPanelVisible() && typeof setOrderProjectsPanelActionLoading === 'function') {
+        setOrderProjectsPanelActionLoading(active, message, status);
         return;
     }
 
-    if (isOrderProjectsPanelVisible()) {
-        setOrderProjectsActionLoading(active, message, status);
+    if (typeof getAppGlobalOverlayConfig === 'function') {
+        setModalOverlayLoading(getAppGlobalOverlayConfig(), active, message, status);
     }
 }
 
@@ -402,11 +339,11 @@ async function iniciarProjetoTecnico(projectId) {
         await refreshOrderProjetoTecnicoRelatedViews(project.orderId);
 
         setProjetoTecnicoActionLoading(true, 'Projeto técnico iniciado!', 'success');
-        await waitProjetoTecnicoStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         return true;
     } catch (error) {
         setProjetoTecnicoActionLoading(true, `Erro ao iniciar projeto: ${error.message}`, 'error');
-        await waitProjetoTecnicoStatus(2200);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         return false;
     } finally {
         setProjetoTecnicoTableButtonsDisabled(false);

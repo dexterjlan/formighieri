@@ -4,3 +4,4 @@ PENDING-PROD-SQL.md
 .cursor/rules/push-prod-sql-reminder.mdc
 scripts/*
 .cursor
+node_modules/

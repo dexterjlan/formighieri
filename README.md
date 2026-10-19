@@ -39,6 +39,21 @@ npx serve .
 
 Depois acesse `http://localhost:3000`.
 
+## Lint (código morto)
+
+Análise estática opcional com ESLint, focada em **variáveis e funções não usadas** por arquivo (`no-unused-vars` em modo aviso). Não bloqueia deploy; serve para limpeza incremental.
+
+```bash
+npm install
+npm run lint
+```
+
+Configuração: `eslint.config.mjs`.
+
+- Só regras `no-unused-vars` e `no-unreachable` (avisos); `no-undef` desligado (scripts globais no bootstrap).
+- `js/vendor/**` ignorado (ex.: `xlsx.full.min.js`).
+- Funções usadas só em outro arquivo via `typeof fn === 'function'` podem aparecer como “não usadas” no arquivo da definição — conferir antes de apagar.
+
 ## Publicar no GitHub Pages
 
 1. Faça push deste repositório para o GitHub (branch `main`).

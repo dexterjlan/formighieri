@@ -45,10 +45,6 @@ function canAccessCommercialRevision(approval) {
 }
 window.canAccessCommercialRevision = canAccessCommercialRevision;
 
-function canEditCommercialApprovalCommercialFields(approval) {
-    return isAdminOrOrderConsultorForApproval(approval || { orderId: activeOrderId });
-}
-
 function canApproveCommercialApproval(approval) {
     if (!approval) return false;
     if (!isAdminOrOrderConsultorForApproval(approval)) return false;
@@ -448,13 +444,6 @@ async function applyNomearStatusToProjects(orderProjectIds) {
     await notifyOrderProjectStatusChangeForProjects(uniqueIds, COMMERCIAL_APPROVED_PROJECT_STATUS);
 }
 
-async function applyNomearStatusForCommercialApproval(approval) {
-    const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
-    if (!orderProjectId) return;
-
-    await applyNomearStatusToProjects([orderProjectId]);
-}
-
 async function applyApprovedStatusForCommercialApproval(approval) {
     const orderProjectId = await resolveCommercialApprovalOrderProjectId(approval);
     if (!orderProjectId) return;
@@ -526,10 +515,6 @@ async function enrichCommercialApprovalProjectsWithStatus(projects) {
         ...project,
         projectStatus: project.projectStatus || statusById[project.statusId] || null
     }));
-}
-
-async function loadApprovalProjetistas() {
-    // Responsável definido no cadastro do projeto.
 }
 
 async function fetchCommercialApprovalEligibleProjects(orderId) {
@@ -700,24 +685,6 @@ async function blockCommercialApprovalWhenOpenRequests(orderId, projectIds) {
     return false;
 }
 
-async function confirmApprovalDespiteOpenRequests(openRequests, projects) {
-    const lines = openRequests.map(req => {
-        const project = projects.find(p => p.id === req.orderProjectId);
-        const name = project?.name || 'Projeto';
-        const status = normalizeRequestStatus(req);
-        return `• ${name} (${status})`;
-    });
-
-    return await confirmAppDialog(
-        `Os projetos abaixo possuem requisições em aberto:\n\n${lines.join('\n')}\n\nDeseja solicitar aprovação comercial mesmo assim?`,
-        {
-            title: 'Requisições em aberto',
-            confirmLabel: 'Continuar mesmo assim',
-            variant: 'warning'
-        }
-    );
-}
-
 async function validateConsultorRequestAgainstOpenApproval(orderProjectId, existingRequest) {
     if (currentUser?.role !== 'Consultor' || !orderProjectId || !activeOrderId) {
         return true;
@@ -746,10 +713,6 @@ async function validateConsultorRequestAgainstOpenApproval(orderProjectId, exist
         'Solicite uma revisão ou edite a solicitação existente antes de criar uma nova requisição.'
     );
     return false;
-}
-
-async function insertCommercialApprovals() {
-    return { error: null, data: [] };
 }
 
 let aprovacaoCaminhoModalResolver = null;
@@ -1206,11 +1169,11 @@ async function submitCommercialApprovalFromPendencias(projectId) {
         }
 
         setCommercialApprovalSubmitLoading(true, 'Envio para aprovação concluído!', 'success');
-        await waitCommercialApprovalSubmitStatus(1800);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setCommercialApprovalSubmitLoading(false);
     } catch (error) {
         setCommercialApprovalSubmitLoading(true, `Erro ao enviar: ${error.message}`, 'error');
-        await waitCommercialApprovalSubmitStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setCommercialApprovalSubmitLoading(false);
     }
 }
@@ -1374,10 +1337,6 @@ async function showCommercialApprovalOrderDeliveryModal(approval) {
     (commercialApprovalOrderDeliveryContext.hasPhases
         ? document.querySelector('.commercial-approval-phase-delivery')
         : input)?.focus();
-}
-
-async function saveCommercialApprovalOrderDeliveryDate(orderId, clientDeliveryDate) {
-    await persistSalesOrderClientDeliveryDate(orderId, clientDeliveryDate);
 }
 
 async function submitCommercialApprovalOrderDeliveryModal() {
@@ -1771,36 +1730,18 @@ async function loadCommercialApprovals(orderId) {
     }
 }
 
+const commercialApprovalModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('commercial-approval', {
+        disableFormSelector: '#commercial-approval-form input, #commercial-approval-form select, #commercial-approval-form button'
+    })
+    : null;
+
+const approvalsQueryActionOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('approvals-query-action')
+    : null;
+
 function setCommercialApprovalFormLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('commercial-approval-loading');
-    const messageEl = document.getElementById('commercial-approval-loading-msg');
-    const spinner = document.getElementById('commercial-approval-loading-spinner');
-    const successIcon = document.getElementById('commercial-approval-loading-success');
-    const errorIcon = document.getElementById('commercial-approval-loading-error');
-    const submitBtn = document.getElementById('commercial-approval-form-submit');
-    const cancelBtn = document.querySelector('#commercial-approval-form button[type="button"]');
-    const fields = document.querySelectorAll('#commercial-approval-form input, #commercial-approval-form select');
-    const show = Boolean(active);
-
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
-
-    [submitBtn, cancelBtn].forEach(btn => {
-        if (!btn) return;
-        btn.disabled = show;
-        btn.classList.toggle('opacity-60', show);
-        btn.classList.toggle('cursor-not-allowed', show);
-    });
-    fields.forEach(field => { field.disabled = show; });
+    commercialApprovalModalOverlay?.setLoading(active, message, status);
 }
 
 function isCommercialApprovalModalVisible() {
@@ -1824,24 +1765,7 @@ function isApprovalsQueryViewVisibleForApproval() {
 }
 
 function setApprovalsQueryActionLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('approvals-query-action-loading');
-    const messageEl = document.getElementById('approvals-query-action-loading-msg');
-    const spinner = document.getElementById('approvals-query-action-loading-spinner');
-    const successIcon = document.getElementById('approvals-query-action-loading-success');
-    const errorIcon = document.getElementById('approvals-query-action-loading-error');
-    const show = Boolean(active);
-
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
+    approvalsQueryActionOverlay?.setLoading(active, message, status);
 }
 
 function applyCommercialApprovalContextLoading(active, message = 'Processando...', status = 'loading') {
@@ -1856,7 +1780,11 @@ function applyCommercialApprovalContextLoading(active, message = 'Processando...
     }
 
     if (isOrderProjectsPanelVisibleForApproval()) {
-        setOrderProjectsPanelActionLoading(active, message, status);
+        if (typeof getAppGlobalOverlayConfig === 'function') {
+            setModalOverlayLoading(getAppGlobalOverlayConfig(), active, message, status);
+        } else if (typeof setOrderProjectsPanelActionLoading === 'function') {
+            setOrderProjectsPanelActionLoading(active, message, status);
+        }
         return true;
     }
 
@@ -1873,18 +1801,14 @@ function setCommercialApprovalSubmitLoading(active, message = 'Processando...', 
         return;
     }
 
-    if (typeof setPendenciasActionLoading === 'function') {
-        setPendenciasActionLoading(active, message, status);
-    }
-}
-
-async function waitCommercialApprovalSubmitStatus(ms) {
-    if (typeof waitPendenciasStatus === 'function') {
-        await waitPendenciasStatus(ms);
+    if (typeof getAppGlobalOverlayConfig === 'function') {
+        setModalOverlayLoading(getAppGlobalOverlayConfig(), active, message, status);
         return;
     }
 
-    await new Promise(resolve => setTimeout(resolve, ms));
+    if (typeof setPendenciasActionLoading === 'function') {
+        setPendenciasActionLoading(active, message, status);
+    }
 }
 
 function setCommercialApprovalActionLoading(approvalId, active, message = 'Processando...', status = 'loading') {

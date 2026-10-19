@@ -156,14 +156,16 @@ async function countDetalhamentosEmAndamentoForDesigner(designerId) {
     return count || 0;
 }
 
-const DETALHAMENTO_MODAL_OVERLAY = createModalOverlayConfig('detalhamento-modal');
+const detalhamentoModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('detalhamento-modal')
+    : null;
 
 function setDetalhamentoModalLoading(visible, message = 'Processando...', variant = 'loading') {
-    setModalOverlayLoading(DETALHAMENTO_MODAL_OVERLAY, visible, message, variant);
+    detalhamentoModalOverlay?.setLoading(visible, message, variant);
 }
 
 function waitDetalhamentoStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return waitAppOverlay(ms);
 }
 
 function populateDetalhamentoForm(record) {
@@ -376,12 +378,12 @@ async function handleDetalhamentoAssociar() {
         activeDetalhamentoRecord = data;
         populateDetalhamentoForm(data);
         setDetalhamentoModalLoading(true, isTransfer ? 'Projetista atualizado!' : 'Projetista associado!', 'success');
-        await waitDetalhamentoStatus(1200);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setDetalhamentoModalLoading(false);
         await refreshDetalhamentoRelatedViews(activeDetalhamentoOrderProjectId);
     } catch (error) {
         setDetalhamentoModalLoading(true, `Erro: ${error.message}`, 'error');
-        await waitDetalhamentoStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setDetalhamentoModalLoading(false);
     }
 }
@@ -429,12 +431,12 @@ async function handleDetalhamentoIniciar() {
         activeDetalhamentoRecord = data;
         populateDetalhamentoForm(data);
         setDetalhamentoModalLoading(true, 'Detalhamento iniciado!', 'success');
-        await waitDetalhamentoStatus(1200);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setDetalhamentoModalLoading(false);
         await refreshDetalhamentoRelatedViews(activeDetalhamentoOrderProjectId);
     } catch (error) {
         setDetalhamentoModalLoading(true, `Erro: ${error.message}`, 'error');
-        await waitDetalhamentoStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setDetalhamentoModalLoading(false);
     }
 }
@@ -496,12 +498,12 @@ async function handleDetalhamentoEncerrar() {
         activeDetalhamentoRecord = data;
         populateDetalhamentoForm(data);
         setDetalhamentoModalLoading(true, 'Detalhamento encerrado!', 'success');
-        await waitDetalhamentoStatus(1200);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setDetalhamentoModalLoading(false);
         await refreshDetalhamentoRelatedViews(activeDetalhamentoOrderProjectId);
     } catch (error) {
         setDetalhamentoModalLoading(true, `Erro: ${error.message}`, 'error');
-        await waitDetalhamentoStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setDetalhamentoModalLoading(false);
     }
 }

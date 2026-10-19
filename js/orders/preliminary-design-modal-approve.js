@@ -108,7 +108,8 @@ function syncAnteprojetoApproveDeliveryUi(hasPhases = anteprojetoApproveOrderHas
     }
 }
 
-const ANTEPROJETO_APPROVE_MODAL_OVERLAY = createModalOverlayConfig('anteprojeto-approve-modal', {
+const anteprojetoApproveModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('anteprojeto-approve-modal', {
     disableElementIds: [
         'btn-anteprojeto-approve-modal-cancel',
         'btn-anteprojeto-approve-modal-submit',
@@ -117,10 +118,11 @@ const ANTEPROJETO_APPROVE_MODAL_OVERLAY = createModalOverlayConfig('anteprojeto-
     ],
     disableFormSelector: '.anteprojeto-approve-project-delivery, .anteprojeto-approve-phase-delivery',
     disableDatasetKey: 'approveModalLoadingDisabled'
-});
+})
+    : null;
 
 function setAnteprojetoApproveModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(ANTEPROJETO_APPROVE_MODAL_OVERLAY, active, message, status);
+    anteprojetoApproveModalOverlay?.setLoading(active, message, status);
 }
 
 function closePreliminaryDesignApproveDeliveryModal() {

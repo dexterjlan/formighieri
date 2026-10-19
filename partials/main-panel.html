@@ -112,6 +112,7 @@
                                 <button type="button" id="gestao-nav-characteristics" class="app-nav-item app-nav-item--nested">Características</button>
                                 <button type="button" id="gestao-nav-third-party-subtypes" class="app-nav-item app-nav-item--nested">Subtipos Terceiros</button>
                                 <button type="button" id="gestao-nav-purchase-reasons" class="app-nav-item app-nav-item--nested">Motivos de Compra</button>
+                                <button type="button" id="gestao-nav-woodwork-checklist-items" class="app-nav-item app-nav-item--nested hidden">Checklist marcenaria</button>
                             </div>
                         </div>
                         <button type="button" id="gestao-nav-dashboard" class="app-nav-item app-nav-item--nested">Dashboard</button>
@@ -379,14 +380,13 @@
                 <div id="order-content" class="hidden flex flex-col gap-6">
                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
                         <div id="order-projects-action-loading"
-                            class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                            <div id="order-projects-action-loading-spinner"
-                                class="h-8 w-8 border-2 border-slate-300 border-t-violet-700 rounded-full animate-spin"></div>
-                            <div id="order-projects-action-loading-success"
-                                class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                            <div id="order-projects-action-loading-error"
-                                class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                            <p id="order-projects-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                            class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                            <div class="fm-app-overlay__card">
+                                <div id="order-projects-action-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                                <div id="order-projects-action-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                                <div id="order-projects-action-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                                <p id="order-projects-action-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                            </div>
                         </div>
                         <div class="p-5 border-b border-slate-100">
                             <div>
@@ -465,15 +465,14 @@
                         </div>
                         <div id="order-tab-panel-anteprojeto" class="order-detail-tab-panel hidden p-4 md:p-5 relative">
                             <div id="anteprojeto-tab-action-loading"
-                                class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                                <div id="anteprojeto-tab-action-loading-spinner"
-                                    class="h-8 w-8 border-2 border-slate-300 border-t-sky-700 rounded-full animate-spin"></div>
-                                <div id="anteprojeto-tab-action-loading-success"
-                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                                <div id="anteprojeto-tab-action-loading-error"
-                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                                <p id="anteprojeto-tab-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                            class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                            <div class="fm-app-overlay__card">
+                                <div id="anteprojeto-tab-action-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                                <div id="anteprojeto-tab-action-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                                <div id="anteprojeto-tab-action-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                                <p id="anteprojeto-tab-action-loading-msg" class="fm-app-overlay__message">Processando...</p>
                             </div>
+                        </div>
                             <div class="order-tab-actions mb-3">
                                 <button type="button" id="btn-new-anteprojeto"
                                     class="order-tab-action-btn hidden bg-sky-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium hover:bg-sky-800">
@@ -499,15 +498,14 @@
                         </div>
                         <div id="order-tab-panel-third-party" class="order-detail-tab-panel hidden p-4 md:p-5 relative">
                             <div id="third-party-tab-action-loading"
-                                class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                                <div id="third-party-tab-action-loading-spinner"
-                                    class="h-8 w-8 border-2 border-slate-300 border-t-violet-700 rounded-full animate-spin"></div>
-                                <div id="third-party-tab-action-loading-success"
-                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                                <div id="third-party-tab-action-loading-error"
-                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                                <p id="third-party-tab-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                            class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                            <div class="fm-app-overlay__card">
+                                <div id="third-party-tab-action-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                                <div id="third-party-tab-action-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                                <div id="third-party-tab-action-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                                <p id="third-party-tab-action-loading-msg" class="fm-app-overlay__message">Processando...</p>
                             </div>
+                        </div>
                             <p class="text-xs text-slate-500 mb-3">Projetos de terceiros gerados na aprovação da conferência comercial.</p>
                             <div id="order-third-party-projects-list"></div>
                         </div>
@@ -985,15 +983,14 @@
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
                 <div id="approvals-query-action-loading"
-                    class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                    <div id="approvals-query-action-loading-spinner"
-                        class="h-8 w-8 border-2 border-slate-300 border-t-emerald-700 rounded-full animate-spin"></div>
-                    <div id="approvals-query-action-loading-success"
-                        class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                    <div id="approvals-query-action-loading-error"
-                        class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                    <p id="approvals-query-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
-                </div>
+                            class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                            <div class="fm-app-overlay__card">
+                                <div id="approvals-query-action-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                                <div id="approvals-query-action-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                                <div id="approvals-query-action-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                                <p id="approvals-query-action-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                            </div>
+                        </div>
                 <div class="p-3 border-b border-slate-100 bg-slate-50/50">
                     <span class="text-xs text-slate-500" id="approval-query-results-count">0 aprovações</span>
                 </div>
@@ -1143,17 +1140,14 @@
 
                     <div id="gestao-pedido-form-panel" class="hidden relative bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div id="gestao-order-descriptive-loading"
-                            class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-6">
-                            <div class="bg-white rounded-2xl shadow-xl px-8 py-7 w-full max-w-sm flex flex-col items-center gap-3 text-center">
-                                <div id="gestao-order-descriptive-loading-spinner"
-                                    class="h-10 w-10 rounded-full border-2 border-slate-200 border-t-indigo-700 animate-spin"></div>
-                                <div id="gestao-order-descriptive-loading-success"
-                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                                <div id="gestao-order-descriptive-loading-error"
-                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                                <p id="gestao-order-descriptive-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
-                            </div>
-                        </div>
+                class="fm-app-overlay fm-app-overlay--viewport hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                <div class="fm-app-overlay__card">
+                    <div id="gestao-order-descriptive-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                    <div id="gestao-order-descriptive-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                    <div id="gestao-order-descriptive-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                    <p id="gestao-order-descriptive-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                </div>
+            </div>
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
                             <div>
                                 <h3 id="gestao-order-form-title" class="font-bold text-sm text-slate-900">Criar Pedido</h3>
@@ -1332,17 +1326,14 @@
 
                     <div id="gestao-project-form-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div id="gestao-project-form-loading"
-                            class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-6">
-                            <div class="bg-white rounded-2xl shadow-xl px-8 py-7 w-full max-w-sm flex flex-col items-center gap-3 text-center">
-                                <div id="gestao-project-form-loading-spinner"
-                                    class="h-10 w-10 rounded-full border-2 border-slate-200 border-t-indigo-700 animate-spin"></div>
-                                <div id="gestao-project-form-loading-success"
-                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                                <div id="gestao-project-form-loading-error"
-                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                                <p id="gestao-project-form-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
-                            </div>
-                        </div>
+                class="fm-app-overlay fm-app-overlay--viewport hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                <div class="fm-app-overlay__card">
+                    <div id="gestao-project-form-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                    <div id="gestao-project-form-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                    <div id="gestao-project-form-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                    <p id="gestao-project-form-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                </div>
+            </div>
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
                             <div>
                                 <h3 id="gestao-project-form-title" class="font-bold text-sm text-slate-900">Novo Projeto</h3>
@@ -1484,6 +1475,45 @@
                                 </div>
                             </div>
                         </form>
+                    </div>
+
+                    <div id="gestao-woodwork-checklist-items-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Itens do checklist de marcenaria</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Itens de verificação usados ao criar uma nova versão do checklist no projeto.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-woodwork-item-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[200px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo item</label>
+                                    <input type="text" id="gestao-new-woodwork-item-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Descrição do item">
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ordem</label>
+                                    <input type="number" id="gestao-new-woodwork-item-sort" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Item</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-woodwork-checklist-items-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
 
                     <div id="gestao-project-status-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -1707,17 +1737,14 @@
 
                     <div id="gestao-create-detailing-panel" class="hidden relative bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div id="gestao-create-detailing-loading"
-                            class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/45 backdrop-blur-sm p-6">
-                            <div class="bg-white rounded-2xl shadow-xl px-8 py-7 w-full max-w-sm flex flex-col items-center gap-3 text-center">
-                                <div id="gestao-create-detailing-loading-spinner"
-                                    class="h-10 w-10 rounded-full border-2 border-slate-200 border-t-indigo-700 animate-spin"></div>
-                                <div id="gestao-create-detailing-loading-success"
-                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                                <div id="gestao-create-detailing-loading-error"
-                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                                <p id="gestao-create-detailing-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
-                            </div>
-                        </div>
+                class="fm-app-overlay fm-app-overlay--viewport hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                <div class="fm-app-overlay__card">
+                    <div id="gestao-create-detailing-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                    <div id="gestao-create-detailing-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                    <div id="gestao-create-detailing-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                    <p id="gestao-create-detailing-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                </div>
+            </div>
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h3 class="font-bold text-sm text-slate-900">Criar Detalhamento</h3>
                             <p class="text-xs text-slate-400 mt-0.5">Para projetos migrados ou que não passaram pelo fluxo. Busque pelo pedido ou cliente e crie o detalhamento.</p>
@@ -2546,14 +2573,13 @@
                         </div>
                         <div id="gestao-project-scheduling-body" class="flex-1 min-h-0 relative overflow-auto">
                             <div id="gestao-project-scheduling-action-loading"
-                                class="hidden absolute inset-0 bg-white/90 flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                                <div id="gestao-project-scheduling-action-loading-spinner"
-                                    class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
-                                <div id="gestao-project-scheduling-action-loading-success"
-                                    class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                                <div id="gestao-project-scheduling-action-loading-error"
-                                    class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                                <p id="gestao-project-scheduling-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
+                                class="fm-app-overlay fm-app-overlay--viewport hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                                <div class="fm-app-overlay__card">
+                                    <div id="gestao-project-scheduling-action-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                                    <div id="gestao-project-scheduling-action-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                                    <div id="gestao-project-scheduling-action-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                                    <p id="gestao-project-scheduling-action-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                                </div>
                             </div>
                             <div id="gestao-project-scheduling-content" class="bg-slate-50/30">
                             <p class="text-xs text-slate-400 text-center py-10">Carregando calendário...</p>
@@ -2595,11 +2621,14 @@
                         </div>
                         <div class="relative flex-1 min-h-0 flex flex-col">
                             <div id="gestao-commercial-finance-meta-loading"
-                                class="hidden absolute inset-0 bg-white/90 flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                                <div id="gestao-commercial-finance-meta-loading-spinner"
-                                    class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
-                                <p id="gestao-commercial-finance-meta-loading-msg" class="text-sm text-slate-700 font-medium">Carregando...</p>
+                            class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                            <div class="fm-app-overlay__card">
+                                <div id="gestao-commercial-finance-meta-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                                <div id="gestao-commercial-finance-meta-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                                <div id="gestao-commercial-finance-meta-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                                <p id="gestao-commercial-finance-meta-loading-msg" class="fm-app-overlay__message">Processando...</p>
                             </div>
+                        </div>
                             <div id="gestao-commercial-finance-content" class="flex-1 min-h-0 overflow-auto p-4 space-y-4 bg-slate-50/30">
                                 <p class="text-xs text-slate-400 text-center py-8">Carregando...</p>
                             </div>
@@ -3146,15 +3175,14 @@
             <div class="flex flex-col gap-4 min-h-[calc(100vh-140px)]">
                 <div class="fm-programacoes-main flex-1 min-w-0 relative">
                     <div id="programacoes-action-loading"
-                        class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                        <div id="programacoes-action-loading-spinner"
-                            class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
-                        <div id="programacoes-action-loading-success"
-                            class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                        <div id="programacoes-action-loading-error"
-                            class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                        <p id="programacoes-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
-                    </div>
+                            class="fm-app-overlay fm-app-overlay--viewport hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                            <div class="fm-app-overlay__card">
+                                <div id="programacoes-action-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                                <div id="programacoes-action-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                                <div id="programacoes-action-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                                <p id="programacoes-action-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                            </div>
+                        </div>
                     <div id="programacoes-content">
                         <p class="text-xs text-slate-400 text-center py-10">Selecione um item no menu.</p>
                     </div>
@@ -3166,9 +3194,13 @@
         <main id="view3d-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6">
             <div class="max-w-6xl mx-auto space-y-4 relative">
                 <div id="view3d-loading"
-                    class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                    <div class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
-                    <p id="view3d-loading-msg" class="text-sm text-slate-700 font-medium">Carregando...</p>
+                    class="fm-app-overlay fm-app-overlay--contained hidden" role="status" aria-live="polite">
+                    <div class="fm-app-overlay__card">
+                        <div id="view3d-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                        <div id="view3d-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                        <div id="view3d-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                        <p id="view3d-loading-msg" class="fm-app-overlay__message">Carregando...</p>
+                    </div>
                 </div>
                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="p-4 border-b border-slate-100 bg-slate-50/50">
@@ -3252,15 +3284,14 @@
             <div class="flex flex-col lg:flex-row gap-4 min-h-[calc(100vh-140px)]">
                 <div class="fm-pendencias-main flex-1 min-w-0 relative">
                     <div id="pendencias-action-loading"
-                        class="hidden absolute inset-0 bg-white/90 rounded-xl flex flex-col items-center justify-center gap-3 z-20 px-6 text-center">
-                        <div id="pendencias-action-loading-spinner"
-                            class="h-8 w-8 border-2 border-slate-300 border-t-violet-700 rounded-full animate-spin"></div>
-                        <div id="pendencias-action-loading-success"
-                            class="hidden h-10 w-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold">✓</div>
-                        <div id="pendencias-action-loading-error"
-                            class="hidden h-10 w-10 rounded-full bg-red-100 text-red-700 flex items-center justify-center text-lg font-bold">!</div>
-                        <p id="pendencias-action-loading-msg" class="text-sm text-slate-700 font-medium">Processando...</p>
-                    </div>
+                            class="fm-app-overlay fm-app-overlay--viewport hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                            <div class="fm-app-overlay__card">
+                                <div id="pendencias-action-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                                <div id="pendencias-action-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                                <div id="pendencias-action-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                                <p id="pendencias-action-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                            </div>
+                        </div>
                     <div id="pendencias-content">
                         <p class="text-xs text-slate-400 text-center py-10">Selecione um item no menu.</p>
                     </div>

@@ -218,6 +218,9 @@ function renderProgramacoesProjectsMobileCard(row, options = {}) {
 }
 
 function bindProgramacoesProjectsMobileList(root, options = {}) {
+    if (typeof bindOrderCodeLinks === 'function') {
+        bindOrderCodeLinks(root);
+    }
     if (options.canReorder) {
         bindProgramacoesSequenceInputs(root);
     }
@@ -285,12 +288,14 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
                 characteristicFilterText,
                 productionMonth,
                 productionMonthLabel,
-                designerName: project?.designer?.name || '—'
+                designerName: project?.designer?.name || '—',
+                orderId: Number(project?.orderId || project?.order?.id) || null
             })
             : {
                 id: project.id,
                 orderProjectId: Number(item.orderProjectId || project.id),
                 sequence: Number(item.sequence) || 0,
+                orderId: Number(project?.orderId || project?.order?.id) || null,
                 orderCode: project?.order?.orderCode || '—',
                 clientName: project?.order?.client?.name || '—',
                 projectName: project?.name || '—',
@@ -333,8 +338,11 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
             key: 'orderCode',
             label: 'Pedido',
             thClass: 'programacoes-col-order whitespace-nowrap',
-            cellClass: 'programacoes-col-order px-2 py-2 text-xs font-mono text-slate-600 whitespace-nowrap',
-            filterInputClass: 'interactive-table-filter-input--compact'
+            cellClass: 'programacoes-col-order px-2 py-2 text-xs whitespace-nowrap',
+            filterInputClass: 'interactive-table-filter-input--compact',
+            render: (row) => (typeof renderOrderCodeLinkHtml === 'function'
+                ? renderOrderCodeLinkHtml(row.orderId, row.orderCode, { className: 'text-xs text-slate-600' })
+                : escapeHtml(String(row.orderCode || '—')))
         },
         {
             key: 'clientName',
@@ -445,6 +453,9 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
         onBind(tbody) {
             if (typeof syncProgramacoesFullscreenButton === 'function') {
                 syncProgramacoesFullscreenButton();
+            }
+            if (typeof bindOrderCodeLinks === 'function') {
+                bindOrderCodeLinks(tbody);
             }
             if (canReorder) {
                 bindProgramacoesSequenceInputs(tbody);

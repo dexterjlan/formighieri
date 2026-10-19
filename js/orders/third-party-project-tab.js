@@ -1,6 +1,8 @@
 let orderThirdPartyProjectsCache = [];
 
-const THIRD_PARTY_TAB_ACTION_OVERLAY = createModalOverlayConfig('third-party-tab-action');
+const thirdPartyTabActionOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('third-party-tab-action')
+    : null;
 
 function isThirdPartyPendenciasViewVisible() {
     const view = document.getElementById('pendencias-view');
@@ -25,12 +27,8 @@ function setThirdPartyProjectActionLoading(active, message = 'Processando...', s
     }
 
     if (isThirdPartyOrderTabVisible()) {
-        setModalOverlayLoading(THIRD_PARTY_TAB_ACTION_OVERLAY, active, message, status);
+        thirdPartyTabActionOverlay?.setLoading(active, message, status);
     }
-}
-
-function waitThirdPartyProjectActionStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function formatThirdPartyProjectDateTime(value) {

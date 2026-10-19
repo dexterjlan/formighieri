@@ -794,16 +794,18 @@ function closeMeasurementModal() {
 window.closeMeasurementModal = closeMeasurementModal;
 window.closeMedicaoModal = closeMeasurementModal;
 
-const MEDICAO_MODAL_OVERLAY = createModalOverlayConfig('medicao-modal', {
-    disableElementIds: ['medicao-form-submit'],
-    reenableElementIdsOnHide: ['medicao-form-submit'],
-    closeButtonSelector: '#btn-cancel-medicao',
-    disableFormSelector: '#medicao-modal input:not([disabled]), #medicao-modal textarea:not([disabled])',
-    disableDatasetKey: 'medicaoLoadingDisabled'
-});
+const medicaoModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('medicao-modal', {
+        disableElementIds: ['medicao-form-submit'],
+        reenableElementIdsOnHide: ['medicao-form-submit'],
+        closeButtonSelector: '#btn-cancel-medicao',
+        disableFormSelector: '#medicao-modal input:not([disabled]), #medicao-modal textarea:not([disabled])',
+        disableDatasetKey: 'medicaoLoadingDisabled'
+    })
+    : null;
 
 function setMedicaoModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(MEDICAO_MODAL_OVERLAY, active, message, status);
+    medicaoModalOverlay?.setLoading(active, message, status);
 }
 
 /** Garante campos editáveis ao abrir a modal (ex.: após save com overlay ou disabled residual). */

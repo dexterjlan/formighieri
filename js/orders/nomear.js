@@ -227,13 +227,13 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
                 ? 'Coluna isNamed não encontrada. Execute supabase/create-gestao-order-fields.sql no Supabase.'
                 : `Erro ao confirmar projeto como nomeado: ${error.message}`;
             setNomearActionLoading(true, message, 'error');
-            await waitNomearActionStatus(2200);
+            await waitAppOverlay(APP_OVERLAY_ERROR_MS);
             return false;
         }
 
         if (updatedProject?.isNamed !== true) {
             setNomearActionLoading(true, 'Não foi possível marcar o projeto como nomeado. Verifique a coluna isNamed no Supabase.', 'error');
-            await waitNomearActionStatus(2200);
+            await waitAppOverlay(APP_OVERLAY_ERROR_MS);
             return false;
         }
 
@@ -254,11 +254,11 @@ async function markOrderProjectAsNomeado(projectId, options = {}) {
         }
 
         setNomearActionLoading(true, 'Projeto nomeado!', 'success');
-        await waitNomearActionStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         return true;
     } catch (error) {
         setNomearActionLoading(true, `Erro ao nomear projeto: ${error.message}`, 'error');
-        await waitNomearActionStatus(2200);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         return false;
     } finally {
         setNomearActionLoading(false);

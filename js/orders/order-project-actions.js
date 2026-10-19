@@ -302,12 +302,12 @@ async function returnOrderProjectToCommercialReview(projectId, options = {}) {
         }
 
         setVoltarRevisaoActionLoading(true, 'Projeto voltou para Em Revisão Comercial Cons.', 'success');
-        await waitVoltarRevisaoStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         return true;
     } catch (error) {
         console.error('returnOrderProjectToCommercialReview:', error);
         setVoltarRevisaoActionLoading(true, error.message || 'Erro ao voltar o projeto para revisão.', 'error');
-        await waitVoltarRevisaoStatus(1600);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         return false;
     } finally {
         setVoltarRevisaoActionLoading(false);
@@ -655,6 +655,19 @@ function getOrderProjectActions(project, context = {}) {
         });
     }
 
+    if (statusName === 'Montagem Interna'
+        && typeof canManageWoodworkQualityChecklist === 'function'
+        && canManageWoodworkQualityChecklist()) {
+        actions.push({
+            id: 'woodwork-checklist',
+            label: 'Checklist',
+            enabled: true,
+            projectId: project.id,
+            projectName: project.name || '',
+            buttonClass: 'bg-amber-600 text-white hover:bg-amber-700'
+        });
+    }
+
     if (typeof canShowOrderProjectIniciarMontagemExtAction === 'function'
         && canShowOrderProjectIniciarMontagemExtAction(project)) {
         actions.push({
@@ -822,6 +835,11 @@ async function handleOrderProjectAction(button) {
         case 'finalizar-montagem-int':
             if (typeof openOrderProjectMontagemFimModal === 'function' && projectId) {
                 await openOrderProjectMontagemFimModal(projectId, projectName);
+            }
+            break;
+        case 'woodwork-checklist':
+            if (typeof openWoodworkQualityChecklistEntryFlow === 'function' && projectId) {
+                await openWoodworkQualityChecklistEntryFlow(projectId);
             }
             break;
         case 'iniciar-montagem-ext':

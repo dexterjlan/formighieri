@@ -488,18 +488,22 @@ function isAnteprojetoReturnModalVisible() {
     return Boolean(modal && !modal.classList.contains('hidden'));
 }
 
-const ANTEPROJETO_RETURN_MODAL_OVERLAY = createModalOverlayConfig('anteprojeto-return-modal', {
+const anteprojetoReturnModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('anteprojeto-return-modal', {
     disableElementIds: [
         'btn-anteprojeto-return-modal-submit',
         'btn-anteprojeto-return-modal-cancel',
         'anteprojeto-return-modal-observation'
     ]
-});
+})
+    : null;
 
-const ANTEPROJETO_TAB_ACTION_OVERLAY = createModalOverlayConfig('anteprojeto-tab-action');
+const anteprojetoTabActionOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('anteprojeto-tab-action')
+    : null;
 
 function setAnteprojetoReturnModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(ANTEPROJETO_RETURN_MODAL_OVERLAY, active, message, status);
+    anteprojetoReturnModalOverlay?.setLoading(active, message, status);
 }
 
 function isAnteprojetoTabVisible() {
@@ -508,7 +512,7 @@ function isAnteprojetoTabVisible() {
 }
 
 function setAnteprojetoTabActionLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(ANTEPROJETO_TAB_ACTION_OVERLAY, active, message, status);
+    anteprojetoTabActionOverlay?.setLoading(active, message, status);
 }
 
 function setAnteprojetoConferenceActionLoading(active, message = 'Processando...', status = 'loading') {
@@ -529,6 +533,11 @@ function setAnteprojetoConferenceActionLoading(active, message = 'Processando...
 
     if (isAnteprojetoTabVisible()) {
         setAnteprojetoTabActionLoading(active, message, status);
+        return;
+    }
+
+    if (typeof getAppGlobalOverlayConfig === 'function') {
+        setModalOverlayLoading(getAppGlobalOverlayConfig(), active, message, status);
     }
 }
 
@@ -616,31 +625,33 @@ function scrollAnteprojetoModalToTop() {
     scrollContainer.scrollTop = 0;
 }
 
-const ANTEPROJETO_MODAL_OVERLAY = createModalOverlayConfig('anteprojeto-modal', {
-    disableElementIds: [
-        'anteprojeto-form-submit',
-        'btn-anteprojeto-modal-send',
-        'btn-add-anteprojeto-project',
-        'btn-anteprojeto-modal-confirm',
-        'btn-anteprojeto-modal-approve',
-        'btn-anteprojeto-modal-return'
-    ],
-    reenableElementIdsOnHide: [
-        'anteprojeto-form-submit',
-        'btn-anteprojeto-modal-send',
-        'btn-add-anteprojeto-project',
-        'btn-anteprojeto-modal-confirm',
-        'btn-anteprojeto-modal-approve',
-        'btn-anteprojeto-modal-return'
-    ],
-    closeButtonSelector: '#anteprojeto-modal button[onclick="closePreliminaryDesignModal()"]',
-    disableFormSelector: '#anteprojeto-modal input:not([disabled]), #anteprojeto-modal textarea:not([disabled]), #anteprojeto-modal select:not([disabled])',
-    disableDatasetKey: 'anteprojetoLoadingDisabled',
-    onShow: scrollAnteprojetoModalToTop
-});
+const anteprojetoModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('anteprojeto-modal', {
+        disableElementIds: [
+            'anteprojeto-form-submit',
+            'btn-anteprojeto-modal-send',
+            'btn-add-anteprojeto-project',
+            'btn-anteprojeto-modal-confirm',
+            'btn-anteprojeto-modal-approve',
+            'btn-anteprojeto-modal-return'
+        ],
+        reenableElementIdsOnHide: [
+            'anteprojeto-form-submit',
+            'btn-anteprojeto-modal-send',
+            'btn-add-anteprojeto-project',
+            'btn-anteprojeto-modal-confirm',
+            'btn-anteprojeto-modal-approve',
+            'btn-anteprojeto-modal-return'
+        ],
+        closeButtonSelector: '#anteprojeto-modal button[onclick="closePreliminaryDesignModal()"]',
+        disableFormSelector: '#anteprojeto-modal input:not([disabled]), #anteprojeto-modal textarea:not([disabled]), #anteprojeto-modal select:not([disabled])',
+        disableDatasetKey: 'anteprojetoLoadingDisabled',
+        onShow: scrollAnteprojetoModalToTop
+    })
+    : null;
 
 function setAnteprojetoModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(ANTEPROJETO_MODAL_OVERLAY, active, message, status);
+    anteprojetoModalOverlay?.setLoading(active, message, status);
 }
 
 async function confirmPreliminaryDesignConference(conferenceId, options = {}) {

@@ -1241,30 +1241,32 @@ const ensureImplantacaoRecordsForProjects = ensureImplementationRecordsForProjec
 const fetchOrderProjectsInImplantacaoStatus = fetchOrderProjectsInImplementationStatus;
 const syncImplantacaoRecordsMapForProjects = syncImplementationRecordsMapForProjects;
 
-const IMPLANTACAO_MODAL_OVERLAY = createModalOverlayConfig('implantacao-modal', {
-    disableElementIds: [
-        'btn-implantacao-enviar-producao',
-        'btn-implantacao-enviar-compras',
-        'btn-implantacao-encerrar',
-        'btn-implantacao-salvar',
-        'btn-implantacao-detalhamento-select-file',
-        'btn-implantacao-detalhamento-upload'
-    ],
-    reenableElementIdsOnHide: [],
-    closeButtonSelector: '#implantacao-modal button[onclick="closeImplantacaoModal()"]',
-    disableFormSelector: '#implantacao-modal input:not([disabled]), #implantacao-modal textarea:not([disabled]), #implantacao-modal select:not([disabled])',
-    disableDatasetKey: 'implantacaoLoadingDisabled'
-});
+const implantacaoModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('implantacao-modal', {
+        disableElementIds: [
+            'btn-implantacao-enviar-producao',
+            'btn-implantacao-enviar-compras',
+            'btn-implantacao-encerrar',
+            'btn-implantacao-salvar',
+            'btn-implantacao-detalhamento-select-file',
+            'btn-implantacao-detalhamento-upload'
+        ],
+        reenableElementIdsOnHide: [],
+        closeButtonSelector: '#implantacao-modal button[onclick="closeImplantacaoModal()"]',
+        disableFormSelector: '#implantacao-modal input:not([disabled]), #implantacao-modal textarea:not([disabled]), #implantacao-modal select:not([disabled])',
+        disableDatasetKey: 'implantacaoLoadingDisabled'
+    })
+    : null;
 
 function setImplantacaoModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(IMPLANTACAO_MODAL_OVERLAY, active, message, status);
+    implantacaoModalOverlay?.setLoading(active, message, status);
     if (!active) {
         updateImplantacaoActionButtons(activeImplantacaoRecord);
     }
 }
 
 function waitImplantacaoStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return waitAppOverlay(ms);
 }
 
 async function createImplantacaoForProject(orderProjectId) {
@@ -1282,11 +1284,11 @@ async function handleImplantacaoSalvar() {
         populateImplantacaoForm(data);
         updateImplantacaoActionButtons(data);
         setImplantacaoModalLoading(true, 'Implantação salva com sucesso!', 'success');
-        await waitImplantacaoStatus(1500);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setImplantacaoModalLoading(false);
     } catch (error) {
         setImplantacaoModalLoading(true, `Erro ao salvar: ${error.message}`, 'error');
-        await waitImplantacaoStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setImplantacaoModalLoading(false);
     }
 }
@@ -1369,11 +1371,11 @@ async function handleImplantacaoEnviarProducao() {
 
         updateImplantacaoActionButtons(data);
         setImplantacaoModalLoading(true, 'Envio para produção concluído!', 'success');
-        await waitImplantacaoStatus(1800);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setImplantacaoModalLoading(false);
     } catch (error) {
         setImplantacaoModalLoading(true, `Erro ao enviar: ${error.message}`, 'error');
-        await waitImplantacaoStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setImplantacaoModalLoading(false);
     }
 }
@@ -1431,10 +1433,10 @@ async function createImplantacaoThirdPartyProjectForSubtype(subtypeId) {
             createdCount ? 'Projeto de terceiros criado.' : 'Projeto de terceiros já existia.',
             'success'
         );
-        await waitImplantacaoStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
         setImplantacaoModalLoading(true, error.message || 'Erro ao criar projeto.', 'error');
-        await waitImplantacaoStatus(2200);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
     } finally {
         setImplantacaoModalLoading(false);
     }
@@ -1590,11 +1592,11 @@ async function handleImplantacaoEnviarCompras() {
         }
 
         setImplantacaoModalLoading(true, 'Envio para compras concluído!', 'success');
-        await waitImplantacaoStatus(1800);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setImplantacaoModalLoading(false);
     } catch (error) {
         setImplantacaoModalLoading(true, `Erro ao enviar: ${error.message}`, 'error');
-        await waitImplantacaoStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setImplantacaoModalLoading(false);
     }
 }
@@ -1706,11 +1708,11 @@ async function handleImplantacaoEncerrar() {
 
         updateImplantacaoActionButtons(data);
         setImplantacaoModalLoading(true, 'Implantação encerrada com sucesso!', 'success');
-        await waitImplantacaoStatus(1800);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setImplantacaoModalLoading(false);
     } catch (error) {
         setImplantacaoModalLoading(true, `Erro ao encerrar: ${error.message}`, 'error');
-        await waitImplantacaoStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setImplantacaoModalLoading(false);
     }
 }

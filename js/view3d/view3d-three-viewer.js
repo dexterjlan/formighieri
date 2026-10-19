@@ -1,19 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-
-function formatView3dDistance(distance) {
-    const value = Number(distance) || 0;
-    if (value <= 0) return '0 mm';
-    // Export em mm (comum em marcenaria) vs glTF em metros
-    if (value > 50) {
-        return `${value.toFixed(0)} mm`;
-    }
-    const mm = value * 1000;
-    return `${mm.toFixed(0)} mm`;
-}
-
 /** Ângulo mínimo (graus) para desenhar aresta; reduz linhas em triangulação suave. */
 const VIEW3D_EDGE_THRESHOLD_DEGREES = 18;
 
@@ -47,11 +34,17 @@ class View3dThreeViewer {
         this.xrayEnabled = false;
         this.edgesEnabled = true;
         this.edgeLineMaterial = null;
-        this.measureEnabled = false;
-        this.measurePickPoints = [];
         this.materialSnapshots = new Map();
         this.defaultCameraPosition = null;
         this.defaultTarget = new THREE.Vector3();
+        this.sectionCutEnabled = false;
+        this.sectionCutAxis = 'y';
+        /** 0…1 ao longo do eixo (0 = um extremo, 1 = o outro). */
+        this.sectionCutT = 0.55;
+        this.sectionCutInvert = false;
+        this.clipBounds = null;
+        this.clipPlane = new THREE.Plane();
+        this.clipPlanes = [this.clipPlane];
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x191919);
@@ -72,13 +65,6 @@ class View3dThreeViewer {
         canvas.style.height = '100%';
         this.hostEl.appendChild(canvas);
 
-        this.labelRenderer = new CSS2DRenderer();
-        this.labelRenderer.domElement.className = 'view3d-three-label-layer';
-        this.labelRenderer.domElement.style.position = 'absolute';
-        this.labelRenderer.domElement.style.inset = '0';
-        this.labelRenderer.domElement.style.pointerEvents = 'none';
-        this.hostEl.appendChild(this.labelRenderer.domElement);
-
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
         this.controls.enableDamping = true;
         this.controls.screenSpacePanning = true;
@@ -89,7 +75,6 @@ class View3dThreeViewer {
         this.navigationMode = 'orbit';
         this.setNavigationMode('orbit');
         this.controls.addEventListener('start', () => {
-            if (this.measureEnabled) return;
             if (this.navigationMode === 'pan') {
                 this.renderer.domElement.style.cursor = 'grabbing';
             }
@@ -114,28 +99,17 @@ class View3dThreeViewer {
 
         this.scene.environment = null;
 
-        this.measureGroup = new THREE.Group();
-        this.measureGroup.name = 'view3d-measurements';
-        this.scene.add(this.measureGroup);
-
-        this.raycaster = new THREE.Raycaster();
-        this.pointer = new THREE.Vector2();
-
         this.loader = new GLTFLoader();
         this.resizeObserver = new ResizeObserver(() => this.handleResize());
         this.resizeObserver.observe(this.hostEl);
         this.handleResize();
         this.animate();
-
-        this.onCanvasClick = event => this.handleCanvasClick(event);
-        this.renderer.domElement.addEventListener('click', this.onCanvasClick);
     }
 
     animate() {
         this.animationId = requestAnimationFrame(() => this.animate());
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
-        this.labelRenderer.render(this.scene, this.camera);
     }
 
     handleResize() {
@@ -146,7 +120,6 @@ class View3dThreeViewer {
         this.camera.updateProjectionMatrix();
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         this.renderer.setSize(width, height, false);
-        this.labelRenderer.setSize(width, height);
     }
 
     stripModelImageBasedLighting(root) {
@@ -206,6 +179,7 @@ class View3dThreeViewer {
             opacity: 0.92,
             depthTest: true
         });
+        this.syncEdgeMaterialClipping();
         return this.edgeLineMaterial;
     }
 
@@ -229,6 +203,7 @@ class View3dThreeViewer {
         if (!this.model) return;
         if (this.edgesEnabled) {
             this.addEdgeOverlays();
+            this.applySectionCutToMaterials();
             return;
         }
         this.removeEdgeOverlays();
@@ -240,7 +215,8 @@ class View3dThreeViewer {
     }
 
     clearModel() {
-        this.clearMeasurements();
+        this.setSectionCutEnabled(false);
+        this.clipBounds = null;
         this.removeEdgeOverlays();
         this.edgeLineMaterial?.dispose();
         this.edgeLineMaterial = null;
@@ -284,6 +260,20 @@ class View3dThreeViewer {
         this.modelMaxDim = maxDim;
         this.defaultCameraPosition = this.camera.position.clone();
         this.defaultTarget.copy(this.controls.target);
+
+        const framedBox = new THREE.Box3().setFromObject(root);
+        this.clipBounds = {
+            xMin: framedBox.min.x,
+            xMax: framedBox.max.x,
+            yMin: framedBox.min.y,
+            yMax: framedBox.max.y,
+            zMin: framedBox.min.z,
+            zMax: framedBox.max.z
+        };
+        this.updateClipPlaneFromState();
+        if (this.sectionCutEnabled) {
+            this.applySectionCutToMaterials();
+        }
     }
 
     resetCamera() {
@@ -320,7 +310,7 @@ class View3dThreeViewer {
         this.applyZoomStep(1 / 0.82);
     }
 
-    /** Captura a vista atual do WebGL (sem overlays HTML de medida). */
+    /** Captura a vista atual do WebGL. */
     captureScreenshotDataUrl() {
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
@@ -393,6 +383,9 @@ class View3dThreeViewer {
         }
 
         this.applyMaterialStateFromSnapshot();
+        if (this.sectionCutEnabled) {
+            this.applySectionCutToMaterials();
+        }
     }
 
     toggleXray() {
@@ -401,10 +394,6 @@ class View3dThreeViewer {
     }
 
     updateNavigationCursor() {
-        if (this.measureEnabled) {
-            this.renderer.domElement.style.cursor = 'crosshair';
-            return;
-        }
         if (this.navigationMode === 'pan') {
             this.renderer.domElement.style.cursor = 'grab';
             return;
@@ -440,85 +429,107 @@ class View3dThreeViewer {
         return this.navigationMode;
     }
 
-    setMeasureMode(enabled) {
-        this.measureEnabled = Boolean(enabled);
-        this.controls.enabled = !this.measureEnabled;
-        if (!this.measureEnabled) {
-            this.measurePickPoints = [];
+    isSectionCutPlaneActive() {
+        return Boolean(this.sectionCutEnabled && this.clipBounds);
+    }
+
+    updateClipPlaneFromState() {
+        if (!this.clipBounds) return;
+
+        const t = THREE.MathUtils.clamp(Number(this.sectionCutT) || 0, 0, 1);
+
+        const invert = this.sectionCutInvert;
+        const { xMin, xMax, yMin, yMax, zMin, zMax } = this.clipBounds;
+        const point = new THREE.Vector3();
+        const normal = new THREE.Vector3();
+
+        if (this.sectionCutAxis === 'x') {
+            normal.set(invert ? 1 : -1, 0, 0);
+            point.set(xMin + t * (xMax - xMin), 0, 0);
+        } else if (this.sectionCutAxis === 'z') {
+            normal.set(0, 0, invert ? 1 : -1);
+            point.set(0, 0, zMin + t * (zMax - zMin));
+        } else {
+            normal.set(0, invert ? 1 : -1, 0);
+            point.set(0, yMin + t * (yMax - yMin), 0);
         }
-        this.updateNavigationCursor();
-        return this.measureEnabled;
+
+        this.clipPlane.setFromNormalAndCoplanarPoint(normal, point);
     }
 
-    toggleMeasureMode() {
-        return this.setMeasureMode(!this.measureEnabled);
-    }
+    applySectionCutToMaterials() {
+        const active = this.isSectionCutPlaneActive();
+        const planes = active ? this.clipPlanes : [];
+        this.renderer.localClippingEnabled = active;
 
-    createMeasureMarker(position) {
-        const radius = Math.max((this.modelMaxDim || 1) * 0.004, 0.002);
-        const geometry = new THREE.SphereGeometry(radius, 12, 12);
-        const material = new THREE.MeshBasicMaterial({ color: 0x34d399 });
-        const marker = new THREE.Mesh(geometry, material);
-        marker.position.copy(position);
-        return marker;
-    }
+        if (!this.model) return;
 
-    createMeasureLabel(text, position) {
-        const element = document.createElement('div');
-        element.className = 'view3d-measure-label';
-        element.textContent = text;
-        const label = new CSS2DObject(element);
-        label.position.copy(position);
-        return label;
-    }
-
-    addMeasurementSegment(pointA, pointB) {
-        const distance = pointA.distanceTo(pointB);
-        const geometry = new THREE.BufferGeometry().setFromPoints([pointA, pointB]);
-        const material = new THREE.LineBasicMaterial({ color: 0xfbbf24, linewidth: 2 });
-        const line = new THREE.Line(geometry, material);
-        this.measureGroup.add(line);
-
-        const midpoint = pointA.clone().lerp(pointB, 0.5);
-        const labelText = formatView3dDistance(distance);
-        this.measureGroup.add(this.createMeasureLabel(labelText, midpoint));
-        this.measureGroup.add(this.createMeasureMarker(pointA.clone()));
-        this.measureGroup.add(this.createMeasureMarker(pointB.clone()));
-    }
-
-    clearMeasurements() {
-        const children = [...this.measureGroup.children];
-        children.forEach(child => {
-            if (child.element) {
-                child.element.remove();
+        this.model.traverse(node => {
+            if (node.isMesh && node.material) {
+                const materials = Array.isArray(node.material) ? node.material : [node.material];
+                materials.forEach(material => {
+                    material.clippingPlanes = planes;
+                    material.clipIntersection = false;
+                    material.needsUpdate = true;
+                });
             }
-            child.geometry?.dispose();
-            child.material?.dispose();
-            this.measureGroup.remove(child);
+            if (node.userData?.view3dEdgeOverlay && node.material) {
+                node.material.clippingPlanes = planes;
+                node.material.needsUpdate = true;
+            }
         });
-        this.measurePickPoints = [];
+        this.syncEdgeMaterialClipping();
     }
 
-    handleCanvasClick(event) {
-        if (!this.measureEnabled || !this.model) return;
+    syncEdgeMaterialClipping() {
+        if (!this.edgeLineMaterial) return;
+        this.edgeLineMaterial.clippingPlanes = this.isSectionCutPlaneActive() ? this.clipPlanes : [];
+        this.edgeLineMaterial.needsUpdate = true;
+    }
 
-        const rect = this.renderer.domElement.getBoundingClientRect();
-        this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-        this.raycaster.setFromCamera(this.pointer, this.camera);
-        const hits = this.raycaster.intersectObject(this.model, true);
-        if (!hits.length) return;
-
-        const point = hits[0].point.clone();
-        this.measurePickPoints.push(point);
-
-        if (this.measurePickPoints.length >= 2) {
-            const pointA = this.measurePickPoints[this.measurePickPoints.length - 2];
-            const pointB = this.measurePickPoints[this.measurePickPoints.length - 1];
-            this.addMeasurementSegment(pointA, pointB);
-            this.measurePickPoints = [];
+    setSectionCutEnabled(enabled) {
+        this.sectionCutEnabled = Boolean(enabled);
+        if (this.sectionCutEnabled) {
+            this.updateClipPlaneFromState();
         }
+        this.applySectionCutToMaterials();
+        return this.sectionCutEnabled;
+    }
+
+    toggleSectionCut() {
+        return this.setSectionCutEnabled(!this.sectionCutEnabled);
+    }
+
+    setSectionCutAxis(axis) {
+        const next = axis === 'x' || axis === 'z' ? axis : 'y';
+        this.sectionCutAxis = next;
+        if (this.sectionCutEnabled) {
+            this.updateClipPlaneFromState();
+            this.applySectionCutToMaterials();
+        }
+        return this.sectionCutAxis;
+    }
+
+    setSectionCutPosition(t) {
+        this.sectionCutT = THREE.MathUtils.clamp(Number(t) || 0, 0, 1);
+        if (this.sectionCutEnabled) {
+            this.updateClipPlaneFromState();
+            this.applySectionCutToMaterials();
+        }
+        return this.sectionCutT;
+    }
+
+    setSectionCutInvert(invert) {
+        this.sectionCutInvert = Boolean(invert);
+        if (this.sectionCutEnabled) {
+            this.updateClipPlaneFromState();
+            this.applySectionCutToMaterials();
+        }
+        return this.sectionCutInvert;
+    }
+
+    toggleSectionCutInvert() {
+        return this.setSectionCutInvert(!this.sectionCutInvert);
     }
 
     loadFromUrl(url) {
@@ -548,16 +559,12 @@ class View3dThreeViewer {
             cancelAnimationFrame(this.animationId);
             this.animationId = null;
         }
-        this.renderer.domElement.removeEventListener('click', this.onCanvasClick);
         this.resizeObserver.disconnect();
         this.clearModel();
         this.controls.dispose();
         this.renderer.dispose();
         if (this.renderer.domElement.parentNode === this.hostEl) {
             this.hostEl.removeChild(this.renderer.domElement);
-        }
-        if (this.labelRenderer.domElement.parentNode === this.hostEl) {
-            this.hostEl.removeChild(this.labelRenderer.domElement);
         }
     }
 }

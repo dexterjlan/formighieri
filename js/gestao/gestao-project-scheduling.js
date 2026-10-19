@@ -48,14 +48,16 @@ let gestaoProjectSchedulingConferenceReviewersCache = [];
 let gestaoProjectSchedulingPpcpUsersCache = [];
 let gestaoProjectSchedulingMeasurementEventsCache = [];
 
-const GESTAO_PROJECT_SCHEDULING_ACTION_OVERLAY = createModalOverlayConfig('gestao-project-scheduling-action');
+const gestaoProjectSchedulingActionOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('gestao-project-scheduling-action')
+    : null;
 
 function setGestaoProjectSchedulingActionLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(GESTAO_PROJECT_SCHEDULING_ACTION_OVERLAY, active, message, status);
+    gestaoProjectSchedulingActionOverlay?.setLoading(active, message, status);
 }
 
 function waitGestaoProjectSchedulingStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return waitAppOverlay(ms);
 }
 
 function canEditGestaoProjectSchedulingStatus(status = getGestaoProjectSchedulingSelectedStatus()) {
@@ -1560,7 +1562,7 @@ async function saveGestaoProjectSchedulingTableRow(row) {
 
         if (forecastError && !isOrderProjectStatusForecastTableError(forecastError.message)) {
             setGestaoProjectSchedulingActionLoading(true, `Erro ao salvar previsão: ${forecastError.message}`, 'error');
-            await waitGestaoProjectSchedulingStatus(2200);
+            await waitAppOverlay(APP_OVERLAY_ERROR_MS);
             return false;
         }
 
@@ -1581,7 +1583,7 @@ async function saveGestaoProjectSchedulingTableRow(row) {
         applyOrderProjectStatusForecastToProject(project, gestaoProjectSchedulingForecastByProjectId.get(projectId) || null);
 
         setGestaoProjectSchedulingActionLoading(true, 'Previsão salva com sucesso!', 'success');
-        await waitGestaoProjectSchedulingStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         renderGestaoProjectSchedulingViews();
         return true;
     } finally {
@@ -1665,7 +1667,7 @@ async function associateGestaoProjectSchedulingAssignee(row) {
 
         if (projectError) {
             setGestaoProjectSchedulingActionLoading(true, `Erro ao associar: ${projectError.message}`, 'error');
-            await waitGestaoProjectSchedulingStatus(2200);
+            await waitAppOverlay(APP_OVERLAY_ERROR_MS);
             return false;
         }
 
@@ -1684,7 +1686,7 @@ async function associateGestaoProjectSchedulingAssignee(row) {
                     `Projetista associado, mas falhou ao replicar nos ambientes agrupados: ${replicateError.message}`,
                     'error'
                 );
-                await waitGestaoProjectSchedulingStatus(2200);
+                await waitAppOverlay(APP_OVERLAY_ERROR_MS);
                 return false;
             }
         }
@@ -1716,7 +1718,7 @@ async function associateGestaoProjectSchedulingAssignee(row) {
 
             if (forecastError && !isOrderProjectStatusForecastTableError(forecastError.message)) {
                 setGestaoProjectSchedulingActionLoading(true, `Responsável associado, mas falhou ao salvar previsão: ${forecastError.message}`, 'error');
-                await waitGestaoProjectSchedulingStatus(2200);
+                await waitAppOverlay(APP_OVERLAY_ERROR_MS);
                 return false;
             }
 
@@ -1742,7 +1744,7 @@ async function associateGestaoProjectSchedulingAssignee(row) {
         }
 
         setGestaoProjectSchedulingActionLoading(true, 'Responsável associado com sucesso!', 'success');
-        await waitGestaoProjectSchedulingStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         renderGestaoProjectSchedulingViews();
         return true;
     } finally {

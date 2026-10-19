@@ -4,16 +4,24 @@ let thirdPartyProjectDetailState = {
     selectedFile: null
 };
 
-function setThirdPartyProjectDetailLoading(active, message = 'Processando...') {
-    const wrap = document.getElementById('third-party-project-detail-loading');
-    const msg = document.getElementById('third-party-project-detail-loading-msg');
-    if (!wrap) return;
-    wrap.classList.toggle('hidden', !active);
-    if (msg) msg.textContent = message;
-}
+const thirdPartyProjectDetailOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('third-party-project-detail', {
+        closeButtonSelector: '#btn-close-third-party-project-detail',
+        disableElementIds: [
+            'btn-close-third-party-project-detail',
+            'btn-third-party-project-detail-send',
+            'btn-third-party-project-detail-finish',
+            'btn-third-party-project-detail-open',
+            'btn-third-party-project-detail-download',
+            'btn-third-party-project-detail-select-file',
+            'btn-third-party-project-detail-upload',
+            'btn-third-party-project-detail-history'
+        ]
+    })
+    : null;
 
-function waitThirdPartyProjectDetailStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+function setThirdPartyProjectDetailLoading(active, message = 'Processando...', status = 'loading') {
+    thirdPartyProjectDetailOverlay?.setLoading(active, message, status);
 }
 
 function sanitizeThirdPartyDriveFileSlug(value) {
@@ -324,10 +332,10 @@ async function uploadThirdPartyProjectDetailFile() {
         });
         await refreshThirdPartyProjectDetailAfterChange(project.id);
         setThirdPartyProjectDetailLoading(true, 'Arquivo enviado!', 'success');
-        await waitThirdPartyProjectDetailStatus(1200);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
         setThirdPartyProjectDetailLoading(true, error.message || 'Erro no upload.', 'error');
-        await waitThirdPartyProjectDetailStatus(2200);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
     } finally {
         setThirdPartyProjectDetailLoading(false);
     }
@@ -389,11 +397,11 @@ async function sendThirdPartyProjectFromDetailModal() {
         if (typeof reloadThirdPartyProjectViews === 'function') {
             await reloadThirdPartyProjectViews();
         }
-        setThirdPartyProjectDetailLoading(true, 'Enviado ao consultor!');
-        await waitThirdPartyProjectDetailStatus(1200);
+        setThirdPartyProjectDetailLoading(true, 'Enviado ao consultor!', 'success');
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
-        setThirdPartyProjectDetailLoading(true, error.message || 'Erro ao enviar.');
-        await waitThirdPartyProjectDetailStatus(1600);
+        setThirdPartyProjectDetailLoading(true, error.message || 'Erro ao enviar.', 'error');
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         alertAppDialog(error.message || 'Erro ao enviar.', { variant: 'warning', title: 'Aviso' });
     } finally {
         setThirdPartyProjectDetailLoading(false);
@@ -411,11 +419,11 @@ async function finishThirdPartyProjectFromDetailModal() {
         if (typeof reloadThirdPartyProjectViews === 'function') {
             await reloadThirdPartyProjectViews();
         }
-        setThirdPartyProjectDetailLoading(true, 'Projeto concluído!');
-        await waitThirdPartyProjectDetailStatus(1200);
+        setThirdPartyProjectDetailLoading(true, 'Projeto concluído!', 'success');
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
-        setThirdPartyProjectDetailLoading(true, error.message || 'Erro ao concluir.');
-        await waitThirdPartyProjectDetailStatus(1600);
+        setThirdPartyProjectDetailLoading(true, error.message || 'Erro ao concluir.', 'error');
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         alertAppDialog(error.message || 'Erro ao concluir.', { variant: 'warning', title: 'Aviso' });
     } finally {
         setThirdPartyProjectDetailLoading(false);

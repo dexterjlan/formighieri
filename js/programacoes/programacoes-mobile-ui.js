@@ -38,9 +38,12 @@ function renderProgramacoesMobileInlineField(label, value) {
 }
 
 function renderProgramacoesMobileHeadlineHtml(row) {
+    const orderCodeHtml = typeof renderOrderCodeLinkHtml === 'function'
+        ? renderOrderCodeLinkHtml(row.orderId, row.orderCode, { className: 'text-slate-500' })
+        : `<span class="font-mono text-slate-500">${escapeHtml(String(row.orderCode || '—'))}</span>`;
     return `
         <p class="programacoes-projects-mobile__order">
-            <span class="font-mono text-slate-500">${escapeHtml(String(row.orderCode || '—'))}</span>
+            ${orderCodeHtml}
             <span class="text-slate-300" aria-hidden="true">·</span>
             <span class="font-semibold text-slate-900">${escapeHtml(String(row.projectName || '—'))}</span>
         </p>

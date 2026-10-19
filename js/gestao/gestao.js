@@ -9,8 +9,8 @@ let editingGestaoOrderId = null;
 let gestaoOrderProjectsDraft = [];
 let editingGestaoProjectDraftIndex = null;
 
-const GESTAO_PROJECT_FORM_OVERLAY = typeof createModalOverlayConfig === 'function'
-    ? createModalOverlayConfig('gestao-project-form', {
+const gestaoProjectFormOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('gestao-project-form', {
         disableElementIds: [
             'gestao-project-form-submit',
             'btn-gestao-cancel-project',
@@ -21,56 +21,29 @@ const GESTAO_PROJECT_FORM_OVERLAY = typeof createModalOverlayConfig === 'functio
     : null;
 
 function setGestaoProjectFormLoading(active, message = 'Processando...', status = 'loading') {
-    if (typeof setModalOverlayLoading !== 'function' || !GESTAO_PROJECT_FORM_OVERLAY) return;
-    setModalOverlayLoading(GESTAO_PROJECT_FORM_OVERLAY, active, message, status);
+    gestaoProjectFormOverlay?.setLoading(active, message, status);
 }
 
-function waitGestaoProjectFormStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'alterar-status-terceiros', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'alterar-status-terceiros', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons', 'woodwork-checklist-items'];
 
-function resolveGestaoCadastroSaveHost(anchor) {
-    const element = anchor?.nodeType === 1 ? anchor : document.getElementById(anchor);
-    if (!element) return null;
-    const modal = element.closest('[id$="-modal"]');
-    if (modal) return modal.querySelector(':scope > .bg-white') || modal;
-    return element.closest('[id$="-panel"]') || element;
+function setGestaoCadastroSaveOverlayLoading(active, message = 'Salvando...', status = 'loading') {
+    if (typeof getAppGlobalOverlayConfig !== 'function') return;
+    setModalOverlayLoading(getAppGlobalOverlayConfig(), active, message, status);
 }
 
-function ensureGestaoCadastroSaveOverlay(host) {
-    if (getComputedStyle(host).position === 'static') host.classList.add('relative');
-    let overlay = host.querySelector(':scope > .gestao-cadastro-save-overlay');
-    if (overlay) return overlay;
-
-    overlay = document.createElement('div');
-    overlay.className = 'gestao-cadastro-save-overlay hidden absolute inset-0 bg-white/90 flex flex-col items-center justify-center gap-3 z-30 px-6 text-center';
-    overlay.innerHTML = `
-        <div class="h-8 w-8 border-2 border-slate-300 border-t-indigo-700 rounded-full animate-spin"></div>
-        <p class="gestao-cadastro-save-overlay__msg text-sm text-slate-700 font-medium">Salvando...</p>
-    `;
-    host.appendChild(overlay);
-    return overlay;
-}
-
-async function withGestaoCadastroSaveOverlay(anchor, task, message = 'Salvando...') {
-    const host = resolveGestaoCadastroSaveHost(anchor);
-    if (!host || typeof task !== 'function') return task?.();
-
-    const overlay = ensureGestaoCadastroSaveOverlay(host);
-    const messageEl = overlay.querySelector('.gestao-cadastro-save-overlay__msg');
-    if (messageEl) messageEl.textContent = message;
-    overlay.classList.remove('hidden');
-    void overlay.offsetWidth;
+async function withGestaoCadastroSaveOverlay(_anchor, task, message = 'Salvando...') {
+    if (typeof task !== 'function') return task?.();
 
     try {
+        setGestaoCadastroSaveOverlayLoading(true, message, 'loading');
         return await task();
     } finally {
-        overlay.classList.add('hidden');
+        setGestaoCadastroSaveOverlayLoading(false);
     }
 }
 
 window.withGestaoCadastroSaveOverlay = withGestaoCadastroSaveOverlay;
+window.setGestaoCadastroSaveOverlayLoading = setGestaoCadastroSaveOverlayLoading;
 const GESTAO_COMMERCIAL_FINANCE_NAV_KEYS = ['comercial-meta-venda', 'comercial-vendas', 'comercial-comissao-venda'];
 
 function formatGestaoDate(dateStr) {
@@ -126,6 +99,7 @@ function setGestaoNavActive(navKey) {
         characteristics: document.getElementById('gestao-nav-characteristics'),
         'third-party-subtypes': document.getElementById('gestao-nav-third-party-subtypes'),
         'purchase-reasons': document.getElementById('gestao-nav-purchase-reasons'),
+        'woodwork-checklist-items': document.getElementById('gestao-nav-woodwork-checklist-items'),
         'montagem-programacao': document.getElementById('gestao-nav-montagem-programacao'),
         dashboard: document.getElementById('gestao-nav-dashboard'),
         kanban: document.getElementById('gestao-nav-kanban'),
@@ -186,6 +160,7 @@ function updateGestaoCadastrosNavVisibility() {
     if (typeof updateGestaoCommercialFinanceNavVisibility === 'function') {
         updateGestaoCommercialFinanceNavVisibility();
     }
+    document.getElementById('gestao-nav-woodwork-checklist-items')?.classList.toggle('hidden', !isAdmin());
 
     const agruparBtn = document.getElementById('gestao-nav-agrupar-projetos');
     if (agruparBtn) {
@@ -338,6 +313,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
     document.getElementById('gestao-third-party-subtypes-panel')?.classList.add('hidden');
     document.getElementById('gestao-purchase-reasons-panel')?.classList.add('hidden');
+    document.getElementById('gestao-woodwork-checklist-items-panel')?.classList.add('hidden');
     document.getElementById('gestao-compra-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-montagem-programacao-panel')?.classList.add('hidden');
     document.getElementById('gestao-programacao-producao-panel')?.classList.add('hidden');
@@ -487,12 +463,6 @@ function getEnvironmentOptionsHtml(selectedId = '') {
 
     return types.map(type => `
         <option value="${type.id}" ${String(type.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(type.name)}</option>
-    `).join('');
-}
-
-function getProjetistaOptionsHtml(selectedId = '') {
-    return gestaoProjetistasCache.map(user => `
-        <option value="${user.id}" ${String(user.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(user.name)}</option>
     `).join('');
 }
 
@@ -1184,10 +1154,10 @@ async function saveGestaoProjectDraftAsync() {
         }
 
         setGestaoProjectFormLoading(true, 'Projeto salvo com sucesso!', 'success');
-        await waitGestaoProjectFormStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
         setGestaoProjectFormLoading(true, `Erro ao salvar projeto: ${error.message}`, 'error');
-        await waitGestaoProjectFormStatus(1800);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         alertAppDialog(`Erro ao salvar projeto no banco: ${error.message}`);
         return;
     } finally {
@@ -1332,12 +1302,6 @@ function showGestaoPedidoFormPanel() {
     setGestaoNavActive('pedido');
 }
 
-function showGestaoProjectStatusPanel() {
-    if (typeof showSystemSettings === 'function') {
-        void showSystemSettings('project-status');
-    }
-}
-
 function showGestaoAlterarStatusProjetoPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-alterar-status-projeto-panel')?.classList.remove('hidden');
@@ -1388,24 +1352,6 @@ function showGestaoAddrPanel() {
     setGestaoNavActive('addr');
 }
 
-function showGestaoCalendarEventTypesPanel() {
-    if (typeof showSystemSettings === 'function') {
-        void showSystemSettings('calendar-event-types');
-    }
-}
-
-function showGestaoDealStagesPanel() {
-    if (typeof showSystemSettings === 'function') {
-        void showSystemSettings('deal-stages');
-    }
-}
-
-function showGestaoLostReasonsPanel() {
-    if (typeof showSystemSettings === 'function') {
-        void showSystemSettings('lost-reasons');
-    }
-}
-
 function showGestaoMarceneirosPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-marceneiros-panel')?.classList.remove('hidden');
@@ -1437,9 +1383,16 @@ function showGestaoThirdPartySubtypesPanel() {
     setGestaoNavActive('third-party-subtypes');
 }
 
-function showGestaoCompraStatusPanel() {
-    if (typeof showSystemSettings === 'function') {
-        void showSystemSettings('compra-status');
+function showGestaoWoodworkChecklistItemsPanel() {
+    if (!isAdmin()) return;
+    if (typeof ensureGestaoWoodworkChecklistItemsPanelHost === 'function') {
+        ensureGestaoWoodworkChecklistItemsPanelHost();
+    }
+    hideAllGestaoPanels();
+    document.getElementById('gestao-woodwork-checklist-items-panel')?.classList.remove('hidden');
+    setGestaoNavActive('woodwork-checklist-items');
+    if (typeof loadGestaoWoodworkChecklistItemsList === 'function') {
+        void loadGestaoWoodworkChecklistItemsList();
     }
 }
 
@@ -1679,6 +1632,10 @@ function bindGestaoEvents() {
         if (typeof loadGestaoThirdPartySubtypesList === 'function') {
             loadGestaoThirdPartySubtypesList();
         }
+    });
+    document.getElementById('gestao-nav-woodwork-checklist-items')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoWoodworkChecklistItemsPanel();
     });
     document.getElementById('gestao-new-characteristic-form')?.addEventListener('submit', addGestaoProjectCharacteristic);
     document.getElementById('gestao-new-third-party-subtype-form')?.addEventListener('submit', addGestaoThirdPartySubtype);
@@ -1925,14 +1882,6 @@ function renderParentProjectPickerList(projects = parentProjectPickerCache) {
 }
 
 let currentProjectPickerTarget = 'parent';
-
-async function openParentProjectPickerModal() {
-    return openProjectRelationPickerModal('parent');
-}
-
-async function openSubstituidoProjectPickerModal() {
-    return openProjectRelationPickerModal('substituido');
-}
 
 async function openProjectRelationPickerModal(target = 'parent') {
     currentProjectPickerTarget = target;

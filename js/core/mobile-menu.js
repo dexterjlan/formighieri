@@ -34,6 +34,7 @@ const MOBILE_MENU_ICON_PATHS = {
     'gestao-nav-characteristics': '<path d="M4 7h7"/><path d="M4 12h10"/><path d="M4 17h13"/><circle cx="17" cy="7" r="1.5"/><circle cx="20" cy="12" r="1.5"/><circle cx="14" cy="17" r="1.5"/>',
     'gestao-nav-third-party-subtypes': '<path d="M7 7h10v10H7z"/><path d="M4 4h4M16 4h4M4 20h4M16 20h4"/>',
     'gestao-nav-purchase-reasons': '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+    'gestao-nav-woodwork-checklist-items': '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>',
     'gestao-nav-dashboard': '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
     'gestao-nav-kanban': '<rect x="4" y="4" width="4.5" height="16" rx="1"/><rect x="9.75" y="4" width="4.5" height="10" rx="1"/><rect x="15.5" y="4" width="4.5" height="13" rx="1"/>',
     'gestao-nav-cronograma-pedido': '<path d="M4 7h16v12H4z"/><path d="M4 11h16M9 7V4M15 7V4"/><path d="M8 15h3"/>',

@@ -489,7 +489,7 @@ async function submitOrderProjectMontagemInicioModal() {
         const montagemInternaStatusId = await getMontagemInternaProjectStatusId();
         if (!montagemInternaStatusId) {
             setOrderProjectMontagemActionLoading(true, `Status "${MONTAGEM_INTERNA_STATUS}" não encontrado.`, 'error');
-            await waitOrderProjectMontagemActionStatus(2200);
+            await waitAppOverlay(APP_OVERLAY_ERROR_MS);
             return;
         }
 
@@ -504,13 +504,13 @@ async function submitOrderProjectMontagemInicioModal() {
         await refreshOrderProjectMontagemViews();
 
         setOrderProjectMontagemActionLoading(true, 'Montagem interna iniciada!', 'success');
-        await waitOrderProjectMontagemActionStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
         const sqlHint = error.message?.includes('cabinetMakerId') || error.message?.includes('MontagemInterna')
             ? ' Execute supabase/create-gestao-order-fields.sql e supabase/create-marceneiro.sql no Supabase.'
             : '';
         setOrderProjectMontagemActionLoading(true, `Erro ao salvar: ${error.message}${sqlHint}`, 'error');
-        await waitOrderProjectMontagemActionStatus(2200);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
     } finally {
         setOrderProjectMontagemActionLoading(false);
     }
@@ -532,6 +532,11 @@ async function submitOrderProjectMontagemFimModal() {
         return;
     }
 
+    if (typeof warnIfWoodworkQualityChecklistIncomplete === 'function') {
+        const proceed = await warnIfWoodworkQualityChecklistIncomplete(pending.projectId, label);
+        if (!proceed) return;
+    }
+
     closeOrderProjectMontagemFimModal();
     setOrderProjectMontagemActionLoading(true, 'Finalizando montagem interna...');
 
@@ -539,7 +544,7 @@ async function submitOrderProjectMontagemFimModal() {
         const expedicaoStatusId = await getExpedicaoProjectStatusId();
         if (!expedicaoStatusId) {
             setOrderProjectMontagemActionLoading(true, `Status "${MONTAGEM_EXPEDICAO_STATUS}" não encontrado.`, 'error');
-            await waitOrderProjectMontagemActionStatus(2200);
+            await waitAppOverlay(APP_OVERLAY_ERROR_MS);
             return;
         }
 
@@ -553,13 +558,13 @@ async function submitOrderProjectMontagemFimModal() {
         await refreshOrderProjectMontagemViews();
 
         setOrderProjectMontagemActionLoading(true, 'Montagem interna finalizada!', 'success');
-        await waitOrderProjectMontagemActionStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
         const sqlHint = error.message?.includes('internalAssemblyEndDate')
             ? ' Execute supabase/create-gestao-order-fields.sql no Supabase.'
             : '';
         setOrderProjectMontagemActionLoading(true, `Erro ao salvar: ${error.message}${sqlHint}`, 'error');
-        await waitOrderProjectMontagemActionStatus(2200);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
     } finally {
         setOrderProjectMontagemActionLoading(false);
     }

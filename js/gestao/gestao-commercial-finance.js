@@ -20,15 +20,12 @@ let gestaoCommercialFinanceConsultantAdjustmentsSchemaReady = true;
 let gestaoCommercialFinanceManagerUserCache = null;
 let gestaoCommercialFinanceManagerConfigSchemaReady = true;
 
-const GESTAO_COMMERCIAL_FINANCE_META_LOADING_OVERLAY = {
-    overlayId: 'gestao-commercial-finance-meta-loading',
-    messageId: 'gestao-commercial-finance-meta-loading-msg',
-    spinnerId: 'gestao-commercial-finance-meta-loading-spinner'
-};
+const gestaoCommercialFinanceMetaOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('gestao-commercial-finance-meta')
+    : null;
 
-function setGestaoCommercialFinanceMetaLoading(active, message = 'Carregando...') {
-    if (typeof setActionOverlayLoading !== 'function') return;
-    setActionOverlayLoading(GESTAO_COMMERCIAL_FINANCE_META_LOADING_OVERLAY, active, message, 'loading');
+function setGestaoCommercialFinanceMetaLoading(active, message = 'Carregando...', status = 'loading') {
+    gestaoCommercialFinanceMetaOverlay?.setLoading(active, message, status);
 }
 
 function reportCommercialFinanceMonthCloseStep(options, message) {

@@ -485,17 +485,19 @@ function closeThirdPartyRevisionsHistoryModal() {
     toggleModal('third-party-revisions-history-modal', false);
 }
 
-const THIRD_PARTY_REVISION_MODAL_OVERLAY = createModalOverlayConfig('third-party-revision', {
+const thirdPartyRevisionModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('third-party-revision', {
     disableElementIds: [
         'btn-save-third-party-revision',
         'btn-resend-third-party-project',
         'btn-add-third-party-revision-activity',
         'btn-close-third-party-revision'
     ]
-});
+})
+    : null;
 
 function setThirdPartyRevisionModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(THIRD_PARTY_REVISION_MODAL_OVERLAY, active, message, status);
+    thirdPartyRevisionModalOverlay?.setLoading(active, message, status);
 }
 
 async function persistThirdPartyRevision() {
@@ -736,10 +738,10 @@ async function approveThirdPartyProject(thirdPartyProjectId) {
         }
 
         setThirdPartyProjectActionLoading(true, 'Projeto aprovado com sucesso!', 'success');
-        await waitThirdPartyProjectActionStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
         setThirdPartyProjectActionLoading(true, `Erro ao aprovar: ${error.message}`, 'error');
-        await waitThirdPartyProjectActionStatus(2200);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
     } finally {
         setThirdPartyProjectActionLoading(false);
     }

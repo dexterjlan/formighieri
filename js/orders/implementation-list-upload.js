@@ -353,14 +353,14 @@ async function handleImplantacaoListUpload(purchaseType) {
 
         if (typeof setImplantacaoModalLoading === 'function') {
             setImplantacaoModalLoading(true, 'Lista enviada com sucesso!', 'success');
-            if (typeof waitImplantacaoStatus === 'function') await waitImplantacaoStatus(900);
+            if (typeof waitImplantacaoStatus === 'function') await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
             setImplantacaoModalLoading(false);
         }
     } catch (error) {
         console.error('handleImplantacaoListUpload:', error);
         if (typeof setImplantacaoModalLoading === 'function') {
             setImplantacaoModalLoading(true, error.message || 'Não foi possível enviar a lista.', 'error');
-            if (typeof waitImplantacaoStatus === 'function') await waitImplantacaoStatus(2200);
+            if (typeof waitImplantacaoStatus === 'function') await waitAppOverlay(APP_OVERLAY_ERROR_MS);
             setImplantacaoModalLoading(false);
         }
     }

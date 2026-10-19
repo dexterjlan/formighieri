@@ -741,12 +741,14 @@ function setCompraFormDisabled(disabled) {
     });
 }
 
-const COMPRA_MODAL_OVERLAY = createModalOverlayConfig('compra-modal', {
-    closeButtonSelector: '#compra-modal button[onclick="closePurchaseModal()"]'
-});
+const compraModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('compra-modal', {
+        closeButtonSelector: '#compra-modal button[onclick="closePurchaseModal()"]'
+    })
+    : null;
 
 function setCompraModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(COMPRA_MODAL_OVERLAY, active, message, status);
+    compraModalOverlay?.setLoading(active, message, status);
     setCompraFormDisabled(active ? true : !canActCompraModal());
 }
 

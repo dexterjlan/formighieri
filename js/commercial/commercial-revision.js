@@ -63,14 +63,6 @@ function canEditRevisionActivitiesConsultor(approval) {
         && isAdminOrOrderConsultorForApproval(approval);
 }
 
-function canEditRevisionActivityProjetista(approval) {
-    if (currentUser?.role === 'Admin') return true;
-    if (currentUser?.role === 'Projetista'
-        && approval?.designerId
-        && Number(approval.designerId) === Number(currentUser.id)) return true;
-    return false;
-}
-
 function canEditRevisionActivityCompletionFields(approval) {
     if (currentUser?.role === 'Admin') return true;
     if (currentUser?.role !== 'Projetista') return false;
@@ -898,19 +890,21 @@ function refreshCommercialApprovalViews() {
     }
 }
 
-const COMMERCIAL_REVISION_MODAL_OVERLAY = createModalOverlayConfig('commercial-revision', {
-    disableElementIds: [
-        'btn-save-revision',
-        'btn-send-back-approval',
-        'btn-add-revision-activity',
-        'btn-start-revision'
-    ],
-    closeButtonSelector: '#commercial-revision-modal button[onclick="closeCommercialRevisionModal()"]',
-    disableFormSelector: '#commercial-revision-modal textarea, #commercial-revision-modal input'
-});
+const commercialRevisionModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('commercial-revision', {
+        disableElementIds: [
+            'btn-save-revision',
+            'btn-send-back-approval',
+            'btn-add-revision-activity',
+            'btn-start-revision'
+        ],
+        closeButtonSelector: '#commercial-revision-modal button[onclick="closeCommercialRevisionModal()"]',
+        disableFormSelector: '#commercial-revision-modal textarea, #commercial-revision-modal input'
+    })
+    : null;
 
 function setCommercialRevisionModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(COMMERCIAL_REVISION_MODAL_OVERLAY, active, message, status);
+    commercialRevisionModalOverlay?.setLoading(active, message, status);
 }
 
 async function startTechnicalRevision() {
@@ -1193,39 +1187,6 @@ function sortCommercialRevisionsDescending(revisions) {
         if (dateA !== dateB) return dateB - dateA;
         return (b.id || 0) - (a.id || 0);
     });
-}
-
-function sortRevisionsWithCommercialFirst(revisions) {
-    return sortCommercialRevisionsDescending(revisions);
-}
-
-function getCurrentCommercialRevision(revisions) {
-    const sorted = sortCommercialRevisionsDescending(revisions);
-    return sorted[0] || null;
-}
-
-function isCommercialRevisionAwaitingResponse(approval) {
-    return approval?.status === 'Em revisão';
-}
-
-function isProjetistaRevisionResponder(approval) {
-    return currentUser?.role === 'Projetista'
-        && typeof canEditRevisionActivityCompletionFields === 'function'
-        && canEditRevisionActivityCompletionFields(approval);
-}
-
-function getRevisionActionButtonLabel(approval, showInHistoryModal) {
-    if (isProjetistaRevisionResponder(approval)) {
-        return 'Editar';
-    }
-    return showInHistoryModal ? 'Ver detalhes' : 'Ver Revisão';
-}
-
-function shouldShowRevisionActionButton(approval, isCurrentRevision) {
-    if (!approval || !isCurrentRevision) return false;
-    if (!canViewCommercialRevision(approval)) return false;
-    if (!isCommercialRevisionAwaitingResponse(approval)) return false;
-    return canOpenRevisionModal(approval);
 }
 
 function renderCommercialRevisionsSection(revisions, approval, options = {}) {

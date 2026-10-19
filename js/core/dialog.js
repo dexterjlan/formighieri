@@ -130,6 +130,7 @@ function showAppDialog(options = {}) {
         message = '',
         confirmLabel = 'Confirmar',
         cancelLabel = 'Cancelar',
+        alternateLabel = null,
         variant = 'confirm',
         showCancel = true,
         showIcon = false,
@@ -149,6 +150,7 @@ function showAppDialog(options = {}) {
         const inputEl = document.getElementById('app-dialog-input');
         const checkboxListEl = document.getElementById('app-dialog-checkbox-list');
         const cancelBtn = document.getElementById('btn-app-dialog-cancel');
+        const alternateBtn = document.getElementById('btn-app-dialog-alternate');
         const confirmBtn = document.getElementById('btn-app-dialog-confirm');
         const iconWrap = document.getElementById('app-dialog-icon-wrap');
 
@@ -165,9 +167,14 @@ function showAppDialog(options = {}) {
         confirmBtn.textContent = confirmLabel;
         cancelBtn.textContent = cancelLabel;
 
+        const showAlternate = Boolean(alternateLabel);
         cancelBtn.classList.toggle('hidden', !showCancel);
-        confirmBtn.classList.toggle('flex-1', showCancel);
-        confirmBtn.classList.toggle('w-full', !showCancel);
+        if (alternateBtn) {
+            alternateBtn.classList.toggle('hidden', !showAlternate);
+            if (showAlternate) alternateBtn.textContent = alternateLabel;
+        }
+        confirmBtn.classList.toggle('flex-1', showCancel || showAlternate);
+        confirmBtn.classList.toggle('w-full', !showCancel && !showAlternate);
 
         if (inputEl) {
             inputEl.classList.toggle('hidden', !showInput);
@@ -216,16 +223,22 @@ function showAppDialog(options = {}) {
 }
 
 function confirmAppDialog(message, options = {}) {
+    const hasAlternate = Boolean(options.alternateLabel);
     return showAppDialog({
         title: options.title || 'Confirmação',
         message,
         confirmLabel: options.confirmLabel || 'Confirmar',
         cancelLabel: options.cancelLabel || 'Cancelar',
+        alternateLabel: options.alternateLabel || null,
         variant: options.variant || 'confirm',
         showCancel: true,
         showIcon: false,
-        ...options
-    }).then(result => result === true);
+        focusCancel: options.focusCancel,
+        confirmClass: options.confirmClass
+    }).then(result => {
+        if (hasAlternate && result === 'alternate') return 'alternate';
+        return result === true;
+    });
 }
 
 function inferAlertDialogOptions(message, options = {}) {
@@ -298,10 +311,15 @@ function promptAppDialog(message, options = {}) {
 
 function bindAppDialogEvents() {
     const cancelBtn = document.getElementById('btn-app-dialog-cancel');
+    const alternateBtn = document.getElementById('btn-app-dialog-alternate');
     const confirmBtn = document.getElementById('btn-app-dialog-confirm');
 
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => closeAppDialog(false));
+    }
+
+    if (alternateBtn) {
+        alternateBtn.addEventListener('click', () => closeAppDialog('alternate'));
     }
 
     if (confirmBtn) {

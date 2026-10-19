@@ -953,6 +953,63 @@ async function applyOrderDetailHeader(order) {
     activeOrderAddrId = Number(order.addrId) || null;
 }
 
+function renderOrderCodeLinkHtml(orderId, orderCode, options = {}) {
+    const normalizedId = Number(orderId);
+    const code = orderCode === null || orderCode === undefined ? '' : String(orderCode);
+    const display = code.trim() || '—';
+    if (!normalizedId || display === '—') {
+        return escapeHtml(display);
+    }
+
+    const canNavigate = typeof canAccessOrdersDashboard === 'function'
+        ? canAccessOrdersDashboard()
+        : true;
+    if (!canNavigate) {
+        const className = options.className ? ` ${options.className}` : '';
+        return `<span class="font-mono${className}">${escapeHtml(display)}</span>`;
+    }
+
+    const className = options.className || '';
+    return `<button type="button"
+        class="fm-order-code-link font-mono text-indigo-600 hover:text-indigo-800 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded ${escapeHtml(className)}"
+        data-order-id="${normalizedId}"
+        title="Abrir pedido">${escapeHtml(display)}</button>`;
+}
+
+function bindOrderCodeLinks(root) {
+    root?.querySelectorAll('.fm-order-code-link[data-order-id]').forEach(button => {
+        if (button.dataset.orderCodeLinkBound === '1') return;
+        button.dataset.orderCodeLinkBound = '1';
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void navigateToOrderDashboard(Number(button.dataset.orderId));
+        });
+    });
+}
+
+async function navigateToOrderDashboard(orderId) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId) return;
+
+    if (typeof canAccessOrdersDashboard === 'function' && !canAccessOrdersDashboard()) {
+        alertAppDialog('Você não tem permissão para acessar pedidos.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (typeof showDashboard === 'function') {
+        showDashboard();
+    }
+
+    if (typeof loadOrders === 'function') {
+        await loadOrders();
+    }
+
+    if (typeof selectOrder === 'function') {
+        await selectOrder(normalizedId);
+    }
+}
+
 async function selectOrder(id) {
     const normalizedId = Number(id);
     if (!normalizedId) return;

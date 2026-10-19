@@ -108,11 +108,12 @@ function updateView3dNav() {
     btn.classList.toggle('hidden', !canAccessView3d());
 }
 
-function setView3dLoading(active, message = 'Carregando...') {
-    const overlay = document.getElementById('view3d-loading');
-    const msg = document.getElementById('view3d-loading-msg');
-    overlay?.classList.toggle('hidden', !active);
-    if (msg) msg.textContent = message;
+const view3dPanelOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('view3d')
+    : null;
+
+function setView3dLoading(active, message = 'Carregando...', status = 'loading') {
+    view3dPanelOverlay?.setLoading(active, message, status);
 }
 
 function buildView3dDriveContext(orderProject, order) {
@@ -133,11 +134,6 @@ function buildView3dDriveContext(orderProject, order) {
         folderPath: buildDriveFolderPath(orderCode, projectName, DRIVE_FILE_FOLDER_KIND.MODEL_3D),
         replaceByEntity: true
     };
-}
-
-function isAllowedView3dUploadFile(file) {
-    if (!file) return false;
-    return isAllowedDriveUploadFileName(file.name, DRIVE_FILE_FOLDER_KIND.MODEL_3D);
 }
 
 async function fetchView3dOrders(orderCodeFilter, clientFilter) {
@@ -463,9 +459,10 @@ async function openView3dViewerModal(file, title = 'Modelo 3D') {
 function closeView3dViewerModal() {
     disposeView3dThreeSession();
     setView3dThreeOverlay(false);
-    ['btn-view3d-toggle-xray', 'btn-view3d-toggle-edges'].forEach(id => {
+    ['btn-view3d-toggle-xray', 'btn-view3d-toggle-edges', 'btn-view3d-toggle-section-cut'].forEach(id => {
         toggleView3dToolbarActive(document.getElementById(id), false);
     });
+    resetView3dSectionCutPanel();
     setView3dNavigationToolbar('orbit');
     setView3dMobileBodyScrollLock(false);
     toggleModal('view3d-viewer-modal', false);
@@ -589,21 +586,17 @@ function bindView3dEvents() {
     });
     document.getElementById('btn-view3d-viewer-close')?.addEventListener('click', closeView3dViewerModal);
     document.getElementById('btn-view3d-nav-orbit')?.addEventListener('click', () => {
-        exitView3dMeasureModeForNavigation();
         view3dThreeViewer?.setNavigationMode('orbit');
         setView3dNavigationToolbar('orbit');
     });
     document.getElementById('btn-view3d-nav-pan')?.addEventListener('click', () => {
-        exitView3dMeasureModeForNavigation();
         view3dThreeViewer?.setNavigationMode('pan');
         setView3dNavigationToolbar('pan');
     });
     document.getElementById('btn-view3d-zoom-in')?.addEventListener('click', () => {
-        exitView3dMeasureModeForNavigation();
         view3dThreeViewer?.zoomIn();
     });
     document.getElementById('btn-view3d-zoom-out')?.addEventListener('click', () => {
-        exitView3dMeasureModeForNavigation();
         view3dThreeViewer?.zoomOut();
     });
     document.getElementById('btn-view3d-screenshot')?.addEventListener('click', () => {
@@ -625,6 +618,75 @@ function bindView3dEvents() {
         const enabled = view3dThreeViewer?.toggleXray();
         toggleView3dToolbarActive(event.currentTarget, enabled);
     });
+    document.getElementById('btn-view3d-toggle-section-cut')?.addEventListener('click', event => {
+        const viewer = view3dThreeViewer;
+        if (!viewer) return;
+        if (!viewer.sectionCutEnabled) {
+            const slider = document.getElementById('view3d-section-cut-slider');
+            const activeAxisBtn = document.querySelector('[data-view3d-section-axis].bg-indigo-700');
+            viewer.setSectionCutAxis(activeAxisBtn?.dataset.view3dSectionAxis || 'y');
+            viewer.setSectionCutPosition(Number(slider?.value ?? 55) / 100);
+            viewer.setSectionCutInvert(
+                document.getElementById('btn-view3d-section-cut-invert')?.classList.contains('bg-indigo-700')
+            );
+        }
+        const enabled = viewer.toggleSectionCut();
+        toggleView3dToolbarActive(event.currentTarget, enabled);
+        syncView3dSectionCutPanelVisibility(enabled);
+    });
+    document.getElementById('view3d-section-cut-panel')?.addEventListener('click', event => {
+        const axisBtn = event.target.closest('[data-view3d-section-axis]');
+        if (axisBtn) {
+            const axis = axisBtn.dataset.view3dSectionAxis;
+            view3dThreeViewer?.setSectionCutAxis(axis);
+            setView3dSectionCutAxisUi(axis);
+            return;
+        }
+        if (event.target.closest('#btn-view3d-section-cut-invert')) {
+            const inverted = view3dThreeViewer?.toggleSectionCutInvert();
+            setView3dSectionCutInvertUi(inverted);
+        }
+    });
+    document.getElementById('view3d-section-cut-slider')?.addEventListener('input', event => {
+        view3dThreeViewer?.setSectionCutPosition(Number(event.target.value) / 100);
+    });
+}
+
+function syncView3dSectionCutPanelVisibility(enabled) {
+    const panel = document.getElementById('view3d-section-cut-panel');
+    panel?.classList.toggle('hidden', !enabled);
+}
+
+function resetView3dSectionCutPanel() {
+    syncView3dSectionCutPanelVisibility(false);
+    const slider = document.getElementById('view3d-section-cut-slider');
+    if (slider) slider.value = '55';
+    setView3dSectionCutAxisUi('y');
+    setView3dSectionCutInvertUi(false);
+}
+
+function setView3dSectionCutInvertUi(inverted) {
+    const button = document.getElementById('btn-view3d-section-cut-invert');
+    if (!button) return;
+    const active = Boolean(inverted);
+    button.classList.toggle('border-indigo-500', active);
+    button.classList.toggle('bg-indigo-700', active);
+    button.classList.toggle('text-white', active);
+    button.classList.toggle('border-slate-600', !active);
+    button.classList.toggle('bg-slate-800', !active);
+    button.classList.toggle('hover:bg-slate-700', !active);
+}
+
+function setView3dSectionCutAxisUi(axis) {
+    document.querySelectorAll('[data-view3d-section-axis]').forEach(button => {
+        const active = button.dataset.view3dSectionAxis === axis;
+        button.classList.toggle('border-indigo-500', active);
+        button.classList.toggle('bg-indigo-700', active);
+        button.classList.toggle('text-white', active);
+        button.classList.toggle('border-slate-600', !active);
+        button.classList.toggle('bg-slate-800', !active);
+        button.classList.toggle('hover:bg-slate-700', !active);
+    });
 }
 
 function toggleView3dToolbarActive(button, active) {
@@ -642,11 +704,6 @@ function setView3dNavigationToolbar(mode) {
     const panBtn = document.getElementById('btn-view3d-nav-pan');
     toggleView3dToolbarActive(orbitBtn, mode === 'orbit');
     toggleView3dToolbarActive(panBtn, mode === 'pan');
-}
-
-function exitView3dMeasureModeForNavigation() {
-    if (!view3dThreeViewer?.measureEnabled) return;
-    view3dThreeViewer.setMeasureMode(false);
 }
 
 window.canAccessView3d = canAccessView3d;

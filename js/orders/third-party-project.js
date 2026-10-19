@@ -589,13 +589,6 @@ async function createThirdPartyProjectsForSelectedSubtypes(options = {}) {
     return { created, existing };
 }
 
-async function ensureThirdPartyProjectsForProcurementSubtypes(options = {}) {
-    return createThirdPartyProjectsForProcurementSubtypes({
-        ...options,
-        createAllActiveProcurementSubtypes: true
-    });
-}
-
 function mergeThirdPartySubtypesForApprovalModal(procurementSubtypes = [], existingProjects = []) {
     const subtypeById = new Map();
 
@@ -1010,7 +1003,35 @@ async function fetchThirdPartyProjectsForProjetista(designerId, options = {}) {
     return data || [];
 }
 
-async function assignThirdPartyProjectDesigner(thirdPartyProjectId, designerId) {
+/**
+ * Alinha o projetista dos projetos de terceiros vinculados aos ambientes informados.
+ * @returns {Promise<{ updatedIds: number[] }>}
+ */
+async function syncThirdPartyProjectDesignersForOrderProjects(orderProjectIds = [], designerId, options = {}) {
+    const normalizedDesignerId = Number(designerId);
+    if (!normalizedDesignerId) return { updatedIds: [] };
+
+    const uniqueOrderProjectIds = [...new Set(
+        (orderProjectIds || []).map(id => Number(id)).filter(Boolean)
+    )];
+    if (!uniqueOrderProjectIds.length) return { updatedIds: [] };
+
+    const thirdPartyProjects = await fetchThirdPartyProjectsByOrderProjectIds(uniqueOrderProjectIds);
+    const staleProjects = (thirdPartyProjects || []).filter(
+        project => Number(project.designerId) !== normalizedDesignerId
+    );
+    if (!staleProjects.length) return { updatedIds: [] };
+
+    const updatedIds = [];
+    for (const project of staleProjects) {
+        await assignThirdPartyProjectDesigner(project.id, normalizedDesignerId, options);
+        updatedIds.push(Number(project.id));
+    }
+
+    return { updatedIds };
+}
+
+async function assignThirdPartyProjectDesigner(thirdPartyProjectId, designerId, options = {}) {
     const projectId = Number(thirdPartyProjectId);
     const normalizedDesignerId = Number(designerId);
     if (!projectId || !normalizedDesignerId) {
@@ -1043,7 +1064,7 @@ async function assignThirdPartyProjectDesigner(thirdPartyProjectId, designerId) 
 
     if (error) throw error;
 
-    if (typeof notifyThirdPartyDesignerAssignedEmail === 'function') {
+    if (options.sendNotification !== false && typeof notifyThirdPartyDesignerAssignedEmail === 'function') {
         try {
             await notifyThirdPartyDesignerAssignedEmail({
                 orderId: data.orderId,
@@ -1057,28 +1078,6 @@ async function assignThirdPartyProjectDesigner(thirdPartyProjectId, designerId) 
         }
     }
 
-    return data;
-}
-
-async function saveThirdPartyProjectFilePath(thirdPartyProjectId, filePath) {
-    const projectId = Number(thirdPartyProjectId);
-    const normalizedPath = String(filePath || '').trim();
-    if (!projectId) throw new Error('Projeto inválido.');
-    if (!normalizedPath) throw new Error('Informe o caminho do arquivo ou envie o arquivo pelo Drive.');
-
-    const now = new Date().toISOString();
-    const { data, error } = await supabaseClient
-        .from('ThirdPartyProject')
-        .update({
-            filePath: normalizedPath,
-            updatedAt: now,
-            updatedById: currentUser?.id || null
-        })
-        .eq('id', projectId)
-        .select('id, filePath, status, designerId')
-        .single();
-
-    if (error) throw error;
     return data;
 }
 
@@ -1241,26 +1240,6 @@ function buildThirdPartyProjectCompraLookupKey(orderProjectId, thirdPartySubtype
     const subtypeId = Number(thirdPartySubtypeId);
     if (!projectId || !subtypeId) return '';
     return `${projectId}:${subtypeId}`;
-}
-
-function formatThirdPartyProjectObservationPreview(text, maxLength = 120) {
-    const normalized = String(text || '').trim();
-    if (!normalized) return '—';
-    if (normalized.length <= maxLength) return normalized;
-    return `${normalized.slice(0, maxLength - 1)}…`;
-}
-
-async function fetchThirdPartyProjectsByOrderProjectIds(orderProjectIds = []) {
-    const ids = [...new Set((orderProjectIds || []).map(id => Number(id)).filter(Boolean))];
-    if (!ids.length) return [];
-
-    return fetchThirdPartyProjectsWithFallback(
-        select => supabaseClient
-            .from('ThirdPartyProject')
-            .select(select)
-            .in('orderProjectId', ids),
-        {}
-    );
 }
 
 async function buildThirdPartyProjectObservationLookupByOrderProjectIds(orderProjectIds = []) {

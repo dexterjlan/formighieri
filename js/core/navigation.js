@@ -211,6 +211,21 @@ async function restoreGestaoView(state) {
         'programacao-producao': () => {
             if (typeof showProgramacaoProducaoView === 'function') showProgramacaoProducaoView();
             else if (typeof showGestaoProgramacaoProducaoPanel === 'function') showGestaoProgramacaoProducaoPanel();
+        },
+        characteristics: () => {
+            if (typeof showGestaoCharacteristicsPanel === 'function') showGestaoCharacteristicsPanel();
+            if (typeof loadGestaoCharacteristicsList === 'function') loadGestaoCharacteristicsList();
+        },
+        'third-party-subtypes': () => {
+            if (typeof showGestaoThirdPartySubtypesPanel === 'function') showGestaoThirdPartySubtypesPanel();
+            if (typeof loadGestaoThirdPartySubtypesList === 'function') loadGestaoThirdPartySubtypesList();
+        },
+        'purchase-reasons': () => {
+            if (typeof showGestaoPurchaseReasonsPanel === 'function') showGestaoPurchaseReasonsPanel();
+            if (typeof loadGestaoPurchaseReasonsList === 'function') loadGestaoPurchaseReasonsList();
+        },
+        'woodwork-checklist-items': () => {
+            if (typeof showGestaoWoodworkChecklistItemsPanel === 'function') showGestaoWoodworkChecklistItemsPanel();
         }
     };
 
@@ -402,6 +417,10 @@ async function restoreAppNavState() {
                 showApprovalsQuery();
                 return true;
             case 'settings':
+                if (state.settingsNav === 'woodwork-checklist-items') {
+                    await restoreGestaoView({ gestaoNav: 'woodwork-checklist-items' });
+                    return true;
+                }
                 if (typeof showSystemSettings === 'function') await showSystemSettings(state.settingsNav || 'geral');
                 return true;
             default:

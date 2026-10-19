@@ -457,8 +457,9 @@ async function submitRequisicoesPurchase(draft) {
             throw new Error('Não foi possível registrar a compra.');
         }
 
-        const overlayMessage = form?.querySelector('.gestao-cadastro-save-overlay__msg');
-        if (overlayMessage) overlayMessage.textContent = 'Enviando e-mail...';
+        if (typeof setGestaoCadastroSaveOverlayLoading === 'function') {
+            setGestaoCadastroSaveOverlayLoading(true, 'Enviando e-mail...', 'loading');
+        }
         if (!locked && typeof notifyRequisicoesPurchaseEmail === 'function') {
             await notifyRequisicoesPurchaseEmail({
                 orderProjectId,

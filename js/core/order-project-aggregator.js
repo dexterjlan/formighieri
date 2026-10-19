@@ -125,12 +125,6 @@ function normalizeOrderProjectDeliveryDateKey(dateValue) {
     return String(dateValue).split('T')[0];
 }
 
-function renderGroupedChildProjectNoticeHtml(project) {
-    if (!isOrderProjectGroupedChild(project)) return '';
-
-    return `<span class="inline-flex items-center text-[10px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-full shrink-0" title="Ambiente vinculado a um agrupador; ações nas pendências usam o agrupador">Vinculado ao agrupador</span>`;
-}
-
 function isPendenciasAggregatorColumnQueryError(message) {
     const normalized = String(message || '');
     return normalized.includes('aggregatorOrderProjectId') || normalized.includes('isAggregator');
@@ -550,14 +544,30 @@ async function applyOrderProjectDesignerAssignmentToAggregatorChildren(
     projectId,
     designerId,
     meta = {},
-    project = null
+    project = null,
+    options = {}
 ) {
-    return replicateOrderProjectAggregatorChildFields(
+    const normalizedProjectId = Number(projectId);
+    const normalizedDesignerId = Number(designerId) || null;
+    const childIds = await replicateOrderProjectAggregatorChildFields(
         projectId,
-        { designerId: Number(designerId) || null },
+        { designerId: normalizedDesignerId },
         meta,
         project
     );
+
+    if (normalizedDesignerId && typeof syncThirdPartyProjectDesignersForOrderProjects === 'function') {
+        const orderProjectIds = [...new Set(
+            [normalizedProjectId, ...(childIds || [])].map(id => Number(id)).filter(Boolean)
+        )];
+        await syncThirdPartyProjectDesignersForOrderProjects(
+            orderProjectIds,
+            normalizedDesignerId,
+            options
+        );
+    }
+
+    return childIds;
 }
 
 function renderPendenciasProjectNameHtml(project, nameOverride = null) {

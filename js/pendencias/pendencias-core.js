@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars -- API global (bootstrap); símbolos consumidos em outros scripts. */
 const PENDENCIAS_STATUS_AGUARDANDO_PT = 'Aguardando Projeto Técnico';
 const PENDENCIAS_STATUS_PROJETO_TECNICO = 'Projeto Técnico';
 const PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL = ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS;
@@ -17,7 +18,6 @@ const PENDENCIAS_STATUS_EM_PRODUCAO = 'Em Produção';
 const PENDENCIAS_STATUS_MONTAGEM_INTERNA = 'Montagem Interna';
 const PENDENCIAS_STATUS_MONTAGEM_EXTERNA = 'Montagem Externa';
 const PENDENCIAS_STATUS_AGUARDANDO_ENTREGA_TECNICA = 'Aguardando Entrega Técnica';
-const PENDENCIAS_STATUS_ENTREGUE = 'Entregue';
 const PENDENCIAS_STATUS_EXPEDICAO = 'Expedição';
 
 const PENDENCIAS_FABRICA_PROJECT_SELECT = `
@@ -30,16 +30,6 @@ const PENDENCIAS_FABRICA_PROJECT_SELECT_FALLBACK = `
 const PENDENCIAS_AGUARDANDO_MEDICAO_LIST_STATUSES = [
     PENDENCIAS_STATUS_VENDIDO,
     PENDENCIAS_STATUS_AGUARDANDO_OBRA
-];
-const PENDENCIAS_MINE_EXTRA_STATUSES = [
-    PENDENCIAS_STATUS_PROJETO_TECNICO,
-    PENDENCIAS_STATUS_EM_REVISAO_COMERCIAL,
-    PENDENCIAS_STATUS_EM_REVISAO_TECNICA,
-    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
-    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
-    'Aguardando Aprovação',
-    PENDENCIAS_STATUS_EM_REVISAO,
-    'Em revisão'
 ];
 
 const PENDENCIAS_PROJECT_SELECT = `
@@ -74,12 +64,6 @@ const PENDENCIAS_GESTOR_WORKLOAD_COLUMNS = [
     PENDENCIAS_STATUS_NOMEAR,
     'Aguardando PPCP',
     PENDENCIAS_STATUS_IMPLANTACAO
-];
-
-const PENDENCIAS_CONFERENTE_MENU_ITEM_IDS = [
-    'aguardando-medicao',
-    'aguardando-planta',
-    'conferencias'
 ];
 
 function isPendenciasAguardandoProjetoTecnicoView() {
@@ -641,14 +625,16 @@ function renderPendenciasPlaceholder(title, message) {
     `;
 }
 
-const PENDENCIAS_ACTION_OVERLAY = createModalOverlayConfig('pendencias-action');
+const pendenciasActionOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('pendencias-action')
+    : null;
 
 function setPendenciasActionLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(PENDENCIAS_ACTION_OVERLAY, active, message, status);
+    pendenciasActionOverlay?.setLoading(active, message, status);
 }
 
 function waitPendenciasStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return waitAppOverlay(ms);
 }
 
 async function getPendenciasStatusIdsByNames(names) {

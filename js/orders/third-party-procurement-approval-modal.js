@@ -2,8 +2,8 @@ let thirdPartyProcurementApprovalModalResolver = null;
 let thirdPartyProcurementApprovalModalContext = null;
 let thirdPartyProcurementApprovalModalEventsBound = false;
 
-const THIRD_PARTY_PROCUREMENT_APPROVAL_MODAL_OVERLAY = typeof createModalOverlayConfig === 'function'
-    ? createModalOverlayConfig('third-party-procurement-approval-modal', {
+const thirdPartyProcurementApprovalModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('third-party-procurement-approval-modal', {
         disableElementIds: [
             'btn-confirm-third-party-procurement-approval',
             'btn-cancel-third-party-procurement-approval',
@@ -14,20 +14,11 @@ const THIRD_PARTY_PROCUREMENT_APPROVAL_MODAL_OVERLAY = typeof createModalOverlay
     : null;
 
 function setThirdPartyProcurementApprovalModalLoading(active, message = 'Processando...', status = 'loading') {
-    if (!THIRD_PARTY_PROCUREMENT_APPROVAL_MODAL_OVERLAY
-        || typeof setModalOverlayLoading !== 'function') {
-        return;
-    }
-    setModalOverlayLoading(
-        THIRD_PARTY_PROCUREMENT_APPROVAL_MODAL_OVERLAY,
-        active,
-        message,
-        status
-    );
+    thirdPartyProcurementApprovalModalOverlay?.setLoading(active, message, status);
 }
 
-function waitThirdPartyProcurementApprovalModalStatus(ms = 1200) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+function waitThirdPartyProcurementApprovalModalStatus(ms = APP_OVERLAY_SUCCESS_MS) {
+    return waitAppOverlay(ms);
 }
 
 function closeThirdPartyProcurementApprovalModal(confirmed = false) {
@@ -223,24 +214,24 @@ async function confirmThirdPartyProcurementApprovalModal() {
                     `${result.created.length} projeto(s) criado(s).`,
                     'success'
                 );
-                await waitThirdPartyProcurementApprovalModalStatus(800);
+                await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
                 if (typeof showThirdPartyProjectsCreatedModal === 'function') {
                     showThirdPartyProjectsCreatedModal(result.created);
                 }
             } else {
                 setThirdPartyProcurementApprovalModalLoading(true, 'Nenhum projeto novo para criar.');
-                await waitThirdPartyProcurementApprovalModalStatus(600);
+                await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
             }
         } else {
             setThirdPartyProcurementApprovalModalLoading(true, 'Preparando envio para aprovação...');
-            await waitThirdPartyProcurementApprovalModalStatus(400);
+            await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         }
         setThirdPartyProcurementApprovalModalLoading(false);
         closeThirdPartyProcurementApprovalModal(true);
     } catch (error) {
         const message = error.message || 'Erro ao criar projetos de terceiros.';
         setThirdPartyProcurementApprovalModalLoading(true, message, 'error');
-        await waitThirdPartyProcurementApprovalModalStatus(1600);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setThirdPartyProcurementApprovalModalLoading(false);
         alertAppDialog(message);
     }

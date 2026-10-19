@@ -176,13 +176,12 @@ function updateProgramacoesNav() {
     if (canAccess) renderProgramacoesSidebar();
 }
 
-const PROGRAMACOES_ACTION_OVERLAY = typeof createModalOverlayConfig === 'function'
-    ? createModalOverlayConfig('programacoes-action')
+const programacoesActionOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('programacoes-action')
     : null;
 
 function setProgramacoesActionLoading(active, message = 'Processando...', status = 'loading') {
-    if (!PROGRAMACOES_ACTION_OVERLAY || typeof setModalOverlayLoading !== 'function') return;
-    setModalOverlayLoading(PROGRAMACOES_ACTION_OVERLAY, active, message, status);
+    programacoesActionOverlay?.setLoading(active, message, status);
 }
 
 function bindProgramacoesEvents() {

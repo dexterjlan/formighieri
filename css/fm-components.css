@@ -1396,3 +1396,182 @@ html[data-theme="formighieri-sage"] .app-sidebar .pendencias-subitem-btn.is-sele
     border: 0 !important;
     box-shadow: none !important;
 }
+
+.woodwork-checklist-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.woodwork-checklist-item {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 0.75rem 0.85rem;
+    background: #fff;
+}
+
+.woodwork-checklist-item__label {
+    font-size: 0.8125rem;
+    color: #0f172a;
+    margin: 0 0 0.5rem;
+    line-height: 1.35;
+}
+
+.woodwork-checklist-item__num {
+    font-weight: 700;
+    color: #64748b;
+    margin-right: 0.25rem;
+}
+
+.woodwork-checklist-answers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.woodwork-checklist-answer-btn {
+    min-height: 2.5rem;
+    min-width: 4.25rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.75rem;
+    font-weight: 700;
+    touch-action: manipulation;
+}
+
+.woodwork-checklist-answer-btn.is-active {
+    border-color: #d97706;
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.woodwork-checklist-answer-btn:disabled {
+    opacity: 0.85;
+}
+
+.woodwork-checklist-header {
+    margin: 0;
+    padding: 0.85rem 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    background: #f8fafc;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.woodwork-checklist-header__row {
+    display: grid;
+    grid-template-columns: minmax(8.5rem, 34%) 1fr;
+    gap: 0.5rem 0.75rem;
+    align-items: baseline;
+}
+
+.woodwork-checklist-header__row dt {
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #64748b;
+}
+
+.woodwork-checklist-header__row dd {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: #0f172a;
+    font-weight: 600;
+}
+
+/* Overlay de ação padronizado (utils-ui: buildAppOverlayHtml / runAppOverlayAction) */
+.fm-app-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: rgb(15 23 42 / 0.45);
+    backdrop-filter: blur(4px);
+}
+
+.fm-app-overlay--viewport {
+    position: fixed;
+    inset: 0;
+    z-index: 180;
+}
+
+.fm-app-overlay--contained {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    border-radius: inherit;
+}
+
+.fm-app-overlay--modal-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+}
+
+.fm-app-overlay__card {
+    width: 100%;
+    max-width: 24rem;
+    padding: 1.75rem 2rem;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    border: 1px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    text-align: center;
+}
+
+.fm-app-overlay__spinner {
+    height: 2.5rem;
+    width: 2.5rem;
+    border-radius: 9999px;
+    border: 2px solid #e2e8f0;
+    border-top-color: #4338ca;
+    animation: fm-app-overlay-spin 0.7s linear infinite;
+}
+
+.fm-app-overlay__spinner--amber {
+    border-top-color: #d97706;
+}
+
+.fm-app-overlay__icon {
+    height: 2.5rem;
+    width: 2.5rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.125rem;
+    font-weight: 700;
+}
+
+.fm-app-overlay__icon--success {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.fm-app-overlay__icon--error {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.fm-app-overlay__message {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #334155;
+    line-height: 1.4;
+}
+
+@keyframes fm-app-overlay-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

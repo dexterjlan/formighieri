@@ -82,16 +82,146 @@ function setModalOverlayLoading(config, active, message = 'Processando...', stat
     }
 }
 
-const ORDER_PROJECTS_ACTION_OVERLAY = {
-    overlayId: 'order-projects-action-loading',
-    messageId: 'order-projects-action-loading-msg',
-    spinnerId: 'order-projects-action-loading-spinner',
-    successId: 'order-projects-action-loading-success',
-    errorId: 'order-projects-action-loading-error'
-};
+/** Tempos padrão do popup de ação (sucesso / erro). */
+const APP_OVERLAY_SUCCESS_MS = 1800;
+const APP_OVERLAY_ERROR_MS = 4000;
+
+function waitAppOverlay(ms = APP_OVERLAY_SUCCESS_MS) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getAppOverlayElementIds(prefix) {
+    const base = String(prefix).replace(/-loading$/, '');
+    return {
+        overlayId: `${base}-loading`,
+        messageId: `${base}-loading-msg`,
+        spinnerId: `${base}-loading-spinner`,
+        successId: `${base}-loading-success`,
+        errorId: `${base}-loading-error`
+    };
+}
+
+/**
+ * HTML do overlay padronizado. scope: viewport (fixed, centro da tela) ou contained (absolute no pai relative).
+ * IDs: {prefix}-loading, -loading-msg, -loading-spinner, -loading-success, -loading-error
+ */
+function buildAppOverlayHtml(prefix, scope = 'viewport') {
+    const ids = getAppOverlayElementIds(prefix);
+    const scopeClass = scope === 'contained'
+        ? 'fm-app-overlay fm-app-overlay--contained'
+        : 'fm-app-overlay fm-app-overlay--viewport';
+    return `
+<div id="${ids.overlayId}" class="${scopeClass} hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+    <div class="fm-app-overlay__card">
+        <div id="${ids.spinnerId}" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+        <div id="${ids.successId}" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+        <div id="${ids.errorId}" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+        <p id="${ids.messageId}" class="fm-app-overlay__message">Processando...</p>
+    </div>
+</div>`;
+}
+
+function ensureAppOverlayMarkup(prefix, options = {}) {
+    const ids = getAppOverlayElementIds(prefix);
+    const scope = options.scope || 'viewport';
+    const mountSelector = options.mountSelector || null;
+
+    if (!document.getElementById(ids.overlayId)) {
+        const html = buildAppOverlayHtml(prefix, scope);
+        const mountParent = mountSelector
+            ? document.querySelector(mountSelector)
+            : document.body;
+        if (mountParent) {
+            mountParent.insertAdjacentHTML(
+                mountParent === document.body ? 'beforeend' : 'afterbegin',
+                html
+            );
+        }
+    }
+
+    return createModalOverlayConfig(prefix, options);
+}
+
+async function showAppOverlayFeedback(config, message, status = 'error', durationMs = null) {
+    const ms = durationMs ?? (status === 'error' ? APP_OVERLAY_ERROR_MS : APP_OVERLAY_SUCCESS_MS);
+    setModalOverlayLoading(config, true, message, status);
+    await waitAppOverlay(ms);
+    setModalOverlayLoading(config, false);
+}
+
+async function runAppOverlayAction(config, options = {}) {
+    const {
+        loadingMessage = 'Processando...',
+        successMessage = 'Concluído!',
+        task,
+        formatError = (error) => `Erro: ${error?.message || error}`,
+        successMs = APP_OVERLAY_SUCCESS_MS,
+        errorMs = APP_OVERLAY_ERROR_MS,
+        onSuccess = null,
+        hideOnSuccess = true,
+        rethrow = false
+    } = options;
+
+    if (typeof task !== 'function') {
+        throw new Error('runAppOverlayAction: task é obrigatório.');
+    }
+
+    try {
+        setModalOverlayLoading(config, true, loadingMessage, 'loading');
+        const result = await task();
+        setModalOverlayLoading(config, true, successMessage, 'success');
+        await waitAppOverlay(successMs);
+        if (hideOnSuccess) {
+            setModalOverlayLoading(config, false);
+        }
+        if (typeof onSuccess === 'function') {
+            await onSuccess(result);
+        }
+        return result;
+    } catch (error) {
+        const errorMessage = typeof options.errorMessage === 'string'
+            ? options.errorMessage
+            : formatError(error);
+        setModalOverlayLoading(config, true, errorMessage, 'error');
+        await waitAppOverlay(errorMs);
+        setModalOverlayLoading(config, false);
+        if (rethrow) throw error;
+        return null;
+    }
+}
+
+function createAppOverlayHelper(prefix, options = {}) {
+    const config = ensureAppOverlayMarkup(prefix, options);
+    return {
+        config,
+        setLoading(active, message = 'Processando...', status = 'loading') {
+            setModalOverlayLoading(config, active, message, status);
+        },
+        feedback(message, status = 'error', durationMs = null) {
+            return showAppOverlayFeedback(config, message, status, durationMs);
+        },
+        runAction(runOptions) {
+            return runAppOverlayAction(config, runOptions);
+        }
+    };
+}
+
+let appGlobalOverlayConfigCache = null;
+
+/** Overlay global (centro da tela); use com runAppOverlayAction(getAppGlobalOverlayConfig(), …). */
+function getAppGlobalOverlayConfig() {
+    if (!appGlobalOverlayConfigCache) {
+        appGlobalOverlayConfigCache = ensureAppOverlayMarkup('app', { scope: 'viewport' });
+    }
+    return appGlobalOverlayConfigCache;
+}
+
+const orderProjectsActionOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('order-projects-action')
+    : null;
 
 function setOrderProjectsPanelActionLoading(active, message = 'Processando...', status = 'loading') {
-    setActionOverlayLoading(ORDER_PROJECTS_ACTION_OVERLAY, active, message, status);
+    orderProjectsActionOverlay?.setLoading(active, message, status);
 }
 
 function escapeHtml(text) {

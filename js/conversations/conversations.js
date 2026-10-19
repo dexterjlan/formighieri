@@ -1113,12 +1113,11 @@ function setRequestReplyLoading(id, role, isLoading, message = 'Respondendo...')
     }
 }
 
+const convFormOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('conv-form')
+    : null;
+
 function setConvFormLoading(active, message = 'Processando...', status = 'loading') {
-    const overlay = document.getElementById('conv-form-loading');
-    const messageEl = document.getElementById('conv-form-loading-msg');
-    const spinner = document.getElementById('conv-form-loading-spinner');
-    const successIcon = document.getElementById('conv-form-loading-success');
-    const errorIcon = document.getElementById('conv-form-loading-error');
     const submitBtn = document.getElementById('conv-form-submit');
     const encerrarBtn = document.getElementById('conv-form-encerrar');
     const cancelBtn = document.querySelector('#conv-form button[type="button"]');
@@ -1128,17 +1127,7 @@ function setConvFormLoading(active, message = 'Processando...', status = 'loadin
     const fields = document.querySelectorAll('#conv-form input, #conv-form select, #conv-form textarea');
     const show = Boolean(active);
 
-    overlay?.classList.toggle('hidden', !show);
-    if (messageEl) {
-        messageEl.textContent = message;
-        messageEl.classList.toggle('text-red-600', status === 'error');
-        messageEl.classList.toggle('text-emerald-700', status === 'success');
-        messageEl.classList.toggle('text-slate-700', status === 'loading');
-    }
-
-    spinner?.classList.toggle('hidden', status !== 'loading');
-    successIcon?.classList.toggle('hidden', status !== 'success');
-    errorIcon?.classList.toggle('hidden', status !== 'error');
+    convFormOverlay?.setLoading(active, message, status);
 
     [submitBtn, encerrarBtn, cancelBtn, addActivityBtn, saveActivitiesBtn, addAttachmentBtn].forEach(btn => {
         if (!btn) return;

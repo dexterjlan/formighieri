@@ -1,13 +1,15 @@
 let gestaoCreateDetailingProjectsCache = [];
 
-const GESTAO_CREATE_DETAILING_OVERLAY = createModalOverlayConfig('gestao-create-detailing');
+const gestaoCreateDetailingOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('gestao-create-detailing')
+    : null;
 
 function setGestaoCreateDetailingLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(GESTAO_CREATE_DETAILING_OVERLAY, active, message, status);
+    gestaoCreateDetailingOverlay?.setLoading(active, message, status);
 }
 
 function waitGestaoCreateDetailingStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return waitAppOverlay(ms);
 }
 
 function getGestaoCreateDetailingFilters() {
@@ -279,7 +281,7 @@ async function createGestaoCreateDetailingRecord(projectId, projectName, button)
         setGestaoCreateDetailingLoading(true, 'Atualizando lista...');
         await loadGestaoCreateDetailingProjectsList();
         setGestaoCreateDetailingLoading(true, 'Detalhamento criado com sucesso!', 'success');
-        await waitGestaoCreateDetailingStatus(1500);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
         setGestaoCreateDetailingLoading(false);
         await openGestaoCreateDetailingRecord(projectId, projectName);
     } catch (error) {
@@ -288,7 +290,7 @@ async function createGestaoCreateDetailingRecord(projectId, projectName, button)
         if (alreadyExists) {
             setGestaoCreateDetailingLoading(true, 'Detalhamento já existe. Abrindo...');
             await loadGestaoCreateDetailingProjectsList();
-            await waitGestaoCreateDetailingStatus(800);
+            await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
             setGestaoCreateDetailingLoading(false);
             await openGestaoCreateDetailingRecord(projectId, projectName);
             return;
@@ -296,7 +298,7 @@ async function createGestaoCreateDetailingRecord(projectId, projectName, button)
 
         console.error('createGestaoCreateDetailingRecord:', error);
         setGestaoCreateDetailingLoading(true, `Erro ao criar detalhamento: ${error.message}`, 'error');
-        await waitGestaoCreateDetailingStatus(2500);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
         setGestaoCreateDetailingLoading(false);
     }
 }

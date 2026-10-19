@@ -25,10 +25,6 @@ function parseEmailList(text) {
         .filter(Boolean);
 }
 
-function formatEmailListForInput(emails) {
-    return parseEmailList(emails).join(', ');
-}
-
 function getApprovalCcEmailsRaw() {
     return systemSettingsCache?.approvalCcEmails || '';
 }

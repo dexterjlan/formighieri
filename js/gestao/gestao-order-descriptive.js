@@ -3,8 +3,8 @@ let gestaoOrderDescriptiveCurrentFile = null;
 
 const GESTAO_ORDER_DESCRIPTIVE_INPUT_ACCEPT = '.pdf,application/pdf';
 
-const GESTAO_ORDER_DESCRIPTIVE_OVERLAY = typeof createModalOverlayConfig === 'function'
-    ? createModalOverlayConfig('gestao-order-descriptive', {
+const gestaoOrderDescriptiveOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('gestao-order-descriptive', {
         disableElementIds: [
             'btn-gestao-ord-descriptive-select',
             'btn-gestao-ord-descriptive-upload',
@@ -14,12 +14,11 @@ const GESTAO_ORDER_DESCRIPTIVE_OVERLAY = typeof createModalOverlayConfig === 'fu
     : null;
 
 function setGestaoOrderDescriptiveLoading(active, message = 'Processando...', status = 'loading') {
-    if (typeof setModalOverlayLoading !== 'function' || !GESTAO_ORDER_DESCRIPTIVE_OVERLAY) return;
-    setModalOverlayLoading(GESTAO_ORDER_DESCRIPTIVE_OVERLAY, active, message, status);
+    gestaoOrderDescriptiveOverlay?.setLoading(active, message, status);
 }
 
 function waitGestaoOrderDescriptiveStatus(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return waitAppOverlay(ms);
 }
 
 function getGestaoOrderDescriptiveOrderContext() {
@@ -218,11 +217,11 @@ async function uploadGestaoOrderDescriptiveFile() {
         clearGestaoOrderDescriptiveFileSelection();
         await loadGestaoOrderDescriptiveFile();
         setGestaoOrderDescriptiveLoading(true, 'Descritivo enviado com sucesso!', 'success');
-        await waitGestaoOrderDescriptiveStatus(900);
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
     } catch (error) {
         console.error('uploadGestaoOrderDescriptiveFile:', error);
         setGestaoOrderDescriptiveLoading(true, error.message || 'Não foi possível enviar o Descritivo.', 'error');
-        await waitGestaoOrderDescriptiveStatus(2200);
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
     } finally {
         setGestaoOrderDescriptiveLoading(false);
         updateGestaoOrderDescriptiveUploadButtons();

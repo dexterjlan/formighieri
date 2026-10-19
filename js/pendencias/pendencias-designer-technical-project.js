@@ -414,19 +414,6 @@ function getPendenciasWorkloadAssigneeId(project, implementationDesignerByProjec
     return Number(project.designerId) || null;
 }
 
-function getPendenciasWorkloadAssigneeName(project, designerId, implementationDesignerByProjectId = {}) {
-    const statusName = normalizePendenciasWorkloadStatusName(
-        getPendenciasProjectStatusName(project)
-    );
-    if (statusName === PENDENCIAS_STATUS_IMPLANTACAO) {
-        return implementationDesignerByProjectId[Number(project.id)]?.name || null;
-    }
-    if (Number(project.designerId) === Number(designerId)) {
-        return project.designer?.name || null;
-    }
-    return null;
-}
-
 async function fetchPendenciasImplementationDesignerByProjectIds(projectIds) {
     const ids = [...new Set((projectIds || []).map(id => Number(id)).filter(Boolean))];
     if (!ids.length) return {};
@@ -1755,7 +1742,8 @@ async function savePendenciasSemProjetistaAssociationsBatch() {
                         item.projectId,
                         item.designerId,
                         { updatedById: currentUser.id, updatedAt: now },
-                        cachedProject
+                        cachedProject,
+                        { sendNotification: false }
                     );
                 }
             } catch (replicateError) {

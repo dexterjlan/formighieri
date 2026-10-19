@@ -125,7 +125,8 @@ function getPendenciasAguardandoMedicaoGroupProjects(orderId, statusName) {
     ));
 }
 
-const PENDENCIAS_AGUARDANDO_MEDICAO_MODAL_OVERLAY = createModalOverlayConfig('pendencias-aguardando-medicao-modal', {
+const pendenciasAguardandoMedicaoModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('pendencias-aguardando-medicao-modal', {
     disableElementIds: [
         'btn-pendencias-am-obra',
         'btn-pendencias-am-medicao',
@@ -134,10 +135,11 @@ const PENDENCIAS_AGUARDANDO_MEDICAO_MODAL_OVERLAY = createModalOverlayConfig('pe
     ],
     disableFormSelector: '#pendencias-am-modal-projects-list input, #pendencias-am-modal-projects-list textarea',
     disableDatasetKey: 'pendenciasAmLoadingDisabled'
-});
+})
+    : null;
 
 function setPendenciasAguardandoMedicaoModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(PENDENCIAS_AGUARDANDO_MEDICAO_MODAL_OVERLAY, active, message, status);
+    pendenciasAguardandoMedicaoModalOverlay?.setLoading(active, message, status);
 }
 
 function closePendenciasAguardandoMedicaoModal() {
@@ -1407,13 +1409,20 @@ function renderPendenciasEmMontagemList(projects) {
             },
             getPendenciasInteractiveActionColumn({
                 label: 'Ações',
-                thClass: 'w-40',
+                thClass: 'w-52',
                 render: (row) => canAct
-                    ? `<button type="button"
-                        class="pendencias-fabrica-fim-btn text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
-                        data-project-id="${row.id}">
-                        Finalizar montagem
-                    </button>`
+                    ? `<div class="flex flex-col gap-1 items-end">
+                        <button type="button"
+                            class="pendencias-woodwork-checklist-btn text-xs bg-amber-600 text-white hover:bg-amber-700 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
+                            data-project-id="${row.id}">
+                            Checklist
+                        </button>
+                        <button type="button"
+                            class="pendencias-fabrica-fim-btn text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
+                            data-project-id="${row.id}">
+                            Finalizar montagem
+                        </button>
+                    </div>`
                     : '<span class="text-xs text-slate-300">—</span>'
             })
         ],
@@ -1427,6 +1436,13 @@ function renderPendenciasEmMontagemList(projects) {
             tbody?.querySelectorAll('.pendencias-fabrica-fim-btn').forEach(button => {
                 button.addEventListener('click', async () => {
                     savePendenciasFabricaFimMontagem(Number(button.dataset.projectId));
+                });
+            });
+            tbody?.querySelectorAll('.pendencias-woodwork-checklist-btn').forEach(button => {
+                button.addEventListener('click', () => {
+                    if (typeof openWoodworkQualityChecklistEntryFlow === 'function') {
+                        void openWoodworkQualityChecklistEntryFlow(Number(button.dataset.projectId));
+                    }
                 });
             });
         }
@@ -1576,6 +1592,11 @@ async function savePendenciasFabricaFimMontagem(projectId) {
     }
 
     if (!(await confirmAppDialog(`Finalizar montagem interna de "${projectLabel}" e enviar à expedição?`))) return;
+
+    if (typeof warnIfWoodworkQualityChecklistIncomplete === 'function') {
+        const proceed = await warnIfWoodworkQualityChecklistIncomplete(projectId, projectLabel);
+        if (!proceed) return;
+    }
 
     const expedicaoStatusId = typeof getExpedicaoProjectStatusId === 'function'
         ? await getExpedicaoProjectStatusId()

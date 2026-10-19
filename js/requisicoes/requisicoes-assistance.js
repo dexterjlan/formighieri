@@ -436,8 +436,8 @@ function renderAssistanceListActionButtons(record) {
 const ASSISTANCE_STATUS_HISTORY_CHANGED_BY_EMBED =
     'changedBy:appUsers!AssistanceRequestStatusHistory_changedById_fkey(id, name)';
 
-const ASSISTANCE_MODAL_OVERLAY = typeof createModalOverlayConfig === 'function'
-    ? createModalOverlayConfig('assistance-modal', {
+const assistanceModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('assistance-modal', {
         closeButtonSelector: '#assistance-modal button[onclick="toggleModal(\'assistance-modal\', false)"]'
     })
     : null;
@@ -482,13 +482,7 @@ function setAssistanceModalFormLocked(locked) {
 }
 
 function setAssistanceModalLoading(active, message = 'Processando...', status = 'loading') {
-    if (!ASSISTANCE_MODAL_OVERLAY) return;
-
-    if (typeof setActionOverlayLoading === 'function') {
-        setActionOverlayLoading(ASSISTANCE_MODAL_OVERLAY, active, message, status);
-    } else if (typeof setModalOverlayLoading === 'function') {
-        setModalOverlayLoading(ASSISTANCE_MODAL_OVERLAY, active, message, status);
-    }
+    assistanceModalOverlay?.setLoading(active, message, status);
 
     const lockForm = Boolean(active) && status === 'loading';
     setAssistanceModalFormLocked(lockForm);

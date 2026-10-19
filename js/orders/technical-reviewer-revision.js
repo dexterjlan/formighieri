@@ -505,20 +505,22 @@ function closeTechnicalReviewerRevisionModal() {
     toggleModal('technical-reviewer-revision-modal', false);
 }
 
-const TECHNICAL_REVIEWER_REVISION_MODAL_OVERLAY = createModalOverlayConfig('technical-reviewer-revision', {
-    disableElementIds: [
-        'btn-tr-save-revision',
-        'btn-tr-send-to-designer',
-        'btn-tr-return-to-reviewer',
-        'btn-add-tr-revision-activity',
-        'btn-tr-start-revision'
-    ],
-    closeButtonSelector: '#technical-reviewer-revision-modal button[onclick="closeTechnicalReviewerRevisionModal()"]',
-    disableFormSelector: '#technical-reviewer-revision-modal textarea, #technical-reviewer-revision-modal input'
-});
+const technicalReviewerRevisionModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('technical-reviewer-revision', {
+        disableElementIds: [
+            'btn-tr-save-revision',
+            'btn-tr-send-to-designer',
+            'btn-tr-return-to-reviewer',
+            'btn-add-tr-revision-activity',
+            'btn-tr-start-revision'
+        ],
+        closeButtonSelector: '#technical-reviewer-revision-modal button[onclick="closeTechnicalReviewerRevisionModal()"]',
+        disableFormSelector: '#technical-reviewer-revision-modal textarea, #technical-reviewer-revision-modal input'
+    })
+    : null;
 
 function setTechnicalReviewerRevisionModalLoading(active, message = 'Processando...', status = 'loading') {
-    setModalOverlayLoading(TECHNICAL_REVIEWER_REVISION_MODAL_OVERLAY, active, message, status);
+    technicalReviewerRevisionModalOverlay?.setLoading(active, message, status);
 }
 
 function isTechnicalReviewerRevisionModalVisible() {
