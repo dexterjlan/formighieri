@@ -167,26 +167,58 @@ async function fetchLatestRevisionForOrderProjectByType(orderProjectId, revision
     return data ? normalizeRevisionRecord(data) : null;
 }
 
-async function fetchOpenTechnicalReviewerRevision(orderProjectId) {
+async function fetchOpenRevisionForOrderProject(orderProjectId, revisionType) {
     const normalizedId = Number(orderProjectId);
+    if (!normalizedId || !revisionType) return null;
+
+    const { data, error } = await supabaseClient
+        .from('Revision')
+        .select('id, revisionType, status, createdAt, revisionStartedAt, revisionCompletedAt, updatedAt')
+        .eq('orderProjectId', normalizedId)
+        .eq('revisionType', revisionType)
+        .eq('status', REVISION_STATUS_OPEN)
+        .order('createdAt', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (error) {
+        console.error('fetchOpenRevisionForOrderProject:', error);
+        return null;
+    }
+
+    return data ? normalizeRevisionRecord(data) : null;
+}
+
+async function fetchOpenRevisionForThirdPartyProject(thirdPartyProjectId) {
+    const normalizedId = Number(thirdPartyProjectId);
     if (!normalizedId) return null;
 
     const { data, error } = await supabaseClient
         .from('Revision')
-        .select('id, revisionType, status, createdAt, revisionStartedAt, revisionCompletedAt')
-        .eq('orderProjectId', normalizedId)
-        .eq('revisionType', REVISION_TYPE_TECHNICAL_REVISOR)
+        .select('id, thirdPartyProjectId, revisionType, status, createdAt, revisionStartedAt, revisionCompletedAt, updatedAt')
+        .eq('thirdPartyProjectId', normalizedId)
+        .eq('revisionType', REVISION_TYPE_THIRD_PARTY)
         .eq('status', REVISION_STATUS_OPEN)
         .order('createdAt', { ascending: false })
         .limit(1)
         .maybeSingle();
 
     if (error) {
-        console.error('fetchOpenTechnicalReviewerRevision:', error);
+        console.error('fetchOpenRevisionForThirdPartyProject:', error);
         return null;
     }
 
-    return data;
+    return data ? normalizeRevisionRecord(data) : null;
+}
+
+function isRevisionOneOpenPerSubjectConstraintError(error) {
+    const message = String(error?.message || error || '');
+    return message.includes('Revision_one_open_per_subject_type_uidx') || error?.code === '23505';
+}
+
+async function fetchOpenTechnicalReviewerRevision(orderProjectId) {
+    return fetchOpenRevisionForOrderProject(orderProjectId, REVISION_TYPE_TECHNICAL_REVISOR);
 }
 
 async function fetchRevisionActivities(revisionId) {

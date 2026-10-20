@@ -536,6 +536,9 @@ function setupCommercialRevisionModalHeader(approval) {
 }
 
 async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica', options = {}) {
+    if (typeof primeGoogleDriveAppsScript === 'function') {
+        primeGoogleDriveAppsScript();
+    }
     currentRevisionType = revisionType;
     revisionModalViewOnly = false;
     const approval = await ensureApprovalInCache(approvalId, true);
@@ -581,12 +584,13 @@ async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica',
         updateRevisionModalControls(approval);
         addRevisionActivityRow();
     } else if (revisionType === 'comercial') {
-        const revision = await fetchLatestRevisionForOrderProject(
-            approval.orderProjectId,
-            'comercial'
-        );
+        const orderProjectId = approval.orderProjectId;
+        const revision = orderProjectId
+            ? (await fetchOpenRevisionForOrderProject(orderProjectId, REVISION_TYPE_COMMERCIAL_COMMERCIAL)
+                || await fetchLatestRevisionForOrderProject(orderProjectId, 'comercial'))
+            : null;
 
-        if (revision) {
+        if (revision?.id) {
             editingRevisionId = revision.id;
             setupCommercialRevisionModalHeader(approval);
             await loadRevisionActivities(revision.id);
@@ -596,12 +600,13 @@ async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica',
             addRevisionActivityRow();
         }
     } else if (approval.status === 'Em revisão' && currentUser?.role === 'Projetista') {
-        const revision = await fetchLatestRevisionForOrderProject(
-            approval.orderProjectId,
-            'tecnica'
-        );
+        const orderProjectId = approval.orderProjectId;
+        const revision = orderProjectId
+            ? (await fetchOpenRevisionForOrderProject(orderProjectId, REVISION_TYPE_COMMERCIAL_TECHNICAL)
+                || await fetchLatestRevisionForOrderProject(orderProjectId, 'tecnica'))
+            : null;
 
-        if (revision) {
+        if (revision?.id) {
             editingRevisionId = revision.id;
             setupCommercialRevisionModalHeader(approval);
             await loadRevisionActivities(revision.id);
@@ -612,8 +617,18 @@ async function openCommercialRevisionModal(approvalId, revisionType = 'tecnica',
         }
     } else {
         setupCommercialRevisionModalHeader(approval);
+        const orderProjectId = approval.orderProjectId;
+        const openRevision = revisionType === 'tecnica' && orderProjectId
+            ? await fetchOpenRevisionForOrderProject(orderProjectId, REVISION_TYPE_COMMERCIAL_TECHNICAL)
+            : null;
+
+        if (openRevision?.id) {
+            editingRevisionId = openRevision.id;
+            await loadRevisionActivities(openRevision.id);
+        } else {
+            addRevisionActivityRow();
+        }
         updateRevisionModalControls(approval);
-        addRevisionActivityRow();
     }
 
     toggleModal('commercial-revision-modal', true);
@@ -782,7 +797,7 @@ async function persistCommercialRevision() {
 
     const now = new Date().toISOString();
     let revisionId = editingRevisionId;
-    const createdRevision = !revisionId;
+    let createdRevision = false;
 
     if (!revisionId) {
         const orderProjectId = approval.orderProjectId
@@ -795,20 +810,34 @@ async function persistCommercialRevision() {
             return { ok: false };
         }
 
-        const { data: revision, error: revisionError } = await createRevisionRecord({
-            orderProjectId,
-            revisionType: mapLegacyRevisionTypeToDb(currentRevisionType)
-        });
+        const revisionType = mapLegacyRevisionTypeToDb(currentRevisionType);
+        let revision = await fetchOpenRevisionForOrderProject(orderProjectId, revisionType);
 
-        if (revisionError || !revision) {
-            alertAppDialog('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
-            return { ok: false };
+        if (!revision?.id) {
+            const { data: inserted, error: revisionError } = await createRevisionRecord({
+                orderProjectId,
+                revisionType
+            });
+
+            if (revisionError || !inserted) {
+                if (typeof isRevisionOneOpenPerSubjectConstraintError === 'function'
+                    && isRevisionOneOpenPerSubjectConstraintError(revisionError)) {
+                    revision = await fetchOpenRevisionForOrderProject(orderProjectId, revisionType);
+                }
+                if (!revision?.id) {
+                    alertAppDialog('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
+                    return { ok: false };
+                }
+            } else {
+                revision = inserted;
+                createdRevision = true;
+            }
         }
 
         revisionId = revision.id;
         editingRevisionId = revisionId;
 
-        if (currentRevisionType === 'tecnica') {
+        if (createdRevision && currentRevisionType === 'tecnica') {
             if (typeof applyEmRevisaoStatusForCommercialApproval === 'function') {
                 await applyEmRevisaoStatusForCommercialApproval(approval, { skipEmail: true });
             }

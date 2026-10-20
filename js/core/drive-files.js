@@ -417,7 +417,7 @@ function driveFileMissingSetupMessage(error) {
     return message || 'Erro ao enviar arquivo.';
 }
 
-const GOOGLE_APPS_SCRIPT_DRIVE_TIMEOUT_MS = 25000;
+const GOOGLE_APPS_SCRIPT_DRIVE_TIMEOUT_MS = 60000;
 const DRIVE_FILE_POLL_MS_INITIAL = 180;
 const DRIVE_FILE_POLL_MS_MAX = 480;
 const GOOGLE_DRIVE_APPS_SCRIPT_PRIME_TTL_MS = 4 * 60 * 1000;

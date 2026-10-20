@@ -177,7 +177,9 @@ async function resolveRevisionDriveFolderContext() {
             .select('orderCode')
             .eq('id', orderId)
             .maybeSingle();
-        if (error) throw error;
+        if (error) {
+            console.warn('resolveRevisionDriveFolderContext orderCode:', error);
+        }
         orderCode = data?.orderCode || '';
     }
 
@@ -191,7 +193,9 @@ async function resolveRevisionDriveFolderContext() {
                 .select('name, orderId')
                 .eq('id', orderProjectId)
                 .maybeSingle();
-            if (error) throw error;
+            if (error) {
+                console.warn('resolveRevisionDriveFolderContext project:', error);
+            }
             projectName = data?.name || '';
             orderId = orderId || Number(data?.orderId || 0) || null;
         }
@@ -582,6 +586,9 @@ function handleRevisionActivityImageSelect(fileList, context = null) {
     if (typeof isGoogleDriveAppsScriptConfigured === 'function' && !isGoogleDriveAppsScriptConfigured()) {
         alertAppDialog('Drive não configurado no Apps Script.', { variant: 'warning', title: 'Aviso' });
         return;
+    }
+    if (typeof primeGoogleDriveAppsScript === 'function') {
+        primeGoogleDriveAppsScript();
     }
 
     if (hasRevisionActivityImage(rowId)) {

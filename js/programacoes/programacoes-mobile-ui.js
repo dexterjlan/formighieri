@@ -1,5 +1,9 @@
 const PROGRAMACOES_MOBILE_LAYOUT_MQ = '(max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse))';
 
+function renderProgramacoesRevisionInProgressBadgeHtml() {
+    return '<span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0" title="Revisão técnica em andamento">Em andamento</span>';
+}
+
 function normalizeProgramacoesMobileSearchText(value) {
     return String(value || '')
         .normalize('NFD')
@@ -41,11 +45,17 @@ function renderProgramacoesMobileHeadlineHtml(row) {
     const orderCodeHtml = typeof renderOrderCodeLinkHtml === 'function'
         ? renderOrderCodeLinkHtml(row.orderId, row.orderCode, { className: 'text-slate-500' })
         : `<span class="font-mono text-slate-500">${escapeHtml(String(row.orderCode || '—'))}</span>`;
+    const revisionBadge = row.revisionInProgress
+        ? renderProgramacoesRevisionInProgressBadgeHtml()
+        : '';
     return `
         <p class="programacoes-projects-mobile__order">
             ${orderCodeHtml}
             <span class="text-slate-300" aria-hidden="true">·</span>
-            <span class="font-semibold text-slate-900">${escapeHtml(String(row.projectName || '—'))}</span>
+            <span class="inline-flex items-center gap-1.5 flex-wrap min-w-0">
+                <span class="font-semibold text-slate-900">${escapeHtml(String(row.projectName || '—'))}</span>
+                ${revisionBadge}
+            </span>
         </p>
         <p class="programacoes-projects-mobile__client">${escapeHtml(String(row.clientName || '—'))}</p>
     `;

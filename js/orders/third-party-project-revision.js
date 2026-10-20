@@ -512,18 +512,31 @@ async function persistThirdPartyRevision() {
 
     const now = new Date().toISOString();
     let revisionId = editingThirdPartyRevisionId;
-    const createdRevision = !revisionId;
+    let createdRevision = false;
 
     if (!revisionId) {
-        const { data: revision, error: revisionError } = await createRevisionRecord({
-            thirdPartyProjectId: project.id,
-            revisionType: REVISION_TYPE_THIRD_PARTY,
-            status: REVISION_STATUS_OPEN
-        });
+        let revision = await fetchOpenRevisionForThirdPartyProject(project.id);
 
-        if (revisionError) {
-            alertAppDialog('Erro ao criar revisão: ' + revisionError.message);
-            return { ok: false };
+        if (!revision?.id) {
+            const { data: inserted, error: revisionError } = await createRevisionRecord({
+                thirdPartyProjectId: project.id,
+                revisionType: REVISION_TYPE_THIRD_PARTY,
+                status: REVISION_STATUS_OPEN
+            });
+
+            if (revisionError || !inserted) {
+                if (typeof isRevisionOneOpenPerSubjectConstraintError === 'function'
+                    && isRevisionOneOpenPerSubjectConstraintError(revisionError)) {
+                    revision = await fetchOpenRevisionForThirdPartyProject(project.id);
+                }
+                if (!revision?.id) {
+                    alertAppDialog('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
+                    return { ok: false };
+                }
+            } else {
+                revision = inserted;
+                createdRevision = true;
+            }
         }
 
         revisionId = revision.id;

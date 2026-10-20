@@ -3,6 +3,27 @@ const PESQUISAS_REVISIONS_DEFAULT_CHECKED_STATUSES = ['Aberta', 'Iniciado'];
 const PESQUISAS_REVISIONS_TYPE_OPTIONS = ['Comercial', 'Técnica', 'Revisor', 'Terceiro'];
 
 let pesquisasRevisionsCache = [];
+let pesquisasRevisionActivityCountById = new Map();
+
+function buildPesquisasRevisionActivityCountMap(activities = []) {
+    const counts = new Map();
+    activities.forEach(activity => {
+        const revisionId = Number(activity.revisionId);
+        if (!revisionId) return;
+        counts.set(revisionId, (counts.get(revisionId) || 0) + 1);
+    });
+    return counts;
+}
+
+async function refreshPesquisasRevisionActivityCounts(revisions = []) {
+    const revisionIds = revisions.map(revision => revision.id).filter(Boolean);
+    if (!revisionIds.length || typeof fetchRevisionActivitiesByRevisionIds !== 'function') {
+        pesquisasRevisionActivityCountById = new Map();
+        return;
+    }
+    const activities = await fetchRevisionActivitiesByRevisionIds(revisionIds);
+    pesquisasRevisionActivityCountById = buildPesquisasRevisionActivityCountMap(activities);
+}
 
 function getRevisionSearchTypeLabel(revisionType) {
     const legacyType = typeof mapDbRevisionTypeToLegacy === 'function'
@@ -263,7 +284,8 @@ function mapPesquisasRevisionRows(revisions = [], sequentialMaps = null) {
             revisionStartedAt: revision.revisionStartedAt,
             startedAtLabel: revision.revisionStartedAt ? formatDate(revision.revisionStartedAt) : '—',
             revisionCompletedAt: revision.revisionCompletedAt,
-            completedAtLabel: revision.revisionCompletedAt ? formatDate(revision.revisionCompletedAt) : '—'
+            completedAtLabel: revision.revisionCompletedAt ? formatDate(revision.revisionCompletedAt) : '—',
+            activityCount: pesquisasRevisionActivityCountById.get(Number(revision.id)) || 0
         };
     });
 }
@@ -277,7 +299,7 @@ function renderPesquisasRevisionsTable(rows = []) {
         onRefresh: refreshPesquisasRevisionsQuery,
         tableId: 'pesquisas-revisions',
         rows,
-        minWidth: '1180px',
+        minWidth: '1240px',
         emptyMessage: 'Nenhuma revisão encontrada.',
         columns: [
             {
@@ -315,6 +337,14 @@ function renderPesquisasRevisionsTable(rows = []) {
                 label: 'Sequencial',
                 align: 'center',
                 cellClass: 'p-3 text-xs text-slate-600 text-center'
+            },
+            {
+                key: 'activityCount',
+                label: 'Atividades',
+                align: 'center',
+                type: 'number',
+                cellClass: 'p-3 text-xs text-slate-600 text-center tabular-nums',
+                getFilterValue: row => String(row.activityCount ?? '')
             },
             getPendenciasInteractiveStatusColumn(),
             getPendenciasInteractiveDateColumn({
@@ -361,6 +391,7 @@ async function searchPesquisasRevisions() {
     try {
         if (!pesquisasRevisionsCache.length) {
             pesquisasRevisionsCache = await fetchPesquisasRevisions();
+            await refreshPesquisasRevisionActivityCounts(pesquisasRevisionsCache);
         }
 
         const filters = getPesquisasTextFilters('revisions');
@@ -398,6 +429,7 @@ async function searchPesquisasRevisions() {
 
 async function refreshPesquisasRevisionsQuery() {
     pesquisasRevisionsCache = [];
+    pesquisasRevisionActivityCountById = new Map();
     await searchPesquisasRevisions();
 }
 

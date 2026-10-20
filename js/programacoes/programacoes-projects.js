@@ -164,6 +164,26 @@ function bindProgramacoesSequenceInputs(tbody) {
     });
 }
 
+async function fetchProgramacoesRevisionInProgressIds(projects) {
+    if (!projects?.length) return new Set();
+    const workloadShape = [{ projects }];
+    const commercialReviewProjIds = typeof collectPendenciasWorkloadProjectIdsByStatus === 'function'
+        ? collectPendenciasWorkloadProjectIdsByStatus(workloadShape, PENDENCIAS_STATUS_EM_REVISAO_TECNICA)
+        : [];
+    const technicalReviewProjIds = typeof collectPendenciasWorkloadProjectIdsByStatus === 'function'
+        ? collectPendenciasWorkloadProjectIdsByStatus(workloadShape, ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ)
+        : [];
+    const [commercialInProgressIds, technicalInProgressIds] = await Promise.all([
+        typeof fetchRevisionInProgressByOrderProjectIds === 'function'
+            ? fetchRevisionInProgressByOrderProjectIds(commercialReviewProjIds)
+            : Promise.resolve(new Set()),
+        typeof fetchTechnicalReviewerRevisionInProgressByOrderProjectIds === 'function'
+            ? fetchTechnicalReviewerRevisionInProgressByOrderProjectIds(technicalReviewProjIds)
+            : Promise.resolve(new Set())
+    ]);
+    return new Set([...commercialInProgressIds, ...technicalInProgressIds]);
+}
+
 function programacoesProjectRowMatchesMobileSearch(row, queryNorm) {
     if (!queryNorm) return true;
     const haystack = normalizeProgramacoesMobileSearchText([
@@ -171,6 +191,7 @@ function programacoesProjectRowMatchesMobileSearch(row, queryNorm) {
         row.clientName,
         row.projectName,
         row.statusName,
+        row.revisionInProgress ? 'em andamento revisao' : '',
         row.designerName,
         row.clientDeliveryLabel,
         row.clientDeliveryPhaseName,
@@ -247,7 +268,12 @@ function renderProgramacoesProjectsMobileScreen(content, config = {}) {
     });
 }
 
-function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, characteristicsMap = new Map()) {
+function renderProgramacoesProjectsTable(
+    queueRows = [],
+    phasesByOrderId = {},
+    characteristicsMap = new Map(),
+    revisionInProgressIds = new Set()
+) {
     const content = document.getElementById('programacoes-content');
     if (!content) return;
 
@@ -273,6 +299,7 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
             .map(row => row.characteristic?.name)
             .filter(Boolean)
             .join(' ');
+        const revisionInProgress = revisionInProgressIds.has(Number(project.id));
 
         return (typeof mapPendenciasInteractiveIdentity === 'function'
             ? mapPendenciasInteractiveIdentity(project, {
@@ -280,6 +307,7 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
                 orderProjectId: Number(item.orderProjectId || project.id),
                 sequence: Number(item.sequence) || 0,
                 statusName,
+                revisionInProgress,
                 clientDeliveryLabel,
                 clientDeliveryDate,
                 clientDeliveryPhaseName: clientDeliveryPhase?.name || '',
@@ -300,6 +328,7 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
                 clientName: project?.order?.client?.name || '—',
                 projectName: project?.name || '—',
                 statusName,
+                revisionInProgress,
                 designerName: project?.designer?.name || '—',
                 clientDeliveryLabel,
                 clientDeliveryDate,
@@ -357,7 +386,19 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
         {
             key: 'projectName',
             label: 'Projeto',
-            cellClass: 'p-3 text-xs font-medium text-slate-800'
+            cellClass: 'p-3 text-xs font-medium text-slate-800',
+            getFilterValue: row => [
+                row.projectName,
+                row.revisionInProgress ? 'Em andamento' : ''
+            ].filter(Boolean).join(' '),
+            render: (row) => {
+                const name = row.projectName || '—';
+                const badge = row.revisionInProgress
+                    && typeof renderProgramacoesRevisionInProgressBadgeHtml === 'function'
+                    ? renderProgramacoesRevisionInProgressBadgeHtml()
+                    : '';
+                return `<span class="inline-flex items-center gap-1.5 flex-wrap"><span>${escapeHtml(name)}</span>${badge}</span>`;
+            }
         },
         {
             key: 'statusName',
@@ -366,6 +407,7 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
             cellClass: 'p-3 whitespace-nowrap',
             getFilterValue: row => [
                 row.statusName,
+                row.revisionInProgress ? 'Em andamento' : '',
                 typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(row.project)
                     ? 'Aguardando requisição'
                     : ''
@@ -376,12 +418,16 @@ function renderProgramacoesProjectsTable(queueRows = [], phasesByOrderId = {}, c
                     || (typeof getPendenciasProjectStatusBadgeClass === 'function'
                         ? getPendenciasProjectStatusBadgeClass(statusName)
                         : 'bg-slate-100 text-slate-600');
+                const revisionBadge = row.revisionInProgress
+                    && typeof renderProgramacoesRevisionInProgressBadgeHtml === 'function'
+                    ? renderProgramacoesRevisionInProgressBadgeHtml()
+                    : '';
                 const flag = typeof isOrderProjectAwaitingRequest === 'function'
                     && isOrderProjectAwaitingRequest(row.project)
                     && typeof renderOrderProjectAwaitingRequestFlagHtml === 'function'
                     ? renderOrderProjectAwaitingRequestFlagHtml()
                     : '';
-                return `<span class="inline-flex flex-col items-start gap-1"><span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>${flag ? `<span class="pl-3">${flag}</span>` : ''}</span>`;
+                return `<span class="inline-flex flex-col items-start gap-1"><span class="inline-flex flex-wrap items-center gap-1.5"><span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>${revisionBadge}</span>${flag ? `<span class="pl-3">${flag}</span>` : ''}</span>`;
             }
         },
         {
@@ -535,8 +581,9 @@ async function loadProgramacoesProjects(options = {}) {
     const characteristicsMap = typeof fetchOrderProjectCharacteristicsMap === 'function'
         ? await fetchOrderProjectCharacteristicsMap(projectIds)
         : new Map();
+    const revisionInProgressIds = await fetchProgramacoesRevisionInProgressIds(projects);
 
-    renderProgramacoesProjectsTable(queueRows, phasesByOrderId, characteristicsMap);
+    renderProgramacoesProjectsTable(queueRows, phasesByOrderId, characteristicsMap, revisionInProgressIds);
 }
 
 window.loadProgramacoesProjects = loadProgramacoesProjects;

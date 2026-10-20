@@ -425,6 +425,9 @@ async function fetchOrderProjectForTechnicalReviewerRevision(orderProjectId) {
 }
 
 async function openTechnicalReviewerRevisionModal(orderProjectId, options = {}) {
+    if (typeof primeGoogleDriveAppsScript === 'function') {
+        primeGoogleDriveAppsScript();
+    }
     const { viewOnly = false, revisionId = null } = options;
     technicalReviewerRevisionModalViewOnly = viewOnly;
     editingTechnicalReviewerRevisionId = null;
@@ -577,14 +580,26 @@ async function persistTechnicalReviewerRevision() {
     let revisionId = editingTechnicalReviewerRevisionId;
 
     if (!revisionId) {
-        const { data: revision, error: revisionError } = await createRevisionRecord({
-            orderProjectId: project.id,
-            revisionType: REVISION_TYPE_TECHNICAL_REVISOR
-        });
+        let revision = await fetchOpenRevisionForOrderProject(project.id, REVISION_TYPE_TECHNICAL_REVISOR);
 
-        if (revisionError || !revision) {
-            alertAppDialog('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
-            return { ok: false };
+        if (!revision?.id) {
+            const { data: inserted, error: revisionError } = await createRevisionRecord({
+                orderProjectId: project.id,
+                revisionType: REVISION_TYPE_TECHNICAL_REVISOR
+            });
+
+            if (revisionError || !inserted) {
+                if (typeof isRevisionOneOpenPerSubjectConstraintError === 'function'
+                    && isRevisionOneOpenPerSubjectConstraintError(revisionError)) {
+                    revision = await fetchOpenRevisionForOrderProject(project.id, REVISION_TYPE_TECHNICAL_REVISOR);
+                }
+                if (!revision?.id) {
+                    alertAppDialog('Erro ao criar revisão: ' + (revisionError?.message || 'Erro desconhecido'));
+                    return { ok: false };
+                }
+            } else {
+                revision = inserted;
+            }
         }
 
         revisionId = revision.id;
