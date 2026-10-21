@@ -18,13 +18,10 @@ function renderProgramacoesMobileStatusHtml(row) {
         || (typeof getPendenciasProjectStatusBadgeClass === 'function'
             ? getPendenciasProjectStatusBadgeClass(statusName)
             : 'bg-slate-100 text-slate-600');
-    const flag = typeof isOrderProjectAwaitingRequest === 'function'
-        && row.project
-        && isOrderProjectAwaitingRequest(row.project)
-        && typeof renderOrderProjectAwaitingRequestFlagHtml === 'function'
-        ? renderOrderProjectAwaitingRequestFlagHtml()
+    const flag = row.project && typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+        ? renderOrderProjectOpenSubstatusFlagsHtml(row.project)
         : '';
-    return `<span class="programacoes-projects-mobile__status">
+    return `<span class="programacoes-projects-mobile__status flex flex-col items-start gap-1">
         <span class="inline-flex items-center text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>
         ${flag ? `<span class="programacoes-projects-mobile__status-flag">${flag}</span>` : ''}
     </span>`;

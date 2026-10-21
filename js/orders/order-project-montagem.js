@@ -71,6 +71,10 @@ async function persistMontagemInicioProject(entry, montagemInternaStatusId) {
 }
 
 async function persistMontagemFimProject(entry, expedicaoStatusId) {
+    if (typeof assertNoOpenInternalAssemblySubstatusForExpedicao === 'function') {
+        await assertNoOpenInternalAssemblySubstatusForExpedicao(entry.projectId);
+    }
+
     const now = new Date().toISOString();
     const { error } = await supabaseClient
         .from('OrderProject')
@@ -571,6 +575,10 @@ async function submitOrderProjectMontagemFimModal() {
 }
 
 function bindOrderProjectMontagemEvents() {
+    if (typeof bindOrderProjectMontagemSubstatusEvents === 'function') {
+        bindOrderProjectMontagemSubstatusEvents();
+    }
+
     document.getElementById('order-project-montagem-inicio-cancel')
         ?.addEventListener('click', closeOrderProjectMontagemInicioModal);
     document.getElementById('order-project-montagem-inicio-submit')

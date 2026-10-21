@@ -451,8 +451,8 @@ function appendOrderProjectGridItem(container, project, orderId, actionContext, 
             ${phaseCellHtml}
             <div class="order-projects-grid__cell order-projects-grid__cell--status flex flex-wrap items-center gap-1 min-w-0">
                 <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
-                ${typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(project) && typeof renderOrderProjectAwaitingRequestFlagHtml === 'function'
-                    ? renderOrderProjectAwaitingRequestFlagHtml()
+                ${typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+                    ? renderOrderProjectOpenSubstatusFlagsHtml(project)
                     : ''}
             </div>
             <div class="order-projects-grid__cell order-projects-grid__cell--actions">

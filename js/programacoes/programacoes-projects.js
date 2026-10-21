@@ -190,8 +190,12 @@ function programacoesProjectRowMatchesMobileSearch(row, queryNorm) {
         row.orderCode,
         row.clientName,
         row.projectName,
+        row.consultantName,
         row.statusName,
         row.revisionInProgress ? 'em andamento revisao' : '',
+        ...(typeof getOrderProjectOpenSubstatusFilterLabels === 'function' && row.project
+            ? getOrderProjectOpenSubstatusFilterLabels(row.project)
+            : []),
         row.designerName,
         row.clientDeliveryLabel,
         row.clientDeliveryPhaseName,
@@ -216,6 +220,7 @@ function renderProgramacoesProjectsMobileCard(row, options = {}) {
         : '';
 
     const detailFields = [
+        renderProgramacoesMobileInlineField('Consultor', row.consultantName),
         renderProgramacoesMobileInlineField('Dt entrg. cli.', deliveryValue),
         renderProgramacoesMobileInlineField('Projetista', row.designerName),
         renderProgramacoesMobileInlineField('Mês prog. prod.', row.productionMonthLabel)
@@ -300,6 +305,9 @@ function renderProgramacoesProjectsTable(
             .filter(Boolean)
             .join(' ');
         const revisionInProgress = revisionInProgressIds.has(Number(project.id));
+        const consultantName = typeof getOrderConsultantNameFromRecord === 'function'
+            ? (getOrderConsultantNameFromRecord(project?.order) || '—')
+            : (project?.order?.consultor?.name || '—');
 
         return (typeof mapPendenciasInteractiveIdentity === 'function'
             ? mapPendenciasInteractiveIdentity(project, {
@@ -316,6 +324,7 @@ function renderProgramacoesProjectsTable(
                 characteristicFilterText,
                 productionMonth,
                 productionMonthLabel,
+                consultantName,
                 designerName: project?.designer?.name || '—',
                 orderId: Number(project?.orderId || project?.order?.id) || null
             })
@@ -329,6 +338,7 @@ function renderProgramacoesProjectsTable(
                 projectName: project?.name || '—',
                 statusName,
                 revisionInProgress,
+                consultantName,
                 designerName: project?.designer?.name || '—',
                 clientDeliveryLabel,
                 clientDeliveryDate,
@@ -401,6 +411,11 @@ function renderProgramacoesProjectsTable(
             }
         },
         {
+            key: 'consultantName',
+            label: 'Consultor',
+            cellClass: 'p-3 text-xs text-slate-600'
+        },
+        {
             key: 'statusName',
             label: 'Status',
             thClass: 'whitespace-nowrap',
@@ -408,9 +423,9 @@ function renderProgramacoesProjectsTable(
             getFilterValue: row => [
                 row.statusName,
                 row.revisionInProgress ? 'Em andamento' : '',
-                typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(row.project)
-                    ? 'Aguardando requisição'
-                    : ''
+                ...(typeof getOrderProjectOpenSubstatusFilterLabels === 'function' && row.project
+                    ? getOrderProjectOpenSubstatusFilterLabels(row.project)
+                    : [])
             ].filter(Boolean).join(' '),
             render: (row) => {
                 const statusName = row.statusName || '—';
@@ -422,12 +437,10 @@ function renderProgramacoesProjectsTable(
                     && typeof renderProgramacoesRevisionInProgressBadgeHtml === 'function'
                     ? renderProgramacoesRevisionInProgressBadgeHtml()
                     : '';
-                const flag = typeof isOrderProjectAwaitingRequest === 'function'
-                    && isOrderProjectAwaitingRequest(row.project)
-                    && typeof renderOrderProjectAwaitingRequestFlagHtml === 'function'
-                    ? renderOrderProjectAwaitingRequestFlagHtml()
+                const flag = row.project && typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+                    ? renderOrderProjectOpenSubstatusFlagsHtml(row.project)
                     : '';
-                return `<span class="inline-flex flex-col items-start gap-1"><span class="inline-flex flex-wrap items-center gap-1.5"><span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>${revisionBadge}</span>${flag ? `<span class="pl-3">${flag}</span>` : ''}</span>`;
+                return `<span class="inline-flex flex-col items-start gap-1"><span class="inline-flex flex-wrap items-center gap-1.5"><span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>${revisionBadge}</span>${flag ? `<span class="mt-0.5">${flag}</span>` : ''}</span>`;
             }
         },
         {
@@ -494,7 +507,7 @@ function renderProgramacoesProjectsTable(
         rows,
         columns,
         disableSort: true,
-        minWidth: '76rem',
+        minWidth: '84rem',
         emptyMessage: 'Nenhum projeto na fila de programação.',
         onBind(tbody) {
             if (typeof syncProgramacoesFullscreenButton === 'function') {

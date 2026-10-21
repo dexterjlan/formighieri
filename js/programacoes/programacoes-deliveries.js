@@ -285,7 +285,10 @@ function programacoesDeliveriesRowMatchesMobileSearch(row, queryNorm) {
         row.clientDeliveryPhaseName,
         row.consultantName,
         row.designerName,
-        row.productionMonthLabel
+        row.productionMonthLabel,
+        ...(typeof getOrderProjectOpenSubstatusFilterLabels === 'function' && row.project
+            ? getOrderProjectOpenSubstatusFilterLabels(row.project)
+            : [])
     ].join(' '));
     return haystack.includes(queryNorm);
 }
@@ -407,7 +410,10 @@ function renderProgramacoesDeliveriesTable(projects = [], phasesByOrderId = {}) 
                         || (typeof getPendenciasProjectStatusBadgeClass === 'function'
                             ? getPendenciasProjectStatusBadgeClass(statusName)
                             : 'bg-slate-100 text-slate-600');
-                    return `<span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>`;
+                    const flag = row.project && typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+                        ? renderOrderProjectOpenSubstatusFlagsHtml(row.project)
+                        : '';
+                    return `<span class="inline-flex flex-col items-start gap-1"><span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>${flag ? `<span>${flag}</span>` : ''}</span>`;
                 }
             })
             : { key: 'statusName', label: 'Status', cellClass: 'p-3 whitespace-nowrap' },
@@ -521,7 +527,10 @@ async function loadProgramacoesDeliveries(options = {}) {
         return;
     }
 
-    const projects = result.data || [];
+    let projects = result.data || [];
+    if (typeof attachOpenOrderProjectSubstatuses === 'function' && projects.length) {
+        await attachOpenOrderProjectSubstatuses(projects);
+    }
     const phasesByOrderId = typeof fetchPhasesByOrderIdForPendenciasProjects === 'function'
         ? await fetchPhasesByOrderIdForPendenciasProjects(projects)
         : {};

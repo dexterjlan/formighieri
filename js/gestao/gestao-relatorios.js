@@ -771,6 +771,9 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
     const rowClass = nested
         ? 'border-b border-slate-50 last:border-0 bg-slate-50/20'
         : 'border-b border-slate-50 last:border-0 bg-slate-50/40';
+    const substatusFlags = typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+        ? renderOrderProjectOpenSubstatusFlagsHtml(project, options)
+        : '';
 
     return `
         <tr class="${rowClass}">
@@ -783,9 +786,12 @@ function renderGestaoRelatorioPedidosPendentesProjectRow(project, options = {}) 
             </td>
             <td class="p-2">
                 ${parentOnly ? '<span class="text-[10px] text-slate-400">—</span>' : `
-                <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
-                    ${escapeHtml(statusName || '—')}
-                </span>`}
+                <div class="flex flex-col items-start gap-1">
+                    <span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">
+                        ${escapeHtml(statusName || '—')}
+                    </span>
+                    ${substatusFlags || ''}
+                </div>`}
             </td>
             <td class="p-2 text-xs text-slate-600 text-right">${parentOnly ? '<span class="text-slate-400">—</span>' : escapeHtml(saleValue)}</td>
         </tr>
@@ -1221,6 +1227,9 @@ function renderGestaoRelatorioFechamentoProducaoProjectRow(project, options = {}
     const assemblyMismatchMarker = assemblyMonthMismatch
         ? '<span class="text-amber-600 font-bold" title="Fim da montagem interna em mês diferente do programado">*</span>'
         : '';
+    const substatusFlags = typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+        ? renderOrderProjectOpenSubstatusFlagsHtml(project, options)
+        : '';
 
     return `
         <tr class="${rowClass}">
@@ -1230,6 +1239,7 @@ function renderGestaoRelatorioFechamentoProducaoProjectRow(project, options = {}
                     <span>${escapeHtml(`${labelPrefix}${getGestaoRelatorioProjectLabel(project, options)}`)}</span>
                     ${assemblyMismatchMarker}
                     ${nestedKindLabel ? `<span class="text-[10px] font-normal text-slate-400 shrink-0">${escapeHtml(nestedKindLabel)}</span>` : ''}
+                    ${substatusFlags || ''}
                 </div>
             </td>
             <td class="p-2.5 text-xs text-slate-500 whitespace-nowrap">${escapeHtml(fimMontagem)}</td>

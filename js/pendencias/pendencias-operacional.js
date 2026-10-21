@@ -1358,7 +1358,11 @@ function renderPendenciasEmMontagemList(projects) {
             cabinetMakerId: project.cabinetMakerId,
             internalAssemblyStartLabel: formatPendenciasFabricaDisplayDate(project.internalAssemblyStartDate),
             internalAssemblyStartDate: project.internalAssemblyStartDate,
-            internalAssemblyEndDate: fimValue
+            internalAssemblyEndDate: fimValue,
+            internalAssemblySubstatusOpen: project.internalAssemblySubstatusOpen || [],
+            montagemSubstatusOpenCount: Number(project.internalAssemblySubstatusOpenCount) || 0,
+            canManageMontagemSubstatus: typeof canManageOrderProjectInternalAssemblySubstatus === 'function'
+                && canManageOrderProjectInternalAssemblySubstatus(project)
         });
     });
 
@@ -1374,6 +1378,15 @@ function renderPendenciasEmMontagemList(projects) {
         getRowAttrs: (row) => `data-pendencias-fabrica-project-id="${row.id}"`,
         columns: [
             ...getPendenciasInteractiveIdentityColumns(),
+            {
+                key: 'montagemSubstatusOpenCount',
+                label: 'Substatus',
+                cellClass: 'p-3 whitespace-normal max-w-[200px]',
+                render: (row) => (row.montagemSubstatusOpenCount
+                    && typeof renderOrderProjectInternalAssemblySubstatusFlagsHtml === 'function'
+                    ? renderOrderProjectInternalAssemblySubstatusFlagsHtml(row.internalAssemblySubstatusOpen)
+                    : '—')
+            },
             {
                 key: 'cabinetMakerName',
                 label: 'Marceneiro',
@@ -1412,6 +1425,14 @@ function renderPendenciasEmMontagemList(projects) {
                 thClass: 'w-52',
                 render: (row) => canAct
                     ? `<div class="flex flex-col gap-1 items-end">
+                        ${row.canManageMontagemSubstatus
+                            ? `<button type="button"
+                                class="pendencias-montagem-substatus-btn text-xs bg-amber-600 text-white hover:bg-amber-700 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
+                                data-project-id="${row.id}"
+                                data-project-label="${escapeHtml(row.projectName || '')}">
+                                Substatus
+                            </button>`
+                            : ''}
                         <button type="button"
                             class="pendencias-woodwork-checklist-btn text-xs bg-amber-600 text-white hover:bg-amber-700 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
                             data-project-id="${row.id}">
@@ -1436,6 +1457,19 @@ function renderPendenciasEmMontagemList(projects) {
             tbody?.querySelectorAll('.pendencias-fabrica-fim-btn').forEach(button => {
                 button.addEventListener('click', async () => {
                     savePendenciasFabricaFimMontagem(Number(button.dataset.projectId));
+                });
+            });
+
+            tbody?.querySelectorAll('.pendencias-montagem-substatus-btn').forEach(button => {
+                button.addEventListener('click', async () => {
+                    if (typeof openOrderProjectMontagemSubstatusModal !== 'function') return;
+                    const projectId = Number(button.dataset.projectId);
+                    const projectHint = (projects || []).find(item => Number(item.id) === projectId) || null;
+                    await openOrderProjectMontagemSubstatusModal(
+                        projectId,
+                        button.dataset.projectLabel || '',
+                        projectHint
+                    );
                 });
             });
             tbody?.querySelectorAll('.pendencias-woodwork-checklist-btn').forEach(button => {
@@ -1593,6 +1627,15 @@ async function savePendenciasFabricaFimMontagem(projectId) {
 
     if (!(await confirmAppDialog(`Finalizar montagem interna de "${projectLabel}" e enviar à expedição?`))) return;
 
+    if (typeof assertNoOpenInternalAssemblySubstatusForExpedicao === 'function') {
+        try {
+            await assertNoOpenInternalAssemblySubstatusForExpedicao(projectId);
+        } catch (error) {
+            alertAppDialog(error.message || 'Há substatus Aguardando em aberto.');
+            return;
+        }
+    }
+
     if (typeof warnIfWoodworkQualityChecklistIncomplete === 'function') {
         const proceed = await warnIfWoodworkQualityChecklistIncomplete(projectId, projectLabel);
         if (!proceed) return;
@@ -1706,6 +1749,10 @@ async function loadPendenciasEmMontagem() {
     if (error) {
         renderPendenciasPlaceholder('Em Montagem', `Erro ao carregar: ${error.message}`);
         return;
+    }
+
+    if (typeof attachOpenOrderProjectSubstatuses === 'function') {
+        await attachOpenOrderProjectSubstatuses(projects);
     }
 
     renderPendenciasEmMontagemList(projects);

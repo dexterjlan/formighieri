@@ -656,6 +656,19 @@ function getOrderProjectActions(project, context = {}) {
     }
 
     if (statusName === 'Montagem Interna'
+        && typeof canManageOrderProjectInternalAssemblySubstatus === 'function'
+        && canManageOrderProjectInternalAssemblySubstatus(project)) {
+        actions.push({
+            id: 'montagem-aguardando',
+            label: 'Substatus',
+            enabled: true,
+            projectId: project.id,
+            projectName: project.name || '',
+            buttonClass: 'bg-amber-600 text-white hover:bg-amber-700'
+        });
+    }
+
+    if (statusName === 'Montagem Interna'
         && typeof canManageWoodworkQualityChecklist === 'function'
         && canManageWoodworkQualityChecklist()) {
         actions.push({
@@ -835,6 +848,11 @@ async function handleOrderProjectAction(button) {
         case 'finalizar-montagem-int':
             if (typeof openOrderProjectMontagemFimModal === 'function' && projectId) {
                 await openOrderProjectMontagemFimModal(projectId, projectName);
+            }
+            break;
+        case 'montagem-aguardando':
+            if (typeof openOrderProjectMontagemSubstatusModal === 'function' && projectId) {
+                await openOrderProjectMontagemSubstatusModal(projectId, projectName);
             }
             break;
         case 'woodwork-checklist':

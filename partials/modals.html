@@ -2241,6 +2241,36 @@
         </div>
     </div>
 
+    <!-- MODAL: SUBSTATUS — MONTAGEM INTERNA -->
+    <div id="order-project-montagem-substatus-modal"
+        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 class="font-bold text-base text-slate-900 mb-1">Substatus — Montagem Interna</h3>
+            <p id="order-project-montagem-substatus-context" class="text-xs text-slate-500 mb-4"></p>
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Em aberto</p>
+            <p id="order-project-montagem-substatus-open-empty"
+                class="text-xs text-slate-400 mb-3 hidden">Nenhum substatus em aberto.</p>
+            <ul id="order-project-montagem-substatus-open-list" class="mb-4"></ul>
+            <div class="flex flex-col sm:flex-row gap-2 mb-5">
+                <select id="order-project-montagem-substatus-kind"
+                    class="flex-1 px-2 py-2 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-amber-600">
+                </select>
+                <button type="button" id="order-project-montagem-substatus-start"
+                    class="text-xs bg-amber-600 text-white hover:bg-amber-700 px-4 py-2 rounded-lg font-medium whitespace-nowrap">
+                    Iniciar
+                </button>
+            </div>
+            <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Encerrados (recentes)</p>
+            <p id="order-project-montagem-substatus-closed-empty"
+                class="text-xs text-slate-400 hidden">Nenhum substatus encerrado ainda.</p>
+            <ul id="order-project-montagem-substatus-closed-list" class="mb-4"></ul>
+            <div class="flex gap-2 pt-4 border-t border-slate-100">
+                <button type="button" id="order-project-montagem-substatus-close"
+                    class="flex-1 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-medium hover:bg-slate-200">Fechar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: FINALIZAR ENTREGA TÉCNICA (lista de projetos do pedido / pendências) -->
     <div id="order-project-entrega-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">

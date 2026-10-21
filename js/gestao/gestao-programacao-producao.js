@@ -887,6 +887,9 @@ function renderProgramacaoProducaoProjectTreeRows(projectTree) {
                             ${escapeHtml(statusName || '—')}
                         </span>
                     ` : ''}
+                    ${typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+                        ? renderOrderProjectOpenSubstatusFlagsHtml(project)
+                        : ''}
                 </div>
                 ${parentPending
                     ? renderProgramacaoProducaoProjectMonthInput(project)
@@ -913,6 +916,9 @@ function renderProgramacaoProducaoProjectTreeRows(projectTree) {
                             ${escapeHtml(childStatusName)}
                         </span>
                     ` : ''}
+                    ${typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+                        ? renderOrderProjectOpenSubstatusFlagsHtml(child)
+                        : ''}
                 </div>
                 ${renderProgramacaoProducaoChildProjectMonthDisplay(child)}
             </div>
@@ -1063,7 +1069,10 @@ function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel)
     const pendingBody = programadoClients.length
         ? programadoClients.map(clientGroup =>
             typeof renderGestaoRelatorioPedidosPendentesClientGroup === 'function'
-                ? renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup, { includeProjectCode: false })
+                ? renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup, {
+                    includeProjectCode: false,
+                    projectsById: context.projectsById || {}
+                })
                 : ''
         ).join('')
         : '';
@@ -1311,6 +1320,9 @@ async function loadProgramacaoProducao() {
     }
     if (!error && projects?.length && typeof enrichOrderProjectsWithAggregatorChildrenSaleValue === 'function') {
         projects = enrichOrderProjectsWithAggregatorChildrenSaleValue(projects);
+    }
+    if (!error && projects?.length && typeof attachOpenOrderProjectSubstatuses === 'function') {
+        await attachOpenOrderProjectSubstatuses(projects);
     }
     if (error) {
         const message = `<p class="text-xs text-red-500 text-center py-4">Erro ao carregar: ${escapeHtml(error.message)}</p>`;

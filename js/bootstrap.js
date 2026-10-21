@@ -175,6 +175,7 @@ const SCRIPTS = [
     'js/orders/preliminary-design-exports.js',
     'js/orders/measurement.js',
     'js/orders/order-project-montagem.js',
+    'js/orders/order-project-montagem-substatus.js',
     'js/orders/woodwork-quality-checklist.js',
     'js/orders/order-project-entrega.js',
     'js/orders/ppcp.js',
