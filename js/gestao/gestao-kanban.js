@@ -294,7 +294,8 @@ const PROJECT_STATUS_HISTORY_BAR_COLORS = {
 let projectStatusHistoryState = {
     entries: [],
     viewMode: 'flow',
-    detailingRecord: null
+    detailingRecord: null,
+    substatusRows: []
 };
 
 function getProjectStatusHistoryBarColor(statusName) {
@@ -552,6 +553,67 @@ function renderProjectStatusHistoryObservationHtml(observation) {
     `;
 }
 
+function getProjectStatusHistorySegmentSubstatusRows(substatusRows, statusName, segmentStart, segmentEnd) {
+    if (typeof filterOrderProjectSubstatusForStatusSegment !== 'function') return [];
+    return filterOrderProjectSubstatusForStatusSegment(substatusRows, statusName, segmentStart, segmentEnd);
+}
+
+function renderProjectStatusHistorySubstatusNoteHtml(note) {
+    const text = String(note || '').trim();
+    if (!text) return '';
+    return `
+        <div class="mt-1.5 rounded border border-slate-200 bg-white px-2 py-1.5">
+            <div class="text-[9px] font-medium text-slate-500">Observação</div>
+            <div class="text-[10px] text-slate-600 whitespace-pre-wrap">${escapeHtml(text)}</div>
+        </div>
+    `;
+}
+
+function renderProjectStatusHistorySubstatusRowsHtml(rows) {
+    return rows.map(row => {
+        const label = typeof getOrderProjectSubstatusKindLabel === 'function'
+            ? getOrderProjectSubstatusKindLabel(row.kind)
+            : (row.kind || 'Substatus');
+        const startLabel = formatGestaoDateTime(row.startedAt);
+        const endLabel = row.endedAt ? formatGestaoDateTime(row.endedAt) : 'Em aberto';
+        const startedBy = row.startedBy?.name || '—';
+        const endedBy = row.endedBy?.name || '—';
+
+        return `
+            <li class="project-status-history-substatus-item rounded-lg border border-amber-200/80 bg-white px-2.5 py-2">
+                <div class="text-[11px] font-semibold text-amber-900">${escapeHtml(label)}</div>
+                <div class="text-[10px] text-slate-600 mt-0.5">${escapeHtml(startLabel)} → ${escapeHtml(endLabel)}</div>
+                <div class="text-[10px] text-slate-400">Início: ${escapeHtml(startedBy)}${row.endedAt ? ` · Encerramento: ${escapeHtml(endedBy)}` : ''}</div>
+                ${renderProjectStatusHistorySubstatusNoteHtml(row.note)}
+            </li>
+        `;
+    }).join('');
+}
+
+function renderProjectStatusHistorySubstatusExpandHtml(rows, historyIndex) {
+    if (!rows.length) return '';
+
+    const count = rows.length;
+    return `
+        <div class="project-status-history-substatus mt-2 text-left w-full">
+            <button type="button"
+                class="project-status-history-substatus-toggle text-[10px] font-medium text-amber-800 bg-amber-50 border border-amber-200 hover:bg-amber-100 px-2 py-1 rounded-lg"
+                data-status-history-index="${Number(historyIndex)}"
+                data-count="${count}"
+                aria-expanded="false">
+                Ver substatus (${count})
+            </button>
+            <div class="project-status-history-substatus-panel hidden mt-2 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2"
+                data-status-history-index="${Number(historyIndex)}">
+                <div class="text-[10px] font-semibold uppercase tracking-wide text-amber-900 mb-2">Histórico de substatus</div>
+                <ul class="project-status-history-substatus-list space-y-2 list-none p-0 m-0">
+                    ${renderProjectStatusHistorySubstatusRowsHtml(rows)}
+                </ul>
+            </div>
+        </div>
+    `;
+}
+
 function renderProjectStatusHistoryToolbar(viewMode) {
     return `
         <div class="project-status-history-toolbar">
@@ -572,7 +634,7 @@ function renderProjectStatusHistoryToolbar(viewMode) {
     `;
 }
 
-function renderProjectStatusHistoryTimeline(entries) {
+function renderProjectStatusHistoryTimeline(entries, substatusRows = []) {
     if (!entries.length) {
         return '<p class="text-xs text-slate-400 text-center py-12">Nenhum registro de histórico para este projeto.</p>';
     }
@@ -631,12 +693,18 @@ function renderProjectStatusHistoryTimeline(entries) {
     const statusSpans = renderSpans(statusLanes, 2, 'status');
     const groupSpans = renderSpans(groupItems, 2 + statusLaneCount, 'group');
 
-    const legendItems = segments.map(segment => {
+    const legendItems = segments.map((segment, index) => {
         const color = getProjectStatusHistoryBarColor(segment.statusName);
         const durationLabel = formatStatusDurationSeconds(segment.durationSeconds) || '—';
         const periodLabel = segment.isCurrent
             ? `${formatGestaoDateTime(segment.startAt)} → agora`
             : `${formatGestaoDateTime(segment.startAt)} → ${formatGestaoDateTime(segment.endAt)}`;
+        const segmentSubstatus = getProjectStatusHistorySegmentSubstatusRows(
+            substatusRows,
+            segment.statusName,
+            segment.startAt,
+            segment.endAt
+        );
 
         return `
             <li class="project-status-history-timeline__legend-item">
@@ -645,6 +713,7 @@ function renderProjectStatusHistoryTimeline(entries) {
                     <div class="project-status-history-timeline__legend-title">${escapeHtml(segment.statusName)}</div>
                     <div class="project-status-history-timeline__legend-meta">${escapeHtml(periodLabel)} · ${escapeHtml(durationLabel)} · ${escapeHtml(segment.changedBy)}</div>
                     ${renderProjectStatusHistoryObservationHtml(segment.observation)}
+                    ${renderProjectStatusHistorySubstatusExpandHtml(segmentSubstatus, index)}
                 </div>
             </li>
         `;
@@ -667,10 +736,10 @@ function renderProjectStatusHistoryTimeline(entries) {
     `;
 }
 
-function renderProjectStatusHistoryView(entries, viewMode = 'flow', detailingRecord = null) {
+function renderProjectStatusHistoryView(entries, viewMode = 'flow', detailingRecord = null, substatusRows = []) {
     const content = viewMode === 'timeline'
-        ? renderProjectStatusHistoryTimeline(entries)
-        : renderProjectStatusHistoryFlow(entries, detailingRecord);
+        ? renderProjectStatusHistoryTimeline(entries, substatusRows)
+        : renderProjectStatusHistoryFlow(entries, detailingRecord, substatusRows);
 
     return `
         ${renderProjectStatusHistoryToolbar(viewMode)}
@@ -680,21 +749,29 @@ function renderProjectStatusHistoryView(entries, viewMode = 'flow', detailingRec
     `;
 }
 
-function setProjectStatusHistoryContent(containerId, entries, viewMode = 'flow', detailingRecord = null) {
+function setProjectStatusHistoryContent(
+    containerId,
+    entries,
+    viewMode = 'flow',
+    detailingRecord = null,
+    substatusRows = []
+) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
     projectStatusHistoryState = {
         entries: entries || [],
         viewMode,
-        detailingRecord: detailingRecord || null
+        detailingRecord: detailingRecord || null,
+        substatusRows: substatusRows || []
     };
 
     container.dataset.projectStatusHistoryContainer = 'true';
     container.innerHTML = renderProjectStatusHistoryView(
         projectStatusHistoryState.entries,
         viewMode,
-        projectStatusHistoryState.detailingRecord
+        projectStatusHistoryState.detailingRecord,
+        projectStatusHistoryState.substatusRows
     );
 }
 
@@ -713,12 +790,36 @@ function bindProjectStatusHistoryViewToggle() {
             container.id,
             projectStatusHistoryState.entries,
             viewMode,
-            projectStatusHistoryState.detailingRecord
+            projectStatusHistoryState.detailingRecord,
+            projectStatusHistoryState.substatusRows
         );
     });
 }
 
+function bindProjectStatusHistorySubstatusToggle() {
+    document.addEventListener('click', (event) => {
+        const button = event.target.closest('.project-status-history-substatus-toggle');
+        if (!button) return;
+
+        const container = button.closest('[data-project-status-history-container]');
+        if (!container) return;
+
+        const index = button.dataset.statusHistoryIndex;
+        const panel = container.querySelector(
+            `.project-status-history-substatus-panel[data-status-history-index="${index}"]`
+        );
+        if (!panel) return;
+
+        const expanded = button.getAttribute('aria-expanded') === 'true';
+        const count = button.dataset.count || '0';
+        button.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+        panel.classList.toggle('hidden', expanded);
+        button.textContent = expanded ? `Ver substatus (${count})` : 'Ocultar substatus';
+    });
+}
+
 bindProjectStatusHistoryViewToggle();
+bindProjectStatusHistorySubstatusToggle();
 
 function renderProjectStatusHistoryConnector(durationSeconds) {
     const durationLabel = formatStatusDurationSeconds(durationSeconds);
@@ -736,11 +837,18 @@ function renderProjectStatusHistoryConnector(durationSeconds) {
     `;
 }
 
-function renderProjectStatusHistoryStep(entry, index) {
+function renderProjectStatusHistoryStep(entry, index, entries, substatusRows = []) {
     const statusName = entry.newStatus?.name || 'Status';
     const changedAt = formatGestaoDateTime(entry.changedAt);
     const changedBy = entry.changedBy?.name || '—';
     const isInitial = !entry.previousStatusId && index === 0;
+    const segmentEnd = entries[index + 1]?.changedAt ?? null;
+    const segmentSubstatus = getProjectStatusHistorySegmentSubstatusRows(
+        substatusRows,
+        statusName,
+        entry.changedAt,
+        segmentEnd
+    );
 
     return `
         <div class="rounded-xl border-2 border-indigo-200 bg-white px-4 py-3 shadow-sm text-center max-w-md w-full mx-auto">
@@ -748,11 +856,12 @@ function renderProjectStatusHistoryStep(entry, index) {
             <div class="text-[10px] text-slate-500 mt-1">${escapeHtml(changedAt)} · ${escapeHtml(changedBy)}</div>
             <div class="text-[10px] text-slate-400 mt-0.5">${isInitial ? 'Status inicial do projeto' : `Alterado de ${escapeHtml(entry.previousStatus?.name || '—')}`}</div>
             ${renderProjectStatusHistoryObservationHtml(getOrderProjectStatusHistoryObservation(entry))}
+            ${renderProjectStatusHistorySubstatusExpandHtml(segmentSubstatus, index)}
         </div>
     `;
 }
 
-function renderProjectStatusHistoryFlow(entries, detailingRecord = null) {
+function renderProjectStatusHistoryFlow(entries, detailingRecord = null, substatusRows = []) {
     if (!entries.length) {
         return '<p class="text-xs text-slate-400 text-center py-12">Nenhum registro de histórico para este projeto.</p>';
     }
@@ -766,7 +875,7 @@ function renderProjectStatusHistoryFlow(entries, detailingRecord = null) {
         if (index > 0) {
             parts.push(renderProjectStatusHistoryConnector(entry.previousStatusDurationSeconds));
         }
-        parts.push(renderProjectStatusHistoryStep(entry, index));
+        parts.push(renderProjectStatusHistoryStep(entry, index, entries, substatusRows));
 
         if (detailingRecord && index === lastEmProducaoIndex
             && typeof renderProjectStatusHistoryDetailingBranch === 'function') {
@@ -805,13 +914,16 @@ async function openGestaoProjectStatusHistory(context = {}) {
     }
 
     try {
-        const [entries, detailingRecord] = await Promise.all([
+        const [entries, detailingRecord, substatusRows] = await Promise.all([
             fetchOrderProjectStatusHistory(orderProjectId),
             typeof fetchDetalhamentoByOrderProjectId === 'function'
                 ? fetchDetalhamentoByOrderProjectId(orderProjectId)
-                : Promise.resolve(null)
+                : Promise.resolve(null),
+            typeof fetchOrderProjectSubstatusHistory === 'function'
+                ? fetchOrderProjectSubstatusHistory(orderProjectId)
+                : Promise.resolve([])
         ]);
-        setProjectStatusHistoryContent('gestao-project-history-flow', entries, 'flow', detailingRecord);
+        setProjectStatusHistoryContent('gestao-project-history-flow', entries, 'flow', detailingRecord, substatusRows);
     } catch (error) {
         if (flow) {
             flow.innerHTML = `<p class="text-xs text-red-500 text-center py-8">Erro ao carregar histórico: ${escapeHtml(error.message)}</p>`;
@@ -920,13 +1032,16 @@ async function openProjectStatusHistoryModal(context = {}) {
     }
 
     try {
-        const [entries, detailingRecord] = await Promise.all([
+        const [entries, detailingRecord, substatusRows] = await Promise.all([
             fetchOrderProjectStatusHistory(orderProjectId),
             typeof fetchDetalhamentoByOrderProjectId === 'function'
                 ? fetchDetalhamentoByOrderProjectId(orderProjectId)
-                : Promise.resolve(null)
+                : Promise.resolve(null),
+            typeof fetchOrderProjectSubstatusHistory === 'function'
+                ? fetchOrderProjectSubstatusHistory(orderProjectId)
+                : Promise.resolve([])
         ]);
-        setProjectStatusHistoryContent('project-status-history-flow', entries, 'flow', detailingRecord);
+        setProjectStatusHistoryContent('project-status-history-flow', entries, 'flow', detailingRecord, substatusRows);
     } catch (error) {
         if (flow) {
             flow.innerHTML = `<p class="text-xs text-red-500 text-center py-8">Erro ao carregar histórico: ${escapeHtml(error.message)}</p>`;

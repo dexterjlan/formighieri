@@ -378,6 +378,32 @@ function getOrderProjectsListTopLevel(projects = orderProjectsCache) {
     );
 }
 
+function renderOrderProjectGridStatusCellInnerHtml(project) {
+    const statusName = getOrderProjectStatusName(project);
+    const statusClass = getOrderProjectStatusBadgeClass(statusName);
+    return `
+        <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
+        ${typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
+            ? renderOrderProjectOpenSubstatusFlagsHtml(project)
+            : ''}
+    `;
+}
+
+function refreshOrderProjectSubstatusFlagsInOrderList(projectId) {
+    const id = Number(projectId);
+    if (!id || typeof orderProjectsCache === 'undefined' || !Array.isArray(orderProjectsCache)) return false;
+
+    const project = orderProjectsCache.find(item => Number(item.id) === id);
+    const item = document.querySelector(`#order-projects-list .order-projects-grid__item[data-project-id="${id}"]`);
+    const statusCell = item?.querySelector('.order-projects-grid__cell--status');
+    if (!project || !statusCell) return false;
+
+    statusCell.innerHTML = renderOrderProjectGridStatusCellInnerHtml(project);
+    return true;
+}
+
+window.refreshOrderProjectSubstatusFlagsInOrderList = refreshOrderProjectSubstatusFlagsInOrderList;
+
 function appendOrderProjectGridItem(container, project, orderId, actionContext, options = {}) {
     const {
         nested = false,
@@ -387,8 +413,6 @@ function appendOrderProjectGridItem(container, project, orderId, actionContext, 
     } = options;
     const hasPhases = typeof orderHasDeliveryPhases === 'function'
         && orderHasDeliveryPhases(orderId);
-    const statusName = getOrderProjectStatusName(project);
-    const statusClass = getOrderProjectStatusBadgeClass(statusName);
     const phaseDisplay = typeof getOrderProjectPhaseDisplay === 'function'
         ? getOrderProjectPhaseDisplay(project, orderId)
         : null;
@@ -450,10 +474,7 @@ function appendOrderProjectGridItem(container, project, orderId, actionContext, 
             <span class="order-projects-grid__cell text-[10px] text-slate-600 truncate" title="Projetista: ${escapeHtml(designerName)}">${escapeHtml(designerName)}</span>
             ${phaseCellHtml}
             <div class="order-projects-grid__cell order-projects-grid__cell--status flex flex-wrap items-center gap-1 min-w-0">
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium truncate ${statusClass}" title="${escapeHtml(statusName)}">${escapeHtml(statusName)}</span>
-                ${typeof renderOrderProjectOpenSubstatusFlagsHtml === 'function'
-                    ? renderOrderProjectOpenSubstatusFlagsHtml(project)
-                    : ''}
+                ${renderOrderProjectGridStatusCellInnerHtml(project)}
             </div>
             <div class="order-projects-grid__cell order-projects-grid__cell--actions">
                 ${hideActions

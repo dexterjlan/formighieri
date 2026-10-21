@@ -46,6 +46,10 @@ function formatOrderProjectSubstatusError(error) {
     if (isOrderProjectSubstatusTableMissingError(error)) {
         return 'Execute supabase/feats/add-internal-assembly-awaiting-substatus.sql no Supabase SQL Editor.';
     }
+    const message = String(error?.message || error || '').toLowerCase();
+    if (message.includes('note') && (message.includes('column') || message.includes('schema cache'))) {
+        return 'Execute supabase/feats/add-order-project-substatus-note.sql no Supabase SQL Editor.';
+    }
     return error?.message || 'Não foi possível atualizar o substatus do projeto.';
 }
 
@@ -92,8 +96,25 @@ function canManageOrderProjectAwaitingRequest(project) {
 
 const ORDER_PROJECT_SUBSTATUS_TAG_CLASS = 'inline-block text-[10px] px-1.5 py-0.5 rounded font-semibold border border-amber-300/80 bg-amber-50 text-amber-900 shrink-0';
 
-function renderOrderProjectSubstatusTagHtml(label, title = 'Substatus em aberto') {
-    return `<span class="${ORDER_PROJECT_SUBSTATUS_TAG_CLASS}" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
+function truncateOrderProjectSubstatusTooltip(text, maxLength = 500) {
+    const value = String(text || '').trim();
+    if (value.length <= maxLength) return value;
+    return `${value.slice(0, maxLength - 1)}…`;
+}
+
+function getOrderProjectSubstatusTagTitle(defaultTitle, note) {
+    const text = truncateOrderProjectSubstatusTooltip(note);
+    return text || defaultTitle;
+}
+
+function renderOrderProjectSubstatusTagHtml(label, title = 'Substatus em aberto', substatusId = null) {
+    const idAttr = substatusId ? ` data-order-project-substatus-id="${Number(substatusId)}"` : '';
+    return `<span class="${ORDER_PROJECT_SUBSTATUS_TAG_CLASS}" title="${escapeHtml(title)}"${idAttr}>${escapeHtml(label)}</span>`;
+}
+
+function normalizeOrderProjectSubstatusNote(value) {
+    const text = String(value ?? '').trim();
+    return text || null;
 }
 
 function renderOrderProjectAwaitingRequestFlagHtml() {
@@ -108,17 +129,50 @@ function renderOrderProjectInternalAssemblySubstatusFlagsHtml(openRows = []) {
     if (!rows.length) return '';
 
     const countByKind = {};
+    const sampleByKind = {};
     rows.forEach(row => {
         const kind = row?.kind;
         if (!kind) return;
         countByKind[kind] = (countByKind[kind] || 0) + 1;
+        if (!sampleByKind[kind]) sampleByKind[kind] = row;
     });
 
     return Object.entries(countByKind).map(([kind, count]) => {
         const baseLabel = getOrderProjectInternalAssemblySubstatusLabel(kind);
         const label = count > 1 ? `${baseLabel} (${count})` : baseLabel;
-        return renderOrderProjectSubstatusTagHtml(label, 'Substatus em montagem interna');
+        const sample = sampleByKind[kind];
+        const title = getOrderProjectSubstatusTagTitle(
+            'Substatus em montagem interna',
+            sample?.note
+        );
+        return renderOrderProjectSubstatusTagHtml(label, title, sample?.id);
     }).join('');
+}
+
+function applyInternalAssemblySubstatusOpenToProject(project, openRows = []) {
+    if (!project) return project;
+    const openMontagem = openRows || [];
+    project.internalAssemblySubstatusOpen = openMontagem;
+    project.internalAssemblySubstatusOpenCount = openMontagem.length;
+    project.internalAssemblyAwaitingOpen = openMontagem;
+    project.internalAssemblyAwaitingOpenCount = openMontagem.length;
+    project.internalAssemblyAwaitingOpenIds = openMontagem.map(row => row.id);
+    return project;
+}
+
+async function syncOrderProjectInternalAssemblySubstatusForProject(projectId) {
+    const id = Number(projectId);
+    if (!id) return null;
+
+    const grouped = await fetchOpenInternalAssemblySubstatusByProjectIds([id]);
+    const openRows = grouped[id] || [];
+
+    if (typeof orderProjectsCache !== 'undefined' && Array.isArray(orderProjectsCache)) {
+        const project = orderProjectsCache.find(item => Number(item.id) === id);
+        if (project) applyInternalAssemblySubstatusOpenToProject(project, openRows);
+    }
+
+    return openRows;
 }
 
 function renderOrderProjectInternalAssemblyAwaitingFlagHtml(openCount = 1) {
@@ -190,7 +244,7 @@ async function fetchOpenSubstatusRowsByProjectIds(projectIds = [], kind) {
 
     const { data, error } = await supabaseClient
         .from('OrderProjectSubstatus')
-        .select('id, orderProjectId, kind, startedAt, endedAt')
+        .select('id, orderProjectId, kind, startedAt, endedAt, note')
         .in('orderProjectId', ids)
         .eq('kind', kind)
         .is('endedAt', null)
@@ -220,7 +274,7 @@ async function fetchOpenInternalAssemblySubstatusByProjectIds(projectIds = []) {
 
     const { data, error } = await supabaseClient
         .from('OrderProjectSubstatus')
-        .select('id, orderProjectId, kind, startedAt, endedAt')
+        .select('id, orderProjectId, kind, startedAt, endedAt, note')
         .in('orderProjectId', ids)
         .in('kind', kinds)
         .is('endedAt', null)
@@ -267,16 +321,12 @@ async function attachOpenOrderProjectSubstatuses(projects = []) {
         project.awaitingRequestEndedAt = openAwaiting?.endedAt || null;
 
         const openMontagem = montagemByProject[Number(project.id)] || [];
-        project.internalAssemblySubstatusOpen = openMontagem;
-        project.internalAssemblySubstatusOpenCount = openMontagem.length;
-        project.internalAssemblyAwaitingOpen = openMontagem;
-        project.internalAssemblyAwaitingOpenCount = openMontagem.length;
-        project.internalAssemblyAwaitingOpenIds = openMontagem.map(row => row.id);
+        applyInternalAssemblySubstatusOpenToProject(project, openMontagem);
     });
     return list;
 }
 
-async function startOrderProjectInternalAssemblySubstatus(projectId, kind) {
+async function startOrderProjectInternalAssemblySubstatus(projectId, kind, note = null) {
     const id = Number(projectId);
     if (!id) throw new Error('Projeto inválido.');
     if (!isOrderProjectInternalAssemblySubstatusKind(kind)) {
@@ -291,12 +341,13 @@ async function startOrderProjectInternalAssemblySubstatus(projectId, kind) {
         .insert({
             orderProjectId: id,
             kind,
+            note: normalizeOrderProjectSubstatusNote(note),
             startedAt: now,
             startedById: currentUser?.id || null,
             createdAt: now,
             updatedAt: now
         })
-        .select('id, orderProjectId, kind, startedAt')
+        .select('id, orderProjectId, kind, startedAt, note')
         .single();
 
     if (error) {
@@ -342,6 +393,41 @@ async function endOrderProjectInternalAssemblySubstatusById(substatusId, project
 
 async function endOrderProjectInternalAssemblyAwaitingById(substatusId, projectId = null) {
     return endOrderProjectInternalAssemblySubstatusById(substatusId, projectId);
+}
+
+async function updateOrderProjectInternalAssemblySubstatusNote(substatusId, note, projectId = null) {
+    const id = Number(substatusId);
+    if (!id) throw new Error('Substatus inválido.');
+
+    const kinds = getOrderProjectInternalAssemblySubstatusKindList();
+    const now = new Date().toISOString();
+    let query = supabaseClient
+        .from('OrderProjectSubstatus')
+        .update({
+            note: normalizeOrderProjectSubstatusNote(note),
+            updatedAt: now
+        })
+        .eq('id', id)
+        .in('kind', kinds)
+        .is('endedAt', null);
+
+    if (projectId) {
+        query = query.eq('orderProjectId', Number(projectId));
+    }
+
+    const { data, error } = await query.select('id, kind, note, orderProjectId').maybeSingle();
+    if (error) throw new Error(formatOrderProjectSubstatusError(error));
+    if (!data) throw new Error('Não é possível alterar a observação de um substatus encerrado.');
+
+    const targetProjectId = Number(projectId || data.orderProjectId);
+    if (targetProjectId) {
+        await syncOrderProjectInternalAssemblySubstatusForProject(targetProjectId);
+        if (typeof refreshOrderProjectSubstatusFlagsInOrderList === 'function') {
+            refreshOrderProjectSubstatusFlagsInOrderList(targetProjectId);
+        }
+    }
+
+    return data;
 }
 
 async function assertNoOpenInternalAssemblySubstatusForExpedicao(projectId) {
@@ -417,6 +503,82 @@ async function endOrderProjectAwaitingRequest(project) {
     return data;
 }
 
+function getOrderProjectSubstatusKindsForStatusName(statusName) {
+    const name = String(statusName || '').trim();
+    if (name === ORDER_PROJECT_SUBSTATUS_TECHNICAL_STATUS) {
+        return [ORDER_PROJECT_SUBSTATUS_AWAITING_REQUEST];
+    }
+    if (name === ORDER_PROJECT_SUBSTATUS_MONTAGEM_INTERNA_STATUS) {
+        return getOrderProjectInternalAssemblySubstatusKindList();
+    }
+    return [];
+}
+
+function getOrderProjectSubstatusKindLabel(kind) {
+    if (kind === ORDER_PROJECT_SUBSTATUS_AWAITING_REQUEST) {
+        return ORDER_PROJECT_SUBSTATUS_AWAITING_REQUEST_LABEL;
+    }
+    return getOrderProjectInternalAssemblySubstatusLabel(kind);
+}
+
+function orderProjectSubstatusOverlapsStatusSegment(row, segmentStart, segmentEnd) {
+    if (!row?.startedAt) return false;
+    const segmentStartMs = new Date(segmentStart).getTime();
+    const segmentEndMs = segmentEnd ? new Date(segmentEnd).getTime() : Date.now();
+    const subStartMs = new Date(row.startedAt).getTime();
+    const subEndMs = row.endedAt ? new Date(row.endedAt).getTime() : Date.now();
+    if (Number.isNaN(segmentStartMs) || Number.isNaN(subStartMs)) return false;
+    return subStartMs < segmentEndMs && subEndMs > segmentStartMs;
+}
+
+function filterOrderProjectSubstatusForStatusSegment(substatusRows, statusName, segmentStart, segmentEnd) {
+    const kinds = getOrderProjectSubstatusKindsForStatusName(statusName);
+    if (!kinds.length) return [];
+
+    return (substatusRows || [])
+        .filter(row => kinds.includes(row.kind))
+        .filter(row => orderProjectSubstatusOverlapsStatusSegment(row, segmentStart, segmentEnd))
+        .sort((a, b) => {
+            const diff = new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
+            return diff !== 0 ? diff : Number(a.id) - Number(b.id);
+        });
+}
+
+async function fetchOrderProjectSubstatusHistory(orderProjectId) {
+    const id = Number(orderProjectId);
+    if (!id) return [];
+
+    const { data, error } = await supabaseClient
+        .from('OrderProjectSubstatus')
+        .select('id, orderProjectId, kind, startedAt, endedAt, note, startedById, endedById')
+        .eq('orderProjectId', id)
+        .order('startedAt', { ascending: true })
+        .order('id', { ascending: true });
+
+    if (error) {
+        if (isOrderProjectSubstatusTableMissingError(error)) return [];
+        console.warn('fetchOrderProjectSubstatusHistory:', formatOrderProjectSubstatusError(error));
+        return [];
+    }
+
+    const rows = data || [];
+    const userIds = [...new Set(rows.flatMap(row => [row.startedById, row.endedById].filter(Boolean)))];
+    let userById = {};
+    if (userIds.length) {
+        const { data: users } = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .in('id', userIds);
+        userById = Object.fromEntries((users || []).map(user => [user.id, user]));
+    }
+
+    return rows.map(row => ({
+        ...row,
+        startedBy: userById[row.startedById] || null,
+        endedBy: userById[row.endedById] || null
+    }));
+}
+
 async function refreshSurfacesAfterOrderProjectSubstatusChange() {
     const pendenciasView = document.getElementById('pendencias-view');
     const pendenciasVisible = pendenciasView && !pendenciasView.classList.contains('hidden');
@@ -482,9 +644,15 @@ window.renderOrderProjectOpenSubstatusFlagsHtml = renderOrderProjectOpenSubstatu
 window.renderOrderProjectInternalAssemblyAwaitingFlagHtml = renderOrderProjectInternalAssemblyAwaitingFlagHtml;
 window.attachOpenOrderProjectSubstatuses = attachOpenOrderProjectSubstatuses;
 window.startOrderProjectInternalAssemblySubstatus = startOrderProjectInternalAssemblySubstatus;
+window.updateOrderProjectInternalAssemblySubstatusNote = updateOrderProjectInternalAssemblySubstatusNote;
+window.syncOrderProjectInternalAssemblySubstatusForProject = syncOrderProjectInternalAssemblySubstatusForProject;
 window.startOrderProjectInternalAssemblyAwaiting = startOrderProjectInternalAssemblyAwaiting;
 window.endOrderProjectInternalAssemblySubstatusById = endOrderProjectInternalAssemblySubstatusById;
 window.endOrderProjectInternalAssemblyAwaitingById = endOrderProjectInternalAssemblyAwaitingById;
 window.assertNoOpenInternalAssemblySubstatusForExpedicao = assertNoOpenInternalAssemblySubstatusForExpedicao;
 window.promptStartOrderProjectAwaitingRequest = promptStartOrderProjectAwaitingRequest;
 window.promptEndOrderProjectAwaitingRequest = promptEndOrderProjectAwaitingRequest;
+window.getOrderProjectSubstatusKindsForStatusName = getOrderProjectSubstatusKindsForStatusName;
+window.getOrderProjectSubstatusKindLabel = getOrderProjectSubstatusKindLabel;
+window.filterOrderProjectSubstatusForStatusSegment = filterOrderProjectSubstatusForStatusSegment;
+window.fetchOrderProjectSubstatusHistory = fetchOrderProjectSubstatusHistory;
