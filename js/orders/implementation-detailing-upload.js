@@ -1,6 +1,7 @@
 let implantacaoDetalhamentoRecord = null;
 let implantacaoDetalhamentoDriveContext = null;
 let implantacaoDetalhamentoSelectedFile = null;
+let implantacaoDetalhamentoUploadKind = 'detailing';
 let implantacaoDetalhamentoDriveFilesCache = [];
 
 function isImplantacaoSentToProduction(record) {
@@ -9,22 +10,21 @@ function isImplantacaoSentToProduction(record) {
         || status === IMPLANTACAO_STATUS_ENCERRADO;
 }
 
+function syncImplantacaoDetalhamentoSendButton() {
+    const button = document.getElementById('btn-implantacao-detalhamento-send');
+    const selectButton = document.getElementById('btn-implantacao-detalhamento-select-file');
+    if (!button) return;
+    button.disabled = Boolean(selectButton?.disabled) || !implantacaoDetalhamentoSelectedFile;
+}
+
 function clearImplantacaoDetalhamentoFileSelection() {
     implantacaoDetalhamentoSelectedFile = null;
+    implantacaoDetalhamentoUploadKind = 'detailing';
     const input = document.getElementById('implantacao-detalhamento-file-input');
     if (input) input.value = '';
     const display = document.getElementById('implantacao-detalhamento-file-display');
     if (display) display.value = '';
-    updateImplantacaoDetalhamentoUploadButtons();
-}
-
-function updateImplantacaoDetalhamentoUploadButtons() {
-    const btnSelect = document.getElementById('btn-implantacao-detalhamento-select-file');
-    const btnUpload = document.getElementById('btn-implantacao-detalhamento-upload');
-    const selectDisabled = btnSelect?.disabled || btnSelect?.hasAttribute('disabled');
-    if (btnUpload) {
-        btnUpload.disabled = Boolean(selectDisabled) || !implantacaoDetalhamentoSelectedFile;
-    }
+    syncImplantacaoDetalhamentoSendButton();
 }
 
 function formatImplantacaoDetalhamentoDriveDate(isoDate) {
@@ -57,11 +57,19 @@ function renderImplantacaoDetalhamentoDriveFiles(files = []) {
                     <p class="text-xs font-medium text-slate-800 truncate" title="${name}">${name}</p>
                     <p class="text-[10px] text-slate-400">${size}${updated ? ` · ${updated}` : ''}</p>
                 </div>
+                <div class="flex shrink-0 flex-wrap gap-1">
                 <button type="button"
                     data-implantacao-drive-file-download="${Number(file.id) || 0}"
                     class="shrink-0 text-xs bg-white border border-indigo-200 text-indigo-800 px-2 py-1 rounded-lg font-medium hover:bg-indigo-50">
                     Baixar
                 </button>
+                ${typeof isAdmin === 'function' && isAdmin() ? `
+                <button type="button"
+                    data-implantacao-drive-file-delete="${Number(file.id) || 0}"
+                    class="shrink-0 text-xs bg-white border border-red-200 text-red-700 px-2 py-1 rounded-lg font-medium hover:bg-red-50">
+                    Excluir
+                </button>` : ''}
+                </div>
             </div>
         `;
     }).join('');
@@ -87,6 +95,33 @@ function downloadImplantacaoDetalhamentoDriveFile(fileId) {
         return;
     }
     window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+async function deleteImplantacaoDetalhamentoDriveFile(fileId) {
+    if (typeof isAdmin !== 'function' || !isAdmin()) return;
+    const file = implantacaoDetalhamentoDriveFilesCache.find(item => Number(item.id) === Number(fileId));
+    if (!file || typeof deleteDriveFileRecord !== 'function') return;
+
+    const confirmed = await confirmAppDialog(
+        `Excluir o arquivo "${file.fileName || 'arquivo'}"?`,
+        { title: 'Excluir arquivo', confirmLabel: 'Excluir' }
+    );
+    if (!confirmed) return;
+
+    const setLoading = typeof setImplantacaoModalLoading === 'function' ? setImplantacaoModalLoading : null;
+    const waitStatus = typeof waitImplantacaoStatus === 'function' ? waitImplantacaoStatus : waitAppOverlay;
+    try {
+        setLoading?.(true, 'Excluindo arquivo...');
+        await deleteDriveFileRecord(file);
+        setLoading?.(true, 'Arquivo excluído.', 'success');
+        await waitStatus(typeof APP_OVERLAY_SUCCESS_MS === 'number' ? APP_OVERLAY_SUCCESS_MS : 1800);
+        setLoading?.(false);
+        await loadImplantacaoDetalhamentoDriveFiles();
+    } catch (error) {
+        setLoading?.(true, error.message || 'Não foi possível excluir o arquivo.', 'error');
+        await waitStatus(typeof APP_OVERLAY_ERROR_MS === 'number' ? APP_OVERLAY_ERROR_MS : 4000);
+        setLoading?.(false);
+    }
 }
 
 async function loadImplantacaoDetalhamentoDriveFiles() {
@@ -131,13 +166,13 @@ async function refreshImplantacaoDetalhamentoUploadSection(record = activeImplan
         if (hint) hint.textContent = 'Disponível após enviar o projeto para produção.';
         pathEl?.classList.add('hidden');
         if (btnSelect) btnSelect.disabled = true;
-        updateImplantacaoDetalhamentoUploadButtons();
+        syncImplantacaoDetalhamentoSendButton();
         return;
     }
 
     if (!activeImplantacaoOrderProjectId) {
         if (btnSelect) btnSelect.disabled = true;
-        updateImplantacaoDetalhamentoUploadButtons();
+        syncImplantacaoDetalhamentoSendButton();
         return;
     }
 
@@ -153,14 +188,14 @@ async function refreshImplantacaoDetalhamentoUploadSection(record = activeImplan
         if (hint) hint.textContent = 'Detalhamento ainda não disponível para este projeto.';
         pathEl?.classList.add('hidden');
         if (btnSelect) btnSelect.disabled = true;
-        updateImplantacaoDetalhamentoUploadButtons();
+        syncImplantacaoDetalhamentoSendButton();
         return;
     }
 
     const canUpload = typeof canActImplantacao === 'function' && canActImplantacao(record);
     if (hint) {
         hint.textContent = canUpload
-            ? 'Envie PDF, ZIP ou RAR para a pasta de detalhamento (até 100 MB).'
+            ? 'Escolha Projeto (RAR ou ZIP, nome original) ou Detalhamento (PDF, nome padrão). Até 100 MB.'
             : 'Sem permissão para enviar arquivo.';
     }
 
@@ -182,7 +217,7 @@ async function refreshImplantacaoDetalhamentoUploadSection(record = activeImplan
     }
 
     if (btnSelect) btnSelect.disabled = !canUpload;
-    updateImplantacaoDetalhamentoUploadButtons();
+    syncImplantacaoDetalhamentoSendButton();
     await loadImplantacaoDetalhamentoDriveFiles();
 }
 
@@ -199,11 +234,10 @@ function resetImplantacaoDetalhamentoUploadSection() {
     if (hint) hint.textContent = 'Disponível após enviar o projeto para produção.';
     pathEl?.classList.add('hidden');
     if (btnSelect) btnSelect.disabled = true;
-    updateImplantacaoDetalhamentoUploadButtons();
+    syncImplantacaoDetalhamentoSendButton();
 }
 
-async function handleImplantacaoDetalhamentoUpload() {
-    const file = implantacaoDetalhamentoSelectedFile;
+async function handleImplantacaoDetalhamentoUpload(file, uploadKind) {
     if (!file) return;
 
     if (!implantacaoDetalhamentoDriveContext) {
@@ -217,6 +251,7 @@ async function handleImplantacaoDetalhamentoUpload() {
     }
 
     const uploaded = await uploadFilesToDetailingDrive([file], implantacaoDetalhamentoDriveContext, {
+        uploadKind,
         setLoading: typeof setImplantacaoModalLoading === 'function' ? setImplantacaoModalLoading : null,
         waitStatus: typeof waitImplantacaoStatus === 'function' ? waitImplantacaoStatus : null
     });
@@ -229,22 +264,40 @@ async function handleImplantacaoDetalhamentoUpload() {
 
 function bindImplantacaoDetalhamentoUploadEvents() {
     document.getElementById('btn-implantacao-detalhamento-select-file')?.addEventListener('click', () => {
-        document.getElementById('implantacao-detalhamento-file-input')?.click();
+        const input = document.getElementById('implantacao-detalhamento-file-input');
+        if (!input || typeof openDetailingDriveUploadKindModal !== 'function') return;
+        openDetailingDriveUploadKindModal(input);
     });
 
     document.getElementById('implantacao-detalhamento-file-input')?.addEventListener('change', (event) => {
         const input = event.target;
         const file = input.files?.[0] || null;
+        const uploadKind = input.dataset.uploadKind === 'project' ? 'project' : 'detailing';
+        input.value = '';
+        if (!file) return;
+        if (typeof primeGoogleDriveAppsScript === 'function') {
+            primeGoogleDriveAppsScript();
+        }
         implantacaoDetalhamentoSelectedFile = file;
+        implantacaoDetalhamentoUploadKind = uploadKind;
         const display = document.getElementById('implantacao-detalhamento-file-display');
-        if (display) display.value = file?.name || '';
-        updateImplantacaoDetalhamentoUploadButtons();
+        if (display) display.value = file.name || '';
+        syncImplantacaoDetalhamentoSendButton();
     });
 
-    document.getElementById('btn-implantacao-detalhamento-upload')
-        ?.addEventListener('click', handleImplantacaoDetalhamentoUpload);
+    document.getElementById('btn-implantacao-detalhamento-send')?.addEventListener('click', () => {
+        handleImplantacaoDetalhamentoUpload(
+            implantacaoDetalhamentoSelectedFile,
+            implantacaoDetalhamentoUploadKind
+        );
+    });
 
     document.getElementById('implantacao-detalhamento-drive-list')?.addEventListener('click', (event) => {
+        const deleteButton = event.target.closest('[data-implantacao-drive-file-delete]');
+        if (deleteButton) {
+            deleteImplantacaoDetalhamentoDriveFile(deleteButton.dataset.implantacaoDriveFileDelete);
+            return;
+        }
         const button = event.target.closest('[data-implantacao-drive-file-download]');
         if (!button) return;
         downloadImplantacaoDetalhamentoDriveFile(button.dataset.implantacaoDriveFileDownload);

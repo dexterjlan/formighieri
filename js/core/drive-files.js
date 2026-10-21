@@ -423,6 +423,7 @@ const DRIVE_FILE_POLL_MS_MAX = 480;
 const GOOGLE_DRIVE_APPS_SCRIPT_PRIME_TTL_MS = 4 * 60 * 1000;
 
 let googleDriveAppsScriptPrimedAt = 0;
+let googleDriveAppsScriptPrimePromise = null;
 
 function buildGoogleAppsScriptRequestBody(payload) {
     return {
@@ -440,26 +441,38 @@ function googleAppsScriptUnavailableMessage(statusCode) {
 
 /** Aquece a instância do Apps Script (cold start) sem bloquear a UI. */
 function primeGoogleDriveAppsScript() {
-    if (!isGoogleDriveAppsScriptConfigured()) return;
+    if (!isGoogleDriveAppsScriptConfigured()) return null;
     const now = Date.now();
+    if (googleDriveAppsScriptPrimePromise) return googleDriveAppsScriptPrimePromise;
     if (googleDriveAppsScriptPrimedAt && now - googleDriveAppsScriptPrimedAt < GOOGLE_DRIVE_APPS_SCRIPT_PRIME_TTL_MS) {
-        return;
+        return null;
     }
     googleDriveAppsScriptPrimedAt = now;
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-    void fetch(GOOGLE_APPS_SCRIPT_URL, {
+    googleDriveAppsScriptPrimePromise = fetch(GOOGLE_APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(buildGoogleAppsScriptRequestBody({ action: 'drive_warm' })),
         signal: controller.signal
-    }).catch(() => {}).finally(() => clearTimeout(timeoutId));
+    }).catch(() => {}).finally(() => {
+        clearTimeout(timeoutId);
+        googleDriveAppsScriptPrimePromise = null;
+    });
+
+    return googleDriveAppsScriptPrimePromise;
 }
 
-async function postGoogleDriveAction(payload) {
+async function ensureGoogleDriveAppsScriptReady() {
+    if (!isGoogleDriveAppsScriptConfigured()) return;
+    const pending = primeGoogleDriveAppsScript();
+    if (pending) await pending;
+}
+
+async function postGoogleDriveAction(payload, attempt = 0) {
     if (!isGoogleDriveAppsScriptConfigured()) {
         throw new Error('Drive não configurado no Apps Script.');
     }
@@ -477,6 +490,13 @@ async function postGoogleDriveAction(payload) {
         });
 
         if (!response.ok) {
+            const canRetry = attempt < 1 && (response.status === 404 || response.status >= 500);
+            if (canRetry) {
+                clearTimeout(timeoutId);
+                await waitDriveMs(1500);
+                await ensureGoogleDriveAppsScriptReady();
+                return postGoogleDriveAction(payload, attempt + 1);
+            }
             throw new Error(googleAppsScriptUnavailableMessage(response.status));
         }
 
@@ -854,9 +874,11 @@ async function finalizeDriveFileUploadRow(row, storageMirrorPromise, folderKind)
 }
 
 async function saveDriveFileUpload(file, context = {}, onProgress) {
-    const fileName = context.folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D && context.orderCode
-        ? buildView3dDriveFileName(context.orderCode, context.projectName, file.name)
-        : sanitizeDriveUploadFileName(context.fileName || file.name, context.folderKind);
+    const fileName = context.preserveOriginalFileName
+        ? (String(context.fileName || file.name || 'arquivo').trim().replace(/[\\/]/g, '') || 'arquivo')
+        : (context.folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D && context.orderCode
+            ? buildView3dDriveFileName(context.orderCode, context.projectName, file.name)
+            : sanitizeDriveUploadFileName(context.fileName || file.name, context.folderKind));
     const mimeType = mimeTypeForDriveUpload(file.name, file.type);
     const fileSizeBytes = Number(file.size) || 0;
     const directUploadBase64Promise = fileSizeBytes <= DRIVE_FILE_DIRECT_MAX_BYTES
@@ -1012,6 +1034,7 @@ window.DRIVE_FILE_INPUT_ACCEPT = DRIVE_FILE_INPUT_ACCEPT;
 window.DRIVE_FILE_IMAGE_INPUT_ACCEPT = DRIVE_FILE_IMAGE_INPUT_ACCEPT;
 window.isGoogleDriveAppsScriptConfigured = isGoogleDriveAppsScriptConfigured;
 window.primeGoogleDriveAppsScript = primeGoogleDriveAppsScript;
+window.ensureGoogleDriveAppsScriptReady = ensureGoogleDriveAppsScriptReady;
 window.buildDriveFolderPath = buildDriveFolderPath;
 window.buildDescriptiveDriveFileName = buildDescriptiveDriveFileName;
 window.buildView3dDriveFileName = buildView3dDriveFileName;

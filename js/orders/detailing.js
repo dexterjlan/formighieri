@@ -274,6 +274,9 @@ async function refreshDetalhamentoRelatedViews(orderProjectId) {
 }
 
 async function openDetailingModal(orderProjectId, projectName = '') {
+    if (typeof primeGoogleDriveAppsScript === 'function') {
+        primeGoogleDriveAppsScript();
+    }
     if (!orderProjectId) return;
 
     activeDetalhamentoOrderProjectId = Number(orderProjectId);

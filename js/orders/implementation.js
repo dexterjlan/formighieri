@@ -1140,6 +1140,9 @@ async function openImplantacaoThirdPartyProjectDetail(thirdPartyProjectId) {
 }
 
 async function openImplementationModal(orderProjectId, projectName = '', options = {}) {
+    if (typeof primeGoogleDriveAppsScript === 'function') {
+        primeGoogleDriveAppsScript();
+    }
     const { requireExisting = false } = options;
     if (!orderProjectId) return;
 
@@ -1249,9 +1252,8 @@ const implantacaoModalOverlay = typeof createAppOverlayHelper === 'function'
             'btn-implantacao-encerrar',
             'btn-implantacao-salvar',
             'btn-implantacao-detalhamento-select-file',
-            'btn-implantacao-detalhamento-upload'
+            'btn-implantacao-detalhamento-send'
         ],
-        reenableElementIdsOnHide: [],
         closeButtonSelector: '#implantacao-modal button[onclick="closeImplantacaoModal()"]',
         disableFormSelector: '#implantacao-modal input:not([disabled]), #implantacao-modal textarea:not([disabled]), #implantacao-modal select:not([disabled])',
         disableDatasetKey: 'implantacaoLoadingDisabled'
@@ -1262,6 +1264,9 @@ function setImplantacaoModalLoading(active, message = 'Processando...', status =
     implantacaoModalOverlay?.setLoading(active, message, status);
     if (!active) {
         updateImplantacaoActionButtons(activeImplantacaoRecord);
+        if (typeof refreshImplantacaoDetalhamentoUploadSection === 'function') {
+            refreshImplantacaoDetalhamentoUploadSection(activeImplantacaoRecord).catch(() => {});
+        }
     }
 }
 

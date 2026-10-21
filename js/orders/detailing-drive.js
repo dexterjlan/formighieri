@@ -212,6 +212,12 @@ function renderDetailingDriveFiles(files = []) {
                         class="text-xs bg-white border border-indigo-200 text-indigo-800 px-2.5 py-1 rounded-lg font-medium hover:bg-indigo-50">
                         Baixar
                     </button>
+                    ${typeof isAdmin === 'function' && isAdmin() ? `
+                    <button type="button"
+                        data-drive-file-delete="${Number(file.id) || 0}"
+                        class="text-xs bg-white border border-red-200 text-red-700 px-2.5 py-1 rounded-lg font-medium hover:bg-red-50">
+                        Excluir
+                    </button>` : ''}
                 </div>
             </div>
         `;
@@ -221,6 +227,33 @@ function renderDetailingDriveFiles(files = []) {
 function viewDetailingDriveFile(fileId) {
     const file = detailingDriveFilesCache.find(item => Number(item.id) === Number(fileId));
     openDetailingDriveFileView(file);
+}
+
+async function deleteDetailingDriveFile(fileId) {
+    if (typeof isAdmin !== 'function' || !isAdmin()) return;
+    const file = detailingDriveFilesCache.find(item => Number(item.id) === Number(fileId));
+    if (!file || typeof deleteDriveFileRecord !== 'function') return;
+
+    const confirmed = await confirmAppDialog(
+        `Excluir o arquivo "${file.fileName || 'arquivo'}"?`,
+        { title: 'Excluir arquivo', confirmLabel: 'Excluir' }
+    );
+    if (!confirmed) return;
+
+    const setLoading = typeof setDetalhamentoModalLoading === 'function' ? setDetalhamentoModalLoading : null;
+    const waitStatus = typeof waitDetalhamentoStatus === 'function' ? waitDetalhamentoStatus : waitAppOverlay;
+    try {
+        setLoading?.(true, 'Excluindo arquivo...');
+        await deleteDriveFileRecord(file);
+        setLoading?.(true, 'Arquivo excluído.', 'success');
+        await waitStatus(typeof APP_OVERLAY_SUCCESS_MS === 'number' ? APP_OVERLAY_SUCCESS_MS : 1800);
+        setLoading?.(false);
+        await loadDetailingDriveFiles();
+    } catch (error) {
+        setLoading?.(true, error.message || 'Não foi possível excluir o arquivo.', 'error');
+        await waitStatus(typeof APP_OVERLAY_ERROR_MS === 'number' ? APP_OVERLAY_ERROR_MS : 4000);
+        setLoading?.(false);
+    }
 }
 
 function downloadDetailingDriveFile(fileId) {
@@ -237,6 +270,8 @@ async function loadDetailingDriveFiles() {
     const pathEl = document.getElementById('detalhamento-drive-path');
     const section = document.getElementById('detalhamento-drive-section');
     if (!section || section.classList.contains('hidden')) return;
+
+    clearDetailingDriveFileSelection();
 
     setDetailingDriveStatus('Carregando arquivos...');
     try {
@@ -261,18 +296,90 @@ async function loadDetailingDriveFiles() {
     }
 }
 
+const DETAILING_DRIVE_PROJECT_ACCEPT = '.zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed';
+const DETAILING_DRIVE_PDF_ACCEPT = '.pdf,application/pdf';
+
+let detailingDriveUploadKindInput = null;
+let detailingDrivePendingFile = null;
+let detailingDrivePendingKind = 'detailing';
+
+function syncDetailingDriveSendButton() {
+    const button = document.getElementById('btn-detalhamento-drive-send');
+    if (!button) return;
+    button.disabled = !detailingDrivePendingFile;
+}
+
+function clearDetailingDriveFileSelection() {
+    detailingDrivePendingFile = null;
+    detailingDrivePendingKind = 'detailing';
+    const input = document.getElementById('detalhamento-drive-file-input');
+    if (input) input.value = '';
+    const nameEl = document.getElementById('detalhamento-drive-selected-name');
+    if (nameEl) {
+        nameEl.textContent = '';
+        nameEl.classList.add('hidden');
+    }
+    syncDetailingDriveSendButton();
+}
+
+function detailingDriveFileExtension(fileName) {
+    const name = String(fileName || '');
+    const dot = name.lastIndexOf('.');
+    if (dot < 0) return '';
+    return name.slice(dot + 1).toLowerCase();
+}
+
+function validateDetailingDriveUploadByKind(files, uploadKind) {
+    const list = Array.from(files || []);
+    const isProject = uploadKind === 'project';
+    const allowed = isProject ? ['zip', 'rar'] : ['pdf'];
+    const label = isProject ? 'RAR ou ZIP' : 'PDF';
+    const invalid = list.find(file => !allowed.includes(detailingDriveFileExtension(file?.name)));
+    if (invalid) {
+        return `O arquivo "${invalid.name}" não é permitido. Envie apenas ${label}.`;
+    }
+    const maxBytes = typeof DRIVE_FILE_MAX_BYTES === 'number' ? DRIVE_FILE_MAX_BYTES : (100 * 1024 * 1024);
+    const tooLarge = list.find(file => Number(file?.size) > maxBytes);
+    if (tooLarge) {
+        return `O arquivo "${tooLarge.name}" passa de 100 MB. Envie arquivos menores.`;
+    }
+    return '';
+}
+
+function openDetailingDriveUploadKindModal(input) {
+    if (!input) return;
+    detailingDriveUploadKindInput = input;
+    toggleModal('detailing-drive-upload-kind-modal', true);
+}
+
+function closeDetailingDriveUploadKindModal() {
+    detailingDriveUploadKindInput = null;
+    toggleModal('detailing-drive-upload-kind-modal', false);
+}
+
+function chooseDetailingDriveUploadKind(uploadKind) {
+    const input = detailingDriveUploadKindInput;
+    closeDetailingDriveUploadKindModal();
+    if (!input) return;
+    input.accept = uploadKind === 'project' ? DETAILING_DRIVE_PROJECT_ACCEPT : DETAILING_DRIVE_PDF_ACCEPT;
+    input.multiple = false;
+    input.dataset.uploadKind = uploadKind;
+    input.value = '';
+    input.click();
+}
+
 async function uploadFilesToDetailingDrive(fileList, context, options = {}) {
     const files = Array.from(fileList || []);
     if (!files.length || !context) return false;
+
+    const uploadKind = options.uploadKind === 'project' ? 'project' : 'detailing';
 
     if (!isGoogleDriveAppsScriptConfigured()) {
         alertAppDialog('Drive não configurado no Apps Script.', { variant: 'warning', title: 'Aviso' });
         return false;
     }
 
-    const validationError = typeof validateDriveUploadFiles === 'function'
-        ? validateDriveUploadFiles(files)
-        : '';
+    const validationError = validateDetailingDriveUploadByKind(files, uploadKind);
     if (validationError) {
         alertAppDialog(validationError, { variant: 'warning', title: 'Aviso' });
         return false;
@@ -284,14 +391,20 @@ async function uploadFilesToDetailingDrive(fileList, context, options = {}) {
         : (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
     try {
+        if (typeof ensureGoogleDriveAppsScriptReady === 'function') {
+            setLoading?.(true, 'Preparando envio...');
+            await ensureGoogleDriveAppsScriptReady();
+        }
         setLoading?.(true, 'Enviando arquivo(s) para o Drive...');
 
         for (const file of files) {
+            const renamed = uploadKind === 'detailing' && typeof buildDetailingDriveFileName === 'function'
+                ? buildDetailingDriveFileName(context.orderCode, context.clientName, context.projectName)
+                : file.name;
             const uploadContext = {
                 ...context,
-                fileName: typeof buildDetailingDriveFileName === 'function'
-                    ? buildDetailingDriveFileName(context.orderCode, context.clientName, context.projectName)
-                    : file.name
+                preserveOriginalFileName: uploadKind === 'project',
+                fileName: renamed
             };
             await saveDriveFileUpload(file, uploadContext, (sent, total) => {
                 if (!setLoading || !total) return;
@@ -317,7 +430,7 @@ async function uploadFilesToDetailingDrive(fileList, context, options = {}) {
     }
 }
 
-async function uploadDetailingDriveFiles(fileList) {
+async function uploadDetailingDriveFiles(fileList, uploadKind) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
 
@@ -330,6 +443,7 @@ async function uploadDetailingDriveFiles(fileList) {
     }
 
     const uploaded = await uploadFilesToDetailingDrive(files, detailingDriveContext, {
+        uploadKind,
         setLoading: typeof setDetalhamentoModalLoading === 'function' ? setDetalhamentoModalLoading : null,
         waitStatus: typeof waitDetalhamentoStatus === 'function' ? waitDetalhamentoStatus : null
     });
@@ -346,17 +460,48 @@ function bindDetailingDriveEvents() {
         loadDetailingDriveFiles();
     });
     document.getElementById('btn-detalhamento-drive-upload')?.addEventListener('click', () => {
-        document.getElementById('detalhamento-drive-file-input')?.click();
+        openDetailingDriveUploadKindModal(document.getElementById('detalhamento-drive-file-input'));
     });
-    document.getElementById('detalhamento-drive-file-input')?.addEventListener('change', async (event) => {
+    document.getElementById('detalhamento-drive-file-input')?.addEventListener('change', (event) => {
         const input = event.target;
-        await uploadDetailingDriveFiles(input.files);
+        const file = input.files?.[0] || null;
+        const uploadKind = input.dataset.uploadKind === 'project' ? 'project' : 'detailing';
         input.value = '';
+        if (!file) return;
+        if (typeof primeGoogleDriveAppsScript === 'function') {
+            primeGoogleDriveAppsScript();
+        }
+        detailingDrivePendingFile = file;
+        detailingDrivePendingKind = uploadKind;
+        const nameEl = document.getElementById('detalhamento-drive-selected-name');
+        if (nameEl) {
+            nameEl.textContent = file.name || '';
+            nameEl.classList.remove('hidden');
+        }
+        syncDetailingDriveSendButton();
+    });
+    document.getElementById('btn-detalhamento-drive-send')?.addEventListener('click', () => {
+        if (!detailingDrivePendingFile) return;
+        uploadDetailingDriveFiles([detailingDrivePendingFile], detailingDrivePendingKind);
+    });
+    document.getElementById('detailing-drive-upload-kind-project')?.addEventListener('click', () => {
+        chooseDetailingDriveUploadKind('project');
+    });
+    document.getElementById('detailing-drive-upload-kind-detailing')?.addEventListener('click', () => {
+        chooseDetailingDriveUploadKind('detailing');
+    });
+    document.getElementById('detailing-drive-upload-kind-cancel')?.addEventListener('click', () => {
+        closeDetailingDriveUploadKindModal();
     });
     document.getElementById('detalhamento-drive-list')?.addEventListener('click', (event) => {
         const viewButton = event.target.closest('[data-drive-file-view]');
         if (viewButton) {
             viewDetailingDriveFile(viewButton.dataset.driveFileView);
+            return;
+        }
+        const deleteButton = event.target.closest('[data-drive-file-delete]');
+        if (deleteButton) {
+            deleteDetailingDriveFile(deleteButton.dataset.driveFileDelete);
             return;
         }
         const downloadButton = event.target.closest('[data-drive-file-download]');
@@ -371,3 +516,4 @@ window.resetDetailingDescriptiveSection = resetDetailingDescriptiveSection;
 window.bindDetailingDriveEvents = bindDetailingDriveEvents;
 window.resolveDetailingDriveContextForRecord = resolveDetailingDriveContextForRecord;
 window.uploadFilesToDetailingDrive = uploadFilesToDetailingDrive;
+window.openDetailingDriveUploadKindModal = openDetailingDriveUploadKindModal;
