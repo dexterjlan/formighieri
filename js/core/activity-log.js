@@ -11,6 +11,8 @@ const ACTIVITY_LOG_ACTIONS = {
     'order_project.delivery_date_changed': 'Data de entrega do projeto alterada',
     'order_project.production_month_changed': 'Mês de produção alterado',
     'order_project.technical_forecast_changed': 'Previsão de projeto técnico alterada',
+    'order_project_substatus.started': 'Substatus iniciado',
+    'order_project_substatus.ended': 'Substatus encerrado',
     // Detailing (onda 1)
     'detailing.created': 'Detalhamento criado',
     'detailing.designer_assigned': 'Projetista de detalhamento associado',
@@ -86,6 +88,16 @@ function formatActivityLogRevisionMeta(entry) {
         third_party: 'Terceiro'
     };
     const label = labels[revisionType] || revisionType;
+    return ` (${label})`;
+}
+
+function formatActivityLogSubstatusMeta(entry) {
+    const action = String(entry?.action || '');
+    if (!action.startsWith('order_project_substatus.')) return '';
+    const label = entry?.metadata?.substatusLabel
+        || entry?.metadata?.substatusKind
+        || '';
+    if (!label) return '';
     return ` (${label})`;
 }
 
@@ -316,6 +328,7 @@ window.getActivityLogActionLabel = getActivityLogActionLabel;
 window.getActivityLogValueDisplay = getActivityLogValueDisplay;
 window.formatActivityLogChangeSummary = formatActivityLogChangeSummary;
 window.formatActivityLogRevisionMeta = formatActivityLogRevisionMeta;
+window.formatActivityLogSubstatusMeta = formatActivityLogSubstatusMeta;
 window.toActivityLogJsonbValue = toActivityLogJsonbValue;
 window.logActivityChange = logActivityChange;
 window.fetchActivityLogPage = fetchActivityLogPage;

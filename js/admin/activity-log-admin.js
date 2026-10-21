@@ -40,9 +40,13 @@ function fillActivityLogAdminUserFilter() {
 
 function fillActivityLogAdminActionFilter() {
     const select = document.getElementById('activity-log-filter-action');
-    if (!select || select.dataset.filled === '1') return;
+    if (!select) return;
 
-    const actions = typeof ACTIVITY_LOG_ACTIONS === 'object' ? ACTIVITY_LOG_ACTIONS : {};
+    const actions = (typeof window.ACTIVITY_LOG_ACTIONS === 'object' && window.ACTIVITY_LOG_ACTIONS)
+        ? window.ACTIVITY_LOG_ACTIONS
+        : {};
+    if (!Object.keys(actions).length) return;
+    if (select.dataset.filled === '1') return;
     select.innerHTML = `
         <option value="">Todas as ações</option>
         ${Object.entries(actions).map(([value, label]) => `
@@ -60,6 +64,20 @@ function getActivityLogAdminFilters() {
         dateFrom: document.getElementById('activity-log-filter-from')?.value || '',
         dateTo: document.getElementById('activity-log-filter-to')?.value || ''
     };
+}
+
+function formatActivityLogAdminActionLabel(row) {
+    const action = String(row?.action || '').trim();
+    const baseLabel = typeof window.getActivityLogActionLabel === 'function'
+        ? window.getActivityLogActionLabel(action)
+        : ((window.ACTIVITY_LOG_ACTIONS || {})[action] || action);
+    const revisionMeta = typeof formatActivityLogRevisionMeta === 'function'
+        ? formatActivityLogRevisionMeta(row)
+        : '';
+    const substatusMeta = typeof formatActivityLogSubstatusMeta === 'function'
+        ? formatActivityLogSubstatusMeta(row)
+        : '';
+    return `${baseLabel}${revisionMeta}${substatusMeta}`;
 }
 
 function formatActivityLogAdminDateTime(iso) {
@@ -83,10 +101,7 @@ function renderActivityLogAdminRows(rows) {
     emptyEl?.classList.add('hidden');
     tbody.innerHTML = rows.map(row => {
         const userName = escapeHtml(row.changedBy?.name || '—');
-        const actionLabel = escapeHtml(
-            (typeof getActivityLogActionLabel === 'function' ? getActivityLogActionLabel(row.action) : row.action)
-            + (typeof formatActivityLogRevisionMeta === 'function' ? formatActivityLogRevisionMeta(row) : '')
-        );
+        const actionLabel = escapeHtml(formatActivityLogAdminActionLabel(row));
         const change = escapeHtml(
             typeof formatActivityLogChangeSummary === 'function'
                 ? formatActivityLogChangeSummary(row)
