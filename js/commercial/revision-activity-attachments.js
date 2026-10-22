@@ -217,10 +217,15 @@ async function resolveRevisionDriveFolderContext() {
     };
 }
 
+let revisionDriveUploadBatch = null;
+
 function updateRevisionImageUploadProgress(sent, total) {
     if (!total) return;
     const pct = Math.min(100, Math.round((sent / total) * 100));
-    const message = `Enviando imagem da atividade (${pct}%)...`;
+    const batch = revisionDriveUploadBatch;
+    const message = batch && batch.total > 1
+        ? `Enviando imagens das atividades (${batch.index} de ${batch.total}, ${pct}%)...`
+        : `Enviando imagem da atividade (${pct}%)...`;
     const pairs = [
         ['commercial-revision-loading', typeof setCommercialRevisionModalLoading === 'function' ? setCommercialRevisionModalLoading : null],
         ['technical-reviewer-revision-loading', typeof setTechnicalReviewerRevisionModalLoading === 'function' ? setTechnicalReviewerRevisionModalLoading : null],
@@ -234,40 +239,63 @@ function updateRevisionImageUploadProgress(sent, total) {
 }
 
 async function persistRevisionDriveUploads(drafts, existing, activityIdByRowId = {}) {
-    const hasDraft = Object.entries(activityIdByRowId).some(([rowId, rawActivityId]) => {
-        const activityId = Number(rawActivityId);
-        return Boolean(activityId && (drafts.get(String(rowId)) || drafts.get(String(activityId))));
-    });
-    if (!hasDraft) return;
-
-    const folderContext = await resolveRevisionDriveFolderContext();
-    const uploadedActivityIds = new Set();
+    const uploadQueue = [];
+    const queuedActivityIds = new Set();
 
     for (const [rowId, rawActivityId] of Object.entries(activityIdByRowId)) {
         const activityId = Number(rawActivityId);
-        if (!activityId || uploadedActivityIds.has(activityId)) continue;
+        if (!activityId || queuedActivityIds.has(activityId)) continue;
 
         const draft = drafts.get(String(rowId)) || drafts.get(String(activityId));
         if (!draft) continue;
 
-        const safeName = sanitizeRevisionActivityAttachmentFileName(draft.file.name);
-        const record = await saveDriveFileUpload(
-            draft.file,
-            {
-                ...folderContext,
-                entityId: activityId,
-                fileName: `atividade-${activityId}-${safeName}`
-            },
-            updateRevisionImageUploadProgress
-        );
+        uploadQueue.push({ rowId, activityId, draft });
+        queuedActivityIds.add(activityId);
+    }
 
-        if (draft.previewUrl) {
-            URL.revokeObjectURL(draft.previewUrl);
+    if (!uploadQueue.length) return;
+
+    if (typeof ensureGoogleDriveAppsScriptReady === 'function') {
+        await ensureGoogleDriveAppsScriptReady();
+    }
+
+    const folderContext = await resolveRevisionDriveFolderContext();
+    revisionDriveUploadBatch = { index: 0, total: uploadQueue.length };
+
+    try {
+        for (const { rowId, activityId, draft } of uploadQueue) {
+            revisionDriveUploadBatch.index += 1;
+
+            if (typeof validateDriveUploadFiles === 'function') {
+                const validationError = validateDriveUploadFiles(
+                    [draft.file],
+                    DRIVE_FILE_FOLDER_KIND.REVISION
+                );
+                if (validationError) {
+                    throw new Error(validationError);
+                }
+            }
+
+            const safeName = sanitizeRevisionActivityAttachmentFileName(draft.file.name);
+            const record = await saveDriveFileUpload(
+                draft.file,
+                {
+                    ...folderContext,
+                    entityId: activityId,
+                    fileName: `atividade-${activityId}-${safeName}`
+                },
+                updateRevisionImageUploadProgress
+            );
+
+            if (draft.previewUrl) {
+                URL.revokeObjectURL(draft.previewUrl);
+            }
+            drafts.delete(String(rowId));
+            drafts.delete(String(activityId));
+            existing.set(String(activityId), record);
         }
-        drafts.delete(String(rowId));
-        drafts.delete(String(activityId));
-        existing.set(String(activityId), record);
-        uploadedActivityIds.add(activityId);
+    } finally {
+        revisionDriveUploadBatch = null;
     }
 }
 

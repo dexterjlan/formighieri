@@ -235,14 +235,27 @@ function revokeView3dModelBlobUrl(viewer) {
 }
 
 function sanitizeDriveUploadFileName(fileName, folderKind = DRIVE_FILE_FOLDER_KIND.DETAILING) {
-    const base = String(fileName || 'arquivo')
+    const maxLen = 120;
+    const allowed = allowedDriveExtensionsForFolderKind(folderKind);
+    const normalized = String(fileName || 'arquivo')
         .trim()
         .replace(/[^\w.\-() ]+/g, '_')
-        .replace(/\s+/g, '_')
-        .slice(0, 120);
-    const safe = base || 'arquivo';
+        .replace(/\s+/g, '_');
+
+    if (isImageDriveFolderKind(folderKind)) {
+        let ext = getDriveFileExtension(normalized);
+        if (!allowed.includes(ext)) ext = 'jpg';
+        const dotIdx = normalized.lastIndexOf('.');
+        let stem = dotIdx > 0 ? normalized.slice(0, dotIdx) : normalized;
+        const suffix = `.${ext}`;
+        const maxStem = Math.max(1, maxLen - suffix.length);
+        stem = stem.slice(0, maxStem).replace(/\.+$/g, '') || 'imagem';
+        return `${stem}${suffix}`;
+    }
+
+    const safe = (normalized.slice(0, maxLen) || 'arquivo');
     const ext = getDriveFileExtension(safe);
-    if (allowedDriveExtensionsForFolderKind(folderKind).includes(ext)) return safe;
+    if (allowed.includes(ext)) return safe;
     return `${safe}.bin`;
 }
 
@@ -525,9 +538,18 @@ async function postGoogleDriveAction(payload, attempt = 0) {
         if (error?.message?.includes('Google Apps Script')) {
             throw error;
         }
-        throw new Error(
-            `${googleAppsScriptUnavailableMessage()} Detalhe: ${error?.message || 'falha de rede'}`
-        );
+        const detail = String(error?.message || '').trim();
+        const driveBusinessError = /^(Error:\s*)?(Envie apenas|A imagem |Arquivo passa|Pedido é|Nome do projeto|driveFileRowId|Arquivo grande|Arquivo inválido|Falha no Google Drive)/i
+            .test(detail);
+        if (driveBusinessError) {
+            throw new Error(detail.replace(/^Error:\s*/i, ''));
+        }
+        if (error instanceof TypeError || detail === 'Failed to fetch') {
+            throw new Error(
+                `${googleAppsScriptUnavailableMessage()} Detalhe: ${detail || 'falha de rede'}`
+            );
+        }
+        throw error;
     } finally {
         clearTimeout(timeoutId);
     }
