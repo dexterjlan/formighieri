@@ -170,7 +170,7 @@ async function applyMissingRoleFromMetadata(profile, user) {
         .from('appUsers')
         .update({ role: metadataRole })
         .eq('id', normalized.id)
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy')
         .single();
 
     if (error) {
@@ -184,9 +184,17 @@ async function applyMissingRoleFromMetadata(profile, user) {
 async function queryAppUserByAuthId(authUserId) {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy')
         .eq('authId', authUserId)
         .maybeSingle();
+
+    if (result.error?.message?.includes('receiveEmailCopy')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty')
+            .eq('authId', authUserId)
+            .maybeSingle();
+    }
 
     if (result.error?.message?.includes('isInstaller')) {
         result = await supabaseClient
@@ -216,7 +224,7 @@ async function refreshCurrentUserProfile() {
 
     let query = supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty');
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy');
 
     if (authId) {
         query = query.eq('authId', authId);
@@ -225,6 +233,16 @@ async function refreshCurrentUserProfile() {
     }
 
     let { data, error } = await query.maybeSingle();
+
+    if (error?.message?.includes('receiveEmailCopy')) {
+        let fallbackQuery = supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty');
+        fallbackQuery = authId
+            ? fallbackQuery.eq('authId', authId)
+            : fallbackQuery.eq('id', userId);
+        ({ data, error } = await fallbackQuery.maybeSingle());
+    }
 
     if (error?.message?.includes('isInstaller')) {
         let fallbackQuery = supabaseClient

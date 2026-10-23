@@ -58,6 +58,12 @@ const USER_FLAG_CONFIG = [
         label: 'Terceiro',
         hint: 'Não funcionário: acesso somente à tela de Pendências',
         appliesTo: role => role !== 'Admin'
+    },
+    {
+        id: 'receive-email-copy',
+        label: 'Receber cópia e-mail',
+        hint: 'Recebe em cópia (CC) os e-mails disparados pelas suas ações no sistema',
+        appliesTo: role => Boolean(role)
     }
 ];
 
@@ -130,6 +136,7 @@ function buildUserRoleBadges(u) {
     if (isFabricaUser && u.isFactoryAdministrative) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Administrativo</span>');
     if (isFabricaUser && u.isInstaller) badges.push('<span class="text-[10px] bg-cyan-50 text-cyan-900 px-2 py-0.5 rounded border border-cyan-100">Montador (3D)</span>');
     if (u.isThirdParty) badges.push('<span class="text-[10px] bg-stone-100 text-stone-700 px-2 py-0.5 rounded border border-stone-200">Terceiro</span>');
+    if (u.receiveEmailCopy) badges.push('<span class="text-[10px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-100">Cópia e-mail</span>');
 
     return badges.join('');
 }
@@ -150,7 +157,8 @@ function buildUserFlagCheckbox(u, flag) {
         administrativo: Boolean(u.isFactoryAdministrative),
         montador: Boolean(u.isInstaller),
         detalhamento: Boolean(u.isDetailing),
-        terceiro: Boolean(u.isThirdParty)
+        terceiro: Boolean(u.isThirdParty),
+        'receive-email-copy': Boolean(u.receiveEmailCopy)
     };
 
     return `
@@ -199,7 +207,8 @@ function mergeUserFlagChecks(u, checks) {
         isFactoryAdministrative: checks.administrativo ?? u.isFactoryAdministrative,
         isInstaller: checks.montador ?? u.isInstaller,
         isDetailing: checks.detalhamento ?? u.isDetailing,
-        isThirdParty: checks.terceiro ?? u.isThirdParty
+        isThirdParty: checks.terceiro ?? u.isThirdParty,
+        receiveEmailCopy: checks['receive-email-copy'] ?? u.receiveEmailCopy
     };
 }
 
@@ -391,8 +400,15 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
         .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('receiveEmailCopy')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, calendarColor')
+            .order('name', { ascending: true });
+    }
 
     if (result.error?.message?.includes('calendarColor')) {
         result = await supabaseClient
@@ -488,6 +504,7 @@ async function saveUserRole(userId) {
     const administrativoCheck = document.getElementById(`administrativo-check-${userId}`);
     const montadorCheck = document.getElementById(`montador-check-${userId}`);
     const terceiroCheck = document.getElementById(`terceiro-check-${userId}`);
+    const receiveEmailCopyCheck = document.getElementById(`receive-email-copy-check-${userId}`);
     const rawCalendarColor = getCalendarColorInput(userId)?.value;
     const calendarColor = typeof normalizeGoogleCalendarColorHex === 'function'
         ? (normalizeGoogleCalendarColorHex(rawCalendarColor) || null)
@@ -505,6 +522,7 @@ async function saveUserRole(userId) {
     const isFactoryAdministrative = isFactoryRole && Boolean(administrativoCheck?.checked);
     const isInstaller = isFactoryRole && Boolean(montadorCheck?.checked);
     const isThirdParty = role !== 'Admin' && Boolean(terceiroCheck?.checked);
+    const receiveEmailCopy = Boolean(receiveEmailCopyCheck?.checked);
 
     if (!name) {
         alertAppDialog('Informe o nome do usuário.');
@@ -544,6 +562,7 @@ async function saveUserRole(userId) {
         isInstaller,
         isDetailing,
         isThirdParty,
+        receiveEmailCopy,
         calendarColor
     };
     if (isInstaller && !usersAdminInstallerColumnAvailable) {
@@ -572,6 +591,24 @@ async function saveUserRole(userId) {
         return;
     }
 
+    if (error?.message?.includes('receiveEmailCopy')) {
+        const { receiveEmailCopy: _omit, ...payloadWithoutCopy } = payload;
+        payload = payloadWithoutCopy;
+        updateResult = await supabaseClient
+            .from('appUsers')
+            .update(payload)
+            .eq('id', userId)
+            .select('id, isInstaller')
+            .maybeSingle();
+        error = updateResult.error;
+        if (!error) {
+            alertAppDialog(
+                'O perfil foi salvo, mas a opção Receber cópia e-mail não foi gravada. Execute supabase/feats/add-app-user-receive-email-copy.sql no Supabase SQL Editor.',
+                { variant: 'warning', title: 'Aviso' }
+            );
+        }
+    }
+
     if (error?.message?.includes('calendarColor')) {
         payload = {
             name,
@@ -585,7 +622,8 @@ async function saveUserRole(userId) {
             isFactoryAdministrative,
             isInstaller,
             isDetailing,
-            isThirdParty
+            isThirdParty,
+            receiveEmailCopy
         };
         updateResult = await supabaseClient
             .from('appUsers')
@@ -695,6 +733,7 @@ async function saveUserRole(userId) {
             isInstaller,
             isDetailing,
             isThirdParty,
+            receiveEmailCopy,
             calendarColor
         });
     }
@@ -721,6 +760,7 @@ async function saveUserRole(userId) {
             isInstaller,
             isDetailing,
             isThirdParty,
+            receiveEmailCopy,
             calendarColor
         };
         currentUser = normalizeAppUserProfile(currentUser);

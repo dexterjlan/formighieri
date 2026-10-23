@@ -72,9 +72,17 @@ async function queryAppUserById(userId) {
 
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
         .eq('id', normalizedId)
         .maybeSingle();
+
+    if (result.error?.message?.includes('receiveEmailCopy')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, calendarColor')
+            .eq('id', normalizedId)
+            .maybeSingle();
+    }
 
     if (result.error?.message?.includes('calendarColor')) {
         result = await supabaseClient

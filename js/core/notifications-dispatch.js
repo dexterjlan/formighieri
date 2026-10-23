@@ -108,8 +108,75 @@ async function deliverEmailWithRetries(payload, meta = {}) {
     }
 }
 
+function parseEmailAddressList(text) {
+    return String(text || '')
+        .split(/[,;]+/)
+        .map(entry => entry.trim().toLowerCase())
+        .filter(Boolean);
+}
+
+function mergeEmailCcField(existingCc, extraEmails = []) {
+    const merged = new Set(parseEmailAddressList(existingCc));
+    extraEmails.forEach(email => {
+        const normalized = String(email || '').trim().toLowerCase();
+        if (normalized) merged.add(normalized);
+    });
+    return [...merged].join(', ');
+}
+
+async function resolveActorForEmailCopy(meta = {}) {
+    const actorId = Number(meta.actorUserId ?? currentUser?.id);
+    if (!actorId) return null;
+
+    if (Number(currentUser?.id) === actorId && currentUser?.email) {
+        if (currentUser.receiveEmailCopy !== undefined) {
+            return currentUser;
+        }
+    }
+
+    if (!supabaseClient) return null;
+
+    let { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, email, receiveEmailCopy')
+        .eq('id', actorId)
+        .maybeSingle();
+
+    if (error?.message?.includes('receiveEmailCopy')) {
+        ({ data, error } = await supabaseClient
+            .from('appUsers')
+            .select('id, email')
+            .eq('id', actorId)
+            .maybeSingle());
+        if (data) data.receiveEmailCopy = false;
+    }
+
+    if (error || !data) return null;
+    return typeof normalizeAppUserProfile === 'function' ? normalizeAppUserProfile(data) : data;
+}
+
+async function appendActorEmailCopyCc(payload, meta = {}) {
+    const actor = await resolveActorForEmailCopy(meta);
+    if (!actor?.receiveEmailCopy || !actor.email) return payload;
+
+    const actorEmail = String(actor.email).trim();
+    const actorNormalized = actorEmail.toLowerCase();
+    const toList = parseEmailAddressList(payload?.to_email);
+    const ccList = parseEmailAddressList(payload?.cc_email);
+
+    if (toList.includes(actorNormalized) || ccList.includes(actorNormalized)) {
+        return payload;
+    }
+
+    return {
+        ...payload,
+        cc_email: mergeEmailCcField(payload?.cc_email, [actorEmail])
+    };
+}
+
 async function sendEmailViaGoogleAppsScript(payload, meta = {}) {
-    return deliverEmailWithRetries(payload, meta);
+    const withActorCopy = await appendActorEmailCopyCc(payload, meta);
+    return deliverEmailWithRetries(withActorCopy, meta);
 }
 
 const REVISION_EMAIL_IMAGE_URL_TTL = 60 * 60 * 24 * 7;
