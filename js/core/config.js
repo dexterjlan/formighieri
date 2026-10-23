@@ -88,6 +88,10 @@ const APP_PUBLIC_URL = getAppPublicUrl();
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP1IkfR8OfsYRQEq3IGB_VF_XSGnTQkN5WAjngfTCNGHohp4IcEd4fzaxb3a_o72A/exec';
 const NOTIFICATION_SCRIPT_SECRET = 'Hanna@2020';
 
+// Matrix — produção: token no Apps Script (MATRIX_ACCESS_TOKEN). DEV: opcional token na sessão (tela Matrix teste).
+const MATRIX_HOMESERVER_URL = 'https://matrix.org';
+const MATRIX_ACCESS_TOKEN = '';
+
 // Consulta Requisições / Consulta Aprovações no menu principal
 const QUERY_NAV_ENABLED = false;
 

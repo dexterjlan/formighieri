@@ -163,6 +163,10 @@ async function showSystemSettings(panelKey = 'geral') {
         await initActivityLogAdminPanel();
         return;
     }
+    if (panelKey === 'matrix-test' && typeof initMatrixTestAdminPanel === 'function') {
+        await initMatrixTestAdminPanel();
+        return;
+    }
     if (panelKey === 'import-pedido' && typeof loadImportPedidoSettings === 'function') {
         await loadImportPedidoSettings();
         return;

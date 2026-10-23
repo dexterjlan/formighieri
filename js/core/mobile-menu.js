@@ -53,6 +53,7 @@ const MOBILE_MENU_ICON_PATHS = {
     'performance-nav-montagem-externa': '<path d="M3 10h18v10H3z"/><path d="M7 10V6h10v4"/><path d="M10 14h4"/>',
     'settings-nav-geral': '<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3V20.5M4.9 6.4l1.6 1.6M17.5 16l1.6 1.6M3.5 12h2.2M18.3 12h2.2"/>',
     'settings-nav-activity-log': '<path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/><path d="M10 4V2h4v2"/>',
+    'settings-nav-matrix-test': '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8M8 13h5"/>',
     'settings-nav-import-pedido': '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
     'settings-nav-addr-label': '<path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/>',
     'settings-nav-cadastros-toggle': '<path d="M4 7h16M4 12h10M4 17h6"/>',

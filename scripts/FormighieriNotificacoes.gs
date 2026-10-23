@@ -52,6 +52,10 @@ function doPost(e) {
       return handleCalendarSyncRequest_(body);
     }
 
+    if (body.action && String(body.action).indexOf('matrix_') === 0) {
+      return jsonResponse_(handleMatrixPostRequest_(body));
+    }
+
     // E-mail (fluxo original do FGP)
     return handleEmailRequest_(body);
   } catch (err) {
