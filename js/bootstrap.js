@@ -1,4 +1,4 @@
-const APP_CACHE_VERSION = '1.0.116';
+const APP_CACHE_VERSION = '1.0.117';
 
 const AUTH_PARTIALS = [
     'partials/login.html',
@@ -58,6 +58,7 @@ const SCRIPTS = [
     'js/core/calendar.js',
     'js/core/calendar-google-sync.js',
     'js/core/drive-files.js',
+    'js/core/matrix-messaging.js',
     'js/core/welcome.js',
     'js/comercial/comercial.js',
     'js/comercial/comercial-commissions.js',
@@ -152,6 +153,7 @@ const SCRIPTS = [
     'js/core/activity-log.js',
     'js/admin/system-settings.js',
     'js/admin/activity-log-admin.js',
+    'js/admin/matrix-test-admin.js',
     'js/admin/import-pedido-settings.js',
     'js/admin/addr-label-settings.js',
     'js/core/auth.js',
