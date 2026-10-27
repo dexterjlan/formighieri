@@ -970,12 +970,19 @@ async function startTechnicalRevision() {
             revisionCompletedAt: data?.revisionCompletedAt || null
         };
 
-        setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+        setCommercialRevisionModalLoading(true, 'Enviando notificações...');
         if (typeof notifyApprovalEmail === 'function') {
             await notifyApprovalEmail('revision_started', {
                 ...approval,
                 status: 'Em revisão'
             }, { activities: collectRevisionActivitiesFromDom() });
+        }
+        if (typeof notifyMatrixCommercialRevisionFromApproval === 'function') {
+            await notifyMatrixCommercialRevisionFromApproval('revision_started', approval, {
+                revisionType: typeof mapLegacyRevisionTypeToDb === 'function'
+                    ? mapLegacyRevisionTypeToDb(currentRevisionType)
+                    : null
+            });
         }
 
         setCommercialRevisionModalLoading(true, 'Revisão iniciada!', 'success');
@@ -998,8 +1005,16 @@ async function saveCommercialRevision() {
         if (!result.ok) return;
 
         const approval = getCurrentApproval();
-        if (approval && result.createdRevision && typeof notifyApprovalEmail === 'function') {
-            setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+        if (approval && result.createdRevision) {
+            setCommercialRevisionModalLoading(true, 'Enviando notificações...');
+            if (typeof notifyMatrixCommercialRevisionFromApproval === 'function') {
+                await notifyMatrixCommercialRevisionFromApproval('revision_created', approval, {
+                    revisionType: typeof mapLegacyRevisionTypeToDb === 'function'
+                        ? mapLegacyRevisionTypeToDb(currentRevisionType)
+                        : null
+                });
+            }
+            if (typeof notifyApprovalEmail === 'function') {
             if (currentRevisionType === 'tecnica' && typeof notifyOrderProjectStatusChangeForProjects === 'function') {
                 const orderProjectId = approval.orderProjectId
                     || (typeof resolveCommercialApprovalOrderProjectId === 'function'
@@ -1025,8 +1040,16 @@ async function saveCommercialRevision() {
                     status: 'Em revisão'
                 }, { activities: result.activities });
             }
+            }
         } else if (approval && currentRevisionType === 'tecnica' && canConsultorEditExistingTecnicaRevision(approval) && !result.createdRevision) {
-            setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+            setCommercialRevisionModalLoading(true, 'Enviando notificações...');
+            if (typeof notifyMatrixCommercialRevisionFromApproval === 'function') {
+                await notifyMatrixCommercialRevisionFromApproval('revision_updated', approval, {
+                    revisionType: typeof mapLegacyRevisionTypeToDb === 'function'
+                        ? mapLegacyRevisionTypeToDb(currentRevisionType)
+                        : null
+                });
+            }
             await notifyApprovalEmail('revision_updated', {
                 ...approval,
                 status: 'Em revisão'
@@ -1113,12 +1136,19 @@ async function sendRevisionBackToApproval() {
             };
         }
 
-        setCommercialRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+        setCommercialRevisionModalLoading(true, 'Enviando notificações...');
         if (typeof notifyApprovalEmail === 'function') {
             await notifyApprovalEmail('sent_back_to_approval', {
                 ...approval,
                 status: ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS
             }, { activities: result.activities });
+        }
+        if (typeof notifyMatrixCommercialRevisionFromApproval === 'function') {
+            await notifyMatrixCommercialRevisionFromApproval('sent_back_to_approval', approval, {
+                revisionType: typeof mapLegacyRevisionTypeToDb === 'function'
+                    ? mapLegacyRevisionTypeToDb(currentRevisionType)
+                    : null
+            });
         }
 
         setCommercialRevisionModalLoading(true, 'Atualizando telas...');

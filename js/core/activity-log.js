@@ -9,6 +9,8 @@ const ACTIVITY_LOG_ACTIONS = {
     'order_project.cabinet_maker_assigned': 'Marceneiro associado',
     'order_project.designer_assigned': 'Projetista associado ao projeto',
     'order_project.delivery_date_changed': 'Data de entrega do projeto alterada',
+    'sales_order.client_delivery_date_changed': 'Data de entrega do pedido alterada',
+    'order_delivery_phase.delivery_date_changed': 'Data de entrega da fase alterada',
     'order_project.production_month_changed': 'Mês de produção alterado',
     'order_project.technical_forecast_changed': 'Previsão de projeto técnico alterada',
     'order_project_substatus.started': 'Substatus iniciado',
@@ -46,6 +48,7 @@ const ACTIVITY_LOG_ACTIONS = {
 
 // Próxima onda (ainda sem trigger): ThirdPartyProject, salesOrders.actualDeliveryDate,
 // OrderProjectStatusHistory manual, histórico PreliminaryDesignConferenceHistory (voltar consultor).
+// Entrega pedido/fase: supabase/feats/activity-log-triggers-delivery-dates.sql
 
 const ACTIVITY_LOG_PAGE_SIZE_DEFAULT = 50;
 
@@ -99,6 +102,14 @@ function formatActivityLogSubstatusMeta(entry) {
         || '';
     if (!label) return '';
     return ` (${label})`;
+}
+
+function formatActivityLogDeliveryPhaseMeta(entry) {
+    const action = String(entry?.action || '');
+    if (action !== 'order_delivery_phase.delivery_date_changed') return '';
+    const phaseName = entry?.metadata?.phaseName;
+    if (!phaseName) return '';
+    return ` (${phaseName})`;
 }
 
 function toActivityLogJsonbValue(raw, display) {
@@ -329,6 +340,7 @@ window.getActivityLogValueDisplay = getActivityLogValueDisplay;
 window.formatActivityLogChangeSummary = formatActivityLogChangeSummary;
 window.formatActivityLogRevisionMeta = formatActivityLogRevisionMeta;
 window.formatActivityLogSubstatusMeta = formatActivityLogSubstatusMeta;
+window.formatActivityLogDeliveryPhaseMeta = formatActivityLogDeliveryPhaseMeta;
 window.toActivityLogJsonbValue = toActivityLogJsonbValue;
 window.logActivityChange = logActivityChange;
 window.fetchActivityLogPage = fetchActivityLogPage;

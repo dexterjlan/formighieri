@@ -72,9 +72,17 @@ async function queryAppUserById(userId) {
 
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
         .eq('id', normalizedId)
         .maybeSingle();
+
+    if (result.error?.message?.includes('matrixUserId')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
+            .eq('id', normalizedId)
+            .maybeSingle();
+    }
 
     if (result.error?.message?.includes('receiveEmailCopy')) {
         result = await supabaseClient

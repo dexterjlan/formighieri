@@ -88,28 +88,8 @@ function isOrderProjectStatusInOrderRevisionsListRange(project) {
         && sortOrder <= ORDER_PROJECT_REVISIONS_LIST_MAX_SORT_ORDER;
 }
 
-const COMPLEMENTAR_PARENT_BLOCKED_FROM_SORT_ORDER = 10;
-
 const ORDER_PROJECT_REVISIONS_LIST_MIN_SORT_ORDER = 10;
 const ORDER_PROJECT_REVISIONS_LIST_MAX_SORT_ORDER = 14;
-
-const COMPLEMENTAR_PARENT_BLOCKED_STATUS_NAMES = new Set([
-    'Aguardando Aprovação',
-    ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS,
-    ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ,
-    ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL,
-    ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA,
-    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
-    ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
-    'Em Revisão',
-    'Em revisão',
-    'Nomear',
-    'Aguardando PPCP',
-    'Implantação',
-    'Em Produção',
-    'Montagem Interna',
-    'Expedição'
-]);
 
 function isComplementaryOrderProject(project) {
     return project?.isComplementary === true;
@@ -133,11 +113,9 @@ function getComplementarParentOrderCode(project) {
         || '';
 }
 
-function isComplementaryParentStatusAllowed(statusName, sortOrder = null) {
-    if (sortOrder != null && Number(sortOrder) >= COMPLEMENTAR_PARENT_BLOCKED_FROM_SORT_ORDER) {
-        return false;
-    }
-    return !COMPLEMENTAR_PARENT_BLOCKED_STATUS_NAMES.has(statusName);
+function isComplementaryParentStatusAllowed(_statusName, _sortOrder = null) {
+    // Gestão: projeto pai pode estar em qualquer status ao vincular complementar.
+    return true;
 }
 
 function renderComplementarProjectNoticeHtml(project) {

@@ -227,6 +227,17 @@ function isAppUsersInstallerColumnError(error) {
     return message.includes('isInstaller');
 }
 
+function normalizeAppUserMatrixUserIdInput(value) {
+    const raw = String(value || '').trim();
+    return raw || null;
+}
+
+function isValidAppUserMatrixUserId(value) {
+    const normalized = normalizeAppUserMatrixUserIdInput(value);
+    if (!normalized) return true;
+    return /^@[^:\s/]+:[^\s/]+$/.test(normalized);
+}
+
 function getUsersAdminFilters() {
     return {
         name: document.getElementById('users-filter-name')?.value.trim().toLowerCase() || '',
@@ -311,6 +322,15 @@ function renderUsersAdminCards(users) {
                             ${isSelf ? '<span class="text-[9px] text-slate-400">(você)</span>' : ''}
                         </div>
                         <p class="text-[10px] text-slate-500 truncate mt-0.5">${escapeHtml(u.email)}</p>
+                        <div class="mt-1.5 max-w-md">
+                            <label for="matrix-user-id-${u.id}" class="block text-[9px] font-semibold uppercase text-slate-400 mb-0.5">Usuário Element</label>
+                            <input type="text" id="matrix-user-id-${u.id}" value="${escapeHtml(u.matrixUserId || '')}" ${disableEdit}
+                                placeholder="@usuario:matrix.org"
+                                autocomplete="off"
+                                spellcheck="false"
+                                class="w-full px-2 py-1 text-[10px] font-mono border border-slate-200/80 rounded-md bg-white/90 focus:outline-none focus:border-amber-600 disabled:bg-slate-100 disabled:text-slate-400 text-slate-700">
+                            <p class="text-[9px] text-slate-400 mt-0.5">MXID completo no Element (ex.: @dexterjl:matrix.org).</p>
+                        </div>
                         <div class="flex flex-wrap gap-1 mt-1">${buildUserRoleBadges(u)}</div>
                     </div>
 
@@ -400,8 +420,15 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
         .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('matrixUserId')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
+            .order('name', { ascending: true });
+    }
 
     if (result.error?.message?.includes('receiveEmailCopy')) {
         result = await supabaseClient
@@ -523,6 +550,9 @@ async function saveUserRole(userId) {
     const isInstaller = isFactoryRole && Boolean(montadorCheck?.checked);
     const isThirdParty = role !== 'Admin' && Boolean(terceiroCheck?.checked);
     const receiveEmailCopy = Boolean(receiveEmailCopyCheck?.checked);
+    const matrixUserId = normalizeAppUserMatrixUserIdInput(
+        document.getElementById(`matrix-user-id-${userId}`)?.value
+    );
 
     if (!name) {
         alertAppDialog('Informe o nome do usuário.');
@@ -541,6 +571,12 @@ async function saveUserRole(userId) {
             alertAppDialog(`Essa cor já está em uso por ${taken.get(calendarColor)}. Escolha outra.`);
             return;
         }
+    }
+
+    if (!isValidAppUserMatrixUserId(matrixUserId)) {
+        alertAppDialog('Informe o usuário Element no formato @nome:matrix.org ou deixe em branco.');
+        document.getElementById(`matrix-user-id-${userId}`)?.focus();
+        return;
     }
 
     const { data: previousUser } = await supabaseClient
@@ -563,6 +599,7 @@ async function saveUserRole(userId) {
         isDetailing,
         isThirdParty,
         receiveEmailCopy,
+        matrixUserId,
         calendarColor
     };
     if (isInstaller && !usersAdminInstallerColumnAvailable) {
@@ -589,6 +626,24 @@ async function saveUserRole(userId) {
             { variant: 'error', title: 'Erro' }
         );
         return;
+    }
+
+    if (error?.message?.includes('matrixUserId')) {
+        const { matrixUserId: _omitMatrix, ...payloadWithoutMatrix } = payload;
+        payload = payloadWithoutMatrix;
+        updateResult = await supabaseClient
+            .from('appUsers')
+            .update(payload)
+            .eq('id', userId)
+            .select('id, isInstaller')
+            .maybeSingle();
+        error = updateResult.error;
+        if (!error) {
+            alertAppDialog(
+                'O perfil foi salvo, mas o usuário Element não foi gravado. Execute supabase/feats/add-app-user-matrix-user-id.sql no Supabase SQL Editor.',
+                { variant: 'warning', title: 'Aviso' }
+            );
+        }
     }
 
     if (error?.message?.includes('receiveEmailCopy')) {
@@ -734,6 +789,7 @@ async function saveUserRole(userId) {
             isDetailing,
             isThirdParty,
             receiveEmailCopy,
+            matrixUserId,
             calendarColor
         });
     }
@@ -761,6 +817,7 @@ async function saveUserRole(userId) {
             isDetailing,
             isThirdParty,
             receiveEmailCopy,
+            matrixUserId,
             calendarColor
         };
         currentUser = normalizeAppUserProfile(currentUser);

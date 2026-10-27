@@ -861,11 +861,26 @@ function renderGestaoProjectsSummaryList() {
         const aggregatorBadge = typeof renderAggregatorProjectNoticeHtml === 'function'
             ? renderAggregatorProjectNoticeHtml(project)
             : '';
+        const complementarBadge = typeof renderComplementarProjectNoticeHtml === 'function'
+            ? renderComplementarProjectNoticeHtml(project)
+            : '';
+        const replacedBadge = typeof renderReplacedProjectNoticeHtml === 'function'
+            ? renderReplacedProjectNoticeHtml(project)
+            : '';
+        const replacementBadge = typeof renderReplacementProjectNoticeHtml === 'function'
+            ? renderReplacementProjectNoticeHtml(project)
+            : '';
         const tr = document.createElement('tr');
         tr.className = 'gestao-project-summary-row';
         tr.innerHTML = `
             <td class="p-3 font-medium text-slate-800">
-                <span class="inline-flex flex-wrap items-center gap-1.5">${escapeHtml(project.name || '—')}${aggregatorBadge}</span>
+                <span class="inline-flex flex-wrap items-center gap-1.5">
+                    <span class="text-slate-800">${escapeHtml(project.name || '—')}</span>
+                    ${aggregatorBadge}
+                    ${complementarBadge}
+                    ${replacedBadge}
+                    ${replacementBadge}
+                </span>
             </td>
             <td class="p-3">
                 <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>
@@ -1981,42 +1996,12 @@ async function openProjectRelationPickerModal(target = 'parent') {
             .order('createdAt', { ascending: false }));
     }
 
-    const BLOCKED_STATUSES_AFTER_AGUARDANDO_PT = new Set([
-        'Projeto Técnico',
-        ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_CONS,
-        ORDER_PROJECT_STATUS_EM_REVISAO_COMERCIAL_PROJ,
-        ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_COMERCIAL,
-        ORDER_PROJECT_STATUS_LEGACY_EM_REVISAO_TECNICA,
-        ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR,
-        ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ,
-        'Aguardando Aprovação',
-        'Em Revisão',
-        'Em revisão',
-        'Nomear',
-        'Aguardando PPCP',
-        'Implantação',
-        'Em Produção',
-        'Montagem Interna',
-        'Expedição',
-        'Projeto Substituído'
-    ]);
-
     const currentProjectDraftCode = document.getElementById('gestao-project-code')?.value.trim();
     const availableProjects = (projects || []).filter(p => {
         if (p.isComplementary) return false;
         if (p.isReplaced) return false;
         if (currentOrderId && Number(p.orderId) === currentOrderId) return false;
         if (currentProjectDraftCode && String(p.projectCode) === String(currentProjectDraftCode)) return false;
-
-        const sortOrder = p.projectStatus?.sortOrder ?? null;
-        const statusName = p.projectStatus?.name || '';
-
-        if (sortOrder != null) {
-            if (Number(sortOrder) > 8) return false;
-        } else if (statusName) {
-            if (BLOCKED_STATUSES_AFTER_AGUARDANDO_PT.has(statusName)) return false;
-        }
-
         return true;
     });
 
@@ -2025,7 +2010,7 @@ async function openProjectRelationPickerModal(target = 'parent') {
     if (!availableProjects.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" class="p-4 text-center text-slate-400">Nenhum projeto disponível até "Aguardando Projeto Técnico" em outros pedidos deste cliente.</td>
+                <td colspan="5" class="p-4 text-center text-slate-400">Nenhum projeto elegível como pai em outros pedidos deste cliente.</td>
             </tr>
         `;
         return;

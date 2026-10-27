@@ -57,10 +57,9 @@ function setMatrixTestBusy(isBusy) {
 function refreshMatrixTestBackendUi() {
     const directBlock = document.getElementById('matrix-test-direct-credentials');
     const prodNote = document.getElementById('matrix-test-prod-note');
-    const useProd = typeof isMatrixProductionBackend === 'function' && isMatrixProductionBackend();
 
-    directBlock?.classList.toggle('hidden', useProd);
-    prodNote?.classList.toggle('hidden', !useProd);
+    directBlock?.classList.add('hidden');
+    prodNote?.classList.remove('hidden');
 }
 
 async function initMatrixTestAdminPanel() {
@@ -81,29 +80,18 @@ async function initMatrixTestAdminPanel() {
     }
 
     if (!isMatrixMessagingConfigured()) {
-        const hint = typeof isMatrixProductionBackend === 'function' && isMatrixProductionBackend()
-            ? 'Configure MATRIX_ACCESS_TOKEN no Apps Script (Notificações) e republicar o Web App.'
-            : 'Cole o access token do bot (Element → Avançado) ou configure o Apps Script.';
-        setMatrixTestStatus(hint, 'warning');
-        return;
-    }
-
-    if (typeof isMatrixProductionBackend === 'function' && isMatrixProductionBackend()) {
         setMatrixTestStatus(
-            'Produção: envio via Apps Script (token no servidor). Texto simples, rápido.'
+            'Configure MATRIX_ACCESS_TOKEN no Apps Script (Notificações) e republicar o Web App.',
+            'warning'
         );
         return;
     }
 
-    setMatrixTestStatus(
-        'DEV: envio direto com token na sessão. Produção usa Apps Script automaticamente.'
-    );
+    setMatrixTestStatus('Envio via Apps Script (token do bot no servidor).');
 }
 
 async function runMatrixTestPing() {
     if (!isAdmin() || isThirdParty()) return;
-
-    syncMatrixTestCredentialsFromUi();
 
     setMatrixTestBusy(true);
     setMatrixTestStatus('Testando conexão com Matrix...');
@@ -124,8 +112,6 @@ async function runMatrixTestPing() {
 
 async function runMatrixTestSend(targetType) {
     if (!isAdmin() || isThirdParty()) return;
-
-    syncMatrixTestCredentialsFromUi();
 
     const message = document.getElementById('matrix-test-message')?.value?.trim();
     if (!message) {
@@ -157,11 +143,15 @@ async function runMatrixTestSend(targetType) {
     );
 
     try {
+        const mentionTargets = targetType === 'user' && userId
+            ? [{ matrixUserId: userId, name: userId }]
+            : undefined;
         const data = await sendMatrixMessage({
             targetType,
             userId,
             roomId,
-            message
+            message,
+            mentionTargets
         });
         const roomHint = data.roomAlias
             ? ` ${data.roomAlias} → ${data.roomId}`

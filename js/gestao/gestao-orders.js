@@ -243,14 +243,6 @@ async function validateAndResolveGestaoComplementarProjects(projects) {
             throw new Error(`Projeto "${project.name}": o projeto pai não pode ser complementar.`);
         }
 
-        const statusName = parent.projectStatus?.name || '';
-        const sortOrder = parent.projectStatus?.sortOrder ?? null;
-        if (!isComplementaryParentStatusAllowed(statusName, sortOrder)) {
-            throw new Error(
-                `Projeto "${project.name}": o projeto pai não pode estar em "${statusName || 'Aguardando Aprovação'}" ou status posterior.`
-            );
-        }
-
         if (!parent.statusId) {
             throw new Error(`Projeto "${project.name}": o projeto pai não possui status válido.`);
         }

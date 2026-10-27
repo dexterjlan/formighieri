@@ -1,5 +1,6 @@
 const MATRIX_BOT_MXID = '@formighieri.notificacoes:matrix.org';
 const MATRIX_PROJECTS_ROOM_ALIAS = '#formighieri_projetos:matrix.org';
+const MATRIX_REVISIONS_ROOM_ALIAS = '#formighieri_revisoes:matrix.org';
 const MATRIX_TEST_ROOM_ALIAS = MATRIX_PROJECTS_ROOM_ALIAS;
 const MATRIX_TEST_ROOM_ID = '!j9GOGi5unFpFX5e1oyXDOSqc_YxMKxOJgI0PSbk8m9A';
 const MATRIX_SESSION_TOKEN_KEY = 'fgp-matrix-access-token';
@@ -20,11 +21,9 @@ function isMatrixAppsScriptConfigured() {
             && typeof NOTIFICATION_SCRIPT_SECRET === 'string' && NOTIFICATION_SCRIPT_SECRET);
 }
 
+/** Envio sempre via Apps Script (DEV e produção). Cliente direto só para código legado interno. */
 function shouldUseMatrixDirectClient() {
-    if (typeof FORMIGHIERI_APP_ENV === 'string' && FORMIGHIERI_APP_ENV === 'prod') {
-        return false;
-    }
-    return Boolean(getMatrixAccessToken());
+    return false;
 }
 
 function getMatrixHomeserverUrl() {
@@ -70,14 +69,11 @@ function persistMatrixSessionCredentials({ accessToken, homeserverUrl } = {}) {
 }
 
 function isMatrixMessagingConfigured() {
-    if (shouldUseMatrixDirectClient()) {
-        return true;
-    }
     return isMatrixAppsScriptConfigured();
 }
 
 function isMatrixProductionBackend() {
-    return !shouldUseMatrixDirectClient() && isMatrixAppsScriptConfigured();
+    return isMatrixAppsScriptConfigured();
 }
 
 function matrixEncodedUserId(userId) {
@@ -90,6 +86,22 @@ function parseMatrixClientError(data, status) {
         if (err) return String(err);
     }
     return `Falha HTTP ${status} na API Matrix.`;
+}
+
+function isMatrixInactiveTokenError(errorOrMessage) {
+    const text = String(errorOrMessage?.message || errorOrMessage || '').toLowerCase();
+    return text.includes('token is not active')
+        || text.includes('m_unknown_token')
+        || text.includes('invalid access token');
+}
+
+function handleMatrixInactiveTokenError(errorOrMessage) {
+    if (!isMatrixInactiveTokenError(errorOrMessage)) return;
+    persistMatrixSessionCredentials({ accessToken: '' });
+    console.warn(
+        'Matrix: access token inválido ou expirado — removido da sessão do navegador. '
+        + 'Renove o token do bot no Element ou na propriedade MATRIX_ACCESS_TOKEN do Apps Script.'
+    );
 }
 
 function buildMatrixAppsScriptBody(payload = {}) {
@@ -208,7 +220,9 @@ async function matrixClientFetch(path, { method = 'GET', body } = {}) {
     }
 
     if (!response.ok) {
-        throw new Error(parseMatrixClientError(data, response.status));
+        const message = parseMatrixClientError(data, response.status);
+        handleMatrixInactiveTokenError(message);
+        throw new Error(message);
     }
 
     return data || {};
@@ -308,16 +322,86 @@ async function resolveMatrixDirectRoom(targetUserId) {
     return roomId;
 }
 
-async function sendMatrixPlainTextToRoom(roomId, message) {
+function normalizeMatrixMentionUserIds(mentionUserIds = []) {
+    return [...new Set(
+        (mentionUserIds || [])
+            .map(id => String(id || '').trim())
+            .filter(id => id.startsWith('@') && id.includes(':'))
+    )];
+}
+
+function escapeMatrixHtmlText(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function matrixToUserHref(matrixUserId) {
+    return `https://matrix.to/#/${encodeURIComponent(String(matrixUserId || '').trim())}`;
+}
+
+function buildMatrixFormattedBody(bodyText, mentionTargets = []) {
+    const targets = typeof normalizeMatrixMentionTargets === 'function'
+        ? normalizeMatrixMentionTargets(mentionTargets)
+        : [];
+
+    if (!targets.length) {
+        return null;
+    }
+
+    let html = escapeMatrixHtmlText(bodyText).replace(/\n/g, '<br/>');
+    targets.forEach(target => {
+        const mxid = target.matrixUserId;
+        const label = escapeMatrixHtmlText(target.name || mxid);
+        const needle = escapeMatrixHtmlText(mxid);
+        const anchor = `<a href="${matrixToUserHref(mxid)}">${label}</a>`;
+        html = html.split(needle).join(anchor);
+    });
+    return html;
+}
+
+function buildMatrixTextMessageContent(bodyText, mentionTargets = [], mentionUserIds = []) {
+    const content = {
+        msgtype: 'm.text',
+        body: bodyText
+    };
+    const targets = typeof normalizeMatrixMentionTargets === 'function'
+        ? normalizeMatrixMentionTargets(mentionTargets, mentionUserIds)
+        : [];
+    const userIds = targets.map(target => target.matrixUserId);
+
+    if (userIds.length) {
+        content['m.mentions'] = { user_ids: userIds };
+        const formattedBody = buildMatrixFormattedBody(bodyText, targets);
+        if (formattedBody) {
+            content.format = 'org.matrix.custom.html';
+            content.formatted_body = formattedBody;
+        }
+    }
+    return content;
+}
+
+function serializeMatrixMentionTargetsForAppsScript(mentionTargets = []) {
+    if (typeof normalizeMatrixMentionTargets !== 'function') {
+        return normalizeMatrixMentionUserIds(
+            (mentionTargets || []).map(target => target?.matrixUserId)
+        ).map(matrixUserId => ({ matrixUserId, name: matrixUserId }));
+    }
+    return normalizeMatrixMentionTargets(mentionTargets).map(target => ({
+        matrixUserId: target.matrixUserId,
+        name: target.name || target.matrixUserId
+    }));
+}
+
+async function sendMatrixPlainTextToRoom(roomId, message, mentionTargets = [], mentionUserIds = []) {
     const normalizedRoomId = String(roomId || '').trim();
     const txnId = `fgp-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const path = `/_matrix/client/v3/rooms/${encodeURIComponent(normalizedRoomId)}/send/m.room.message/${txnId}`;
     const result = await matrixClientFetch(path, {
         method: 'PUT',
-        body: {
-            msgtype: 'm.text',
-            body: message
-        }
+        body: buildMatrixTextMessageContent(message, mentionTargets, mentionUserIds)
     });
     return result.event_id || null;
 }
@@ -335,7 +419,7 @@ async function pingMatrixBot() {
     return { ...whoami, viaAppsScript: false };
 }
 
-async function sendMatrixMessageDirect({ targetType, userId, roomId, message }) {
+async function sendMatrixMessageDirect({ targetType, userId, roomId, message, mentionTargets, mentionUserIds }) {
     let resolvedRoomId;
     let roomAlias = null;
     if (String(targetType).toLowerCase() === 'user') {
@@ -350,17 +434,34 @@ async function sendMatrixMessageDirect({ targetType, userId, roomId, message }) 
         resolvedRoomId = await resolveMatrixRoomIdOrAlias(roomId);
     }
 
-    const eventId = await sendMatrixPlainTextToRoom(resolvedRoomId, message);
+    const eventId = await sendMatrixPlainTextToRoom(
+        resolvedRoomId,
+        message,
+        mentionTargets,
+        mentionUserIds
+    );
     return { roomId: resolvedRoomId, eventId, roomAlias, viaAppsScript: false };
 }
 
-async function sendMatrixMessageViaAppsScript({ targetType, userId, roomId, message }) {
+async function sendMatrixMessageViaAppsScript({
+    targetType,
+    userId,
+    roomId,
+    message,
+    mentionTargets,
+    mentionUserIds
+}) {
+    const serializedMentionTargets = serializeMatrixMentionTargetsForAppsScript(
+        mentionTargets?.length ? mentionTargets : (mentionUserIds || []).map(id => ({ matrixUserId: id }))
+    );
     const { data } = await postMatrixAppsScriptAction({
         action: 'matrix_send',
         targetType,
         userId: userId || '',
         roomId: roomId || '',
-        message
+        message,
+        mentionUserIds: serializedMentionTargets.map(target => target.matrixUserId),
+        mentionTargets: serializedMentionTargets
     });
 
     const aliasInput = normalizeMatrixRoomAliasInput(roomId);
@@ -372,33 +473,57 @@ async function sendMatrixMessageViaAppsScript({ targetType, userId, roomId, mess
     };
 }
 
-async function sendMatrixMessage({ targetType, userId, roomId, message }) {
+async function sendMatrixMessage({
+    targetType,
+    userId,
+    roomId,
+    message,
+    mentionTargets,
+    mentionUserIds
+}) {
     const trimmed = String(message || '').trim();
     if (!trimmed) {
         throw new Error('Digite uma mensagem.');
     }
 
-    if (shouldUseMatrixDirectClient()) {
-        return sendMatrixMessageDirect({ targetType, userId, roomId, message: trimmed });
-    }
     if (!isMatrixAppsScriptConfigured()) {
         throw new Error(
-            'Matrix em produção usa o Apps Script. Configure MATRIX_ACCESS_TOKEN nas propriedades do projeto Notificações.'
+            'Matrix usa o Apps Script. Configure MATRIX_ACCESS_TOKEN nas propriedades do projeto Notificações.'
         );
     }
-    return sendMatrixMessageViaAppsScript({ targetType, userId, roomId, message: trimmed });
+    return sendMatrixMessageViaAppsScript({
+        targetType,
+        userId,
+        roomId,
+        message: trimmed,
+        mentionTargets,
+        mentionUserIds
+    });
 }
 
-async function sendMatrixProjectsRoomMessage(message) {
+async function sendMatrixProjectsRoomMessage(message, options = {}) {
     return sendMatrixMessage({
         targetType: 'room',
         roomId: MATRIX_PROJECTS_ROOM_ALIAS,
-        message
+        message,
+        mentionTargets: options.mentionTargets,
+        mentionUserIds: options.mentionUserIds
+    });
+}
+
+async function sendMatrixRevisionsRoomMessage(message, options = {}) {
+    return sendMatrixMessage({
+        targetType: 'room',
+        roomId: MATRIX_REVISIONS_ROOM_ALIAS,
+        message,
+        mentionTargets: options.mentionTargets,
+        mentionUserIds: options.mentionUserIds
     });
 }
 
 window.MATRIX_BOT_MXID = MATRIX_BOT_MXID;
 window.MATRIX_PROJECTS_ROOM_ALIAS = MATRIX_PROJECTS_ROOM_ALIAS;
+window.MATRIX_REVISIONS_ROOM_ALIAS = MATRIX_REVISIONS_ROOM_ALIAS;
 window.MATRIX_TEST_ROOM_ALIAS = MATRIX_TEST_ROOM_ALIAS;
 window.MATRIX_TEST_ROOM_ID = MATRIX_TEST_ROOM_ID;
 window.MATRIX_TEST_DM_USERS = MATRIX_TEST_DM_USERS;
@@ -412,3 +537,4 @@ window.resolveMatrixRoomIdOrAlias = resolveMatrixRoomIdOrAlias;
 window.pingMatrixBot = pingMatrixBot;
 window.sendMatrixMessage = sendMatrixMessage;
 window.sendMatrixProjectsRoomMessage = sendMatrixProjectsRoomMessage;
+window.sendMatrixRevisionsRoomMessage = sendMatrixRevisionsRoomMessage;

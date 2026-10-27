@@ -138,7 +138,9 @@ function buildView3dDriveContext(orderProject, order) {
 
 async function fetchView3dOrders(orderCodeFilter, clientFilter) {
     const orderCode = String(orderCodeFilter || '').trim();
-    const clientNeedle = String(clientFilter || '').trim().toLowerCase();
+    const clientNeedle = typeof normalizeSearchText === 'function'
+        ? normalizeSearchText(clientFilter)
+        : String(clientFilter || '').trim().toLowerCase();
     if (!orderCode && !clientNeedle) {
         return { error: new Error('Informe o pedido ou o cliente para buscar.') };
     }
@@ -162,7 +164,10 @@ async function fetchView3dOrders(orderCodeFilter, clientFilter) {
             const clientName = typeof getOrderClientName === 'function'
                 ? (getOrderClientName(order) || '')
                 : (order.client?.name || '');
-            return clientName.toLowerCase().includes(clientNeedle);
+            const clientNorm = typeof normalizeSearchText === 'function'
+                ? normalizeSearchText(clientName)
+                : clientName.toLowerCase();
+            return clientNorm.includes(clientNeedle);
         });
     }
 

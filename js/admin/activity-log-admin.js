@@ -77,7 +77,10 @@ function formatActivityLogAdminActionLabel(row) {
     const substatusMeta = typeof formatActivityLogSubstatusMeta === 'function'
         ? formatActivityLogSubstatusMeta(row)
         : '';
-    return `${baseLabel}${revisionMeta}${substatusMeta}`;
+    const deliveryPhaseMeta = typeof formatActivityLogDeliveryPhaseMeta === 'function'
+        ? formatActivityLogDeliveryPhaseMeta(row)
+        : '';
+    return `${baseLabel}${revisionMeta}${substatusMeta}${deliveryPhaseMeta}`;
 }
 
 function formatActivityLogAdminDateTime(iso) {

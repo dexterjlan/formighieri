@@ -578,6 +578,7 @@ async function persistTechnicalReviewerRevision() {
 
     const now = new Date().toISOString();
     let revisionId = editingTechnicalReviewerRevisionId;
+    let createdRevision = false;
 
     if (!revisionId) {
         let revision = await fetchOpenRevisionForOrderProject(project.id, REVISION_TYPE_TECHNICAL_REVISOR);
@@ -599,6 +600,7 @@ async function persistTechnicalReviewerRevision() {
                 }
             } else {
                 revision = inserted;
+                createdRevision = true;
             }
         }
 
@@ -666,7 +668,7 @@ async function persistTechnicalReviewerRevision() {
 
     await updateRevisionRecord(revisionId, {});
 
-    return { ok: true, revisionId, activities };
+    return { ok: true, revisionId, activities, createdRevision };
 }
 
 function refreshTechnicalReviewerPendenciasViews() {
@@ -718,7 +720,7 @@ async function startTechnicalReviewerRevision() {
             revisionCompletedAt: data?.revisionCompletedAt || null
         };
 
-        setTechnicalReviewerRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+        setTechnicalReviewerRevisionModalLoading(true, 'Enviando notificações...');
         if (typeof notifyTechnicalReviewerRevisionStartedEmail === 'function') {
             await notifyTechnicalReviewerRevisionStartedEmail({
                 orderId: project.orderId,
@@ -726,6 +728,9 @@ async function startTechnicalReviewerRevision() {
                 designerId: project.designerId,
                 activities: collectTechnicalReviewerRevisionActivitiesFromDom()
             });
+        }
+        if (typeof notifyMatrixTechnicalReviewerRevisionEvent === 'function') {
+            await notifyMatrixTechnicalReviewerRevisionEvent('technical_reviewer_revision_started', project);
         }
 
         setTechnicalReviewerRevisionModalLoading(true, 'Revisão iniciada!', 'success');
@@ -749,6 +754,13 @@ async function saveTechnicalReviewerRevision() {
 
         if (result.revisionId) {
             await loadTechnicalReviewerRevisionActivities(result.revisionId);
+        }
+
+        if (result.createdRevision) {
+            setTechnicalReviewerRevisionModalLoading(true, 'Enviando notificação no Element...');
+            if (typeof notifyMatrixTechnicalReviewerRevisionEvent === 'function') {
+                await notifyMatrixTechnicalReviewerRevisionEvent('revision_created', getCurrentTechnicalReviewerProject());
+            }
         }
 
         setTechnicalReviewerRevisionModalLoading(true, 'Revisão salva com sucesso!', 'success');
@@ -843,7 +855,7 @@ async function sendTechnicalReviewerRevisionToDesigner() {
         setTechnicalReviewerRevisionModalLoading(true, 'Atualizando status do projeto...');
         await applyTechnicalReviewerReviewProjStatusToProjects([project.id], { skipEmail: true });
 
-        setTechnicalReviewerRevisionModalLoading(true, 'Enviando notificação por e-mail...');
+        setTechnicalReviewerRevisionModalLoading(true, 'Enviando notificações...');
         if (typeof notifyOrderProjectStatusChangeForProjects === 'function') {
             await notifyOrderProjectStatusChangeForProjects(
                 [project.id],
@@ -855,6 +867,9 @@ async function sendTechnicalReviewerRevisionToDesigner() {
                     activitiesTitle: 'Atividades da revisão'
                 }
             );
+        }
+        if (typeof notifyMatrixTechnicalReviewerRevisionEvent === 'function') {
+            await notifyMatrixTechnicalReviewerRevisionEvent('revision_sent_to_designer', project);
         }
 
         setTechnicalReviewerRevisionModalLoading(true, 'Enviado para o projetista!', 'success');

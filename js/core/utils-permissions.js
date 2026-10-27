@@ -62,7 +62,8 @@ function normalizeAppUserProfile(profile) {
         isReviewer: Boolean(profile.isReviewer ?? profile.isProjectLeader),
         isThirdParty: Boolean(profile.isThirdParty),
         isInstaller: Boolean(profile.isInstaller),
-        receiveEmailCopy: Boolean(profile.receiveEmailCopy)
+        receiveEmailCopy: Boolean(profile.receiveEmailCopy),
+        matrixUserId: profile.matrixUserId ? String(profile.matrixUserId).trim() : null
     };
 }
 
