@@ -1,5 +1,5 @@
 const revisionMatrixRoomNotifier = new MatrixRoomNotifier(
-    window.MATRIX_REVISIONS_ROOM_ALIAS || '#formighieri_revisoes:matrix.org'
+    getMatrixRoomAlias('revisions')
 );
 
 const MATRIX_REVISION_EVENT_LABELS = {

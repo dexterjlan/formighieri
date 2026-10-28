@@ -5,9 +5,11 @@
 | Ambiente | Envio |
 |----------|--------|
 | **prod** (`FORMIGHIERI_APP_ENV === 'prod'`) | Apps Script (`matrix_send` / `matrix_ping`), token **não** no navegador |
-| **dev** | Apps Script se não houver token na sessão; senão API direta (tela de teste) |
+| **dev** | Apps Script (igual produção) |
 
 Sala padrão do grupo: **`#formighieri_projetos:matrix.org`**
+
+Todas as salas oficiais ficam em **`js/core/matrix-rooms-config.js`** (`getMatrixRoomAlias('projects')`, etc.).
 
 Helper no código: `sendMatrixProjectsRoomMessage(texto)` em `js/core/matrix-messaging.js`.
 
@@ -26,9 +28,15 @@ if (body.action && String(body.action).indexOf('matrix_') === 0) {
 }
 ```
 3. **Propriedades do script:**
-   - `MATRIX_ACCESS_TOKEN` — token do Element (conta @formighieri.notificacoes:matrix.org)
+   - `MATRIX_ACCESS_TOKEN` — access token do bot (curta duração no matrix.org)
+   - `MATRIX_REFRESH_TOKEN` — refresh token (obrigatório; renovação automática no script)
+   - `MATRIX_ACCESS_TOKEN_EXPIRES_AT` — preenchido pelo script ao renovar (não editar manualmente)
    - `MATRIX_HOMESERVER_URL` — `https://matrix.org` (opcional)
    - `MATRIX_BOT_USER_ID` — `@formighieri.notificacoes:matrix.org` (opcional)
+
+   **Obter par de tokens (uma vez):** `POST https://matrix.org/_matrix/client/v3/login` com
+   `refresh_token: true` na conta do bot. Não use só o token copiado do Element (expira em ~5 min
+   e não traz refresh). O `FormighieriMatrix.gs` chama `/_matrix/client/v3/refresh` antes de expirar.
 4. **Implantar → Nova versão** do Web App (mesma URL em `GOOGLE_APPS_SCRIPT_URL`).
 
 ## Validar em produção

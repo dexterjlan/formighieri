@@ -651,6 +651,14 @@ async function notifyDesignerAssignedToProjectEmail(options = {}) {
     const { orderId, orderProjectIds = [], designerId = null } = options;
     if (!NOTIFICATIONS_ENABLED || !orderId || !orderProjectIds.length || !designerId) return;
 
+    if (typeof notifyMatrixDesignerAssignedToProject === 'function') {
+        try {
+            await notifyMatrixDesignerAssignedToProject(options);
+        } catch (matrixErr) {
+            console.warn('notifyDesignerAssignedToProjectEmail (Matrix):', matrixErr);
+        }
+    }
+
     if (!isGoogleAppsScriptConfigured()) {
         console.info('notifyDesignerAssignedToProjectEmail: Google Apps Script não configurado em js/core/config.js');
         return;

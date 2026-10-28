@@ -625,6 +625,14 @@ function allImplantacaoThirdPartyProjectsApprovedAndSent() {
     });
 }
 
+function resolveImplantacaoStatusAfterReopen(record = activeImplantacaoRecord) {
+    const wpsOpCode = String(record?.wpsOpCode || '').trim();
+    if (wpsOpCode) {
+        return IMPLANTACAO_STATUS_ENVIADO_PRODUCAO;
+    }
+    return IMPLANTACAO_STATUS_ABERTO;
+}
+
 function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
     const canAct = canActImplantacao(record);
     const values = readImplantacaoFormValues();
@@ -636,16 +644,27 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
     const btnProducao = document.getElementById('btn-implantacao-enviar-producao');
     const btnCompras = document.getElementById('btn-implantacao-enviar-compras');
     const btnEncerrar = document.getElementById('btn-implantacao-encerrar');
+    const btnReabrir = document.getElementById('btn-implantacao-reabrir');
     const btnSalvar = document.getElementById('btn-implantacao-salvar');
+    const isAdminUser = typeof isAdmin === 'function' && isAdmin();
 
     if (isEncerrado) {
         if (btnProducao) btnProducao.disabled = true;
         if (btnCompras) btnCompras.disabled = true;
         if (btnEncerrar) btnEncerrar.disabled = true;
         if (btnSalvar) btnSalvar.disabled = true;
+        if (btnReabrir) {
+            btnReabrir.classList.toggle('hidden', !isAdminUser);
+            btnReabrir.disabled = !isAdminUser;
+        }
         setImplantacaoFormDisabled(true);
         setImplantacaoProjetoFieldsDisabled(true);
         return;
+    }
+
+    if (btnReabrir) {
+        btnReabrir.classList.add('hidden');
+        btnReabrir.disabled = true;
     }
 
     const canEnviarProducao = canAct
@@ -1722,6 +1741,65 @@ async function handleImplantacaoEncerrar() {
     }
 }
 
+async function handleImplantacaoReabrir() {
+    if (!activeImplantacaoRecord?.id) return;
+    if (typeof isAdmin !== 'function' || !isAdmin()) return;
+
+    const currentStatus = activeImplantacaoRecord?.status || '';
+    if (currentStatus !== IMPLANTACAO_STATUS_ENCERRADO) return;
+
+    const nextStatus = resolveImplantacaoStatusAfterReopen(activeImplantacaoRecord);
+    const statusLabel = nextStatus === IMPLANTACAO_STATUS_ENVIADO_PRODUCAO
+        ? 'Enviado para Produção'
+        : 'Aberto';
+
+    const confirmed = await confirmAppDialog(
+        `A implantação voltará ao status "${statusLabel}" e poderá ser editada novamente.`,
+        {
+            title: `Reabrir implantação de "${activeImplantacaoProjectName}"?`,
+            confirmLabel: 'Reabrir',
+            variant: 'warning'
+        }
+    );
+    if (!confirmed) return;
+
+    try {
+        setImplantacaoModalLoading(true, 'Reabrindo implantação...');
+
+        const formValues = readImplantacaoFormValues();
+        const payload = buildImplantacaoUpdatePayload(formValues, {
+            status: nextStatus
+        });
+
+        const { data, error } = await supabaseClient
+            .from('Implementation')
+            .update(payload)
+            .eq('id', activeImplantacaoRecord.id)
+            .select('*')
+            .single();
+
+        if (error) throw error;
+
+        activeImplantacaoRecord = data;
+        populateImplantacaoForm(data);
+        if (typeof refreshImplantacaoDetalhamentoUploadSection === 'function') {
+            await refreshImplantacaoDetalhamentoUploadSection(data);
+        }
+
+        setImplantacaoModalLoading(true, 'Atualizando telas...');
+        await refreshImplantacaoRelatedViews(activeImplantacaoOrderProjectId);
+
+        updateImplantacaoActionButtons(data);
+        setImplantacaoModalLoading(true, 'Implantação reaberta!', 'success');
+        await waitAppOverlay(APP_OVERLAY_SUCCESS_MS);
+        setImplantacaoModalLoading(false);
+    } catch (error) {
+        setImplantacaoModalLoading(true, `Erro ao reabrir: ${error.message}`, 'error');
+        await waitAppOverlay(APP_OVERLAY_ERROR_MS);
+        setImplantacaoModalLoading(false);
+    }
+}
+
 function bindImplementationEvents() {
     [
         'implantacao-projeto-path',
@@ -1776,6 +1854,8 @@ function bindImplementationEvents() {
         ?.addEventListener('click', handleImplantacaoEnviarCompras);
     document.getElementById('btn-implantacao-encerrar')
         ?.addEventListener('click', handleImplantacaoEncerrar);
+    document.getElementById('btn-implantacao-reabrir')
+        ?.addEventListener('click', handleImplantacaoReabrir);
     document.getElementById('btn-implantacao-salvar')
         ?.addEventListener('click', handleImplantacaoSalvar);
 

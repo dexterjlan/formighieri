@@ -1,4 +1,11 @@
 let activityLogAdminUsersCache = [];
+
+function compareActivityLogAdminUserNames(a, b) {
+    const nameA = String(a?.name || '').trim() || `Usuário #${a?.id}`;
+    const nameB = String(b?.name || '').trim() || `Usuário #${b?.id}`;
+    return nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+}
+
 let activityLogAdminState = {
     page: 0,
     total: 0,
@@ -20,7 +27,7 @@ async function loadActivityLogAdminUsers() {
         return activityLogAdminUsersCache;
     }
 
-    activityLogAdminUsersCache = data || [];
+    activityLogAdminUsersCache = (data || []).slice().sort(compareActivityLogAdminUserNames);
     return activityLogAdminUsersCache;
 }
 
@@ -29,9 +36,10 @@ function fillActivityLogAdminUserFilter() {
     if (!select) return;
 
     const current = select.value;
+    const users = activityLogAdminUsersCache.slice().sort(compareActivityLogAdminUserNames);
     select.innerHTML = `
         <option value="">Todos os usuários</option>
-        ${activityLogAdminUsersCache.map(user => `
+        ${users.map(user => `
             <option value="${Number(user.id)}">${escapeHtml(user.name || `Usuário #${user.id}`)}</option>
         `).join('')}
     `;
@@ -47,9 +55,16 @@ function fillActivityLogAdminActionFilter() {
         : {};
     if (!Object.keys(actions).length) return;
     if (select.dataset.filled === '1') return;
+    const sortedActions = Object.entries(actions)
+        .slice()
+        .sort(([, labelA], [, labelB]) => String(labelA || '').localeCompare(
+            String(labelB || ''),
+            'pt-BR',
+            { sensitivity: 'base' }
+        ));
     select.innerHTML = `
         <option value="">Todas as ações</option>
-        ${Object.entries(actions).map(([value, label]) => `
+        ${sortedActions.map(([value, label]) => `
             <option value="${escapeHtml(value)}">${escapeHtml(label)}</option>
         `).join('')}
     `;

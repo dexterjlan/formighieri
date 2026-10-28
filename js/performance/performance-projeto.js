@@ -461,7 +461,7 @@ function computePerformanceProjetoExitsByWeek(
             if (!projectId) return;
 
             const project = projectsById[projectId];
-            if (project && isPerformanceProjetoComplementaryProject(project)) return;
+            if (!project || isPerformanceProjetoComplementaryProject(project)) return;
 
             const referenceId = projectId;
 
@@ -576,13 +576,20 @@ function computePerformanceProjetoExitsByWeek(
         if (!metric || metric.id === 'revisoes' || !countsByMetric[metric.id]) return;
 
         const project = projectsById[entry.referenceId];
-        countsByMetric[metric.id][weekKey] += 1;
-        if (project) {
-            projectsByMetricAndWeek[metric.id][weekKey].push({
-                project,
-                exitAt: entry.exitAt
-            });
-        }
+        if (!project) return;
+
+        projectsByMetricAndWeek[metric.id][weekKey].push({
+            project,
+            exitAt: entry.exitAt
+        });
+    });
+
+    PERFORMANCE_PROJETO_EXIT_METRICS.forEach(metric => {
+        if (metric.id === 'revisoes') return;
+        (weekKeys || []).forEach(weekKey => {
+            const list = projectsByMetricAndWeek[metric.id]?.[weekKey] || [];
+            countsByMetric[metric.id][weekKey] = list.length;
+        });
     });
 
     const colors = shared.GESTAO_PERFORMANCE_BAR_COLORS || ['#6366f1', '#8b5cf6', '#0891b2'];

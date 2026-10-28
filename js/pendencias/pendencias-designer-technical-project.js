@@ -1545,7 +1545,8 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
                         await notifyDesignerAssignedToProjectEmail({
                             orderId: projectMeta.orderId,
                             orderProjectIds: emailProjectIds,
-                            designerId: newDesignerId
+                            designerId: newDesignerId,
+                            previousDesignerId: currentDesignerId || null
                         });
                     }
                 }

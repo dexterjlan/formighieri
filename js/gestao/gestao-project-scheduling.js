@@ -1734,11 +1734,12 @@ async function associateGestaoProjectSchedulingAssignee(row) {
                 ? resolveDesignerAssignmentNotificationProjectIds(projectId, project)
                 : [projectId];
             if (orderId && emailProjectIds.length && typeof notifyDesignerAssignedToProjectEmail === 'function') {
-                setGestaoProjectSchedulingActionLoading(true, 'Enviando notificação por e-mail...');
+                setGestaoProjectSchedulingActionLoading(true, 'Enviando notificações...');
                 await notifyDesignerAssignedToProjectEmail({
                     orderId,
                     orderProjectIds: emailProjectIds,
-                    designerId: values.assigneeId
+                    designerId: values.assigneeId,
+                    previousDesignerId: associated?.id || null
                 });
             }
         }
