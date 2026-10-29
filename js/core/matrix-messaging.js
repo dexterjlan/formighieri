@@ -1,7 +1,4 @@
 const MATRIX_BOT_MXID = '@formighieri.notificacoes:matrix.org';
-const MATRIX_PROJECTS_ROOM_ALIAS = getMatrixRoomAlias('projects');
-const MATRIX_REVISIONS_ROOM_ALIAS = getMatrixRoomAlias('revisions');
-const MATRIX_TEST_ROOM_ALIAS = MATRIX_PROJECTS_ROOM_ALIAS;
 const MATRIX_TEST_ROOM_ID = '!j9GOGi5unFpFX5e1oyXDOSqc_YxMKxOJgI0PSbk8m9A';
 const MATRIX_SESSION_TOKEN_KEY = 'fgp-matrix-access-token';
 const MATRIX_SESSION_HOMESERVER_KEY = 'fgp-matrix-homeserver-url';
@@ -504,7 +501,7 @@ async function sendMatrixMessage({
 async function sendMatrixProjectsRoomMessage(message, options = {}) {
     return sendMatrixMessage({
         targetType: 'room',
-        roomId: MATRIX_PROJECTS_ROOM_ALIAS,
+        roomId: getMatrixRoomAlias('projects'),
         message,
         mentionTargets: options.mentionTargets,
         mentionUserIds: options.mentionUserIds
@@ -514,7 +511,7 @@ async function sendMatrixProjectsRoomMessage(message, options = {}) {
 async function sendMatrixRevisionsRoomMessage(message, options = {}) {
     return sendMatrixMessage({
         targetType: 'room',
-        roomId: MATRIX_REVISIONS_ROOM_ALIAS,
+        roomId: getMatrixRoomAlias('revisions'),
         message,
         mentionTargets: options.mentionTargets,
         mentionUserIds: options.mentionUserIds
@@ -522,9 +519,7 @@ async function sendMatrixRevisionsRoomMessage(message, options = {}) {
 }
 
 window.MATRIX_BOT_MXID = MATRIX_BOT_MXID;
-window.MATRIX_PROJECTS_ROOM_ALIAS = MATRIX_PROJECTS_ROOM_ALIAS;
-window.MATRIX_REVISIONS_ROOM_ALIAS = MATRIX_REVISIONS_ROOM_ALIAS;
-window.MATRIX_TEST_ROOM_ALIAS = MATRIX_TEST_ROOM_ALIAS;
+window.MATRIX_TEST_ROOM_ALIAS = getMatrixRoomAlias('projects');
 window.MATRIX_TEST_ROOM_ID = MATRIX_TEST_ROOM_ID;
 window.MATRIX_TEST_DM_USERS = MATRIX_TEST_DM_USERS;
 window.getMatrixHomeserverUrl = getMatrixHomeserverUrl;

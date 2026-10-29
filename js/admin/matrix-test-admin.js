@@ -96,7 +96,10 @@ async function runMatrixTestPing() {
     setMatrixTestBusy(true);
     setMatrixTestStatus('Testando conexão com Matrix...');
     try {
-        const data = await pingMatrixBot();
+        if (typeof window.pingMatrixBot !== 'function') {
+            throw new Error('Módulo Matrix não carregado. Atualize a página (hard refresh).');
+        }
+        const data = await window.pingMatrixBot();
         const deviceHint = data.deviceId ? ` Dispositivo: ${data.deviceId}.` : '';
         setMatrixTestStatus(
             `Conexão OK. Conta: ${data.userId || window.MATRIX_BOT_MXID}.${deviceHint}`,
@@ -146,7 +149,10 @@ async function runMatrixTestSend(targetType) {
         const mentionTargets = targetType === 'user' && userId
             ? [{ matrixUserId: userId, name: userId }]
             : undefined;
-        const data = await sendMatrixMessage({
+        if (typeof window.sendMatrixMessage !== 'function') {
+            throw new Error('Módulo Matrix não carregado. Atualize a página (hard refresh).');
+        }
+        const data = await window.sendMatrixMessage({
             targetType,
             userId,
             roomId,
