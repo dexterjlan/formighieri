@@ -183,42 +183,22 @@ function getCommercialFinanceRecordSaleValue(record) {
     return getCommercialFinanceOrderSaleValue(record);
 }
 
-function getCommercialFinanceOrderProjectSaleValue(project, projectsById = {}) {
-    if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
-        return 0;
-    }
-    if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
-        return 0;
-    }
+function getCommercialFinanceOrderProjectPureSaleValue(project) {
+    const value = Number(project?.saleValue);
+    return Number.isFinite(value) ? roundCommercialFinanceMoney(value) : 0;
+}
 
-    const baseValue = typeof getProjectEffectiveSaleValue === 'function'
-        ? getProjectEffectiveSaleValue(project)
-        : Number(project?.saleValue);
-    const normalizedBase = Number.isFinite(Number(baseValue)) ? Number(baseValue) : 0;
-
-    const childrenValue = Object.values(projectsById).reduce((sum, child) => {
-        if (!child || typeof isComplementaryOrderProject !== 'function' || !isComplementaryOrderProject(child)) {
-            return sum;
-        }
-        if (Number(child.parentProjectId) !== Number(project?.id)) return sum;
-        const value = Number(child.saleValue);
-        return sum + (Number.isFinite(value) ? value : 0);
-    }, 0);
-
-    return roundCommercialFinanceMoney(normalizedBase + childrenValue);
+/** Valor de venda: saleValue do projeto, sem somar complementares nem substituição. */
+function getCommercialFinanceOrderProjectSaleValue(project, _projectsById = {}) {
+    return getCommercialFinanceOrderProjectPureSaleValue(project);
 }
 
 function getCommercialFinanceOrderSaleValue(order) {
     const projects = Array.isArray(order?.projects) ? order.projects : [];
-    const projectsById = Object.fromEntries(
-        projects
-            .map(project => [Number(project.id), project])
-            .filter(([projectId]) => projectId)
-    );
 
     return roundCommercialFinanceMoney(
         projects.reduce(
-            (sum, project) => sum + getCommercialFinanceOrderProjectSaleValue(project, projectsById),
+            (sum, project) => sum + getCommercialFinanceOrderProjectPureSaleValue(project),
             0
         )
     );

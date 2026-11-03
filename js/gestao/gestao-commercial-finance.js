@@ -706,34 +706,7 @@ async function deleteCommercialFinanceConsultantAdjustment(adjustmentId, saleYea
 }
 
 async function enrichCommercialFinanceOrdersWithProjectValues(orders = []) {
-    const flattenedProjects = (orders || []).flatMap(order =>
-        (order.projects || []).map(project => ({ ...project, __orderId: order.id }))
-    );
-
-    if (!flattenedProjects.length) {
-        return orders;
-    }
-
-    let enrichedProjects = flattenedProjects;
-    if (typeof enrichGestaoRelatorioProjectsWithSubstituicaoValues === 'function') {
-        enrichedProjects = await enrichGestaoRelatorioProjectsWithSubstituicaoValues(flattenedProjects);
-    }
-
-    const projectsByOrderId = {};
-    enrichedProjects.forEach(project => {
-        const orderId = Number(project.__orderId);
-        if (!orderId) return;
-        const { __orderId, ...cleanProject } = project;
-        if (!projectsByOrderId[orderId]) {
-            projectsByOrderId[orderId] = [];
-        }
-        projectsByOrderId[orderId].push(cleanProject);
-    });
-
-    return (orders || []).map(order => ({
-        ...order,
-        projects: projectsByOrderId[Number(order.id)] || order.projects || []
-    }));
+    return orders || [];
 }
 
 async function fetchCommercialFinanceOrdersPaginated(selectQuery) {
