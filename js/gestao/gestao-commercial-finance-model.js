@@ -133,7 +133,10 @@ function commercialFinanceSaleToCommissionRecord(sale) {
         saleValue: getCommercialFinanceImportedSaleValue(sale),
         paymentMethod: sale.paymentMethod,
         installmentCount: sale.installmentCount,
-        commissionCountsForTier: sale.countsForTier,
+        commissionCountsForTier: sale.countsForTier !== false,
+        countsForTier: sale.countsForTier !== false,
+        countsForManagerCommission: sale.countsForManagerCommission !== false,
+        commissionCountsForManagerCommission: sale.countsForManagerCommission !== false,
         commissionRateOverride: sale.rateOverride,
         commissionRatePercent: sale.importedRatePercent,
         isImported: sale.isImported,
@@ -148,6 +151,8 @@ function mergeCommercialFinanceOrderWithSale(order, sale) {
         paymentMethod: COMMERCIAL_FINANCE_PAYMENT_CASH,
         installmentCount: 1,
         commissionCountsForTier: true,
+        countsForManagerCommission: true,
+        commissionCountsForManagerCommission: true,
         commissionRateOverride: null,
         commissionRatePercent: null,
         isImported: false,
@@ -437,6 +442,36 @@ function orderCountsForCommercialFinanceTierSum(order) {
     return order?.countsForTier !== false && order?.commissionCountsForTier !== false;
 }
 
+function orderCountsForCommercialFinanceManagerCommission(order) {
+    return order?.countsForManagerCommission !== false
+        && order?.commissionCountsForManagerCommission !== false;
+}
+
+function buildCommercialFinanceConsultantRateByConsultantMonth(
+    records = [],
+    targetsByYearMonth = {},
+    consultantAdjustments = [],
+    managerUserId = null
+) {
+    const confirmedOrders = filterCommercialFinanceCommissionOrders(records);
+    const consultantTotals = buildCommercialFinanceConsultantMonthlyTotals(confirmedOrders);
+    const adjustmentsByConsultantMonth = buildCommercialFinanceConsultantAdjustmentsMap(consultantAdjustments);
+    const rateByConsultantMonth = {};
+
+    Object.values(consultantTotals).forEach(({ consultantUserId, yearMonth, totalSales }) => {
+        rateByConsultantMonth[`${consultantUserId}:${yearMonth}`] = computeCommercialFinanceConsultantMonthRate(
+            consultantUserId,
+            yearMonth,
+            totalSales,
+            targetsByYearMonth,
+            adjustmentsByConsultantMonth,
+            managerUserId
+        );
+    });
+
+    return rateByConsultantMonth;
+}
+
 function parseCommercialFinanceRateOverrideInput(value) {
     if (value === null || value === undefined || String(value).trim() === '') {
         return null;
@@ -635,6 +670,7 @@ function buildCommercialFinanceManagerTeamEntryDrafts(
     const managerName = managerUser?.name || 'Gestor comercial';
 
     return filterCommercialFinanceCommissionOrders(records)
+        .filter(record => orderCountsForCommercialFinanceManagerCommission(record))
         .filter(record => !isCommercialFinanceManagerSale(record, normalizedManagerId))
         .map(record => {
             const saleValue = getCommercialFinanceRecordSaleValue(record);

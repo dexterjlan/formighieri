@@ -536,6 +536,7 @@ async function fetchCommercialFinanceSales() {
     }
 
     const selectVariants = [
+        'id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, paymentMethod, installmentCount, countsForTier, countsForManagerCommission, rateOverride, importedRatePercent, isImported, source, installments:SalesCommissionSaleInstallment(installmentNumber, paymentYearMonth, clientInstallmentAmount), consultant:appUsers!consultantUserId(id, name)',
         'id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, paymentMethod, installmentCount, countsForTier, rateOverride, importedRatePercent, isImported, source, installments:SalesCommissionSaleInstallment(installmentNumber, paymentYearMonth, clientInstallmentAmount), consultant:appUsers!consultantUserId(id, name)',
         'id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, paymentMethod, installmentCount, countsForTier, rateOverride, importedRatePercent, isImported, source, installments:SalesCommissionSaleInstallment(installmentNumber, paymentYearMonth, clientInstallmentAmount)'
     ];
@@ -550,7 +551,7 @@ async function fetchCommercialFinanceSales() {
             break;
         } catch (error) {
             lastError = error;
-            if (!/SalesCommissionSaleInstallment|relationship|embed|schema cache/i.test(error.message || '')) {
+            if (!/SalesCommissionSaleInstallment|relationship|embed|schema cache|countsForManagerCommission/i.test(error.message || '')) {
                 markCommercialFinanceSalesSchemaUnavailable(error);
                 return { data: [], error };
             }
@@ -624,12 +625,16 @@ function buildCommercialFinanceCommissionRecordsForSaleMonth(saleYearMonth) {
 
         const installments = getCommercialFinanceOrderClientInstallments(merged);
         const countsForTier = merged.countsForTier !== false && merged.commissionCountsForTier !== false;
+        const countsForManagerCommission = merged.countsForManagerCommission !== false
+            && merged.commissionCountsForManagerCommission !== false;
         const rateOverride = merged.rateOverride ?? merged.commissionRateOverride ?? fromSale.rateOverride;
 
         return {
             ...fromSale,
             countsForTier,
             commissionCountsForTier: countsForTier,
+            countsForManagerCommission,
+            commissionCountsForManagerCommission: countsForManagerCommission,
             rateOverride,
             commissionRateOverride: rateOverride,
             paymentMethod: normalizeCommercialFinancePaymentMethod(merged.paymentMethod || fromSale.paymentMethod),
@@ -1249,6 +1254,142 @@ function formatCommercialFinanceSimulationRateLabel(entry, rateByConsultantMonth
     return `${formatCommercialFinanceRatePercent(ratePercent)} (${sign} ${adjustmentLabel})`;
 }
 
+function buildCommercialFinanceMonthSimulationTableRows(entries = [], rateByConsultantMonth = {}) {
+    return (entries || []).map((entry, index) => {
+        const saleConsultant = entry.saleConsultantName || entry.consultantName || '—';
+        const payee = entry.entryType === COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_TEAM
+            ? `${entry.consultantName} (${saleConsultant})`
+            : (entry.consultantName || '—');
+        const consultantUserId = Number(entry.consultantUserId);
+        const saleYearMonth = normalizeCommercialFinanceSaleYearMonth(
+            entry.saleYearMonth || getCommercialFinanceYearMonthFromDate(entry.saleDate)
+        );
+        const rateInfo = rateByConsultantMonth[`${consultantUserId}:${saleYearMonth}`];
+        const ratePercent = Number(entry.ratePercent ?? rateInfo?.ratePercent) || 0;
+
+        return {
+            id: `${entry.salesOrderId || 'na'}-${entry.entryType}-${entry.installmentNumber || 0}-${index}`,
+            entryType: entry.entryType,
+            entryTypeLabel: formatCommercialFinanceEntryTypeLabel(entry.entryType),
+            orderCode: entry.orderCode || '',
+            clientName: entry.clientName || '',
+            payee,
+            referenceYearMonth: entry.referenceYearMonth || '',
+            referenceYearMonthLabel: formatCommercialFinanceYearMonthLabel(entry.referenceYearMonth),
+            clientInstallmentAmount: Number(entry.clientInstallmentAmount) || 0,
+            ratePercent,
+            rateLabel: formatCommercialFinanceSimulationRateLabel(entry, rateByConsultantMonth),
+            commissionAmount: Number(entry.commissionAmount) || 0
+        };
+    });
+}
+
+function buildCommercialFinanceMonthSimulationTableColumns() {
+    return [
+        {
+            key: 'entryTypeLabel',
+            label: 'Tipo',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 text-left font-semibold normal-case',
+            cellClass: 'p-2 text-slate-600 whitespace-nowrap',
+            render: row => escapeHtml(row.entryTypeLabel)
+        },
+        {
+            key: 'orderCode',
+            label: 'Pedido',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 text-left font-semibold normal-case',
+            cellClass: 'p-2 font-mono text-slate-800 whitespace-nowrap',
+            render: row => escapeHtml(row.orderCode || '—')
+        },
+        {
+            key: 'clientName',
+            label: 'Cliente',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 text-left font-semibold normal-case',
+            cellClass: 'p-2 text-slate-700',
+            render: row => escapeHtml(row.clientName || '—')
+        },
+        {
+            key: 'payee',
+            label: 'Beneficiário',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 text-left font-semibold normal-case',
+            cellClass: 'p-2 text-slate-700',
+            render: row => escapeHtml(row.payee || '—')
+        },
+        {
+            key: 'referenceYearMonth',
+            label: 'Mês pagamento',
+            sortable: true,
+            filterable: true,
+            thClass: 'p-2 text-left font-semibold normal-case',
+            cellClass: 'p-2 whitespace-nowrap',
+            getSortValue: row => row.referenceYearMonth,
+            getFilterValue: row => row.referenceYearMonthLabel,
+            render: row => escapeHtml(row.referenceYearMonthLabel || '—')
+        },
+        {
+            key: 'clientInstallmentAmount',
+            label: 'Base (R$)',
+            type: 'number',
+            sortable: true,
+            align: 'right',
+            thClass: 'p-2 text-right font-semibold normal-case',
+            cellClass: 'p-2 text-right whitespace-nowrap',
+            render: row => escapeHtml(formatSaleValue(row.clientInstallmentAmount || 0))
+        },
+        {
+            key: 'ratePercent',
+            label: '%',
+            type: 'number',
+            sortable: true,
+            align: 'right',
+            thClass: 'p-2 text-right font-semibold normal-case',
+            cellClass: 'p-2 text-right whitespace-nowrap',
+            render: row => escapeHtml(row.rateLabel)
+        },
+        {
+            key: 'commissionAmount',
+            label: 'Comissão',
+            type: 'number',
+            sortable: true,
+            align: 'right',
+            thClass: 'p-2 text-right font-semibold normal-case',
+            cellClass: 'p-2 text-right font-medium text-slate-900 whitespace-nowrap',
+            render: row => escapeHtml(formatSaleValue(row.commissionAmount || 0))
+        }
+    ];
+}
+
+function mountCommercialFinanceMonthSimulationTable(container, result) {
+    if (!container || typeof mountInteractiveTable !== 'function' || !result?.entries?.length) {
+        return;
+    }
+
+    mountInteractiveTable(container, {
+        tableId: 'commercial-finance-month-simulation',
+        tableClass: 'gestao-commercial-finance-table interactive-table w-full text-xs',
+        theadClass: 'bg-slate-50 text-slate-500',
+        minWidth: '52rem',
+        rows: buildCommercialFinanceMonthSimulationTableRows(
+            result.entries,
+            result.rateByConsultantMonth || {}
+        ),
+        columns: buildCommercialFinanceMonthSimulationTableColumns(),
+        defaultSort: [
+            { key: 'referenceYearMonth', direction: 'asc' },
+            { key: 'orderCode', direction: 'asc' }
+        ],
+        filteredEmptyMessage: 'Nenhum registro encontrado com os filtros aplicados.',
+        getRowClass: () => 'border-b border-slate-100 last:border-0'
+    });
+}
+
 function renderCommercialFinanceMonthSimulationBody(result) {
     if (!result.ok) {
         return `<p class="text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">${escapeHtml(result.message || 'Não foi possível simular.')}</p>`;
@@ -1346,55 +1487,13 @@ function renderCommercialFinanceMonthSimulationBody(result) {
         `;
     }
 
-    const sortedEntries = [...result.entries].sort((left, right) => {
-        const refCompare = String(left.referenceYearMonth || '').localeCompare(String(right.referenceYearMonth || ''));
-        if (refCompare !== 0) return refCompare;
-        const orderCompare = String(left.orderCode || '').localeCompare(String(right.orderCode || ''));
-        if (orderCompare !== 0) return orderCompare;
-        return Number(left.installmentNumber || 0) - Number(right.installmentNumber || 0);
-    });
-
-    const rowsHtml = sortedEntries.map(entry => {
-        const saleConsultant = entry.saleConsultantName || entry.consultantName || '—';
-        const payee = entry.entryType === COMMERCIAL_FINANCE_ENTRY_TYPE_MANAGER_TEAM
-            ? `${entry.consultantName} (${saleConsultant})`
-            : (entry.consultantName || '—');
-        return `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-2 text-slate-600 whitespace-nowrap">${escapeHtml(formatCommercialFinanceEntryTypeLabel(entry.entryType))}</td>
-                <td class="p-2 font-mono text-slate-800 whitespace-nowrap">${escapeHtml(entry.orderCode || '—')}</td>
-                <td class="p-2 text-slate-700">${escapeHtml(entry.clientName || '—')}</td>
-                <td class="p-2 text-slate-700">${escapeHtml(payee)}</td>
-                <td class="p-2 whitespace-nowrap">${escapeHtml(formatCommercialFinanceYearMonthLabel(entry.referenceYearMonth))}</td>
-                <td class="p-2 text-right whitespace-nowrap">${escapeHtml(formatSaleValue(entry.clientInstallmentAmount || 0))}</td>
-                <td class="p-2 text-right whitespace-nowrap">${escapeHtml(formatCommercialFinanceSimulationRateLabel(entry, rateByConsultantMonth))}</td>
-                <td class="p-2 text-right font-medium text-slate-900 whitespace-nowrap">${escapeHtml(formatSaleValue(entry.commissionAmount || 0))}</td>
-            </tr>
-        `;
-    }).join('');
-
     return `
         ${metricsHtml}
         ${warningsHtml}
         ${consultantRatesHtml}
         ${totalsByMonthHtml}
-        <div class="gestao-commercial-finance-table-wrap overflow-x-auto border border-slate-200 rounded-lg">
-            <table class="gestao-commercial-finance-table w-full text-xs">
-                <thead>
-                    <tr class="bg-slate-50 text-slate-500">
-                        <th class="p-2 text-left font-semibold">Tipo</th>
-                        <th class="p-2 text-left font-semibold">Pedido</th>
-                        <th class="p-2 text-left font-semibold">Cliente</th>
-                        <th class="p-2 text-left font-semibold">Beneficiário</th>
-                        <th class="p-2 text-left font-semibold">Mês pagamento</th>
-                        <th class="p-2 text-right font-semibold">Base (R$)</th>
-                        <th class="p-2 text-right font-semibold">%</th>
-                        <th class="p-2 text-right font-semibold">Comissão</th>
-                    </tr>
-                </thead>
-                <tbody>${rowsHtml}</tbody>
-            </table>
-        </div>
+        <div id="commercial-finance-month-simulation-table" class="gestao-commercial-finance-table-wrap border border-slate-200 rounded-lg overflow-hidden"></div>
+        <p class="text-[10px] text-slate-400 mt-2">Clique no cabeçalho da coluna para ordenar (clique de novo para inverter; terceiro clique remove). Filtros opcionais na linha abaixo dos títulos.</p>
     `;
 }
 
@@ -1413,6 +1512,10 @@ async function openCommercialFinanceMonthCloseSimulationModal(saleYearMonth) {
     const result = await simulateCommercialFinanceSaleMonth(normalizedYearMonth);
     if (bodyEl) {
         bodyEl.innerHTML = renderCommercialFinanceMonthSimulationBody(result);
+        mountCommercialFinanceMonthSimulationTable(
+            bodyEl.querySelector('#commercial-finance-month-simulation-table'),
+            result
+        );
     }
 }
 
@@ -1534,6 +1637,35 @@ function isCommercialFinanceSaleMonthClosed(saleYearMonth) {
     return Boolean(normalized) && gestaoCommercialFinanceClosedSaleMonths.has(normalized);
 }
 
+/** Próximo mês de venda ainda aberto (a partir do mês corrente ou referência). */
+function getCommercialFinanceNextOpenSaleMonth(referenceYearMonth = '') {
+    const normalizedReference = normalizeCommercialFinanceSaleYearMonth(referenceYearMonth)
+        || getCommercialFinanceCurrentYearMonth();
+    const maxSteps = 24;
+
+    let cursor = normalizedReference;
+    for (let step = 0; step < maxSteps; step += 1) {
+        if (!isCommercialFinanceSaleMonthClosed(cursor)) {
+            return cursor;
+        }
+        const next = addCommercialFinanceMonths(cursor, 1);
+        if (!next) break;
+        cursor = next;
+    }
+
+    cursor = normalizedReference;
+    for (let step = 0; step < maxSteps; step += 1) {
+        if (!isCommercialFinanceSaleMonthClosed(cursor)) {
+            return cursor;
+        }
+        const previous = addCommercialFinanceMonths(cursor, -1);
+        if (!previous) break;
+        cursor = previous;
+    }
+
+    return normalizedReference;
+}
+
 function getCommercialFinanceOrderSaleYearMonth(order) {
     return getCommercialFinanceRecordSaleYearMonth(order);
 }
@@ -1576,6 +1708,14 @@ function syncCommercialFinanceOrderPaymentCache(orderId, fields = {}) {
         ...(fields.commissionConfirmed != null ? { isImported: Boolean(fields.commissionConfirmed), commissionConfirmed: Boolean(fields.commissionConfirmed) } : {}),
         ...(fields.countsForTier != null ? { countsForTier: Boolean(fields.countsForTier), commissionCountsForTier: Boolean(fields.countsForTier) } : {}),
         ...(fields.commissionCountsForTier != null ? { countsForTier: Boolean(fields.commissionCountsForTier), commissionCountsForTier: Boolean(fields.commissionCountsForTier) } : {}),
+        ...(fields.countsForManagerCommission != null ? {
+            countsForManagerCommission: Boolean(fields.countsForManagerCommission),
+            commissionCountsForManagerCommission: Boolean(fields.countsForManagerCommission)
+        } : {}),
+        ...(fields.commissionCountsForManagerCommission != null ? {
+            countsForManagerCommission: Boolean(fields.commissionCountsForManagerCommission),
+            commissionCountsForManagerCommission: Boolean(fields.commissionCountsForManagerCommission)
+        } : {}),
         ...(Object.prototype.hasOwnProperty.call(fields, 'rateOverride') ? { rateOverride: fields.rateOverride, commissionRateOverride: fields.rateOverride } : {}),
         ...(Object.prototype.hasOwnProperty.call(fields, 'commissionRateOverride') ? { rateOverride: fields.commissionRateOverride, commissionRateOverride: fields.commissionRateOverride } : {}),
         ...(fields.clientInstallments != null ? { clientInstallments: fields.clientInstallments } : {})
@@ -1584,6 +1724,7 @@ function syncCommercialFinanceOrderPaymentCache(orderId, fields = {}) {
 
 function readCommercialFinanceSaleRowCommissionOptions(row) {
     const countsForTier = row?.querySelector('.gestao-commercial-finance-counts-for-tier')?.checked !== false;
+    const countsForManagerCommission = row?.querySelector('.gestao-commercial-finance-counts-for-manager')?.checked !== false;
     const rateOverrideRaw = row?.querySelector('.gestao-commercial-finance-rate-override')?.value ?? '';
     const clearRateOverride = String(rateOverrideRaw).trim() === '';
     const rateOverride = clearRateOverride
@@ -1592,6 +1733,7 @@ function readCommercialFinanceSaleRowCommissionOptions(row) {
 
     return {
         countsForTier,
+        countsForManagerCommission,
         rateOverride,
         clearRateOverride
     };
@@ -1630,6 +1772,7 @@ async function upsertCommercialFinanceSale(
         : 1;
     const normalizedIsImported = Boolean(isImported);
     const countsForTier = commissionOptions.countsForTier !== false;
+    const countsForManagerCommission = commissionOptions.countsForManagerCommission !== false;
     const clearRateOverride = Boolean(commissionOptions.clearRateOverride);
     const rateOverride = clearRateOverride ? null : commissionOptions.rateOverride;
     const draftOrder = {
@@ -1638,6 +1781,8 @@ async function upsertCommercialFinanceSale(
         installmentCount: normalizedInstallmentCount,
         countsForTier,
         commissionCountsForTier: countsForTier,
+        countsForManagerCommission,
+        commissionCountsForManagerCommission: countsForManagerCommission,
         rateOverride,
         commissionRateOverride: rateOverride,
         isImported: normalizedIsImported,
@@ -1662,6 +1807,7 @@ async function upsertCommercialFinanceSale(
             installmentCount: normalizedInstallmentCount,
             isImported: false,
             countsForTier,
+            countsForManagerCommission,
             rateOverride,
             clientInstallments: draftOrder.clientInstallments
         });
@@ -1687,6 +1833,7 @@ async function upsertCommercialFinanceSale(
         paymentMethod: normalizedPaymentMethod,
         installmentCount: normalizedInstallmentCount,
         countsForTier,
+        countsForManagerCommission,
         rateOverride,
         isImported: true,
         source: 'fgp_order',
@@ -1701,7 +1848,7 @@ async function upsertCommercialFinanceSale(
             .from('SalesCommissionSale')
             .update(salePayload)
             .eq('id', existingSale.id)
-            .select('id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, paymentMethod, installmentCount, countsForTier, rateOverride, importedRatePercent, isImported, source')
+            .select('id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, paymentMethod, installmentCount, countsForTier, countsForManagerCommission, rateOverride, importedRatePercent, isImported, source')
             .single();
         if (error) {
             markCommercialFinanceSalesSchemaUnavailable(error);
@@ -1712,7 +1859,7 @@ async function upsertCommercialFinanceSale(
         const { data, error } = await supabaseClient
             .from('SalesCommissionSale')
             .insert(salePayload)
-            .select('id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, paymentMethod, installmentCount, countsForTier, rateOverride, importedRatePercent, isImported, source')
+            .select('id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, paymentMethod, installmentCount, countsForTier, countsForManagerCommission, rateOverride, importedRatePercent, isImported, source')
             .single();
         if (error) {
             markCommercialFinanceSalesSchemaUnavailable(error);
@@ -1758,6 +1905,7 @@ async function upsertCommercialFinanceSale(
         installmentCount: normalizedInstallmentCount,
         isImported: true,
         countsForTier,
+        countsForManagerCommission,
         rateOverride,
         clientInstallments: installments
     });
@@ -2714,7 +2862,7 @@ function renderCommercialFinanceConsultantAdjustmentsPanel(saleYearMonth = '') {
             <div>
                 <h4 class="text-sm font-bold text-slate-900">Ajustes de alíquota por consultor</h4>
                 <p class="text-xs text-slate-500 mt-1">
-                    Mês de venda igual ao seletor de <strong>Fechar mês</strong>. Soma ao percentual da faixa (ex.: -0,25% por atraso). Não altera vendas com alíquota específica na linha.
+                    Mês de venda igual ao seletor de <strong>Fechar mês</strong>. Soma ao percentual da faixa (ex.: -0,25% por atraso na entrada). Não altera vendas com alíquota específica na linha.
                 </p>
             </div>
             ${!gestaoCommercialFinanceConsultantAdjustmentsSchemaReady ? `
@@ -2757,7 +2905,7 @@ function renderCommercialFinanceConsultantAdjustmentsPanel(saleYearMonth = '') {
                         <label class="block text-[10px] font-semibold uppercase text-slate-400 mb-1">Motivo</label>
                         <input type="text" id="gestao-commercial-finance-adjustment-reason"
                             class="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                            placeholder="Ex.: atraso na entrega">
+                            placeholder="Ex.: atraso na entrada">
                     </div>
                     <div>
                         <button type="submit"
@@ -2776,7 +2924,9 @@ function renderCommercialFinanceConsultantAdjustmentsPanel(saleYearMonth = '') {
 }
 
 function renderCommercialFinanceVendasClosePanel(closeYearMonth = '') {
-    const selectedMonth = closeYearMonth || getCommercialFinanceCurrentYearMonth();
+    const selectedMonth = closeYearMonth
+        ? normalizeCommercialFinanceSaleYearMonth(closeYearMonth)
+        : getCommercialFinanceNextOpenSaleMonth();
     const monthSales = filterCommercialFinanceSalesBySaleYearMonth(
         gestaoCommercialFinanceSalesCache,
         selectedMonth
@@ -2860,10 +3010,54 @@ function renderCommercialFinanceVendasClosePanel(closeYearMonth = '') {
     `;
 }
 
+function renderCommercialFinanceSaleRateOverrideCell(order, options = {}) {
+    const {
+        isReadOnlyRow = false,
+        isMonthClosed = false,
+        rateByConsultantMonth = {}
+    } = options;
+    const explicitRate = getCommercialFinanceOrderExplicitRatePercent(order);
+
+    if (explicitRate !== null) {
+        const formatted = formatCommercialFinanceRateOverrideForInput(order);
+        if (isReadOnlyRow) {
+            return `<span class="text-slate-700 font-medium">${escapeHtml(formatCommercialFinanceRatePercent(explicitRate))}</span>`;
+        }
+        return `
+            <input type="text"
+                class="gestao-commercial-finance-rate-override w-20 px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
+                value="${escapeHtml(formatted)}"
+                placeholder="Faixa"
+                title="Vazio = usa faixa do consultor; 0 = sem comissão nesta venda">
+        `;
+    }
+
+    if (isReadOnlyRow && isMonthClosed) {
+        const tierRate = getCommercialFinanceOrderCommissionRatePercent(order, rateByConsultantMonth);
+        return `<span class="text-slate-600 whitespace-nowrap">Faixa (${escapeHtml(formatCommercialFinanceRatePercent(tierRate))})</span>`;
+    }
+
+    return `
+        <input type="text"
+            class="gestao-commercial-finance-rate-override w-20 px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
+            value=""
+            placeholder="Faixa"
+            title="Vazio = usa faixa do consultor; 0 = sem comissão nesta venda"
+            ${isReadOnlyRow ? 'disabled' : ''}>
+    `;
+}
+
 function renderGestaoCommercialFinanceVendas(orders = [], filters = {}) {
     const monthFilter = filters.yearMonth || '';
     const filteredOrders = filterCommercialFinanceVendasOrders(orders, filters);
     const filteredOrdersTotal = sumCommercialFinanceOrdersSaleValue(filteredOrders);
+    const managerUserId = Number(gestaoCommercialFinanceManagerUserCache?.id) || null;
+    const rateByConsultantMonth = buildCommercialFinanceConsultantRateByConsultantMonth(
+        filteredOrders,
+        gestaoCommercialFinanceTargetsByYearMonth,
+        gestaoCommercialFinanceConsultantAdjustmentsCache,
+        managerUserId
+    );
 
     const rows = filteredOrders.map(order => {
         const paymentMethod = normalizeCommercialFinancePaymentMethod(order.paymentMethod);
@@ -2883,7 +3077,7 @@ function renderGestaoCommercialFinanceVendas(orders = [], filters = {}) {
         const isImportedOnly = isCommercialFinanceImportedOnlyRecord(order);
         const isReadOnlyRow = isMonthClosed || isHistoricalImport;
         const countsForTier = orderCountsForCommercialFinanceTierSum(order);
-        const rateOverrideValue = formatCommercialFinanceRateOverrideForInput(order);
+        const countsForManagerCommission = orderCountsForCommercialFinanceManagerCommission(order);
         const rowClass = [
             'gestao-commercial-finance-sale-row',
             commissionConfirmed ? 'gestao-commercial-finance-sale-row--confirmed' : '',
@@ -2926,13 +3120,19 @@ function renderGestaoCommercialFinanceVendas(orders = [], filters = {}) {
                         Na soma
                     </label>
                 </td>
+                <td class="p-2 text-center">
+                    <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-600" title="Entra na comissão do gestor (% equipe e bônus entrega). Sempre conta para meta do mês.">
+                        <input type="checkbox" class="gestao-commercial-finance-counts-for-manager h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            ${countsForManagerCommission ? 'checked' : ''} ${isReadOnlyRow ? 'disabled' : ''}>
+                        Gerente
+                    </label>
+                </td>
                 <td class="p-2">
-                    <input type="text"
-                        class="gestao-commercial-finance-rate-override w-20 px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
-                        value="${escapeHtml(rateOverrideValue)}"
-                        placeholder="Faixa"
-                        title="Vazio = usa faixa do consultor; 0 = sem comissão nesta venda"
-                        ${isReadOnlyRow ? 'disabled' : ''}>
+                    ${renderCommercialFinanceSaleRateOverrideCell(order, {
+                        isReadOnlyRow,
+                        isMonthClosed,
+                        rateByConsultantMonth
+                    })}
                 </td>
                 <td class="p-2 text-center">
                     <label class="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
@@ -3006,13 +3206,14 @@ function renderGestaoCommercialFinanceVendas(orders = [], filters = {}) {
                             <th class="p-2 text-left font-semibold">Pagamento</th>
                             <th class="p-2 text-left font-semibold">Parcelas cliente</th>
                             <th class="p-2 text-center font-semibold">Na soma</th>
+                            <th class="p-2 text-center font-semibold">Comissão gerente</th>
                             <th class="p-2 text-left font-semibold">Alíq. esp.</th>
                             <th class="p-2 text-center font-semibold">Comissão</th>
                             <th class="p-2"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${rows || '<tr><td colspan="11" class="p-6 text-center text-slate-400">Nenhuma venda encontrada.</td></tr>'}
+                        ${rows || '<tr><td colspan="12" class="p-6 text-center text-slate-400">Nenhuma venda encontrada.</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -3305,13 +3506,14 @@ async function loadGestaoCommercialFinanceVendas() {
     const filters = {
         yearMonth: monthSelect ? monthSelect.value : '',
         consultantName: document.getElementById('gestao-commercial-finance-vendas-consultant')?.value || '',
-        closeYearMonth: document.getElementById('gestao-commercial-finance-close-month')?.value
-            || getCommercialFinanceCurrentYearMonth()
+        closeYearMonth: document.getElementById('gestao-commercial-finance-close-month')?.value || ''
     };
     await Promise.all([
         fetchCommercialFinanceOrdersWithSales(),
         fetchCommercialFinanceClosedSaleMonths(),
-        fetchCommercialFinanceConsultantAdjustments()
+        fetchCommercialFinanceConsultantAdjustments(),
+        fetchCommercialFinanceMonthlyTargets(),
+        fetchCommercialFinanceManagerUser()
     ]);
     const content = document.getElementById('gestao-commercial-finance-content');
     if (!content) return;

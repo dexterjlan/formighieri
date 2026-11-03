@@ -126,7 +126,7 @@ async function fetchCommercialFinanceConfirmedSaleByOrderId(orderId) {
 
     const { data, error } = await supabaseClient
         .from('SalesCommissionSale')
-        .select('id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, isImported, consultant:appUsers!consultantUserId(id, name)')
+        .select('id, salesOrderId, orderCode, saleDate, saleYearMonth, consultantUserId, clientName, saleValue, countsForManagerCommission, isImported, consultant:appUsers!consultantUserId(id, name)')
         .eq('salesOrderId', normalizedOrderId)
         .eq('isImported', true)
         .maybeSingle();
@@ -264,6 +264,10 @@ async function tryCreateManagerDeliveryBonusForDeliveredOrder(orderId) {
     const sale = await fetchCommercialFinanceConfirmedSaleByOrderId(normalizedOrderId);
     if (!sale) {
         return { ok: false, reason: 'sale_not_confirmed' };
+    }
+
+    if (!orderCountsForCommercialFinanceManagerCommission(sale)) {
+        return { ok: false, reason: 'excluded_from_manager_commission' };
     }
 
     const saleYearMonth = sale.saleYearMonth || getCommercialFinanceYearMonthFromDate(sale.saleDate);
