@@ -413,10 +413,17 @@
                                 <p class="text-xs text-slate-400 mt-1" id="det-architect">🏛️ Arquiteto: —</p>
                                 <p class="text-xs text-slate-500 mt-1" id="det-sale-date">Data de venda: —</p>
                                 <p class="text-xs text-slate-500 mt-1" id="det-delivery">Entrega pedido: —</p>
-                                <button type="button" id="btn-order-addr"
-                                    class="mt-2 text-xs bg-slate-900 text-white hover:bg-slate-800 px-3 py-1.5 rounded-lg font-semibold">
-                                    Endereço
-                                </button>
+                                <div class="mt-2 flex flex-wrap items-center gap-2">
+                                    <button type="button" id="btn-order-addr"
+                                        class="text-xs bg-slate-900 text-white hover:bg-slate-800 px-3 py-1.5 rounded-lg font-semibold">
+                                        Endereço
+                                    </button>
+                                    <button type="button" id="btn-order-descriptive"
+                                        class="hidden text-xs bg-indigo-700 text-white hover:bg-indigo-800 px-3 py-1.5 rounded-lg font-semibold"
+                                        title="Abre o PDF Descritivo no visualizador do navegador (Chrome, etc.)">
+                                        Descritivo
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="fm-order-projects-header px-5 py-2.5 border-b border-slate-100 bg-violet-50/50 text-xs font-semibold text-violet-800 uppercase">

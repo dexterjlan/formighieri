@@ -2,6 +2,7 @@ let ordersCache = [];
 let orderSummaryCounts = {};
 let orderPhasesByOrderId = {};
 let activeOrderAddrId = null;
+let activeOrderDescriptiveDriveFile = null;
 
 function getOrderPhasesForOrder(orderId) {
     return orderPhasesByOrderId[Number(orderId)] || [];
@@ -951,6 +952,68 @@ async function applyOrderDetailHeader(order) {
 
     document.getElementById('det-delivery').innerText = formatOrderDeliverySummary(order.id, order.clientDeliveryDate);
     activeOrderAddrId = Number(order.addrId) || null;
+    void refreshOrderDescriptiveFile(order.id);
+}
+
+function orderDescriptiveDriveFileIsAvailable(file) {
+    if (!file) return false;
+    return Boolean(
+        file.id
+        || String(file.driveFileId || '').trim()
+        || String(file.url || '').trim()
+    );
+}
+
+function syncOrderDescriptiveButton() {
+    const button = document.getElementById('btn-order-descriptive');
+    if (!button) return;
+    const visible = orderDescriptiveDriveFileIsAvailable(activeOrderDescriptiveDriveFile);
+    button.classList.toggle('hidden', !visible);
+    button.disabled = !visible;
+}
+
+async function refreshOrderDescriptiveFile(orderId) {
+    const normalizedId = Number(orderId);
+    activeOrderDescriptiveDriveFile = null;
+    syncOrderDescriptiveButton();
+
+    if (!normalizedId || typeof fetchSalesOrderDescriptiveDriveFile !== 'function') {
+        return;
+    }
+
+    try {
+        const file = await fetchSalesOrderDescriptiveDriveFile(normalizedId);
+        if (normalizedId !== activeOrderId) return;
+        activeOrderDescriptiveDriveFile = orderDescriptiveDriveFileIsAvailable(file) ? file : null;
+    } catch (error) {
+        console.warn('refreshOrderDescriptiveFile:', error);
+    }
+    syncOrderDescriptiveButton();
+}
+
+function openOrderDescriptivePdfInBrowser() {
+    const file = activeOrderDescriptiveDriveFile;
+    if (!orderDescriptiveDriveFileIsAvailable(file)) {
+        alertAppDialog('Este pedido não tem PDF Descritivo.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    let url = '';
+    if (typeof resolveDriveFilePdfBrowserOpenUrl === 'function') {
+        url = resolveDriveFilePdfBrowserOpenUrl(file);
+    }
+    if (!url && typeof resolveDriveFileViewUrl === 'function') {
+        url = resolveDriveFileViewUrl(file);
+    }
+    if (!url) {
+        url = String(file?.url || '').trim();
+    }
+    if (!url) {
+        alertAppDialog('Não foi possível abrir o PDF.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 function renderOrderCodeLinkHtml(orderId, orderCode, options = {}) {
@@ -1203,6 +1266,7 @@ async function openOrderAddrModal() {
 
 function bindOrderEvents() {
     document.getElementById('btn-order-addr')?.addEventListener('click', openOrderAddrModal);
+    document.getElementById('btn-order-descriptive')?.addEventListener('click', openOrderDescriptivePdfInBrowser);
     document.getElementById('btn-order-addr-open-maps')?.addEventListener('click', openOrderAddrInGoogleMaps);
     document.getElementById('btn-order-addr-modal-close')?.addEventListener('click', () => toggleModal('order-addr-modal', false));
     document.getElementById('btn-order-addr-modal-close-x')?.addEventListener('click', () => toggleModal('order-addr-modal', false));
