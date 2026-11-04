@@ -38,17 +38,17 @@ async function notifyMatrixWpsItemRegistrationSentToCompras(request = {}) {
     if (!NOTIFICATIONS_ENABLED || !request?.id) return null;
 
     try {
-        const mentionTargets = typeof fetchActiveComprasMatrixMentionTargets === 'function'
-            ? await fetchActiveComprasMatrixMentionTargets()
-            : [];
-
         const lines = buildWpsItemRegistrationMatrixLines(
             'Nova solicitação — Cadastro Item WPS',
             request,
             ['Status: Enviado para Compras']
         );
 
-        return await wpsItemMatrixRoomNotifier.send(lines, { mentionTargets });
+        if (typeof sendMatrixDirectMessageToComprasTeam === 'function') {
+            return await sendMatrixDirectMessageToComprasTeam(lines);
+        }
+
+        return await wpsItemMatrixRoomNotifier.send(lines, { mentionTargets: [] });
     } catch (error) {
         console.warn('notifyMatrixWpsItemRegistrationSentToCompras:', error);
         return null;

@@ -246,6 +246,15 @@ async function savePendenciasGestorDetalhamentoAssociationsBatch() {
                     projectFilePath: data?.projectFilePath || ''
                 });
             }
+
+            if (typeof notifyMatrixDetailingDesignerAssigned === 'function' && resolvedOrderProjectId) {
+                await notifyMatrixDetailingDesignerAssigned({
+                    orderProjectId: resolvedOrderProjectId,
+                    designerId: item.designerId,
+                    projectName: item.projectName,
+                    designerName: item.projetistaName
+                });
+            }
         }
 
         if (errors.length) {

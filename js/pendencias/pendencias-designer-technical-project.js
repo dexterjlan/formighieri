@@ -1665,6 +1665,15 @@ async function atualizarPendenciaDetalhamentoWorkload(detalhamentoId, newDesigne
             });
         }
 
+        if (typeof notifyMatrixDetailingDesignerAssigned === 'function' && resolvedOrderProjectId) {
+            await notifyMatrixDetailingDesignerAssigned({
+                orderProjectId: resolvedOrderProjectId,
+                designerId: newDesignerId,
+                previousDesignerId: currentDesignerId,
+                designerName: projetista.name
+            });
+        }
+
         await loadPendenciasCargaPorProjetista();
     } catch (error) {
         alertAppDialog('Erro ao atualizar projetista: ' + error.message);

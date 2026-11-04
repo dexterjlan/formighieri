@@ -349,6 +349,7 @@ async function handleDetalhamentoAssociar() {
 
     const isTransfer = Boolean(activeDetalhamentoRecord.designerId)
         && Number(activeDetalhamentoRecord.designerId) !== designerId;
+    const previousDesignerId = activeDetalhamentoRecord.designerId;
     if (activeDetalhamentoRecord.designerId && !isTransfer) {
         alertAppDialog('Selecione outro projetista para transferir.');
         return;
@@ -375,6 +376,17 @@ async function handleDetalhamentoAssociar() {
                 orderProjectId: activeDetalhamentoOrderProjectId,
                 designerId,
                 projectFilePath: data?.projectFilePath || activeDetalhamentoRecord?.projectFilePath || ''
+            });
+        }
+
+        if (typeof notifyMatrixDetailingDesignerAssigned === 'function') {
+            setDetalhamentoModalLoading(true, 'Enviando notificação...');
+            await notifyMatrixDetailingDesignerAssigned({
+                orderProjectId: activeDetalhamentoOrderProjectId,
+                designerId,
+                previousDesignerId: isTransfer ? previousDesignerId : null,
+                projectName: activeDetalhamentoProjectName,
+                designerName: data?.designer?.name || projetista?.name
             });
         }
 
@@ -430,6 +442,16 @@ async function handleDetalhamentoIniciar() {
             .single();
 
         if (error) throw error;
+
+        if (typeof notifyMatrixDetailingStarted === 'function') {
+            setDetalhamentoModalLoading(true, 'Enviando notificação...');
+            await notifyMatrixDetailingStarted({
+                orderProjectId: activeDetalhamentoOrderProjectId,
+                designerId: data?.designerId || currentUser?.id,
+                projectName: activeDetalhamentoProjectName,
+                designerName: data?.designer?.name || currentUser?.name
+            });
+        }
 
         activeDetalhamentoRecord = data;
         populateDetalhamentoForm(data);
@@ -497,6 +519,16 @@ async function handleDetalhamentoEncerrar() {
             .single();
 
         if (error) throw error;
+
+        if (typeof notifyMatrixDetailingCompleted === 'function') {
+            setDetalhamentoModalLoading(true, 'Enviando notificação...');
+            await notifyMatrixDetailingCompleted({
+                orderProjectId: activeDetalhamentoOrderProjectId,
+                designerId: data?.designerId || currentUser?.id,
+                projectName: activeDetalhamentoProjectName,
+                designerName: data?.designer?.name || currentUser?.name
+            });
+        }
 
         activeDetalhamentoRecord = data;
         populateDetalhamentoForm(data);

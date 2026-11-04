@@ -581,9 +581,14 @@ async function resolveOrderProjectNames(orderProjectIds) {
 }
 
 const MATRIX_NOTIFICATION_TEST_MXID = '@dexterjl:matrix.org';
+const MATRIX_COMPRAS_TEAM_MXID = '@comprasformighieri:matrix.org';
 
 function getMatrixNotificationTestMentionTargets() {
     return [{ matrixUserId: MATRIX_NOTIFICATION_TEST_MXID, name: 'Dexter (@dexterjl)' }];
+}
+
+function getMatrixComprasTeamMentionTargets() {
+    return [{ matrixUserId: MATRIX_COMPRAS_TEAM_MXID, name: 'Compras Formighieri' }];
 }
 
 async function fetchActiveComprasMatrixMentionTargets() {
@@ -591,7 +596,9 @@ async function fetchActiveComprasMatrixMentionTargets() {
         return getMatrixNotificationTestMentionTargets();
     }
 
-    if (!supabaseClient) return [];
+    const targets = getMatrixComprasTeamMentionTargets();
+
+    if (!supabaseClient) return targets;
 
     let { data, error } = await supabaseClient
         .from('appUsers')
@@ -600,21 +607,23 @@ async function fetchActiveComprasMatrixMentionTargets() {
         .eq('isActive', true);
 
     if (error?.message?.includes('matrixUserId')) {
-        return [];
+        return targets;
     }
 
     if (error) {
         console.warn('fetchActiveComprasMatrixMentionTargets:', error);
-        return [];
+        return targets;
     }
 
-    return (data || [])
+    const userTargets = (data || [])
         .map(user => ({
             appUserId: user.id,
             name: user.name,
             matrixUserId: user.matrixUserId ? String(user.matrixUserId).trim() : null
         }))
-        .filter(user => user.matrixUserId);
+        .filter(user => user.matrixUserId && user.matrixUserId !== MATRIX_COMPRAS_TEAM_MXID);
+
+    return [...targets, ...userTargets];
 }
 
 async function fetchAppUserRecipientEmail(appUserId) {
@@ -638,5 +647,7 @@ async function fetchAppUserRecipientEmail(appUserId) {
 }
 
 window.getMatrixNotificationTestMentionTargets = getMatrixNotificationTestMentionTargets;
+window.MATRIX_COMPRAS_TEAM_MXID = MATRIX_COMPRAS_TEAM_MXID;
+window.getMatrixComprasTeamMentionTargets = getMatrixComprasTeamMentionTargets;
 window.fetchActiveComprasMatrixMentionTargets = fetchActiveComprasMatrixMentionTargets;
 window.fetchAppUserRecipientEmail = fetchAppUserRecipientEmail;

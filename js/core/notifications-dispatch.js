@@ -371,6 +371,14 @@ async function notifyOrderRequestEmail(eventType, requestData) {
 async function notifyRequisicoesPurchaseEmail(details = {}) {
     if (!NOTIFICATIONS_ENABLED || !details.orderProjectId) return;
 
+    if (typeof notifyMatrixRequisicoesPurchaseToCompras === 'function') {
+        try {
+            await notifyMatrixRequisicoesPurchaseToCompras(details);
+        } catch (err) {
+            console.warn('notifyRequisicoesPurchaseEmail (Matrix):', err);
+        }
+    }
+
     if (!isGoogleAppsScriptConfigured()) {
         console.info('notifyRequisicoesPurchaseEmail: Google Apps Script não configurado em js/core/config.js');
         return;
@@ -422,6 +430,14 @@ async function notifyRequisicoesPurchaseEmail(details = {}) {
 async function notifyCompraLiberacaoEmails(options = {}) {
     const { items = [], formValues = {}, orderProjectId } = options;
     if (!NOTIFICATIONS_ENABLED || !items.length || !orderProjectId) return;
+
+    if (typeof notifyMatrixCompraLiberacaoToCompras === 'function') {
+        try {
+            await notifyMatrixCompraLiberacaoToCompras({ items, orderProjectId, formValues });
+        } catch (err) {
+            console.warn('notifyCompraLiberacaoEmails (Matrix):', err);
+        }
+    }
 
     if (!isGoogleAppsScriptConfigured()) {
         console.info('notifyCompraLiberacaoEmails: Google Apps Script não configurado em js/core/config.js');
