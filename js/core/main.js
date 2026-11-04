@@ -121,6 +121,7 @@ function initAppEvents() {
     if (typeof bindProgramacoesEvents === 'function') bindProgramacoesEvents();
     if (typeof bindRequisicoesEvents === 'function') bindRequisicoesEvents();
     if (typeof bindGestaoPurchaseReasonEvents === 'function') bindGestaoPurchaseReasonEvents();
+    if (typeof bindGestaoWpsItemTypeEvents === 'function') bindGestaoWpsItemTypeEvents();
     bindPesquisasEvents();
     if (typeof bindView3dEvents === 'function') bindView3dEvents();
     bindUsersAdminEvents();

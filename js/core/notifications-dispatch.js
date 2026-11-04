@@ -1479,3 +1479,138 @@ async function notifyThirdPartyDesignerAssignedEmail(options = {}) {
 }
 
 window.notifyThirdPartyDesignerAssignedEmail = notifyThirdPartyDesignerAssignedEmail;
+
+function buildWpsItemRegistrationNotificationPayload(request = {}) {
+    return {
+        requestId: request.id,
+        typeName: request?.wpsItemType?.name || '—',
+        description: request?.description || '—',
+        wpsCode: request?.wpsCode || '',
+        createdByName: request?.createdBy?.name || '—',
+        actedByName: currentUser?.name || '—',
+        actedByRole: currentUser?.role || '—'
+    };
+}
+
+async function notifyWpsItemRegistrationSentToCompras(request = {}) {
+    if (!NOTIFICATIONS_ENABLED || !request?.id) return;
+
+    if (typeof notifyMatrixWpsItemRegistrationSentToCompras === 'function') {
+        try {
+            await notifyMatrixWpsItemRegistrationSentToCompras(request);
+        } catch (err) {
+            console.warn('notifyWpsItemRegistrationSentToCompras (Matrix):', err);
+        }
+    }
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyWpsItemRegistrationSentToCompras: Google Apps Script não configurado.');
+        return;
+    }
+
+    try {
+        const recipients = typeof fetchActiveComprasRecipientEmails === 'function'
+            ? await fetchActiveComprasRecipientEmails()
+            : [NOTIFICATION_TEST_EMAIL];
+
+        const payload = {
+            eventTitle: 'Nova solicitação — Cadastro Item WPS',
+            ...buildWpsItemRegistrationNotificationPayload(request)
+        };
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: recipients.join(', '),
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject: buildWpsItemRegistrationEmailSubject('enviada para Compras', request.id),
+            message_body: buildWpsItemRegistrationEmailBody(payload),
+            message_html: buildWpsItemRegistrationEmailHtml(payload)
+        }, { context: 'wps-item-registration-sent', actorUserId: currentUser?.id });
+    } catch (err) {
+        console.warn('notifyWpsItemRegistrationSentToCompras:', err);
+    }
+}
+
+async function notifyWpsItemRegistrationRegistered(request = {}) {
+    if (!NOTIFICATIONS_ENABLED || !request?.id) return;
+
+    if (typeof notifyMatrixWpsItemRegistrationRegistered === 'function') {
+        try {
+            await notifyMatrixWpsItemRegistrationRegistered(request);
+        } catch (err) {
+            console.warn('notifyWpsItemRegistrationRegistered (Matrix):', err);
+        }
+    }
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyWpsItemRegistrationRegistered: Google Apps Script não configurado.');
+        return;
+    }
+
+    try {
+        const creatorId = Number(request.createdById ?? request.createdBy?.id);
+        const toEmail = typeof fetchAppUserRecipientEmail === 'function'
+            ? await fetchAppUserRecipientEmail(creatorId)
+            : NOTIFICATION_TEST_EMAIL;
+
+        const payload = {
+            eventTitle: 'Item cadastrado no WPS',
+            ...buildWpsItemRegistrationNotificationPayload(request)
+        };
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: toEmail,
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject: buildWpsItemRegistrationEmailSubject('cadastrado', request.id),
+            message_body: buildWpsItemRegistrationRegisteredEmailBody(payload),
+            message_html: buildWpsItemRegistrationRegisteredEmailHtml(payload)
+        }, { context: 'wps-item-registration-registered', actorUserId: currentUser?.id });
+    } catch (err) {
+        console.warn('notifyWpsItemRegistrationRegistered:', err);
+    }
+}
+
+async function notifyWpsItemRegistrationInBudget(request = {}) {
+    if (!NOTIFICATIONS_ENABLED || !request?.id) return;
+
+    if (typeof notifyMatrixWpsItemRegistrationInBudget === 'function') {
+        try {
+            await notifyMatrixWpsItemRegistrationInBudget(request);
+        } catch (err) {
+            console.warn('notifyWpsItemRegistrationInBudget (Matrix):', err);
+        }
+    }
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyWpsItemRegistrationInBudget: Google Apps Script não configurado.');
+        return;
+    }
+
+    try {
+        const creatorId = Number(request.createdById ?? request.createdBy?.id);
+        const toEmail = typeof fetchAppUserRecipientEmail === 'function'
+            ? await fetchAppUserRecipientEmail(creatorId)
+            : NOTIFICATION_TEST_EMAIL;
+
+        const payload = {
+            eventTitle: 'Solicitação em processo de orçamento',
+            ...buildWpsItemRegistrationNotificationPayload(request)
+        };
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: toEmail,
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject: buildWpsItemRegistrationEmailSubject('em processo de orçamento', request.id),
+            message_body: buildWpsItemRegistrationEmailBody(payload),
+            message_html: buildWpsItemRegistrationEmailHtml(payload)
+        }, { context: 'wps-item-registration-in-budget', actorUserId: currentUser?.id });
+    } catch (err) {
+        console.warn('notifyWpsItemRegistrationInBudget:', err);
+    }
+}
+
+window.notifyWpsItemRegistrationSentToCompras = notifyWpsItemRegistrationSentToCompras;
+window.notifyWpsItemRegistrationRegistered = notifyWpsItemRegistrationRegistered;
+window.notifyWpsItemRegistrationInBudget = notifyWpsItemRegistrationInBudget;

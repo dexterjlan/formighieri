@@ -499,20 +499,95 @@ async function sendMatrixMessage({
 }
 
 async function sendMatrixProjectsRoomMessage(message, options = {}) {
-    return sendMatrixMessage({
-        targetType: 'room',
-        roomId: getMatrixRoomAlias('projects'),
-        message,
-        mentionTargets: options.mentionTargets,
-        mentionUserIds: options.mentionUserIds
-    });
+    return sendMatrixMessageToProductionRoom(getMatrixRoomAlias('projects'), message, options);
 }
 
 async function sendMatrixRevisionsRoomMessage(message, options = {}) {
+    return sendMatrixMessageToProductionRoom(getMatrixRoomAlias('revisions'), message, options);
+}
+
+function formatMatrixNotificationIntendedRoomLabel(roomIdOrAlias) {
+    const value = String(roomIdOrAlias || '').trim();
+    if (!value) return '—';
+    const definitions = typeof MATRIX_ROOM_DEFINITIONS !== 'undefined'
+        ? MATRIX_ROOM_DEFINITIONS
+        : (typeof window !== 'undefined' ? window.MATRIX_ROOM_DEFINITIONS : null);
+    if (Array.isArray(definitions)) {
+        const match = definitions.find(def => def.roomAlias === value);
+        if (match) {
+            return `${match.label} (${match.roomAlias})`;
+        }
+    }
+    return value;
+}
+
+const MATRIX_NOTIFICATION_TEST_USER_ID = '@dexterjl:matrix.org';
+
+function getMatrixNotificationTestUserId() {
+    if (typeof getMatrixNotificationTestMentionTargets === 'function') {
+        const mxid = getMatrixNotificationTestMentionTargets()?.[0]?.matrixUserId;
+        if (mxid) return String(mxid).trim();
+    }
+    return MATRIX_NOTIFICATION_TEST_USER_ID;
+}
+
+/**
+ * Em NOTIFICATION_TEST_MODE, não posta em salas oficiais — envia DM ao usuário de teste.
+ */
+function getMatrixNotificationDeliveryRoom(productionRoomIdOrAlias) {
+    const intendedRoom = String(productionRoomIdOrAlias || '').trim();
+    const intendedRoomLabel = formatMatrixNotificationIntendedRoomLabel(intendedRoom);
+
+    if (typeof NOTIFICATION_TEST_MODE !== 'undefined' && NOTIFICATION_TEST_MODE) {
+        const userId = getMatrixNotificationTestUserId();
+        if (userId) {
+            return {
+                targetType: 'user',
+                userId,
+                roomId: '',
+                testRedirect: true,
+                intendedRoom,
+                intendedRoomLabel
+            };
+        }
+    }
+
+    return {
+        targetType: 'room',
+        userId: '',
+        roomId: intendedRoom,
+        testRedirect: false,
+        intendedRoom,
+        intendedRoomLabel
+    };
+}
+
+function applyMatrixNotificationTestRoomPrefix(message, delivery) {
+    const body = String(message || '').trim();
+    if (!body || !delivery?.testRedirect || !delivery.intendedRoomLabel) {
+        return body;
+    }
+    return `[TESTE DEV — em produção: ${delivery.intendedRoomLabel}]\n\n${body}`;
+}
+
+async function sendMatrixMessageToProductionRoom(productionRoomIdOrAlias, message, options = {}) {
+    const delivery = getMatrixNotificationDeliveryRoom(productionRoomIdOrAlias);
+    const trimmed = applyMatrixNotificationTestRoomPrefix(message, delivery);
+
+    if (delivery.targetType === 'user' && delivery.userId) {
+        return sendMatrixMessage({
+            targetType: 'user',
+            userId: delivery.userId,
+            message: trimmed,
+            mentionTargets: options.mentionTargets,
+            mentionUserIds: options.mentionUserIds
+        });
+    }
+
     return sendMatrixMessage({
         targetType: 'room',
-        roomId: getMatrixRoomAlias('revisions'),
-        message,
+        roomId: delivery.roomId,
+        message: trimmed,
         mentionTargets: options.mentionTargets,
         mentionUserIds: options.mentionUserIds
     });
@@ -531,5 +606,10 @@ window.shouldUseMatrixDirectClient = shouldUseMatrixDirectClient;
 window.resolveMatrixRoomIdOrAlias = resolveMatrixRoomIdOrAlias;
 window.pingMatrixBot = pingMatrixBot;
 window.sendMatrixMessage = sendMatrixMessage;
+window.MATRIX_NOTIFICATION_TEST_USER_ID = MATRIX_NOTIFICATION_TEST_USER_ID;
+window.getMatrixNotificationTestUserId = getMatrixNotificationTestUserId;
+window.getMatrixNotificationDeliveryRoom = getMatrixNotificationDeliveryRoom;
+window.applyMatrixNotificationTestRoomPrefix = applyMatrixNotificationTestRoomPrefix;
+window.sendMatrixMessageToProductionRoom = sendMatrixMessageToProductionRoom;
 window.sendMatrixProjectsRoomMessage = sendMatrixProjectsRoomMessage;
 window.sendMatrixRevisionsRoomMessage = sendMatrixRevisionsRoomMessage;

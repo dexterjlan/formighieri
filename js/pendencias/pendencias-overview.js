@@ -42,7 +42,9 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
     },
     compras: {
-        'enviados-compras': 'Solicitações de compra em aberto geradas pela implantação.'
+        'enviados-compras': 'Solicitações de compra em aberto geradas pela implantação.',
+        'wps-item-registration': 'Cadastros de item WPS enviados ou em processo de orçamento.',
+        assistencias: 'Assistências em orçamento ou separação aguardando Compras.'
     }
 };
 
@@ -226,6 +228,39 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             case 'compras:enviados-compras': {
                 const { error, items } = await fetchPendenciasEnviadosCompras();
                 return error ? null : items.length;
+            }
+            case 'compras:wps-item-registration': {
+                if (typeof canActWpsItemRegistrationBuyer === 'function' && !canActWpsItemRegistrationBuyer()) {
+                    return 0;
+                }
+                if (typeof fetchWpsItemRegistrationRequests !== 'function') return null;
+                const sentStatus = typeof WPS_ITEM_REGISTRATION_STATUS_SENT !== 'undefined'
+                    ? WPS_ITEM_REGISTRATION_STATUS_SENT
+                    : 'Sent';
+                const inBudgetStatus = typeof WPS_ITEM_REGISTRATION_STATUS_IN_BUDGET !== 'undefined'
+                    ? WPS_ITEM_REGISTRATION_STATUS_IN_BUDGET
+                    : 'InBudget';
+                const { data, error } = await fetchWpsItemRegistrationRequests({
+                    statusIn: [sentStatus, inBudgetStatus]
+                });
+                if (error?.message?.includes('WpsItemRegistrationRequest')) return 0;
+                return error ? null : (data || []).length;
+            }
+            case 'compras:assistencias': {
+                if (typeof canSeePendenciasComprasMenu === 'function' && !canSeePendenciasComprasMenu()) {
+                    return 0;
+                }
+                if (typeof fetchPendenciasAssistencias === 'function') {
+                    const { error, records } = await fetchPendenciasAssistencias();
+                    if (error?.message?.includes('AssistanceRequest')) return 0;
+                    return error ? null : (records || []).length;
+                }
+                const { count, error } = await supabaseClient
+                    .from('AssistanceRequest')
+                    .select('id', { count: 'exact', head: true })
+                    .in('status', ['Quote', 'Separation']);
+                if (error?.message?.includes('AssistanceRequest')) return 0;
+                return error ? null : (count ?? 0);
             }
             default:
                 return null;

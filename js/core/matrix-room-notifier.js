@@ -54,7 +54,7 @@ class MatrixRoomNotifier {
             throw new Error('Sala Matrix não configurada.');
         }
 
-        const { message, mentionUserIds } = this.formatMessageWithMentions(
+        let { message, mentionUserIds } = this.formatMessageWithMentions(
             linesOrText,
             options.mentionTargets
         );
@@ -65,6 +65,13 @@ class MatrixRoomNotifier {
         if (!this.isConfigured()) {
             console.info('MatrixRoomNotifier: Matrix não configurado — mensagem não enviada.');
             return null;
+        }
+
+        if (typeof sendMatrixMessageToProductionRoom === 'function') {
+            return sendMatrixMessageToProductionRoom(this.roomIdOrAlias, message, {
+                mentionTargets: options.mentionTargets,
+                mentionUserIds
+            });
         }
 
         if (typeof sendMatrixMessage !== 'function') {

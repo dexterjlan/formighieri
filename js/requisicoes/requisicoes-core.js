@@ -1,6 +1,7 @@
 const REQUISICOES_SECTIONS = [
     { id: 'projects', label: 'Projetos' },
     { id: 'purchases', label: 'Compras' },
+    { id: 'wps-item', label: 'Cadastro Item WPS' },
     { id: 'parts', label: 'Peça' },
     { id: 'assistance', label: 'Assistência' }
 ];
@@ -42,6 +43,10 @@ async function loadRequisicoesContent() {
     }
     if (requisicoesActiveSection === 'purchases') {
         if (typeof loadRequisicoesPurchases === 'function') await loadRequisicoesPurchases();
+        return;
+    }
+    if (requisicoesActiveSection === 'wps-item') {
+        if (typeof loadWpsItemRegistrationRequisicoes === 'function') await loadWpsItemRegistrationRequisicoes();
         return;
     }
     if (requisicoesActiveSection === 'assistance') {
@@ -147,6 +152,7 @@ function bindRequisicoesEvents() {
     });
 
     if (typeof bindAssistanceEvents === 'function') bindAssistanceEvents();
+    if (typeof bindWpsItemRegistrationEvents === 'function') bindWpsItemRegistrationEvents();
 }
 
 window.showRequisicoes = showRequisicoes;

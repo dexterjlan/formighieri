@@ -579,3 +579,64 @@ async function resolveOrderProjectNames(orderProjectIds) {
 
     return names;
 }
+
+const MATRIX_NOTIFICATION_TEST_MXID = '@dexterjl:matrix.org';
+
+function getMatrixNotificationTestMentionTargets() {
+    return [{ matrixUserId: MATRIX_NOTIFICATION_TEST_MXID, name: 'Dexter (@dexterjl)' }];
+}
+
+async function fetchActiveComprasMatrixMentionTargets() {
+    if (typeof NOTIFICATION_TEST_MODE !== 'undefined' && NOTIFICATION_TEST_MODE) {
+        return getMatrixNotificationTestMentionTargets();
+    }
+
+    if (!supabaseClient) return [];
+
+    let { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('id, name, matrixUserId')
+        .eq('role', 'Compras')
+        .eq('isActive', true);
+
+    if (error?.message?.includes('matrixUserId')) {
+        return [];
+    }
+
+    if (error) {
+        console.warn('fetchActiveComprasMatrixMentionTargets:', error);
+        return [];
+    }
+
+    return (data || [])
+        .map(user => ({
+            appUserId: user.id,
+            name: user.name,
+            matrixUserId: user.matrixUserId ? String(user.matrixUserId).trim() : null
+        }))
+        .filter(user => user.matrixUserId);
+}
+
+async function fetchAppUserRecipientEmail(appUserId) {
+    if (typeof NOTIFICATION_TEST_MODE !== 'undefined' && NOTIFICATION_TEST_MODE) {
+        return NOTIFICATION_TEST_EMAIL;
+    }
+
+    const normalizedId = Number(appUserId);
+    if (!normalizedId || !supabaseClient) {
+        return NOTIFICATION_TEST_EMAIL;
+    }
+
+    const { data, error } = await supabaseClient
+        .from('appUsers')
+        .select('email')
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data?.email?.trim() || NOTIFICATION_TEST_EMAIL;
+}
+
+window.getMatrixNotificationTestMentionTargets = getMatrixNotificationTestMentionTargets;
+window.fetchActiveComprasMatrixMentionTargets = fetchActiveComprasMatrixMentionTargets;
+window.fetchAppUserRecipientEmail = fetchAppUserRecipientEmail;

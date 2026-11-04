@@ -332,6 +332,7 @@ function getPendenciasSidebarSections() {
             visible: canSeePendenciasComprasMenu(),
             items: [
                 { id: 'enviados-compras', label: 'Enviados para Compras' },
+                { id: 'wps-item-registration', label: 'Cadastro Item WPS' },
                 { id: 'assistencias', label: 'Assistências' }
             ]
         }
@@ -1070,6 +1071,11 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'compras' && pendenciasActiveItem === 'enviados-compras') {
         loadPendenciasEnviadosCompras();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'compras' && pendenciasActiveItem === 'wps-item-registration') {
+        if (typeof loadPendenciasWpsItemRegistration === 'function') loadPendenciasWpsItemRegistration();
         return;
     }
 

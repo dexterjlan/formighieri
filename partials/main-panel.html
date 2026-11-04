@@ -112,6 +112,7 @@
                                 <button type="button" id="gestao-nav-characteristics" class="app-nav-item app-nav-item--nested">Características</button>
                                 <button type="button" id="gestao-nav-third-party-subtypes" class="app-nav-item app-nav-item--nested">Subtipos Terceiros</button>
                                 <button type="button" id="gestao-nav-purchase-reasons" class="app-nav-item app-nav-item--nested">Motivos de Compra</button>
+                                <button type="button" id="gestao-nav-wps-item-types" class="app-nav-item app-nav-item--nested">Tipos item WPS</button>
                                 <button type="button" id="gestao-nav-woodwork-checklist-items" class="app-nav-item app-nav-item--nested hidden">Checklist marcenaria</button>
                             </div>
                         </div>
@@ -2418,6 +2419,42 @@
                                 <button type="submit" class="text-xs bg-slate-900 text-white px-3 py-2 rounded-lg font-medium">Adicionar</button>
                             </form>
                             <div id="gestao-purchase-reasons-list" class="space-y-2"></div>
+                        </div>
+                    </div>
+                    <div id="gestao-wps-item-types-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100">
+                            <h2 class="font-bold text-sm text-slate-900">Tipos item WPS</h2>
+                            <p class="text-xs text-slate-400 mt-0.5">Tipos usados em Requisições → Cadastro Item WPS.</p>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <p id="gestao-wps-item-types-sql-hint" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                Execute <code>supabase/feats/create-wps-item-registration.sql</code> no Supabase SQL Editor.
+                            </p>
+                            <form id="gestao-wps-item-type-form" class="flex flex-wrap gap-2 items-end">
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1" for="gestao-wps-item-type-sort">Ordem</label>
+                                    <input id="gestao-wps-item-type-sort" type="number" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                                </div>
+                                <div class="min-w-[16rem] flex-1">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1" for="gestao-wps-item-type-name">Novo tipo</label>
+                                    <input id="gestao-wps-item-type-name" type="text" required class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                                </div>
+                                <button type="submit" class="text-xs bg-slate-900 text-white px-3 py-2 rounded-lg font-medium">Adicionar</button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-28">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-wps-item-types-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                     <div id="gestao-compra-status-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

@@ -838,3 +838,98 @@ function buildProcessEmailHtml(payload) {
 </body>
 </html>`;
 }
+
+function buildWpsItemRegistrationEmailSubject(actionLabel, requestId) {
+    const id = requestId ? `#${requestId}` : '';
+    return `Cadastro Item WPS — ${actionLabel} ${id}`.trim();
+}
+
+function buildWpsItemRegistrationEmailBody(payload) {
+    const lines = [
+        payload.eventTitle,
+        '',
+        `Solicitação: #${payload.requestId || '—'}`,
+        `Tipo: ${payload.typeName || '—'}`,
+        `Descritivo: ${payload.description || '—'}`,
+        `Solicitante: ${payload.createdByName || '—'}`
+    ];
+
+    if (payload.wpsCode) {
+        lines.push(`Código WPS: ${payload.wpsCode}`);
+    }
+
+    lines.push(
+        '',
+        `Ação por: ${payload.actedByName || '—'} (${payload.actedByRole || '—'})`,
+        '',
+        'Acesse Pendências → Compras → Cadastro Item WPS para tratar a solicitação.'
+    );
+
+    return appendEmailNoReplyFooterText(lines.join('\n'));
+}
+
+function buildWpsItemRegistrationEmailHtml(payload) {
+    const wpsCodeRow = payload.wpsCode
+        ? `<tr>
+            <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Código WPS</td>
+            <td style="padding:8px 12px;font-family:monospace;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.wpsCode)}</td>
+        </tr>`
+        : '';
+
+    return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:24px;background:#f8fafc;font-family:system-ui,sans-serif;color:#0f172a;">
+  <div style="max-width:640px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+    ${buildEmailBrandHeaderHtml(payload.eventTitle, '#6366f1')}
+    <div style="padding:24px;">
+      <table style="width:100%;border-collapse:collapse;font-size:14px;">
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;width:140px;">Solicitação</td>
+          <td style="padding:8px 12px;font-weight:600;border-bottom:1px solid #e2e8f0;">#${escapeHtml(String(payload.requestId || '—'))}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Tipo</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.typeName || '—')}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;vertical-align:top;">Descritivo</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;white-space:pre-wrap;">${escapeHtml(payload.description || '—')}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;border-bottom:1px solid #e2e8f0;">Solicitante</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e2e8f0;">${escapeHtml(payload.createdByName || '—')}</td>
+        </tr>
+        ${wpsCodeRow}
+        <tr>
+          <td style="padding:8px 12px;color:#64748b;">Ação por</td>
+          <td style="padding:8px 12px;">${escapeHtml(payload.actedByName || '—')} <span style="color:#64748b;">(${escapeHtml(payload.actedByRole || '—')})</span></td>
+        </tr>
+      </table>
+      ${buildEmailNoReplyFooterHtml()}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function buildWpsItemRegistrationRegisteredEmailBody(payload) {
+    const lines = [
+        payload.eventTitle,
+        '',
+        `Solicitação: #${payload.requestId || '—'}`,
+        `Tipo: ${payload.typeName || '—'}`,
+        `Descritivo: ${payload.description || '—'}`,
+        `Código WPS: ${payload.wpsCode || '—'}`,
+        '',
+        `Cadastrado por: ${payload.actedByName || '—'} (${payload.actedByRole || '—'})`
+    ];
+    return appendEmailNoReplyFooterText(lines.join('\n'));
+}
+
+function buildWpsItemRegistrationRegisteredEmailHtml(payload) {
+    return buildWpsItemRegistrationEmailHtml({
+        ...payload,
+        wpsCode: payload.wpsCode || '—'
+    });
+}

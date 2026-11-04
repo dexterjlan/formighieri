@@ -24,7 +24,7 @@ function setGestaoProjectFormLoading(active, message = 'Processando...', status 
     gestaoProjectFormOverlay?.setLoading(active, message, status);
 }
 
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'alterar-status-terceiros', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons', 'woodwork-checklist-items'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'alterar-status-terceiros', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons', 'wps-item-types', 'woodwork-checklist-items'];
 
 function setGestaoCadastroSaveOverlayLoading(active, message = 'Salvando...', status = 'loading') {
     if (typeof getAppGlobalOverlayConfig !== 'function') return;
@@ -99,6 +99,7 @@ function setGestaoNavActive(navKey) {
         characteristics: document.getElementById('gestao-nav-characteristics'),
         'third-party-subtypes': document.getElementById('gestao-nav-third-party-subtypes'),
         'purchase-reasons': document.getElementById('gestao-nav-purchase-reasons'),
+        'wps-item-types': document.getElementById('gestao-nav-wps-item-types'),
         'woodwork-checklist-items': document.getElementById('gestao-nav-woodwork-checklist-items'),
         'montagem-programacao': document.getElementById('gestao-nav-montagem-programacao'),
         dashboard: document.getElementById('gestao-nav-dashboard'),
@@ -313,6 +314,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
     document.getElementById('gestao-third-party-subtypes-panel')?.classList.add('hidden');
     document.getElementById('gestao-purchase-reasons-panel')?.classList.add('hidden');
+    document.getElementById('gestao-wps-item-types-panel')?.classList.add('hidden');
     document.getElementById('gestao-woodwork-checklist-items-panel')?.classList.add('hidden');
     document.getElementById('gestao-compra-status-panel')?.classList.add('hidden');
     document.getElementById('gestao-montagem-programacao-panel')?.classList.add('hidden');
@@ -1392,6 +1394,13 @@ function showGestaoPurchaseReasonsPanel() {
     if (typeof loadGestaoPurchaseReasonsList === 'function') loadGestaoPurchaseReasonsList();
 }
 
+function showGestaoWpsItemTypesPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-wps-item-types-panel')?.classList.remove('hidden');
+    setGestaoNavActive('wps-item-types');
+    if (typeof loadGestaoWpsItemTypesList === 'function') loadGestaoWpsItemTypesList();
+}
+
 function showGestaoThirdPartySubtypesPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-third-party-subtypes-panel')?.classList.remove('hidden');
@@ -1640,6 +1649,10 @@ function bindGestaoEvents() {
     document.getElementById('gestao-nav-purchase-reasons')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoPurchaseReasonsPanel();
+    });
+    document.getElementById('gestao-nav-wps-item-types')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoWpsItemTypesPanel();
     });
     document.getElementById('gestao-nav-third-party-subtypes')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
