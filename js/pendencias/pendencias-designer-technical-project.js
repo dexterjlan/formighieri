@@ -373,20 +373,143 @@ function normalizePendenciasWorkloadStatusName(statusName) {
 let pendenciasProjetistasCache = [];
 let pendenciasSemProjetistaRowsCache = [];
 
+const PENDENCIAS_CARGA_PROJETISTA_FILTER_STORAGE_KEY = 'pendencias-carga-projetista-display-filters';
+
+function getDefaultPendenciasCargaProjetistaDisplayFilters() {
+    return {
+        projetista: true,
+        detalhamento: true,
+        conferente: true,
+        gestor: true
+    };
+}
+
+function loadPendenciasCargaProjetistaDisplayFilters() {
+    try {
+        const raw = sessionStorage.getItem(PENDENCIAS_CARGA_PROJETISTA_FILTER_STORAGE_KEY);
+        if (!raw) return getDefaultPendenciasCargaProjetistaDisplayFilters();
+        const parsed = JSON.parse(raw);
+        return {
+            ...getDefaultPendenciasCargaProjetistaDisplayFilters(),
+            ...parsed
+        };
+    } catch {
+        return getDefaultPendenciasCargaProjetistaDisplayFilters();
+    }
+}
+
+function savePendenciasCargaProjetistaDisplayFilters(filters) {
+    try {
+        sessionStorage.setItem(
+            PENDENCIAS_CARGA_PROJETISTA_FILTER_STORAGE_KEY,
+            JSON.stringify(filters)
+        );
+    } catch {
+        /* ignore */
+    }
+}
+
+function readPendenciasCargaProjetistaDisplayFiltersFromDom(root = document) {
+    const getChecked = id => Boolean(root.querySelector(`#${id}`)?.checked);
+    return {
+        projetista: getChecked('pendencias-carga-filter-projetista'),
+        detalhamento: getChecked('pendencias-carga-filter-detalhamento'),
+        conferente: getChecked('pendencias-carga-filter-conferente'),
+        gestor: getChecked('pendencias-carga-filter-gestor')
+    };
+}
+
+function getPendenciasProjetistaProfileFlags(projetistaId) {
+    const meta = (pendenciasProjetistasCache || []).find(
+        item => Number(item.id) === Number(projetistaId)
+    );
+    const isDetailing = Boolean(meta?.isDetailing);
+    const isConferente = Boolean(meta?.isConferenceReviewer);
+    const isGestor = Boolean(meta?.isProjectsManager);
+    return {
+        projetista: !isDetailing && !isConferente && !isGestor,
+        detalhamento: isDetailing,
+        conferente: isConferente,
+        gestor: isGestor
+    };
+}
+
+function pendenciasCargaProjetistaRowMatchesDisplayFilters(
+    row,
+    filters,
+    detalhamentoByDesigner = {},
+    thirdPartyByDesigner = {}
+) {
+    if (isPendenciasWorkloadOutrosDesignerId(row?.designerId)) {
+        return getPendenciasWorkloadRowItemCount(row, detalhamentoByDesigner, thirdPartyByDesigner) > 0;
+    }
+
+    const anyChecked = Boolean(
+        filters.projetista || filters.detalhamento || filters.conferente || filters.gestor
+    );
+    if (!anyChecked) return false;
+
+    const flags = getPendenciasProjetistaProfileFlags(row.designerId);
+    if (filters.projetista && flags.projetista) return true;
+    if (filters.detalhamento && flags.detalhamento) return true;
+    if (filters.conferente && flags.conferente) return true;
+    if (filters.gestor && flags.gestor) return true;
+    return false;
+}
+
+function filterPendenciasCargaProjetistaWorkload(
+    workload,
+    filters,
+    detalhamentoByDesigner = {},
+    thirdPartyByDesigner = {}
+) {
+    return (workload || []).filter(row => pendenciasCargaProjetistaRowMatchesDisplayFilters(
+        row,
+        filters,
+        detalhamentoByDesigner,
+        thirdPartyByDesigner
+    ));
+}
+
+let pendenciasCargaPorProjetistaRenderCache = null;
+
 async function fetchPendenciasActiveProjetistas() {
-    const { data, error } = await supabaseClient
+    const selectWithFlags = 'id, name, isDetailing, isConferenceReviewer, isProjectsManager';
+    let result = await supabaseClient
         .from('appUsers')
-        .select('id, name')
+        .select(selectWithFlags)
         .eq('role', 'Projetista')
         .eq('isActive', true)
         .order('name', { ascending: true });
 
-    if (error) {
-        console.error('fetchPendenciasActiveProjetistas:', error);
-        return [];
+    if (result.error?.message?.includes('isDetailing')
+        || result.error?.message?.includes('isConferenceReviewer')
+        || result.error?.message?.includes('isProjectsManager')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, isConferenceReviewer, isProjectsManager')
+            .eq('role', 'Projetista')
+            .eq('isActive', true)
+            .order('name', { ascending: true });
     }
 
-    pendenciasProjetistasCache = data || [];
+    if (result.error?.message?.includes('isProjectsManager')
+        || result.error?.message?.includes('isConferenceReviewer')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .eq('role', 'Projetista')
+            .eq('isActive', true)
+            .order('name', { ascending: true });
+    }
+
+    if (result.error) {
+        console.error('fetchPendenciasActiveProjetistas:', result.error);
+        pendenciasProjetistasCache = [];
+        return pendenciasProjetistasCache;
+    }
+
+    pendenciasProjetistasCache = result.data || [];
     return pendenciasProjetistasCache;
 }
 
@@ -1211,12 +1334,27 @@ function renderPendenciasCargaPorProjetista(
     workload,
     revisionInProgressIds = new Set(),
     detalhamentoByDesigner = {},
-    thirdPartyByDesigner = {}
+    thirdPartyByDesigner = {},
+    displayFilters = loadPendenciasCargaProjetistaDisplayFilters()
 ) {
     const content = document.getElementById('pendencias-content');
     if (!content) return;
 
-    const workloadCards = workload.map(row => {
+    pendenciasCargaPorProjetistaRenderCache = {
+        workload,
+        revisionInProgressIds,
+        detalhamentoByDesigner,
+        thirdPartyByDesigner
+    };
+
+    const filteredWorkload = filterPendenciasCargaProjetistaWorkload(
+        workload,
+        displayFilters,
+        detalhamentoByDesigner,
+        thirdPartyByDesigner
+    );
+
+    const workloadCards = filteredWorkload.map(row => {
         const itemCount = getPendenciasWorkloadRowItemCount(row, detalhamentoByDesigner, thirdPartyByDesigner);
         return `
         <article class="flex-[1_1_16rem] min-w-[16rem] max-w-full border border-violet-200 rounded-xl bg-violet-50/20 shadow-sm overflow-hidden">
@@ -1245,14 +1383,56 @@ function renderPendenciasCargaPorProjetista(
                     ${renderRefreshButtonInnerHtml()}
                 </button>
             </div>
-            ${workload.length
+            <div class="px-4 py-3 border-b border-slate-100 bg-white flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Exibir</span>
+                <label class="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input type="checkbox" id="pendencias-carga-filter-projetista" class="pendencias-carga-projetista-filter rounded border-slate-300 text-violet-700 focus:ring-violet-500"
+                        ${displayFilters.projetista ? 'checked' : ''}>
+                    Projetista
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input type="checkbox" id="pendencias-carga-filter-detalhamento" class="pendencias-carga-projetista-filter rounded border-slate-300 text-violet-700 focus:ring-violet-500"
+                        ${displayFilters.detalhamento ? 'checked' : ''}>
+                    Detalhamento
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input type="checkbox" id="pendencias-carga-filter-conferente" class="pendencias-carga-projetista-filter rounded border-slate-300 text-violet-700 focus:ring-violet-500"
+                        ${displayFilters.conferente ? 'checked' : ''}>
+                    Conferente
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input type="checkbox" id="pendencias-carga-filter-gestor" class="pendencias-carga-projetista-filter rounded border-slate-300 text-violet-700 focus:ring-violet-500"
+                        ${displayFilters.gestor ? 'checked' : ''}>
+                    Gestor
+                </label>
+            </div>
+            ${filteredWorkload.length
                 ? `<div id="pendencias-workload-cards" class="p-4 flex flex-wrap gap-3 items-start">${workloadCards}</div>`
-                : '<p class="text-xs text-slate-400 text-center py-8 px-4">Nenhum projetista cadastrado.</p>'}
+                : `<p class="text-xs text-slate-400 text-center py-8 px-4">${workload.length
+                    ? 'Nenhum projetista corresponde aos filtros selecionados.'
+                    : 'Nenhum projetista cadastrado.'}</p>`}
         </div>
     `;
 
     content.querySelector('#btn-pendencias-refresh-carga-projetista')
         ?.addEventListener('click', () => loadPendenciasCargaPorProjetista());
+
+    content.querySelectorAll('.pendencias-carga-projetista-filter').forEach(input => {
+        input.addEventListener('change', () => {
+            const filters = readPendenciasCargaProjetistaDisplayFiltersFromDom(content);
+            savePendenciasCargaProjetistaDisplayFilters(filters);
+            const cache = pendenciasCargaPorProjetistaRenderCache;
+            if (!cache) return;
+            renderPendenciasCargaPorProjetista(
+                cache.workload,
+                cache.revisionInProgressIds,
+                cache.detalhamentoByDesigner,
+                cache.thirdPartyByDesigner,
+                filters
+            );
+        });
+    });
+
     bindPendenciasCargaPorProjetistaEvents(content.querySelector('#pendencias-workload-cards'));
 }
 

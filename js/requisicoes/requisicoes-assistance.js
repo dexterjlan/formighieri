@@ -417,6 +417,7 @@ function renderAssistanceListActionButtons(record) {
     ];
     if (record.status === ASSISTANCE_STATUS_OPEN) {
         parts.push(`<button type="button" class="assistance-send-quote-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200" data-assistance-id="${record.id}">Enviar para Compras Orçar</button>`);
+        parts.push(`<button type="button" class="assistance-send-awaiting-scheduling-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200" data-assistance-id="${record.id}">Ir para Aguardando agendamento</button>`);
     }
     if (record.status === ASSISTANCE_STATUS_APPROVAL && canApproveAssistance()) {
         parts.push(`<button type="button" class="assistance-approve-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200" data-assistance-id="${record.id}">Aprovar</button>`);
@@ -663,6 +664,16 @@ function resetAssistanceForm() {
     updateAssistanceQuoteViewButton(null);
     renderAssistanceStatusLabel(ASSISTANCE_STATUS_OPEN);
     syncAssistanceAddressField();
+    syncAssistanceOpenStatusActions(null);
+}
+
+function syncAssistanceOpenStatusActions(record = assistanceEditingRecord) {
+    const wrap = document.getElementById('assistance-open-status-actions');
+    if (!wrap) return;
+    const status = record?.status || assistanceEditingStatus;
+    const hasId = Boolean(Number(record?.id || assistanceEditingId));
+    const show = status === ASSISTANCE_STATUS_OPEN && hasId;
+    wrap.classList.toggle('hidden', !show);
 }
 
 function renderAssistanceStatusLabel(status) {
@@ -922,6 +933,7 @@ async function openAssistanceForm(record = null, options = {}) {
     }
     syncAssistanceQuoteSection(assistanceEditingRecord);
     syncAssistanceSchedulingSection(assistanceEditingRecord);
+    syncAssistanceOpenStatusActions(assistanceEditingRecord);
     if (
         typeof primeGoogleDriveAppsScript === 'function'
         && assistanceShouldShowQuoteSection(assistanceEditingRecord, assistanceEditingStatus)
@@ -1156,6 +1168,73 @@ async function sendAssistanceToQuote(id) {
     } catch (error) {
         alertAppDialog(`Erro ao enviar para orçamento: ${error.message}. ${assistanceSqlHint()}`);
     }
+}
+
+async function sendAssistanceToAwaitingScheduling(id) {
+    const normalizedId = Number(id);
+    if (!normalizedId) return;
+    const record = assistanceRequestsCache.find(item => Number(item.id) === normalizedId);
+    if (record && record.status !== ASSISTANCE_STATUS_OPEN) return;
+    if (!(await confirmAppDialog(
+        'Ir direto para Aguardando agendamento? O fluxo de orçamento na Compras será ignorado.',
+        { title: 'Assistência', confirmLabel: 'Ir para agendamento' }
+    ))) return;
+    try {
+        await updateAssistanceStatus(normalizedId, ASSISTANCE_STATUS_AWAITING_SCHEDULING);
+        await refreshAssistanceSurfaces();
+    } catch (error) {
+        alertAppDialog(`Erro ao atualizar status: ${error.message}. ${assistanceSqlHint()}`);
+    }
+}
+
+async function saveAssistancePayloadFromModalWithStatus(targetStatus) {
+    const id = Number(assistanceEditingId);
+    if (!id) {
+        alertAppDialog('Salve a assistência antes de alterar o status.');
+        return false;
+    }
+    const payload = collectAssistanceForm();
+    if (!payload) return false;
+
+    const now = new Date().toISOString();
+    const userId = currentUser?.id || null;
+    try {
+        setAssistanceModalLoading(true, 'Atualizando status...');
+        const { error } = await supabaseClient
+            .from('AssistanceRequest')
+            .update({
+                ...payload,
+                status: targetStatus,
+                updatedAt: now,
+                updatedById: userId
+            })
+            .eq('id', id);
+        if (error) throw error;
+        setAssistanceModalLoading(true, 'Status atualizado!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 700));
+        setAssistanceModalLoading(false);
+        toggleModal('assistance-modal', false);
+        await refreshAssistanceSurfaces();
+        return true;
+    } catch (error) {
+        setAssistanceModalLoading(false);
+        const missingTable = /AssistanceRequest|schema cache|does not exist/i.test(error.message || '');
+        alertAppDialog(missingTable ? `${error.message}. ${assistanceSqlHint()}` : `Erro ao atualizar: ${error.message}`);
+        return false;
+    }
+}
+
+async function sendAssistanceToQuoteFromModal() {
+    if (!(await confirmAppDialog('Enviar esta assistência para Compras orçar?'))) return;
+    await saveAssistancePayloadFromModalWithStatus(ASSISTANCE_STATUS_QUOTE);
+}
+
+async function sendAssistanceToAwaitingSchedulingFromModal() {
+    if (!(await confirmAppDialog(
+        'Ir direto para Aguardando agendamento? O fluxo de orçamento na Compras será ignorado.',
+        { title: 'Assistência', confirmLabel: 'Ir para agendamento' }
+    ))) return;
+    await saveAssistancePayloadFromModalWithStatus(ASSISTANCE_STATUS_AWAITING_SCHEDULING);
 }
 
 function assistanceQuoteIsReady(record) {
@@ -1458,6 +1537,11 @@ function bindAssistanceEvents() {
             sendAssistanceToQuote(Number(quoteButton.dataset.assistanceId));
             return;
         }
+        const awaitingButton = event.target.closest('.assistance-send-awaiting-scheduling-btn');
+        if (awaitingButton) {
+            sendAssistanceToAwaitingScheduling(Number(awaitingButton.dataset.assistanceId));
+            return;
+        }
         const historyButton = event.target.closest('.assistance-history-btn');
         if (historyButton) {
             const record = assistanceRequestsCache.find(item => Number(item.id) === Number(historyButton.dataset.assistanceId));
@@ -1517,6 +1601,13 @@ function bindAssistanceEvents() {
     document.getElementById('assistance-quote-file')?.addEventListener('change', syncAssistanceQuoteUploadButton);
     document.getElementById('btn-assistance-quote-upload')?.addEventListener('click', uploadAssistanceQuoteFromForm);
     document.getElementById('btn-assistance-quote-view')?.addEventListener('click', openAssistanceQuotePdfInBrowser);
+
+    document.getElementById('btn-assistance-send-quote')?.addEventListener('click', () => {
+        void sendAssistanceToQuoteFromModal();
+    });
+    document.getElementById('btn-assistance-send-awaiting-scheduling')?.addEventListener('click', () => {
+        void sendAssistanceToAwaitingSchedulingFromModal();
+    });
     document.getElementById('assistance-form')?.addEventListener('submit', saveAssistanceRequest);
 }
 
@@ -1528,6 +1619,7 @@ window.openAssistanceForm = openAssistanceForm;
 window.openAssistanceStatusHistoryModal = openAssistanceStatusHistoryModal;
 window.sendAssistanceToApproval = sendAssistanceToApproval;
 window.approveAssistanceRequest = approveAssistanceRequest;
+window.sendAssistanceToAwaitingScheduling = sendAssistanceToAwaitingScheduling;
 window.markAssistanceSeparated = markAssistanceSeparated;
 window.markAssistanceScheduled = markAssistanceScheduled;
 window.markAssistanceExecution = markAssistanceExecution;
