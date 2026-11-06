@@ -46,6 +46,12 @@ const ASSISTANCE_SCHEDULING_VISIBLE_STATUSES = new Set([
     'Finished'
 ]);
 
+/** Data agendada e montador/marceneiro editáveis no modal (não em Execução/Finalizado). */
+const ASSISTANCE_SCHEDULING_FIELDS_EDITABLE_STATUSES = new Set([
+    ASSISTANCE_STATUS_AWAITING_SCHEDULING,
+    ASSISTANCE_STATUS_SCHEDULED
+]);
+
 function assistanceHasQuoteData(record) {
     if (!record) return false;
     return record.totalValue != null
@@ -309,7 +315,9 @@ function canApproveAssistance(user = currentUser) {
 }
 
 function canEditAssistanceScheduling(user = currentUser) {
-    return canEditAssistanceQuote(user) || canApproveAssistance(user);
+    // Compras orça a assistência; agendamento (data/montador) fica com gestão e Fábrica administrativo.
+    return canApproveAssistance(user)
+        || (typeof isFactoryAdministrative === 'function' && isFactoryAdministrative(user));
 }
 
 function toAssistanceDateInputValue(dateStr) {
@@ -385,7 +393,7 @@ function syncAssistanceSchedulingSection(record = null) {
     const status = record?.status || assistanceEditingStatus;
     const visible = assistanceShouldShowSchedulingSection(record, status);
     const editable = canEditAssistanceScheduling()
-        && status === ASSISTANCE_STATUS_AWAITING_SCHEDULING;
+        && ASSISTANCE_SCHEDULING_FIELDS_EDITABLE_STATUSES.has(status);
 
     section?.classList.toggle('hidden', !visible);
     if (!visible) return;
@@ -1068,7 +1076,7 @@ function collectAssistanceForm() {
     }
 
     if (canEditAssistanceScheduling()
-        && assistanceEditingStatus === ASSISTANCE_STATUS_AWAITING_SCHEDULING) {
+        && ASSISTANCE_SCHEDULING_FIELDS_EDITABLE_STATUSES.has(assistanceEditingStatus)) {
         payload.scheduledAt = fromAssistanceDateInputValue(
             document.getElementById('assistance-scheduled-at')?.value
         );
