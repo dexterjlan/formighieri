@@ -317,6 +317,188 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
     color: var(--fm-ink-muted, #5c6658);
 }
 
+.part-request-drawio-host {
+    min-height: min(58vh, 640px);
+    height: min(58vh, 640px);
+}
+
+.part-request-drawio-host .part-request-drawio-iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: min(58vh, 640px);
+    background: #fff;
+}
+
+.part-request-drawio-host--readonly {
+    opacity: 0.92;
+    pointer-events: auto;
+}
+
+.part-request-print-surface {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+}
+
+.part-request-print-sheet {
+    box-sizing: border-box;
+    font-family: system-ui, sans-serif;
+    color: #0f172a;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
+.part-request-print-sheet__header {
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    border-bottom: 2px solid #0f172a;
+}
+
+.part-request-print-sheet__kicker {
+    margin: 0;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.part-request-print-sheet__title {
+    margin: 4px 0 10px;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.part-request-print-sheet__fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.part-request-print-field {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 5px 8px;
+    background: #f8fafc;
+    min-height: 2.35rem;
+}
+
+.part-request-print-field__label {
+    display: block;
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+}
+
+.part-request-print-field__value {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #0f172a;
+    word-break: break-word;
+    line-height: 1.25;
+}
+
+.part-request-print-sheet__defect-box {
+    margin-top: 6px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: #fff;
+}
+
+.part-request-print-sheet__defect {
+    margin: 3px 0 0;
+    font-size: 10px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    color: #0f172a;
+}
+
+.part-request-print-sheet__printed-at {
+    margin: 6px 0 0;
+    font-size: 9px;
+    color: #64748b;
+}
+
+.part-request-print-sheet__drawing-title {
+    margin: 0 0 6px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #475569;
+}
+
+.part-request-print-sheet__img-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 4px;
+    min-height: 200px;
+}
+
+.part-request-print-sheet__img-wrap img {
+    display: block;
+    max-width: 100%;
+    max-height: 180mm;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.part-request-print-sheet__footer {
+    margin-top: 6px;
+    font-size: 8px;
+    color: #94a3b8;
+    text-align: right;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+
+    body.part-request-print-active * {
+        visibility: hidden !important;
+    }
+
+    body.part-request-print-active #part-request-print-surface,
+    body.part-request-print-active #part-request-print-surface * {
+        visibility: visible !important;
+    }
+
+    body.part-request-print-active #part-request-print-surface {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: auto;
+        overflow: visible;
+        clip: auto;
+    }
+
+    .part-request-print-sheet__img-wrap {
+        min-height: auto;
+        max-height: calc(297mm - 95mm);
+    }
+
+    .part-request-print-sheet__img-wrap img {
+        max-height: calc(297mm - 95mm);
+    }
+}
+
 /* ── Menu lateral (árvore, recolhível) ── */
 .app-shell {
     --app-sidebar-rail: 4.25rem;

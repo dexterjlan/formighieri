@@ -213,7 +213,21 @@ function applyOrderCodePickerSelection(order) {
     }
 }
 
+function raiseOrderCodePickerAboveOpenModals() {
+    const modal = document.getElementById('order-code-picker-modal');
+    if (!modal) return;
+    let maxZ = 50;
+    document.querySelectorAll('body .fixed.inset-0').forEach(el => {
+        if (el === modal || el.classList.contains('hidden')) return;
+        const z = Number.parseInt(window.getComputedStyle(el).zIndex, 10);
+        if (Number.isFinite(z) && z > maxZ) maxZ = z;
+    });
+    modal.style.zIndex = String(maxZ + 1);
+}
+
 function closeOrderCodePickerModal() {
+    const modal = document.getElementById('order-code-picker-modal');
+    if (modal) modal.style.zIndex = '';
     toggleModal('order-code-picker-modal', false);
     orderCodePickerTarget = null;
     orderCodePickerSourceOrders = [];
@@ -236,6 +250,7 @@ async function openOrderCodePicker(config) {
         searchInput.value = presetTerm;
     }
 
+    raiseOrderCodePickerAboveOpenModals();
     toggleModal('order-code-picker-modal', true);
 
     if (typeof config.loadOrders === 'function') {

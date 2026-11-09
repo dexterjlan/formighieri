@@ -327,3 +327,11 @@ function canActOrderProjectNomear(project, user = currentUser) {
 function canCreateAsAdminOrConferente() {
     return isAdmin() || isConferente();
 }
+
+/** Requisições → Peça: Admin, gestor de projetos ou perfil Fábrica (incl. Marceneiro). */
+function canAccessRequisicoesPartRequest(user = currentUser) {
+    if (!user?.id || isThirdParty(user)) return false;
+    if (isAdmin(user)) return true;
+    if (isGestorProjetos(user)) return true;
+    return isFabricaRole(user);
+}

@@ -14,12 +14,29 @@ function canAccessRequisicoes() {
     return Boolean(currentUser?.id) && !(typeof isThirdParty === 'function' && isThirdParty());
 }
 
+function canSeeRequisicoesPartRequestSection() {
+    return typeof canAccessRequisicoesPartRequest === 'function' && canAccessRequisicoesPartRequest();
+}
+
+function getVisibleRequisicoesSections() {
+    return REQUISICOES_SECTIONS.filter(section => {
+        if (section.id === 'parts') return canSeeRequisicoesPartRequestSection();
+        return true;
+    });
+}
+
+function normalizeRequisicoesSectionId(sectionId) {
+    const visible = getVisibleRequisicoesSections();
+    if (visible.some(section => section.id === sectionId)) return sectionId;
+    return visible[0]?.id || 'projects';
+}
+
 function renderRequisicoesSidebar() {
     const nav = document.getElementById('requisicoes-sidebar-nav');
     if (!nav) return;
 
     const markSelection = !document.getElementById('requisicoes-view')?.classList.contains('hidden');
-    nav.innerHTML = REQUISICOES_SECTIONS.map(section => `
+    nav.innerHTML = getVisibleRequisicoesSections().map(section => `
         <button type="button"
             class="app-nav-item app-nav-item--nested ${markSelection && requisicoesActiveSection === section.id ? 'is-active' : ''}"
             data-requisicoes-section="${section.id}">
@@ -53,6 +70,15 @@ async function loadRequisicoesContent() {
         if (typeof loadAssistanceRequests === 'function') await loadAssistanceRequests();
         return;
     }
+    if (requisicoesActiveSection === 'parts') {
+        if (!canSeeRequisicoesPartRequestSection()) {
+            alertAppDialog('Você não tem acesso à solicitação de peça.');
+            selectRequisicoesSection('projects');
+            return;
+        }
+        if (typeof loadPartRequests === 'function') await loadPartRequests();
+        return;
+    }
     if (typeof renderRequisicoesConstruction === 'function') {
         renderRequisicoesConstruction(requisicoesActiveSection);
     }
@@ -67,7 +93,8 @@ function ensureRequisicoesViewVisible() {
 }
 
 function selectRequisicoesSection(sectionId) {
-    if (!REQUISICOES_SECTIONS.some(section => section.id === sectionId)) return;
+    sectionId = normalizeRequisicoesSectionId(sectionId);
+    if (!getVisibleRequisicoesSections().some(section => section.id === sectionId)) return;
     ensureRequisicoesViewVisible();
     requisicoesActiveSection = sectionId;
     renderRequisicoesSidebar();
@@ -80,9 +107,7 @@ function showRequisicoes(sectionId = requisicoesActiveSection) {
         alertAppDialog('Você não tem acesso às requisições.');
         return;
     }
-    if (!REQUISICOES_SECTIONS.some(section => section.id === sectionId)) {
-        sectionId = 'projects';
-    }
+    sectionId = normalizeRequisicoesSectionId(sectionId);
     hideSubViews();
     document.getElementById('requisicoes-view')?.classList.remove('hidden');
     updateMainNavActive('requisicoes');
@@ -99,7 +124,7 @@ async function restoreRequisicoesView(state = {}) {
         return;
     }
     const savedSection = state.requisicoesSection || 'projects';
-    showRequisicoes(REQUISICOES_SECTIONS.some(section => section.id === savedSection) ? savedSection : 'projects');
+    showRequisicoes(normalizeRequisicoesSectionId(savedSection));
 }
 
 function updateRequisicoesNav() {
@@ -153,6 +178,7 @@ function bindRequisicoesEvents() {
 
     if (typeof bindAssistanceEvents === 'function') bindAssistanceEvents();
     if (typeof bindWpsItemRegistrationEvents === 'function') bindWpsItemRegistrationEvents();
+    if (typeof bindPartRequestEvents === 'function') bindPartRequestEvents();
 }
 
 window.showRequisicoes = showRequisicoes;
