@@ -161,7 +161,7 @@ function updateGestaoCadastrosNavVisibility() {
     if (typeof updateGestaoCommercialFinanceNavVisibility === 'function') {
         updateGestaoCommercialFinanceNavVisibility();
     }
-    document.getElementById('gestao-nav-woodwork-checklist-items')?.classList.toggle('hidden', !isAdmin());
+    document.getElementById('gestao-nav-woodwork-checklist-items')?.classList.toggle('hidden', !canAccessGestao());
 
     const agruparBtn = document.getElementById('gestao-nav-agrupar-projetos');
     if (agruparBtn) {
@@ -1408,7 +1408,7 @@ function showGestaoThirdPartySubtypesPanel() {
 }
 
 function showGestaoWoodworkChecklistItemsPanel() {
-    if (!isAdmin()) return;
+    if (!canAccessGestao()) return;
     if (typeof ensureGestaoWoodworkChecklistItemsPanelHost === 'function') {
         ensureGestaoWoodworkChecklistItemsPanelHost();
     }

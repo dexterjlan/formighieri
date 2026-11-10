@@ -37,7 +37,7 @@ async function loadWoodworkQualityChecklistItems(activeOnly = false) {
 async function loadGestaoWoodworkChecklistItemsList() {
     ensureGestaoWoodworkChecklistItemsPanelHost();
     const tbody = document.getElementById('gestao-woodwork-checklist-items-list');
-    if (!tbody || !isAdmin()) return;
+    if (!tbody || !canAccessGestao()) return;
 
     const { data: items, error } = await loadWoodworkQualityChecklistItems(false);
     if (error) {
@@ -98,7 +98,7 @@ async function loadGestaoWoodworkChecklistItemsList() {
 }
 
 async function saveGestaoWoodworkChecklistItemRow(row) {
-    if (!row || !isAdmin()) return;
+    if (!row || !canAccessGestao()) return;
 
     const itemId = Number(row.dataset.itemId);
     const name = row.querySelector('.gestao-woodwork-item-name')?.value.trim();
@@ -137,7 +137,7 @@ async function saveGestaoWoodworkChecklistItemRow(row) {
 }
 
 async function deleteGestaoWoodworkChecklistItemRow(row) {
-    if (!row || !isAdmin()) return;
+    if (!row || !canAccessGestao()) return;
 
     const itemId = Number(row.dataset.itemId);
     const name = row.querySelector('.gestao-woodwork-item-name')?.value.trim() || 'este item';
@@ -165,7 +165,7 @@ async function deleteGestaoWoodworkChecklistItemRow(row) {
 
 async function createGestaoWoodworkChecklistItem(event) {
     event?.preventDefault();
-    if (!isAdmin()) return;
+    if (!canAccessGestao()) return;
 
     const name = document.getElementById('gestao-new-woodwork-item-name')?.value.trim();
     const sortOrder = Number(document.getElementById('gestao-new-woodwork-item-sort')?.value) || 0;
