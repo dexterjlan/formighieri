@@ -725,6 +725,22 @@ async function viewConversationDetails(id) {
     toggleModal('conv-modal', true);
 }
 
+function formatOrderRequestCardDate(value) {
+    if (!value) return '—';
+    return typeof formatDate === 'function' ? formatDate(value) : String(value);
+}
+
+function buildOrderRequestCardDatesFooter(conv) {
+    const requestDate = formatOrderRequestCardDate(conv?.createdAt);
+    const responseDate = formatOrderRequestCardDate(getResponseDisplayDate(conv));
+    return `
+        <div class="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-start gap-x-4 gap-y-1 text-[10px] text-slate-500">
+            <span><span class="font-semibold text-slate-600">Data da requisição:</span> ${escapeHtml(requestDate)}</span>
+            <span><span class="font-semibold text-slate-600">Data da resposta:</span> ${escapeHtml(responseDate)}</span>
+        </div>
+    `;
+}
+
 function buildRequestResponseSection(conv, activities = []) {
     const status = normalizeRequestStatus(conv);
     const hasActivities = activities.length > 0;
@@ -751,18 +767,6 @@ function buildRequestResponseSection(conv, activities = []) {
                     <p class="text-slate-800 font-medium">${conv.designerResponse}</p>
                 </div>
             `);
-        }
-        const responseDate = getResponseDisplayDate(conv);
-        if (conv.createdAt || responseDate) {
-            const metaHtml = [
-                conv.createdAt
-                    ? `<p class="text-[10px] text-slate-500">Criado em: ${formatDate(conv.createdAt)}</p>`
-                    : '',
-                responseDate
-                    ? `<p class="text-[10px] text-slate-500">Respondido em: ${formatDate(responseDate)}</p>`
-                    : ''
-            ].filter(Boolean).join('');
-            sections.push(`<div class="space-y-0.5 pt-1">${metaHtml}</div>`);
         }
         return sections.join('') || '<p class="text-xs text-slate-400 italic">Requisição encerrada.</p>';
     }
@@ -960,6 +964,7 @@ async function loadConversations(orderId, options = {}) {
             appendRequestActivitiesToCard(body, c, activitiesByRequest[c.id] || [], byActivity);
             appendOrderRequestAttachmentsToCard(body, c.id, legacy);
             body.insertAdjacentHTML('beforeend', buildRequestResponseSection(c, activitiesByRequest[c.id] || []));
+            body.insertAdjacentHTML('beforeend', buildOrderRequestCardDatesFooter(c));
             list.appendChild(div);
         });
 
