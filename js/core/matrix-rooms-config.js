@@ -27,6 +27,11 @@ const MATRIX_ROOM_DEFINITIONS = [
         key: 'revisions',
         label: 'Revisões',
         roomAlias: '#formighieri_revisoes:matrix.org'
+    },
+    {
+        key: 'externalAssemblyInspection',
+        label: 'Vistoria',
+        roomAlias: '#formighieri_vistoria:matrix.org'
     }
 ];
 

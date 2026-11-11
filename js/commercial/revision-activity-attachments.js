@@ -703,18 +703,26 @@ function bindRevisionActivityAttachmentListEvents(listEl, context) {
         }
 
         const previewImg = event.target.closest('.revision-activity-attachment-item__preview');
-        if (previewImg?.dataset.attachmentDriveUrl) {
+        if (!previewImg) return;
+
+        if (previewImg.dataset.attachmentDriveUrl) {
             openImageAttachmentLightbox(
                 previewImg.dataset.attachmentDriveUrl,
                 previewImg.getAttribute('alt') || 'Imagem'
             );
             return;
         }
-        if (previewImg?.dataset.revisionAttachmentStoragePath) {
+        if (previewImg.dataset.revisionAttachmentStoragePath) {
             openRevisionActivityAttachmentPreview(
                 previewImg.dataset.revisionAttachmentStoragePath,
                 previewImg.getAttribute('alt') || 'Imagem'
             );
+            return;
+        }
+
+        const previewSrc = previewImg.currentSrc || previewImg.src;
+        if (previewSrc && typeof openImageAttachmentLightbox === 'function') {
+            openImageAttachmentLightbox(previewSrc, previewImg.getAttribute('alt') || 'Imagem');
         }
     });
 }

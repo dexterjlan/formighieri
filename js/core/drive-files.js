@@ -9,7 +9,9 @@ const DRIVE_FILE_FOLDER_KIND = {
     THIRD_PARTY: 'thirdParty',
     MODEL_3D: 'model3d',
     IMPLEMENTATION_LIST: 'implementationList',
-    ASSISTANCE_QUOTE: 'assistanceQuote'
+    ASSISTANCE_QUOTE: 'assistanceQuote',
+    EXTERNAL_ASSEMBLY_INSPECTION: 'externalAssemblyInspection',
+    EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE: 'externalAssemblyInspectionResponse'
 };
 
 const DRIVE_FILE_ENTITY_TYPE = {
@@ -21,7 +23,8 @@ const DRIVE_FILE_ENTITY_TYPE = {
     THIRD_PARTY_PROJECT: 'ThirdPartyProject',
     ORDER_PROJECT: 'OrderProject',
     IMPLEMENTATION_PURCHASE_ITEM: 'ImplementationPurchaseItem',
-    ASSISTANCE_REQUEST: 'AssistanceRequest'
+    ASSISTANCE_REQUEST: 'AssistanceRequest',
+    EXTERNAL_ASSEMBLY_INSPECTION_ACTIVITY: 'ExternalAssemblyInspectionActivity'
 };
 
 const DRIVE_FILE_FOLDER_NAMES = {
@@ -32,7 +35,9 @@ const DRIVE_FILE_FOLDER_NAMES = {
     [DRIVE_FILE_FOLDER_KIND.THIRD_PARTY]: 'terceiros',
     [DRIVE_FILE_FOLDER_KIND.MODEL_3D]: '3d',
     [DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST]: 'Listas',
-    [DRIVE_FILE_FOLDER_KIND.ASSISTANCE_QUOTE]: 'orcamento'
+    [DRIVE_FILE_FOLDER_KIND.ASSISTANCE_QUOTE]: 'orcamento',
+    [DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION]: 'vistoria',
+    [DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE]: 'vistoria'
 };
 
 const DRIVE_FILE_IMPLEMENTATION_LIST_EXTENSIONS = ['pdf'];
@@ -90,7 +95,9 @@ function getDriveFileExtension(fileName) {
 
 function isImageDriveFolderKind(folderKind) {
     return folderKind === DRIVE_FILE_FOLDER_KIND.REQUEST
-        || folderKind === DRIVE_FILE_FOLDER_KIND.REVISION;
+        || folderKind === DRIVE_FILE_FOLDER_KIND.REVISION
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE;
 }
 
 function allowedDriveExtensionsForFolderKind(folderKind) {
@@ -113,6 +120,10 @@ function maxDriveUploadBytesForFolderKind(folderKind) {
         return DRIVE_FILE_IMAGE_MAX_BYTES;
     }
     if (folderKind === DRIVE_FILE_FOLDER_KIND.REVISION) {
+        return DRIVE_FILE_REVISION_IMAGE_MAX_BYTES;
+    }
+    if (folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE) {
         return DRIVE_FILE_REVISION_IMAGE_MAX_BYTES;
     }
     return DRIVE_FILE_MAX_BYTES;
@@ -426,6 +437,9 @@ function driveFileMissingSetupMessage(error) {
     }
     if (message.includes('assistanceQuote') || message.includes('AssistanceRequest')) {
         return 'Execute no SQL Editor (DEV): supabase/feats/drive-file-assistance-quote.sql';
+    }
+    if (message.includes('externalAssemblyInspection') || message.includes('ExternalAssemblyInspection')) {
+        return 'Execute no SQL Editor (DEV): supabase/feats/drive-file-external-assembly-inspection.sql';
     }
     return message || 'Erro ao enviar arquivo.';
 }

@@ -263,6 +263,12 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetWorke
 
     syncMontagemProgClientRequired();
     await applyMontagemProgAddressFromContext(prog);
+
+    const skipWeekendsWrap = document.getElementById('montagem-prog-skip-weekends-wrap');
+    const skipWeekendsCheckbox = document.getElementById('montagem-prog-skip-weekends');
+    skipWeekendsWrap?.classList.toggle('hidden', Boolean(editingMontagemProgId));
+    if (skipWeekendsCheckbox) skipWeekendsCheckbox.checked = false;
+
     toggleModal('montagem-prog-modal', true);
 }
 
@@ -341,9 +347,7 @@ async function saveMontagemProg(event) {
     }
 
     const now = new Date().toISOString();
-    const payload = {
-        startDate,
-        endDate,
+    const basePayload = {
         orderId,
         clientId: resolvedClientId,
         observation,
@@ -351,35 +355,77 @@ async function saveMontagemProg(event) {
         updatedById: currentUser.id
     };
 
-    try {
-        let assemblyScheduleId = editingMontagemProgId;
+    const skipWeekends = !editingMontagemProgId
+        && Boolean(document.getElementById('montagem-prog-skip-weekends')?.checked);
 
-        if (editingMontagemProgId) {
-            const { error } = await supabaseClient
-                .from('AssemblySchedule')
-                .update(payload)
-                .eq('id', editingMontagemProgId);
-            if (error) throw error;
-        } else {
+    let dateRanges = [{ startDate, endDate }];
+    if (skipWeekends) {
+        if (!montagemProgDateRangeSpansWeekend(startDate, endDate)) {
+            alertAppDialog('O período informado não inclui sábado nem domingo. Desmarque "Pular FDS" ou amplie as datas.');
+            return;
+        }
+        const segments = splitMontagemProgDateRangeSkippingWeekends(startDate, endDate);
+        if (!segments.length) {
+            alertAppDialog('O período não possui dias úteis para programar.');
+            return;
+        }
+        dateRanges = segments;
+        if (segments.length > 1) {
+            const confirmed = await confirmAppDialog(
+                `Serão criadas ${segments.length} montagens (um bloco por trecho de dias úteis, sem fins de semana). Continuar?`
+            );
+            if (!confirmed) return;
+        }
+    }
+
+    try {
+        const persistOneMontagemProg = async (rangeStart, rangeEnd) => {
             const { data: created, error } = await supabaseClient
                 .from('AssemblySchedule')
                 .insert({
-                    ...payload,
+                    ...basePayload,
+                    startDate: rangeStart,
+                    endDate: rangeEnd,
                     createdById: currentUser.id
                 })
                 .select('id')
                 .single();
             if (error) throw error;
-            assemblyScheduleId = created.id;
+
+            await persistMontagemProgCrew(created.id, montadorIds, cabinetMakerIds);
+            try {
+                await persistMontagemProgAddrId(created.id, addrId);
+            } catch (addrError) {
+                console.warn('persistMontagemProgAddrId:', addrError);
+                alertAppDialog(addrError.message || 'Montagem salva, mas o endereço não pôde ser gravado.');
+            }
+            return created.id;
+        };
+
+        if (editingMontagemProgId) {
+            const { error } = await supabaseClient
+                .from('AssemblySchedule')
+                .update({
+                    ...basePayload,
+                    startDate,
+                    endDate
+                })
+                .eq('id', editingMontagemProgId);
+            if (error) throw error;
+
+            await persistMontagemProgCrew(editingMontagemProgId, montadorIds, cabinetMakerIds);
+            try {
+                await persistMontagemProgAddrId(editingMontagemProgId, addrId);
+            } catch (addrError) {
+                console.warn('persistMontagemProgAddrId:', addrError);
+                alertAppDialog(addrError.message || 'Montagem salva, mas o endereço não pôde ser gravado.');
+            }
+        } else {
+            for (const range of dateRanges) {
+                await persistOneMontagemProg(range.startDate, range.endDate);
+            }
         }
 
-        await persistMontagemProgCrew(assemblyScheduleId, montadorIds, cabinetMakerIds);
-        try {
-            await persistMontagemProgAddrId(assemblyScheduleId, addrId);
-        } catch (addrError) {
-            console.warn('persistMontagemProgAddrId:', addrError);
-            alertAppDialog(addrError.message || 'Montagem salva, mas o endereço não pôde ser gravado.');
-        }
         editingMontagemProgId = null;
         toggleModal('montagem-prog-modal', false);
         await loadMontagemProgramacaoView();

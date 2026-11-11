@@ -410,6 +410,11 @@ async function finalizeMontagemExternaForProject(projectId, options = {}) {
 
     if (!(await confirmAppDialog(confirmMessage))) return false;
 
+    if (typeof assertOrderProjectMontagemExternaExitAllowed === 'function') {
+        const allowed = await assertOrderProjectMontagemExternaExitAllowed(projectId, projectLabel);
+        if (!allowed) return false;
+    }
+
     const targetStatusId = typeof getPendenciasStatusIdByName === 'function'
         ? await getPendenciasStatusIdByName('Aguardando Entrega Técnica')
         : await getOrderProjectStatusIdByName('Aguardando Entrega Técnica');

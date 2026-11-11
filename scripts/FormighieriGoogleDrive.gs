@@ -14,7 +14,7 @@
  * Pasta prod: FGP / {pedido} / {projeto} / {detalhamento|revisao|requisicao}
  * Descritivo:  FGP / {pedido} / descritivo (por pedido, sem pasta de projeto)
  * Pasta dev:  FGP-DEV / ...
- * Detalhamento: PDF/ZIP/RAR. Descritivo: só PDF. Requisição e revisão: imagem por atividade.
+ * Detalhamento: PDF/ZIP/RAR. Descritivo: só PDF. Requisição, revisão e vistoria ME: imagem por atividade.
  */
 
 var FGP_DRIVE_ROOT_FOLDER_NAME = 'FGP';
@@ -28,8 +28,12 @@ var FGP_DRIVE_FOLDER_KIND = {
   revision: 'revisao',
   request: 'requisicao',
   descriptive: 'descritivo',
-  thirdParty: 'terceiros',
-  model3d: '3d'
+  thirdparty: 'terceiros',
+  model3d: '3d',
+  implementationlist: 'Listas',
+  assistancequote: 'orcamento',
+  externalassemblyinspection: 'vistoria',
+  externalassemblyinspectionresponse: 'vistoria'
 };
 
 function handleDrivePostRequest_(body) {
@@ -90,7 +94,20 @@ function streamDriveModelBlob_(params) {
 }
 
 function isImageDriveFolderKind_(folderKind) {
-  return folderKind === 'request' || folderKind === 'revision';
+  return folderKind === 'request'
+    || folderKind === 'revision'
+    || folderKind === 'externalassemblyinspection'
+    || folderKind === 'externalassemblyinspectionresponse';
+}
+
+function maxDriveUploadBytesForFolderKind_(folderKind) {
+  if (folderKind === 'request') return 10 * 1024 * 1024;
+  if (folderKind === 'revision'
+    || folderKind === 'externalassemblyinspection'
+    || folderKind === 'externalassemblyinspectionresponse') {
+    return 2 * 1024 * 1024;
+  }
+  return FGP_DRIVE_MAX_FILE_BYTES;
 }
 
 function isOrderLevelDriveFolderKind_(folderKind) {
@@ -406,13 +423,13 @@ function resolveDriveUploadContext_(body) {
           ? 'Envie apenas uma imagem (JPEG, PNG, WebP, GIF ou HEIC)'
           : 'Envie apenas PDF, ZIP ou RAR')));
   }
-  var maxBytes = folderKind === 'request'
-    ? (10 * 1024 * 1024)
-    : (folderKind === 'revision' ? (2 * 1024 * 1024) : FGP_DRIVE_MAX_FILE_BYTES);
+  var maxBytes = maxDriveUploadBytesForFolderKind_(folderKind);
   if (fileSize <= 0 || fileSize > maxBytes) {
     throw new Error(folderKind === 'request'
       ? 'A imagem deve ter no máximo 10 MB'
       : (folderKind === 'revision'
+        || folderKind === 'externalassemblyinspection'
+        || folderKind === 'externalassemblyinspectionresponse'
         ? 'A imagem deve ter no máximo 2 MB'
         : 'Arquivo passa de 100 MB ou está vazio'));
   }

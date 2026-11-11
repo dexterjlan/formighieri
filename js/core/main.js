@@ -91,6 +91,7 @@ function initAppEvents() {
     bindOrderEvents();
     bindOrderExportEvents();
     bindOrderProjectEvents();
+    if (typeof bindExternalAssemblyInspectionEvents === 'function') bindExternalAssemblyInspectionEvents();
     bindProjectCharacteristicsEvents();
     if (typeof bindThirdPartyProjectTabEvents === 'function') {
         bindThirdPartyProjectTabEvents();

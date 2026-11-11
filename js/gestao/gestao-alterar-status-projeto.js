@@ -234,6 +234,19 @@ async function saveGestaoAlterarStatusPendingChanges() {
     const errors = [];
 
     for (const change of changes) {
+        const leavingMontagemExterna = change.currentStatusName === 'Montagem Externa'
+            && change.newStatusName !== 'Montagem Externa';
+        if (leavingMontagemExterna && typeof assertOrderProjectMontagemExternaExitAllowed === 'function') {
+            const allowed = await assertOrderProjectMontagemExternaExitAllowed(
+                change.projectId,
+                change.project.name || 'Projeto'
+            );
+            if (!allowed) {
+                errors.push(`${change.project.name || change.projectId}: vistoria de montagem externa pendente.`);
+                continue;
+            }
+        }
+
         const { error } = await supabaseClient
             .from('OrderProject')
             .update({

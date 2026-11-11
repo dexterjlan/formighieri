@@ -389,6 +389,37 @@ function renderOrderProjectGridStatusCellInnerHtml(project) {
     `;
 }
 
+function resolveOrderProjectGridActions(project, hideActions, actionContext, orderId) {
+    if (hideActions) {
+        return typeof enrichOrderProjectActionsWithExternalAssemblyInspection === 'function'
+            ? enrichOrderProjectActionsWithExternalAssemblyInspection(project, [])
+            : [];
+    }
+
+    if (typeof canActOnOrderProject === 'function' && !canActOnOrderProject(project)) {
+        return typeof enrichOrderProjectActionsWithExternalAssemblyInspection === 'function'
+            ? enrichOrderProjectActionsWithExternalAssemblyInspection(project, [])
+            : [];
+    }
+
+    const projectId = Number(project.id);
+    const approval = actionContext.approvalsByProject?.[projectId] || null;
+    const revisions = actionContext.revisionsByProject?.[projectId] || [];
+    const implantacao = actionContext.implantacaoByProjectId?.[projectId] || null;
+    const medicao = actionContext.medicaoByProject?.[projectId] || null;
+    const conferencia = actionContext.conferenciaByProject?.[projectId] || null;
+
+    let actions = typeof getOrderProjectActions === 'function'
+        ? getOrderProjectActions(project, { orderId, approval, revisions, implantacao, medicao, conferencia })
+        : [];
+
+    if (typeof enrichOrderProjectActionsWithExternalAssemblyInspection === 'function') {
+        actions = enrichOrderProjectActionsWithExternalAssemblyInspection(project, actions);
+    }
+
+    return actions;
+}
+
 function refreshOrderProjectSubstatusFlagsInOrderList(projectId) {
     const id = Number(projectId);
     if (!id || typeof orderProjectsCache === 'undefined' || !Array.isArray(orderProjectsCache)) return false;
@@ -423,16 +454,7 @@ function appendOrderProjectGridItem(container, project, orderId, actionContext, 
         : '';
     const designerName = project.designer?.name || '—';
     const projectId = Number(project.id);
-    const approval = actionContext.approvalsByProject?.[projectId] || null;
-    const revisions = actionContext.revisionsByProject?.[projectId] || [];
-    const implantacao = actionContext.implantacaoByProjectId?.[projectId] || null;
-    const medicao = actionContext.medicaoByProject?.[projectId] || null;
-    const conferencia = actionContext.conferenciaByProject?.[projectId] || null;
-    const actions = hideActions || (typeof canActOnOrderProject === 'function' && !canActOnOrderProject(project))
-        ? []
-        : (typeof getOrderProjectActions === 'function'
-            ? getOrderProjectActions(project, { orderId, approval, revisions, implantacao, medicao, conferencia })
-            : []);
+    const actions = resolveOrderProjectGridActions(project, hideActions, actionContext, orderId);
     const aggregatorBadge = !nested && typeof renderAggregatorProjectNoticeHtml === 'function'
         ? renderAggregatorProjectNoticeHtml(project)
         : '';
@@ -477,11 +499,9 @@ function appendOrderProjectGridItem(container, project, orderId, actionContext, 
                 ${renderOrderProjectGridStatusCellInnerHtml(project)}
             </div>
             <div class="order-projects-grid__cell order-projects-grid__cell--actions">
-                ${hideActions
-        ? '<span class="text-xs text-slate-300">—</span>'
-        : (typeof renderOrderProjectActionButtons === 'function'
-            ? renderOrderProjectActionButtons(actions)
-            : '<span class="text-xs text-slate-300">—</span>')}
+                ${typeof renderOrderProjectActionButtons === 'function'
+        ? renderOrderProjectActionButtons(actions)
+        : '<span class="text-xs text-slate-300">—</span>'}
             </div>
         </div>
     `;
@@ -572,6 +592,7 @@ async function loadOrderProjects(orderId) {
     if (typeof refreshOrdersListSummary === 'function') {
         await refreshOrdersListSummary();
     }
+
 }
 
 function bindOrderProjectEvents() {

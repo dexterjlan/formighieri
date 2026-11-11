@@ -2088,6 +2088,47 @@ body.gestao-kanban-fullscreen-active {
     max-height: var(--gestao-kanban-column-max-height, calc(100vh - 15rem));
 }
 
+/* Botão Vistoria no kanban — fundo por status (classes injetadas via JS; CSS evita purge do Tailwind CDN) */
+.gestao-kanban-eai-btn[data-eai-tone="none"] {
+    background-color: transparent;
+    border-color: rgb(226 232 240);
+    color: rgb(71 85 105);
+}
+
+.gestao-kanban-eai-btn[data-eai-tone="none"]:hover {
+    background-color: rgb(248 250 252);
+}
+
+.gestao-kanban-eai-btn[data-eai-tone="gray"] {
+    background-color: rgb(226 232 240);
+    border-color: rgb(148 163 184);
+    color: rgb(30 41 59);
+}
+
+.gestao-kanban-eai-btn[data-eai-tone="gray"]:hover {
+    background-color: rgb(203 213 225);
+}
+
+.gestao-kanban-eai-btn[data-eai-tone="yellow"] {
+    background-color: rgb(254 243 199);
+    border-color: rgb(253 230 138);
+    color: rgb(146 64 14);
+}
+
+.gestao-kanban-eai-btn[data-eai-tone="yellow"]:hover {
+    background-color: rgb(253 230 138);
+}
+
+.gestao-kanban-eai-btn[data-eai-tone="green"] {
+    background-color: rgb(209 250 229);
+    border-color: rgb(167 243 208);
+    color: rgb(6 95 70);
+}
+
+.gestao-kanban-eai-btn[data-eai-tone="green"]:hover {
+    background-color: rgb(167 243 208);
+}
+
 #gestao-kanban-panel {
     --gestao-kanban-column-max-height: calc(100vh - 15rem);
 }
@@ -4383,7 +4424,7 @@ body.installer-only-nav #btn-logout {
 .conv-attachment-lightbox {
     position: fixed;
     inset: 0;
-    z-index: 90;
+    z-index: 130;
     background: rgb(15 23 42 / 0.82);
     display: flex;
     align-items: center;
@@ -4831,8 +4872,111 @@ body.montagem-prog-resizing {
     }
 }
 
-.order-export-print-root {
+.order-export-print-root,
+.eai-export-print-root {
     display: none;
+}
+
+.eai-export-image {
+    display: block;
+    max-width: 200px;
+    max-height: 150px;
+    object-fit: contain;
+    margin-top: 0.35rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.25rem;
+}
+
+.eai-export-cell-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.25rem;
+}
+
+.eai-export-header__primary {
+    font-size: 0.9rem;
+}
+
+.eai-export-summary-card {
+    background: #f8fafc;
+}
+
+.eai-export-project-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.eai-export-project-head .order-export-subheading {
+    margin: 0;
+}
+
+.eai-export-pill {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.eai-export-pill--yes {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.eai-export-pill--no {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.eai-export-pill--status {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.eai-export-cell-sub {
+    margin-top: 0.2rem;
+    font-size: 0.68rem;
+    color: #64748b;
+    line-height: 1.3;
+}
+
+.eai-export-approved__name {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.eai-export-activity-text,
+.eai-export-response-text {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 0.78rem;
+    color: #334155;
+}
+
+.eai-export-activities-table .eai-export-th-narrow {
+    width: 4.75rem;
+    text-align: center;
+}
+
+.eai-export-activities-table .eai-export-th-medium {
+    width: 7.5rem;
+}
+
+.eai-export-col-done {
+    text-align: center;
+    vertical-align: top;
+}
+
+.eai-export-col-approved {
+    vertical-align: top;
+    min-width: 7rem;
 }
 
 .order-export-document {
@@ -5003,6 +5147,40 @@ body.montagem-prog-resizing {
     body.order-export-printing .order-export-card {
         break-inside: avoid-page;
         page-break-inside: avoid;
+    }
+
+    body.eai-export-printing * {
+        visibility: hidden;
+    }
+
+    body.eai-export-printing #eai-export-print-root,
+    body.eai-export-printing #eai-export-print-root * {
+        visibility: visible;
+    }
+
+    body.eai-export-printing #eai-export-print-root {
+        display: block;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0;
+        background: #fff;
+    }
+
+    body.eai-export-printing .order-export-section--page-break {
+        break-before: page;
+        page-break-before: always;
+    }
+
+    body.eai-export-printing .order-export-card {
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+    }
+
+    body.eai-export-printing .eai-export-image {
+        max-width: 42%;
+        max-height: 140px;
     }
 }
 

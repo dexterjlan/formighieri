@@ -6,6 +6,7 @@ const ASSISTANCE_STATUS_AWAITING_SCHEDULING = 'AwaitingScheduling';
 const ASSISTANCE_STATUS_SCHEDULED = 'Scheduled';
 const ASSISTANCE_STATUS_EXECUTION = 'Execution';
 const ASSISTANCE_STATUS_FINISHED = 'Finished';
+const ASSISTANCE_STATUS_CANCELLED = 'Cancelled';
 
 const ASSISTANCE_STATUSES = [
     { value: 'Open', label: 'Aberto' },
@@ -15,7 +16,8 @@ const ASSISTANCE_STATUSES = [
     { value: 'AwaitingScheduling', label: 'Aguardando agendamento' },
     { value: 'Scheduled', label: 'Agendado' },
     { value: 'Execution', label: 'Execução' },
-    { value: 'Finished', label: 'Finalizado' }
+    { value: 'Finished', label: 'Finalizado' },
+    { value: 'Cancelled', label: 'Cancelado' }
 ];
 
 const ASSISTANCE_STATUS_BADGE = {
@@ -26,8 +28,14 @@ const ASSISTANCE_STATUS_BADGE = {
     AwaitingScheduling: 'bg-indigo-50 text-indigo-800',
     Scheduled: 'bg-indigo-100 text-indigo-800',
     Execution: 'bg-violet-100 text-violet-800',
-    Finished: 'bg-emerald-100 text-emerald-800'
+    Finished: 'bg-emerald-100 text-emerald-800',
+    Cancelled: 'bg-rose-100 text-rose-800'
 };
+
+const ASSISTANCE_TERMINAL_STATUSES = new Set([
+    ASSISTANCE_STATUS_FINISHED,
+    ASSISTANCE_STATUS_CANCELLED
+]);
 
 const ASSISTANCE_POST_QUOTE_STATUSES = new Set([
     ASSISTANCE_STATUS_QUOTE,
@@ -320,6 +328,62 @@ function canEditAssistanceScheduling(user = currentUser) {
         || (typeof isFactoryAdministrative === 'function' && isFactoryAdministrative(user));
 }
 
+function isAssistanceTerminalStatus(status = assistanceEditingStatus) {
+    return ASSISTANCE_TERMINAL_STATUSES.has(status);
+}
+
+function canCancelAssistance(record = assistanceEditingRecord, user = currentUser) {
+    if (!record?.id) return false;
+    const status = record.status || assistanceEditingStatus;
+    if (isAssistanceTerminalStatus(status)) return false;
+    return canApproveAssistance(user) || canEditAssistanceScheduling(user);
+}
+
+function syncAssistanceCancelReasonSection(record = assistanceEditingRecord) {
+    const section = document.getElementById('assistance-cancel-reason-section');
+    const text = document.getElementById('assistance-cancel-reason-text');
+    if (!section || !text) return;
+    const cancelled = (record?.status || assistanceEditingStatus) === ASSISTANCE_STATUS_CANCELLED;
+    section.classList.toggle('hidden', !cancelled);
+    text.textContent = String(record?.cancelReason || '').trim() || '—';
+}
+
+function syncAssistanceCancelRequestButton(record = assistanceEditingRecord) {
+    const button = document.getElementById('btn-assistance-cancel-request');
+    if (!button) return;
+    const show = canCancelAssistance(record);
+    button.classList.toggle('hidden', !show);
+}
+
+function syncAssistanceFormReadOnlyState(record = assistanceEditingRecord) {
+    const status = record?.status || assistanceEditingStatus;
+    const readOnly = status === ASSISTANCE_STATUS_CANCELLED;
+    const ids = [
+        'assistance-description',
+        'assistance-warranty',
+        'btn-assistance-client-picker',
+        'btn-assistance-order-picker',
+        'btn-assistance-order-clear',
+        'btn-assistance-addr-picker',
+        'btn-assistance-send-quote',
+        'btn-assistance-send-awaiting-scheduling'
+    ];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.tagName === 'BUTTON') {
+            el.disabled = readOnly;
+        } else {
+            el.readOnly = readOnly;
+            el.disabled = readOnly;
+        }
+    });
+    const saveButton = document.getElementById('btn-assistance-save');
+    if (saveButton) {
+        saveButton.classList.toggle('hidden', readOnly);
+    }
+}
+
 function toAssistanceDateInputValue(dateStr) {
     if (!dateStr) return '';
     const date = new Date(dateStr);
@@ -421,8 +485,11 @@ function syncAssistanceSchedulingSection(record = null) {
 
 function renderAssistanceListActionButtons(record) {
     const parts = [
-        `<button type="button" class="assistance-edit-btn text-[11px] font-medium text-indigo-700 hover:text-indigo-900" data-assistance-id="${record.id}">Editar</button>`
+        `<button type="button" class="assistance-edit-btn text-[11px] font-medium text-indigo-700 hover:text-indigo-900" data-assistance-id="${record.id}">Abrir</button>`
     ];
+    if (record.status === ASSISTANCE_STATUS_CANCELLED) {
+        return parts.join('');
+    }
     if (record.status === ASSISTANCE_STATUS_OPEN) {
         parts.push(`<button type="button" class="assistance-send-quote-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200" data-assistance-id="${record.id}">Enviar para Compras Orçar</button>`);
         parts.push(`<button type="button" class="assistance-send-awaiting-scheduling-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200" data-assistance-id="${record.id}">Ir para Aguardando agendamento</button>`);
@@ -447,7 +514,7 @@ const ASSISTANCE_STATUS_HISTORY_CHANGED_BY_EMBED =
 
 const assistanceModalOverlay = typeof createAppOverlayHelper === 'function'
     ? createAppOverlayHelper('assistance-modal', {
-        closeButtonSelector: '#assistance-modal button[onclick="toggleModal(\'assistance-modal\', false)"]'
+        closeButtonSelector: '#btn-assistance-close'
     })
     : null;
 
@@ -496,10 +563,10 @@ function setAssistanceModalLoading(active, message = 'Processando...', status = 
     const lockForm = Boolean(active) && status === 'loading';
     setAssistanceModalFormLocked(lockForm);
 
-    const closeButton = document.querySelector(
-        '#assistance-modal button[onclick="toggleModal(\'assistance-modal\', false)"]'
-    );
+    const closeButton = document.getElementById('btn-assistance-close');
     if (closeButton) closeButton.disabled = Boolean(active);
+    const cancelRequestButton = document.getElementById('btn-assistance-cancel-request');
+    if (cancelRequestButton) cancelRequestButton.disabled = Boolean(active);
 
     if (!active) {
         restoreAssistanceModalQuoteControls();
@@ -673,6 +740,9 @@ function resetAssistanceForm() {
     renderAssistanceStatusLabel(ASSISTANCE_STATUS_OPEN);
     syncAssistanceAddressField();
     syncAssistanceOpenStatusActions(null);
+    syncAssistanceCancelReasonSection(null);
+    syncAssistanceCancelRequestButton(null);
+    syncAssistanceFormReadOnlyState(null);
 }
 
 function syncAssistanceOpenStatusActions(record = assistanceEditingRecord) {
@@ -919,7 +989,8 @@ async function openAssistanceForm(record = null, options = {}) {
 
     if (record) {
         assistanceEditingId = Number(record.id);
-        assistanceEditingRecord = record;
+        assistanceEditingRecord = await enrichAssistanceRecordCancelReason(record);
+        record = assistanceEditingRecord;
         setAssistanceClient({ id: record.clientId || record.client?.id, name: record.client?.name || '' });
         const description = document.getElementById('assistance-description');
         const warranty = document.getElementById('assistance-warranty');
@@ -942,6 +1013,9 @@ async function openAssistanceForm(record = null, options = {}) {
     syncAssistanceQuoteSection(assistanceEditingRecord);
     syncAssistanceSchedulingSection(assistanceEditingRecord);
     syncAssistanceOpenStatusActions(assistanceEditingRecord);
+    syncAssistanceCancelReasonSection(assistanceEditingRecord);
+    syncAssistanceCancelRequestButton(assistanceEditingRecord);
+    syncAssistanceFormReadOnlyState(assistanceEditingRecord);
     if (
         typeof primeGoogleDriveAppsScript === 'function'
         && assistanceShouldShowQuoteSection(assistanceEditingRecord, assistanceEditingStatus)
@@ -984,17 +1058,40 @@ function renderAssistanceScreen(options = {}) {
     mountRequisicoesAssistanceInteractiveTable(document.getElementById('assistance-table-mount'));
 }
 
+const ASSISTANCE_REQUEST_LIST_SELECT = 'id, clientId, orderId, addrId, isWarranty, description, status, totalValue, quoteFilePath, quoteFileName, scheduledAt, finishedAt, montadorId, cabinetMakerId, createdAt, client:Client(id, name), order:salesOrders(id, orderCode), address:addr(id, nickname, street, number, complement, neighborhood, city, state, isPrimary), montador:Installer(id, name), cabinetMaker:CabinetMaker(id, name)';
+
+async function enrichAssistanceRecordCancelReason(record) {
+    if (!record?.id) return record;
+    if (record.status !== ASSISTANCE_STATUS_CANCELLED) return record;
+    if (String(record.cancelReason || '').trim()) return record;
+
+    const { data, error } = await supabaseClient
+        .from('AssistanceRequest')
+        .select('cancelReason')
+        .eq('id', Number(record.id))
+        .maybeSingle();
+
+    if (error || !data) return record;
+    return { ...record, cancelReason: data.cancelReason };
+}
+
 async function loadAssistanceRequests(options = {}) {
     const content = document.getElementById('requisicoes-content');
     if (content && !options.silent) {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando assistências...</p>';
     }
 
-    const selectWithAddress = 'id, clientId, orderId, addrId, isWarranty, description, status, totalValue, quoteFilePath, quoteFileName, scheduledAt, finishedAt, montadorId, cabinetMakerId, createdAt, client:Client(id, name), order:salesOrders(id, orderCode), address:addr(id, nickname, street, number, complement, neighborhood, city, state, isPrimary), montador:Installer(id, name), cabinetMaker:CabinetMaker(id, name)';
     let result = await supabaseClient
         .from('AssistanceRequest')
-        .select(selectWithAddress)
+        .select(`${ASSISTANCE_REQUEST_LIST_SELECT}, cancelReason`)
         .order('id', { ascending: false });
+
+    if (result.error && /cancelReason/i.test(result.error.message || '')) {
+        result = await supabaseClient
+            .from('AssistanceRequest')
+            .select(ASSISTANCE_REQUEST_LIST_SELECT)
+            .order('id', { ascending: false });
+    }
 
     if (result.error && /totalValue|quoteFilePath|quoteFileName|scheduledAt|finishedAt|montadorId|cabinetMakerId|Installer|CabinetMaker/i.test(result.error.message || '')) {
         result = await supabaseClient
@@ -1154,6 +1251,60 @@ async function updateAssistanceStatus(id, status, extraFields = {}) {
         .update(payload)
         .eq('id', id);
     if (error) throw error;
+}
+
+async function cancelAssistanceRequest(record = assistanceEditingRecord) {
+    const assistanceId = Number(record?.id || assistanceEditingId);
+    if (!assistanceId || !canCancelAssistance(record)) {
+        alertAppDialog('Você não pode cancelar esta assistência.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const reason = await promptAppDialog('Informe o motivo do cancelamento:', {
+        title: 'Cancelar assistência',
+        confirmLabel: 'Cancelar assistência',
+        variant: 'danger',
+        placeholder: 'Descreva o motivo...'
+    });
+    if (reason === null) return;
+
+    const cancelReason = String(reason).trim();
+    if (!cancelReason) {
+        alertAppDialog('Informe o motivo do cancelamento.');
+        return;
+    }
+
+    if (!(await confirmAppDialog(
+        'Confirma o cancelamento desta assistência? O status passará para Cancelado.',
+        { title: 'Cancelar assistência', confirmLabel: 'Confirmar cancelamento', variant: 'danger' }
+    ))) return;
+
+    try {
+        setAssistanceModalLoading(true, 'Cancelando assistência...');
+        await updateAssistanceStatus(assistanceId, ASSISTANCE_STATUS_CANCELLED, { cancelReason });
+        assistanceEditingStatus = ASSISTANCE_STATUS_CANCELLED;
+        assistanceEditingRecord = {
+            ...(assistanceEditingRecord || record || {}),
+            id: assistanceId,
+            status: ASSISTANCE_STATUS_CANCELLED,
+            cancelReason
+        };
+        renderAssistanceStatusLabel(ASSISTANCE_STATUS_CANCELLED);
+        syncAssistanceCancelReasonSection(assistanceEditingRecord);
+        syncAssistanceCancelRequestButton(assistanceEditingRecord);
+        syncAssistanceFormReadOnlyState(assistanceEditingRecord);
+        syncAssistanceOpenStatusActions(assistanceEditingRecord);
+        setAssistanceModalLoading(true, 'Cancelada!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        setAssistanceModalLoading(false);
+        await refreshAssistanceSurfaces();
+    } catch (error) {
+        setAssistanceModalLoading(false);
+        const missing = /cancelReason|AssistanceRequest_status_check|schema cache/i.test(error.message || '');
+        alertAppDialog(missing
+            ? `${error.message}. Execute supabase/feats/assistance-request-cancel-status.sql no Supabase SQL Editor.`
+            : `Erro ao cancelar: ${error.message}`);
+    }
 }
 
 async function refreshAssistanceSurfaces() {
@@ -1402,6 +1553,10 @@ async function sendAssistanceToApproval(record) {
 
 async function saveAssistanceRequest(event) {
     event.preventDefault();
+    if (assistanceEditingStatus === ASSISTANCE_STATUS_CANCELLED) {
+        alertAppDialog('Assistência cancelada não pode ser alterada.');
+        return;
+    }
     const payload = collectAssistanceForm();
     if (!payload) return;
 
@@ -1616,6 +1771,12 @@ function bindAssistanceEvents() {
     document.getElementById('btn-assistance-send-awaiting-scheduling')?.addEventListener('click', () => {
         void sendAssistanceToAwaitingSchedulingFromModal();
     });
+    document.getElementById('btn-assistance-close')?.addEventListener('click', () => {
+        toggleModal('assistance-modal', false);
+    });
+    document.getElementById('btn-assistance-cancel-request')?.addEventListener('click', () => {
+        void cancelAssistanceRequest(assistanceEditingRecord);
+    });
     document.getElementById('assistance-form')?.addEventListener('submit', saveAssistanceRequest);
 }
 
@@ -1632,4 +1793,5 @@ window.markAssistanceSeparated = markAssistanceSeparated;
 window.markAssistanceScheduled = markAssistanceScheduled;
 window.markAssistanceExecution = markAssistanceExecution;
 window.markAssistanceFinished = markAssistanceFinished;
+window.cancelAssistanceRequest = cancelAssistanceRequest;
 window.bindAssistanceEvents = bindAssistanceEvents;

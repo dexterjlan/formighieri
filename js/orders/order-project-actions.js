@@ -874,6 +874,16 @@ async function handleOrderProjectAction(button) {
                 });
             }
             break;
+        case 'external-assembly-inspection':
+            if (typeof openExternalAssemblyInspectionListModal === 'function' && projectId) {
+                const listProject = (typeof orderProjectsCache !== 'undefined' ? orderProjectsCache : [])
+                    .find(item => Number(item.id) === projectId);
+                const listLabel = listProject && typeof getExternalAssemblyInspectionProjectName === 'function'
+                    ? getExternalAssemblyInspectionProjectName(listProject)
+                    : projectName;
+                void openExternalAssemblyInspectionListModal(projectId, listLabel);
+            }
+            break;
         case 'finalizar-entrega-tecnica':
             if (typeof openOrderProjectEntregaModal === 'function' && projectId) {
                 await openOrderProjectEntregaModal(projectId, projectName, {

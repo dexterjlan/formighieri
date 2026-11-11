@@ -314,6 +314,12 @@ async function openProjectViewModal(projectOrId) {
         : null;
     document.getElementById('btn-project-view-implantacao')
         ?.classList.toggle('hidden', !orderProjectViewImplantacaoContext);
+    const statusName = typeof getGestaoProjectStatusName === 'function'
+        ? getGestaoProjectStatusName(project)
+        : (project?.projectStatus?.name || '');
+    if (typeof syncProjectViewExternalAssemblyInspectionButton === 'function') {
+        syncProjectViewExternalAssemblyInspectionButton(project, statusName);
+    }
     if (typeof renderProjectViewDetailingSection === 'function') {
         renderProjectViewDetailingSection(detalhamentoRecord);
     } else {

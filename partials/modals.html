@@ -1592,6 +1592,10 @@
                     class="hidden flex-1 bg-amber-50 text-amber-900 border border-amber-200 py-2.5 rounded-lg text-xs font-semibold hover:bg-amber-100">
                     Checklists marcenaria
                 </button>
+                <button type="button" id="btn-project-view-external-assembly-inspection"
+                    class="hidden flex-1 bg-teal-50 text-teal-900 border border-teal-200 py-2.5 rounded-lg text-xs font-semibold hover:bg-teal-100">
+                    Vistoria de Montagem Externa
+                </button>
                 <button type="button" id="btn-order-project-status-history"
                     class="flex-1 bg-white border border-indigo-200 text-indigo-800 py-2.5 rounded-lg text-xs font-semibold hover:bg-indigo-50">
                     Histórico de status
@@ -2123,6 +2127,14 @@
                             required>
                     </div>
                 </div>
+                <div id="montagem-prog-skip-weekends-wrap" class="flex items-start gap-2 rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2">
+                    <input type="checkbox" id="montagem-prog-skip-weekends"
+                        class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                    <div class="min-w-0">
+                        <label for="montagem-prog-skip-weekends" class="text-xs font-semibold text-slate-700 cursor-pointer">Pular FDS</label>
+                        <p class="text-[10px] text-slate-500 leading-snug mt-0.5">Se o período incluir sábado ou domingo, cria uma montagem para cada trecho de dias úteis (ex.: qui–sex e seg–qui).</p>
+                    </div>
+                </div>
                 <div>
                     <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-2">Montadores</p>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2576,16 +2588,22 @@
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 resize-y"
                         placeholder="Descreva a assistência"></textarea>
                 </div>
+                <div id="assistance-cancel-reason-section" class="hidden rounded-xl border border-rose-200 bg-rose-50/50 p-3 space-y-1">
+                    <p class="text-xs font-semibold text-rose-900">Motivo do cancelamento</p>
+                    <p id="assistance-cancel-reason-text" class="text-sm text-slate-800 whitespace-pre-wrap">—</p>
+                </div>
                 <div id="assistance-open-status-actions" class="hidden flex flex-wrap gap-2 pt-1">
                     <button type="button" id="btn-assistance-send-quote"
                         class="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200">Enviar para Compras orçar</button>
                     <button type="button" id="btn-assistance-send-awaiting-scheduling"
                         class="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200">Ir para Aguardando agendamento</button>
                 </div>
-                <div class="flex gap-2 pt-2">
-                    <button type="button" onclick="toggleModal('assistance-modal', false)"
-                        class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Cancelar</button>
-                    <div class="flex-1"></div>
+                <div class="flex flex-wrap gap-2 pt-2 items-center">
+                    <button type="button" id="btn-assistance-close"
+                        class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
+                    <button type="button" id="btn-assistance-cancel-request"
+                        class="hidden text-xs bg-white border border-rose-200 text-rose-800 px-4 py-2 rounded-lg font-medium hover:bg-rose-50">Cancelar</button>
+                    <div class="flex-1 min-w-[0.5rem]"></div>
                     <button type="submit" id="btn-assistance-save"
                         class="text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-800">Salvar</button>
                 </div>
@@ -3638,6 +3656,146 @@
                     class="text-slate-400 hover:text-slate-600 text-xl leading-none" aria-label="Fechar">×</button>
             </div>
             <div id="woodwork-checklist-versions-list" class="p-4 overflow-y-auto space-y-2 flex-1"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: LISTA — VISTORIA DE MONTAGEM EXTERNA -->
+    <div id="external-assembly-inspection-list-modal"
+        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[88]">
+        <div class="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
+            <div class="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h3 class="font-bold text-base text-slate-900">Vistoria de Montagem Externa</h3>
+                    <div class="flex items-center gap-2 min-w-0 mt-1">
+                        <span id="eai-list-order-code"
+                            class="fm-order-code-badge text-sm font-bold bg-slate-900 text-amber-500 px-2.5 py-1 rounded font-mono shrink-0"></span>
+                        <span id="eai-list-order-client"
+                            class="fm-order-client-title text-lg font-bold text-slate-900 truncate min-w-0"></span>
+                    </div>
+                    <p id="eai-list-project-label" class="text-xs font-medium text-slate-600 mt-1 truncate"></p>
+                </div>
+                <button type="button" id="btn-eai-list-close"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none" aria-label="Fechar">×</button>
+            </div>
+            <div id="eai-list-mount" class="p-4 overflow-y-auto flex-1 text-sm"></div>
+            <div class="p-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row gap-2">
+                <button type="button" id="btn-eai-list-close-footer"
+                    class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-medium hover:bg-slate-200">Fechar</button>
+                <button type="button" id="btn-eai-list-create"
+                    class="hidden flex-1 bg-teal-700 text-white py-2 rounded-lg text-xs font-semibold hover:bg-teal-800">Criar Vistoria</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: NOVA VISTORIA DE MONTAGEM EXTERNA -->
+    <div id="external-assembly-inspection-create-modal"
+        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[89]">
+        <div class="bg-white rounded-2xl w-full max-w-4xl shadow-xl border border-slate-200 max-h-[96vh] overflow-hidden flex flex-col relative">
+            <div id="eai-create-modal-loading"
+                class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                <div class="fm-app-overlay__card">
+                    <div class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                    <p class="fm-app-overlay__message">Processando...</p>
+                </div>
+            </div>
+            <div class="p-5 border-b border-slate-100 flex justify-between items-start gap-3">
+                <div>
+                    <h3 class="font-bold text-base text-slate-900">Nova Vistoria de Montagem Externa</h3>
+                    <div class="flex items-center gap-2 min-w-0 mt-1">
+                        <span id="eai-create-order-code"
+                            class="fm-order-code-badge text-sm font-bold bg-slate-900 text-amber-500 px-2.5 py-1 rounded font-mono shrink-0"></span>
+                        <span id="eai-create-order-client"
+                            class="fm-order-client-title text-lg font-bold text-slate-900 truncate min-w-0"></span>
+                    </div>
+                </div>
+                <button type="button" id="btn-eai-create-close"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none" aria-label="Fechar">×</button>
+            </div>
+            <form id="eai-create-form" class="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div class="p-5 overflow-y-auto flex-1 space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="eai-create-observation">Observação da vistoria</label>
+                        <textarea id="eai-create-observation" rows="2"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 resize-y"
+                            placeholder="Contexto geral da vistoria"></textarea>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <label class="text-xs font-semibold text-slate-500" for="eai-create-add-project">Projeto</label>
+                            <select id="eai-create-add-project"
+                                class="flex-1 min-w-[12rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white"></select>
+                            <button type="button" id="btn-eai-create-add-project"
+                                class="text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800">Adicionar</button>
+                        </div>
+                        <p id="eai-create-projects-empty" class="text-xs text-slate-400 text-center py-6">Adicione ao menos um projeto em Montagem Externa.</p>
+                        <div id="eai-create-projects-mount" class="space-y-4"></div>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-100 flex flex-wrap gap-2">
+                    <button type="button" id="btn-eai-create-cancel"
+                        class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Cancelar</button>
+                    <div class="flex-1 min-w-[0.5rem]"></div>
+                    <button type="submit" id="btn-eai-create-save"
+                        class="text-xs bg-teal-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-teal-800">Salvar vistoria</button>
+                </div>
+            </form>
+            <input type="file" id="eai-create-image-input" accept="image/*" class="hidden">
+        </div>
+    </div>
+
+    <!-- MODAL: DETALHE — VISTORIA DE MONTAGEM EXTERNA -->
+    <div id="external-assembly-inspection-detail-modal"
+        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[90]">
+        <div class="bg-white rounded-2xl w-full max-w-5xl shadow-xl border border-slate-200 max-h-[96vh] overflow-hidden flex flex-col relative">
+            <div id="eai-detail-modal-loading"
+                class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                <div class="fm-app-overlay__card">
+                    <div class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                    <p class="fm-app-overlay__message">Processando...</p>
+                </div>
+            </div>
+            <div class="p-5 border-b border-slate-100 flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0 space-y-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h3 class="font-bold text-base text-slate-900">Vistoria de Montagem Externa</h3>
+                        <span id="eai-detail-inspection-status" class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-700">—</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 min-w-0 mt-1">
+                        <span id="eai-detail-order-code"
+                            class="fm-order-code-badge text-sm font-bold bg-slate-900 text-amber-500 px-2.5 py-1 rounded font-mono shrink-0">—</span>
+                        <span id="eai-detail-order-client"
+                            class="fm-order-client-title text-lg font-bold text-slate-900 truncate min-w-0">—</span>
+                        <span class="text-xs font-medium text-slate-500 shrink-0">· Vistoria #<span id="eai-detail-inspection-id">—</span></span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button type="button" id="btn-eai-detail-delete"
+                        class="hidden text-xs text-rose-700 border border-rose-200 px-3 py-1.5 rounded-lg hover:bg-rose-50">Excluir vistoria</button>
+                    <button type="button" id="btn-eai-detail-close"
+                        class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
+                </div>
+            </div>
+            <div class="p-5 overflow-y-auto flex-1 space-y-4">
+                <div id="eai-detail-summary-mount"></div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="eai-detail-observation">Observação da vistoria</label>
+                    <textarea id="eai-detail-observation" rows="2"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-slate-400 resize-y"></textarea>
+                </div>
+                <div id="eai-detail-projects-mount" class="space-y-4"></div>
+            </div>
+            <div class="p-4 border-t border-slate-100 flex flex-wrap gap-2">
+                <button type="button" id="btn-eai-detail-close-footer"
+                    class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
+                <button type="button" id="btn-eai-detail-export-pdf"
+                    class="text-xs bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50"
+                    title="Abrir visualização para salvar como PDF">Gerar PDF</button>
+                <div class="flex-1 min-w-[0.5rem]"></div>
+                <button type="button" id="btn-eai-detail-save"
+                    class="text-xs bg-teal-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-teal-800">Salvar</button>
+            </div>
+            <input type="file" id="eai-detail-image-input" accept="image/*" class="hidden">
+            <input type="file" id="eai-detail-response-image-input" accept="image/*" class="hidden">
         </div>
     </div>
 

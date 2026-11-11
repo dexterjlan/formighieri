@@ -106,6 +106,27 @@ function renderGestaoKanbanProjectRow(project, options = {}) {
 
     const daysInStatusLabel = formatGestaoKanbanDaysInCurrentStatus(project);
     const showHistoryBtn = !isComplementar && !nested && !project.isComplementary;
+    const statusName = typeof getOrderProjectStatusName === 'function'
+        ? getOrderProjectStatusName(project)
+        : (project?.projectStatus?.name || '');
+    const showEaiBtn = !isComplementar && !nested && !project.isComplementary
+        && statusName === 'Montagem Externa';
+    const projectCode = typeof normalizeProjectCodeInput === 'function'
+        ? normalizeProjectCodeInput(project.projectCode || '')
+        : (project.projectCode || '');
+    const eaiLabel = typeof getExternalAssemblyInspectionProjectName === 'function'
+        ? getExternalAssemblyInspectionProjectName(project)
+        : (project.name || 'Projeto');
+    const eaiSummary = (typeof gestaoKanbanEaiSummaryByProjectId !== 'undefined'
+        ? gestaoKanbanEaiSummaryByProjectId
+        : {})[Number(project.id)]
+        || { finished: 0, total: 0, tone: 'none' };
+    const eaiBtnLabel = typeof buildExternalAssemblyInspectionKanbanButtonLabel === 'function'
+        ? buildExternalAssemblyInspectionKanbanButtonLabel(eaiSummary)
+        : 'Vistoria';
+    const eaiBtnTone = typeof normalizeExternalAssemblyInspectionKanbanButtonTone === 'function'
+        ? normalizeExternalAssemblyInspectionKanbanButtonTone(eaiSummary.tone, eaiSummary)
+        : (eaiSummary.total ? 'gray' : 'none');
     const aggregatorTooltip = (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)
         && aggregatorChildLabels.length)
         ? aggregatorChildLabels.join(', ')
@@ -122,13 +143,25 @@ function renderGestaoKanbanProjectRow(project, options = {}) {
                     ? `<span class="text-[10px] text-slate-400 whitespace-nowrap" title="Dias no status atual">${escapeHtml(daysInStatusLabel)}</span>`
                     : ''}
             </div>
+            <div class="flex flex-col items-end gap-1 shrink-0">
             ${showHistoryBtn ? `
             <button type="button"
-                class="gestao-kanban-history-btn shrink-0 text-[10px] bg-white border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-medium hover:bg-indigo-50"
+                class="gestao-kanban-history-btn text-[10px] bg-white border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-md font-medium hover:bg-indigo-50"
                 data-order-project-id="${project.id}">
                 Histórico
             </button>
             ` : ''}
+            ${showEaiBtn ? `
+            <button type="button"
+                class="gestao-kanban-eai-btn text-[10px] border px-2 py-0.5 rounded-md font-medium"
+                data-eai-tone="${escapeHtml(eaiBtnTone)}"
+                data-order-project-id="${project.id}"
+                data-project-label="${escapeHtml(eaiLabel)}"
+                title="Vistoria de Montagem Externa (${eaiSummary.finished}/${eaiSummary.total})">
+                ${escapeHtml(eaiBtnLabel)}
+            </button>
+            ` : ''}
+            </div>
         </div>
     `;
 }
@@ -1085,6 +1118,7 @@ function renderGestaoKanbanColumn(status, orders) {
 let gestaoKanbanFullscreen = false;
 let gestaoKanbanStatusesCache = [];
 let gestaoKanbanStatusSinceByProjectId = {};
+let gestaoKanbanEaiSummaryByProjectId = {};
 let gestaoKanbanClientFilterTimer = null;
 
 function getGestaoKanbanDaysInCurrentStatus(changedAt) {
@@ -1228,6 +1262,32 @@ async function loadGestaoKanbanStatusSinceMap(orders = []) {
     gestaoKanbanStatusSinceByProjectId = await fetchGestaoKanbanCurrentStatusChangedAtByProjects(projects);
 }
 
+async function loadGestaoKanbanEaiSummaryMap(orders = []) {
+    const montagemExternaIds = collectGestaoKanbanVisibleProjects(orders)
+        .filter(project => {
+            const statusName = typeof getOrderProjectStatusName === 'function'
+                ? getOrderProjectStatusName(project)
+                : (project?.projectStatus?.name || '');
+            return statusName === 'Montagem Externa';
+        })
+        .map(project => Number(project.id))
+        .filter(Boolean);
+
+    if (!montagemExternaIds.length || typeof fetchExternalAssemblyInspectionSummaryByOrderProjectIds !== 'function') {
+        gestaoKanbanEaiSummaryByProjectId = {};
+        return;
+    }
+
+    try {
+        gestaoKanbanEaiSummaryByProjectId = await fetchExternalAssemblyInspectionSummaryByOrderProjectIds(
+            montagemExternaIds
+        );
+    } catch (error) {
+        console.warn('loadGestaoKanbanEaiSummaryMap:', error);
+        gestaoKanbanEaiSummaryByProjectId = {};
+    }
+}
+
 function getGestaoKanbanClientFilter() {
     return document.getElementById('gestao-kanban-filter-client')?.value.trim() || '';
 }
@@ -1340,7 +1400,10 @@ async function loadGestaoKanban() {
 
     gestaoKanbanStatusesCache = visibleStatuses;
 
-    await loadGestaoKanbanStatusSinceMap(orders);
+    await Promise.all([
+        loadGestaoKanbanStatusSinceMap(orders),
+        loadGestaoKanbanEaiSummaryMap(orders)
+    ]);
     renderGestaoKanbanBoard();
 }
 

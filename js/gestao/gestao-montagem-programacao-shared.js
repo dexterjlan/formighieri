@@ -194,6 +194,67 @@ function shiftMontagemProgDateKey(dateKey, days) {
     return montagemProgToDateKey(montagemProgAddDays(date, days));
 }
 
+function isMontagemProgWeekendDate(date) {
+    const weekday = date.getDay();
+    return weekday === 0 || weekday === 6;
+}
+
+/** Quebra o período em trechos contínuos de dias úteis (sem sábado/domingo no meio). */
+function splitMontagemProgDateRangeSkippingWeekends(startDateKey, endDateKey) {
+    const start = montagemProgParseDateKey(startDateKey);
+    const end = montagemProgParseDateKey(endDateKey);
+    if (!start || !end || start > end) return [];
+
+    const weekdayDates = [];
+    let cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+
+    while (cursor <= end) {
+        if (!isMontagemProgWeekendDate(cursor)) {
+            weekdayDates.push(new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate()));
+        }
+        cursor = montagemProgAddDays(cursor, 1);
+    }
+
+    if (!weekdayDates.length) return [];
+
+    const segments = [];
+    let segmentStart = weekdayDates[0];
+    let previous = weekdayDates[0];
+
+    for (let index = 1; index < weekdayDates.length; index += 1) {
+        const current = weekdayDates[index];
+        const gapDays = montagemProgDaysBetween(previous, current);
+        if (gapDays > 1) {
+            segments.push({
+                startDate: montagemProgToDateKey(segmentStart),
+                endDate: montagemProgToDateKey(previous)
+            });
+            segmentStart = current;
+        }
+        previous = current;
+    }
+
+    segments.push({
+        startDate: montagemProgToDateKey(segmentStart),
+        endDate: montagemProgToDateKey(previous)
+    });
+
+    return segments;
+}
+
+function montagemProgDateRangeSpansWeekend(startDateKey, endDateKey) {
+    const start = montagemProgParseDateKey(startDateKey);
+    const end = montagemProgParseDateKey(endDateKey);
+    if (!start || !end || start > end) return false;
+
+    let cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    while (cursor <= end) {
+        if (isMontagemProgWeekendDate(cursor)) return true;
+        cursor = montagemProgAddDays(cursor, 1);
+    }
+    return false;
+}
+
 function getMontagemProgClientLabel(prog) {
     if (prog?.order) return getOrderClientName(prog.order) || '';
     return prog?.client?.name || '';

@@ -70,12 +70,14 @@ html[data-theme="formighieri-sage"] #order-content > div {
     box-shadow: var(--fm-shadow-sm) !important;
 }
 
-html[data-theme="formighieri-sage"] #det-code {
+html[data-theme="formighieri-sage"] #det-code,
+html[data-theme="formighieri-sage"] .fm-order-code-badge {
     background: var(--fm-sage-deep) !important;
     color: var(--fm-brass) !important;
 }
 
-html[data-theme="formighieri-sage"] #det-client {
+html[data-theme="formighieri-sage"] #det-client,
+html[data-theme="formighieri-sage"] .fm-order-client-title {
     font-family: var(--fm-font-display);
     font-weight: 600;
     color: var(--fm-ink) !important;
