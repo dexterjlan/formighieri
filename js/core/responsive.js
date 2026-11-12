@@ -165,7 +165,6 @@ function syncMobileLayoutState() {
         syncMobileTopbarContentActions();
     }
 
-    syncEaiModalScreenOpenBodyClass();
     updateDesktopSidebarToggleState();
 }
 
@@ -259,10 +258,7 @@ function bindResponsiveLayout() {
         }
     });
 
-    window.addEventListener('resize', () => {
-        syncMobileLayoutState();
-        syncEaiModalScreenOpenBodyClass();
-    }, { passive: true });
+    window.addEventListener('resize', syncMobileLayoutState, { passive: true });
     window.addEventListener('orientationchange', () => {
         window.setTimeout(syncMobileLayoutState, 100);
     });
@@ -306,11 +302,6 @@ function clearEaiModalKeyboardLayout() {
     });
     document.documentElement.style.removeProperty('--eai-visual-vh');
     document.documentElement.style.removeProperty('--eai-visual-offset-top');
-}
-
-function syncEaiModalScreenOpenBodyClass() {
-    const anyOpen = Boolean(document.querySelector('.eai-modal:not(.hidden)'));
-    document.body.classList.toggle('eai-modal-screen-open', anyOpen && isMobileViewport());
 }
 
 function scrollEaiModalFieldIntoView(field) {
@@ -384,7 +375,6 @@ function bindEaiModalMobileKeyboardLayout() {
 
 window.bindEaiModalMobileKeyboardLayout = bindEaiModalMobileKeyboardLayout;
 window.clearEaiModalKeyboardLayout = clearEaiModalKeyboardLayout;
-window.syncEaiModalScreenOpenBodyClass = syncEaiModalScreenOpenBodyClass;
 
 window.setAppMobileTopbarTitle = setAppMobileTopbarTitle;
 

@@ -9,9 +9,6 @@ function toggleModal(id, show) {
         }
         window.clearEaiModalKeyboardLayout?.();
     }
-    if (el.classList.contains('eai-modal')) {
-        window.syncEaiModalScreenOpenBodyClass?.();
-    }
 }
 window.toggleModal = toggleModal;
 function setActionOverlayLoading(config, active, message = 'Processando...', status = 'loading') {

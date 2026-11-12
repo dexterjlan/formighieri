@@ -5167,8 +5167,8 @@ body.is-mobile .eai-modal:not(.hidden) .eai-modal__panel {
     border-radius: 0;
 }
 
-/* Vistoria em tela cheia: some a topbar do app (evita “Pedidos” aparecer no iOS). */
-body.is-mobile.eai-modal-screen-open .app-mobile-topbar {
+/* Teclado aberto: some topbar do app e cabeçalho da vistoria; overlay segue a visualViewport. */
+body.is-mobile.eai-modal-keyboard-open .app-mobile-topbar {
     display: none !important;
 }
 
