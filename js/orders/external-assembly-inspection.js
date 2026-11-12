@@ -1285,7 +1285,7 @@ function appendExternalAssemblyInspectionDetailActivityRow(button) {
     row.dataset.inspectionProjectId = String(inspectionProjectId);
     row.innerHTML = `
         <td class="p-2 align-top">
-            <textarea rows="2" class="eai-detail-activity-description w-full px-2 py-1 text-xs border border-slate-200 rounded-lg resize-y"
+            <textarea rows="2" class="eai-field-input eai-detail-activity-description w-full px-2 py-1 border border-slate-200 rounded-lg resize-y"
                 placeholder="Descreva a atividade..."></textarea>
             <div class="eai-detail-creation-attachments-mount mt-1"></div>
         </td>
@@ -1293,7 +1293,7 @@ function appendExternalAssemblyInspectionDetailActivityRow(button) {
             <input type="checkbox" class="eai-activity-done h-4 w-4 rounded border-slate-300 text-emerald-600" disabled>
         </td>
         <td class="p-2 align-top">
-            <textarea rows="2" class="eai-activity-response w-full px-2 py-1 text-xs border border-slate-200 rounded-lg resize-y bg-slate-50"
+            <textarea rows="2" class="eai-field-input eai-activity-response w-full px-2 py-1 border border-slate-200 rounded-lg resize-y bg-slate-50"
                 placeholder="Comentário do gestor..."
                 disabled></textarea>
             ${canRespond ? '<div class="eai-detail-response-attachments-mount mt-1"></div>' : ''}
@@ -1500,7 +1500,7 @@ function appendExternalAssemblyInspectionCreateActivityRow(container) {
     row.className = 'eai-create-activity rounded-lg border border-slate-100 bg-slate-50/50 p-2 space-y-2';
     row.dataset.rowId = rowId;
     row.innerHTML = `
-        <textarea rows="2" class="eai-create-activity-description w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg resize-y" placeholder="Descreva a atividade..."></textarea>
+        <textarea rows="2" class="eai-field-input eai-create-activity-description w-full px-2 py-1.5 border border-slate-200 rounded-lg resize-y" placeholder="Descreva a atividade..."></textarea>
         <div class="eai-create-activity-attachments-mount"></div>
         <div class="flex flex-wrap gap-2 pt-1">
             <button type="button" class="eai-create-activity-remove text-[10px] text-rose-700">Excluir atividade</button>
@@ -1775,7 +1775,7 @@ function renderExternalAssemblyInspectionDetail(detail) {
             <tr class="border-t border-slate-100" data-activity-id="${activity.id}" data-inspection-project-id="${project.id}">
                 <td class="p-2 align-top">
                     ${canEditProjectActivities
-            ? `<textarea rows="2" class="eai-detail-activity-description w-full px-2 py-1 text-xs border border-slate-200 rounded-lg resize-y"
+            ? `<textarea rows="2" class="eai-field-input eai-detail-activity-description w-full px-2 py-1 border border-slate-200 rounded-lg resize-y"
                 placeholder="Descreva a atividade...">${escapeHtml(activity.description || '')}</textarea>
                <div class="eai-detail-creation-attachments-mount mt-1"></div>`
             : `<p class="text-xs text-slate-800 whitespace-pre-wrap">${escapeHtml(activity.description)}</p>
@@ -1787,7 +1787,7 @@ function renderExternalAssemblyInspectionDetail(detail) {
                         ${canRespond ? '' : 'disabled'}>
                 </td>
                 <td class="p-2 align-top">
-                    <textarea rows="2" class="eai-activity-response w-full px-2 py-1 text-xs border border-slate-200 rounded-lg resize-y"
+                    <textarea rows="2" class="eai-field-input eai-activity-response w-full px-2 py-1 border border-slate-200 rounded-lg resize-y"
                         placeholder="Comentário do gestor..."
                         ${canRespond ? '' : 'disabled'}>${escapeHtml(activity.responseComment || '')}</textarea>
                     ${canRespond

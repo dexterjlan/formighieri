@@ -4894,21 +4894,39 @@ body.montagem-prog-resizing {
     margin-top: 0.25rem;
 }
 
-/* Vistoria: fonte ≥16px em touch evita zoom automático ao focar (Safari iOS). */
+/* Vistoria: ≥16px em campos evita zoom ao focar no iOS (Safari e Chrome usam WebKit). */
+.eai-field-input {
+    font-size: 16px;
+    line-height: 1.35;
+}
+
+.eai-modal textarea,
+.eai-modal select,
+.eai-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]) {
+    font-size: 16px;
+    line-height: 1.35;
+}
+
 @media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
-    #external-assembly-inspection-create-modal textarea,
-    #external-assembly-inspection-create-modal select,
-    #external-assembly-inspection-detail-modal textarea,
-    #external-assembly-inspection-detail-modal select {
-        font-size: 16px;
+    .eai-modal textarea,
+    .eai-modal select,
+    .eai-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]) {
+        font-size: 16px !important;
     }
 }
 
-body.is-mobile #external-assembly-inspection-create-modal textarea,
-body.is-mobile #external-assembly-inspection-create-modal select,
-body.is-mobile #external-assembly-inspection-detail-modal textarea,
-body.is-mobile #external-assembly-inspection-detail-modal select {
-    font-size: 16px;
+body.is-mobile .eai-modal textarea,
+body.is-mobile .eai-modal select,
+body.is-mobile .eai-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]) {
+    font-size: 16px !important;
+}
+
+@supports (-webkit-touch-callout: none) {
+    .eai-modal textarea,
+    .eai-modal select,
+    .eai-modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="button"]):not([type="submit"]) {
+        font-size: 16px !important;
+    }
 }
 
 /* —— Vistoria: shell do modal (desktop = painel central; mobile = tela cheia) —— */
