@@ -286,13 +286,11 @@ function syncEaiModalVisualViewport() {
     const openModal = getOpenEaiModalWithKeyboard();
     if (!openModal || !window.visualViewport) {
         document.documentElement.style.removeProperty('--eai-visual-vh');
-        document.documentElement.style.removeProperty('--eai-visual-offset-top');
         return;
     }
 
     const viewport = window.visualViewport;
     document.documentElement.style.setProperty('--eai-visual-vh', `${Math.round(viewport.height)}px`);
-    document.documentElement.style.setProperty('--eai-visual-offset-top', `${Math.round(viewport.offsetTop)}px`);
 }
 
 function clearEaiModalKeyboardLayout() {
@@ -301,7 +299,6 @@ function clearEaiModalKeyboardLayout() {
         modal.classList.remove('eai-modal--keyboard-open');
     });
     document.documentElement.style.removeProperty('--eai-visual-vh');
-    document.documentElement.style.removeProperty('--eai-visual-offset-top');
 }
 
 function scrollEaiModalFieldIntoView(field) {
@@ -372,6 +369,7 @@ function bindEaiModalMobileKeyboardLayout() {
 }
 
 window.bindEaiModalMobileKeyboardLayout = bindEaiModalMobileKeyboardLayout;
+window.clearEaiModalKeyboardLayout = clearEaiModalKeyboardLayout;
 
 window.setAppMobileTopbarTitle = setAppMobileTopbarTitle;
 

@@ -1,5 +1,14 @@
 function toggleModal(id, show) {
-    document.getElementById(id)?.classList.toggle('hidden', !show);
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('hidden', !show);
+    if (!show && el.classList.contains('eai-modal')) {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && el.contains(active)) {
+            active.blur();
+        }
+        window.clearEaiModalKeyboardLayout?.();
+    }
 }
 window.toggleModal = toggleModal;
 function setActionOverlayLoading(config, active, message = 'Processando...', status = 'loading') {

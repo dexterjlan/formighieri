@@ -1178,6 +1178,7 @@ function syncExternalAssemblyInspectionListCreateButton(orderId = eaiListState?.
 function closeExternalAssemblyInspectionListModal() {
     toggleModal('external-assembly-inspection-list-modal', false);
     eaiListState = null;
+    window.clearEaiModalKeyboardLayout?.();
 }
 
 function closeExternalAssemblyInspectionCreateModal() {
@@ -1187,6 +1188,7 @@ function closeExternalAssemblyInspectionCreateModal() {
     toggleModal('external-assembly-inspection-create-modal', false);
     eaiCreateState = null;
     eaiCreateImageTarget = null;
+    window.clearEaiModalKeyboardLayout?.();
 }
 
 function closeExternalAssemblyInspectionDetailModal() {
@@ -1205,6 +1207,7 @@ function closeExternalAssemblyInspectionDetailModal() {
     eaiDetailState = null;
     eaiDetailImageTarget = null;
     eaiDetailActivityDraftCounter = 0;
+    window.clearEaiModalKeyboardLayout?.();
 
     if (listReturn?.orderProjectId) {
         void openExternalAssemblyInspectionListModal(
