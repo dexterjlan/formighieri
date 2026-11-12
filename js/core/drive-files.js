@@ -936,6 +936,35 @@ async function fetchDriveFilesByEntityIds({ entityType, entityIds = [], folderKi
     return byEntity;
 }
 
+/** Várias linhas DriveFile por entidade (ex.: duas fotos na vistoria). */
+async function fetchAllDriveFilesByEntityIds({ entityType, entityIds = [], folderKind } = {}) {
+    const type = String(entityType || '').trim();
+    const ids = [...new Set((entityIds || []).map(Number).filter(Boolean))];
+    if (!type || !ids.length) return {};
+
+    let query = supabaseClient
+        .from('DriveFile')
+        .select(DRIVE_FILE_SELECT)
+        .eq('entityType', type)
+        .in('entityId', ids)
+        .not('driveFileId', 'is', null);
+
+    if (folderKind) {
+        query = query.eq('folderKind', folderKind);
+    }
+
+    const { data, error } = await query.order('id', { ascending: true });
+    if (error) throw new Error(driveFileMissingSetupMessage(error));
+
+    const byEntity = {};
+    (data || []).forEach(item => {
+        const key = String(item.entityId);
+        if (!byEntity[key]) byEntity[key] = [];
+        byEntity[key].push(item);
+    });
+    return byEntity;
+}
+
 async function findDriveFileForEntity({ entityType, entityId, folderKind } = {}) {
     const { data, error } = await supabaseClient
         .from('DriveFile')
@@ -1189,6 +1218,7 @@ window.prepareDriveImageUploadFile = prepareDriveImageUploadFile;
 window.DRIVE_IMAGE_UPLOAD_MAX_DIMENSION = DRIVE_IMAGE_UPLOAD_MAX_DIMENSION;
 window.fetchDriveFiles = fetchDriveFiles;
 window.fetchDriveFilesByEntityIds = fetchDriveFilesByEntityIds;
+window.fetchAllDriveFilesByEntityIds = fetchAllDriveFilesByEntityIds;
 window.resolveDriveFileDownloadUrl = resolveDriveFileDownloadUrl;
 window.extractGoogleDriveFileId = extractGoogleDriveFileId;
 window.resolveDriveFilePdfBrowserOpenUrl = resolveDriveFilePdfBrowserOpenUrl;

@@ -4894,6 +4894,279 @@ body.montagem-prog-resizing {
     margin-top: 0.25rem;
 }
 
+/* Vistoria: fonte ≥16px em touch evita zoom automático ao focar (Safari iOS). */
+@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
+    #external-assembly-inspection-create-modal textarea,
+    #external-assembly-inspection-create-modal select,
+    #external-assembly-inspection-detail-modal textarea,
+    #external-assembly-inspection-detail-modal select {
+        font-size: 16px;
+    }
+}
+
+body.is-mobile #external-assembly-inspection-create-modal textarea,
+body.is-mobile #external-assembly-inspection-create-modal select,
+body.is-mobile #external-assembly-inspection-detail-modal textarea,
+body.is-mobile #external-assembly-inspection-detail-modal select {
+    font-size: 16px;
+}
+
+/* —— Vistoria: shell do modal (desktop = painel central; mobile = tela cheia) —— */
+.eai-modal__panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.eai-modal__header,
+.eai-modal__footer {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+    background: #fff;
+}
+
+.eai-modal__body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+
+.eai-modal__form {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
+    .eai-modal:not(.hidden) {
+        padding: 0 !important;
+        align-items: stretch;
+        justify-content: stretch;
+    }
+
+    .eai-modal__panel {
+        width: 100%;
+        max-width: none;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+    }
+
+    .eai-modal__header {
+        padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+        padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+        padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+        box-shadow: 0 1px 0 rgb(241 245 249);
+    }
+
+    .eai-modal__body {
+        padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+        padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+    }
+
+    .eai-modal__footer {
+        z-index: 3;
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+        padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+        padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+        box-shadow: 0 -4px 16px rgb(15 23 42 / 0.08);
+    }
+
+    #external-assembly-inspection-list-modal #btn-eai-list-close,
+    #external-assembly-inspection-create-modal #btn-eai-create-close,
+    #external-assembly-inspection-detail-modal #btn-eai-detail-close {
+        display: none;
+    }
+
+    .eai-modal__footer--compact {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 0.35rem;
+        padding-top: 0.5rem;
+    }
+
+    .eai-modal__footer--compact .eai-modal__footer-spacer {
+        display: none;
+    }
+
+    .eai-modal__footer--compact button {
+        flex: 1 1 0;
+        min-width: 0;
+        width: auto;
+        min-height: 2.25rem;
+        padding: 0.4rem 0.35rem;
+        font-size: 0.6875rem;
+        line-height: 1.2;
+    }
+
+    #external-assembly-inspection-create-modal .eai-create-project-toolbar {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+
+    #external-assembly-inspection-create-modal #btn-eai-create-add-project {
+        width: 100%;
+        min-height: 2.25rem;
+    }
+
+    .eai-list-table thead {
+        display: none;
+    }
+
+    .eai-list-table {
+        border: 0;
+        background: transparent;
+    }
+
+    .eai-list-table tbody tr {
+        display: block;
+        border: 1px solid rgb(226 232 240);
+        border-radius: 0.75rem;
+        margin-bottom: 0.65rem;
+        padding: 0.65rem 0.75rem;
+        background: #fff;
+    }
+
+    .eai-list-table tbody td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        border: 0;
+        padding: 0.25rem 0 !important;
+        text-align: left !important;
+    }
+
+    .eai-list-table tbody td::before {
+        content: attr(data-eai-label);
+        font-size: 0.625rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgb(100 116 139);
+        flex-shrink: 0;
+    }
+
+    .eai-list-table tbody td:last-child {
+        justify-content: flex-end;
+        padding-top: 0.5rem !important;
+        margin-top: 0.25rem;
+        border-top: 1px solid rgb(241 245 249);
+    }
+
+    .eai-list-table tbody td:last-child::before {
+        display: none;
+    }
+
+    .eai-modal__header .fm-order-client-title {
+        font-size: 1rem;
+        line-height: 1.25;
+    }
+
+    .eai-modal__header h3 {
+        font-size: 0.9375rem;
+    }
+
+    /* Atividades: cartões em vez de tabela larga */
+    .eai-detail-project-table-wrap {
+        overflow-x: visible;
+    }
+
+    .eai-detail-activities-table {
+        min-width: 0 !important;
+    }
+
+    .eai-detail-activities-table thead {
+        display: none;
+    }
+
+    .eai-detail-activities-table tbody tr {
+        display: block;
+        border: 1px solid rgb(226 232 240);
+        border-radius: 0.75rem;
+        margin-bottom: 0.65rem;
+        padding: 0.5rem 0.65rem;
+        background: rgb(248 250 252 / 0.65);
+    }
+
+    .eai-detail-activities-table tbody td {
+        display: block;
+        width: 100% !important;
+        border: 0;
+        padding: 0.35rem 0 !important;
+        text-align: left !important;
+    }
+
+    .eai-detail-activities-table tbody td:nth-child(2)::before {
+        content: "Realizado";
+        display: block;
+        font-size: 0.625rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgb(100 116 139);
+        margin-bottom: 0.25rem;
+    }
+
+    .eai-detail-activities-table tbody td:nth-child(3)::before {
+        content: "Resposta";
+        display: block;
+        font-size: 0.625rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: rgb(100 116 139);
+        margin-bottom: 0.25rem;
+    }
+
+    .eai-detail-activities-table tbody td:last-child {
+        text-align: right !important;
+        padding-top: 0.5rem !important;
+    }
+}
+
+body.is-mobile .eai-modal:not(.hidden) {
+    padding: 0 !important;
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+body.is-mobile .eai-modal__panel {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+}
+
+body.is-mobile #external-assembly-inspection-list-modal #btn-eai-list-close,
+body.is-mobile #external-assembly-inspection-create-modal #btn-eai-create-close,
+body.is-mobile #external-assembly-inspection-detail-modal #btn-eai-detail-close {
+    display: none;
+}
+
+body.is-mobile .eai-modal__footer--compact {
+    flex-direction: row;
+    flex-wrap: nowrap;
+}
+
+body.is-mobile .eai-modal__footer--compact button {
+    flex: 1 1 0;
+    width: auto;
+    min-height: 2.25rem;
+    font-size: 0.6875rem;
+}
+
 .eai-export-header__primary {
     font-size: 0.9rem;
 }

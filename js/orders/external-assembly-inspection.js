@@ -16,6 +16,8 @@ const EAI_STATUS_BADGE = {
     [EAI_STATUS_FINISHED]: 'bg-emerald-100 text-emerald-800'
 };
 
+const EAI_ACTIVITY_CREATION_IMAGE_MAX = 2;
+
 const EAI_INSPECTION_SELECT = `
     id, orderId, observation, status, createdAt, updatedAt, createdById, updatedById,
     createdBy:appUsers!ExternalAssemblyInspection_createdById_fkey(id, name),
@@ -151,12 +153,15 @@ async function persistExternalAssemblyInspectionActivityImages(uploads) {
                 throw new Error(uploadValidation);
             }
             const safeName = String(uploadFile?.name || 'imagem').trim() || 'imagem';
+            const fileName = item.context?.response
+                ? `atividade-${item.activityId}-${safeName}`
+                : buildExternalAssemblyInspectionActivityImageUploadFileName(item.activityId, safeName);
             await uploadExternalAssemblyInspectionActivityImage(
                 uploadFile,
                 item.activityId,
                 item.context,
                 updateExternalAssemblyInspectionImageUploadProgress,
-                { fileName: `atividade-${item.activityId}-${safeName}` }
+                { fileName }
             );
         }
     } finally {
@@ -454,39 +459,220 @@ async function syncExternalAssemblyInspectionDetailModalHeader(inspection) {
     });
 }
 
-function revokeExternalAssemblyInspectionCreatePreview(row) {
-    if (row?._imagePreviewUrl) {
-        URL.revokeObjectURL(row._imagePreviewUrl);
-        row._imagePreviewUrl = null;
+function ensureExternalAssemblyInspectionCreationImageRowState(row) {
+    if (!row) return;
+    if (!Array.isArray(row._creationImageDrafts)) row._creationImageDrafts = [];
+    if (!Array.isArray(row._creationExistingDriveFiles)) row._creationExistingDriveFiles = [];
+    if (!(row._creationRemovedDriveFileIds instanceof Set)) {
+        row._creationRemovedDriveFileIds = new Set();
     }
 }
 
-function bindExternalAssemblyInspectionCreateActivityAttachmentMount(row, mount) {
+function newExternalAssemblyInspectionCreationImageDraftId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function countExternalAssemblyInspectionCreationImages(row) {
+    ensureExternalAssemblyInspectionCreationImageRowState(row);
+    const existing = (row._creationExistingDriveFiles || []).filter(
+        file => file?.id && !row._creationRemovedDriveFileIds.has(Number(file.id))
+    );
+    return existing.length + (row._creationImageDrafts || []).length;
+}
+
+function canAddExternalAssemblyInspectionCreationImage(row) {
+    return countExternalAssemblyInspectionCreationImages(row) < EAI_ACTIVITY_CREATION_IMAGE_MAX;
+}
+
+function revokeExternalAssemblyInspectionCreationImageDrafts(row) {
+    ensureExternalAssemblyInspectionCreationImageRowState(row);
+    (row._creationImageDrafts || []).forEach(draft => {
+        if (draft?.previewUrl) URL.revokeObjectURL(draft.previewUrl);
+    });
+    row._creationImageDrafts = [];
+}
+
+function revokeExternalAssemblyInspectionCreatePreview(row) {
+    revokeExternalAssemblyInspectionCreationImageDrafts(row);
+}
+
+function eaiCreationDriveFilePreviewAttrs(file) {
+    if (!file) return '';
+    if (typeof driveFilePreviewImgAttrs === 'function') return driveFilePreviewImgAttrs(file);
+    const preview = typeof resolveDriveFilePreviewUrl === 'function' ? resolveDriveFilePreviewUrl(file) : '';
+    return preview ? `src="${escapeHtml(preview)}"` : '';
+}
+
+function renderExternalAssemblyInspectionCreationAttachmentItems(row, { canEdit = true } = {}) {
+    ensureExternalAssemblyInspectionCreationImageRowState(row);
+    const items = [];
+
+    (row._creationExistingDriveFiles || []).forEach(file => {
+        if (!file?.id || row._creationRemovedDriveFileIds.has(Number(file.id))) return;
+        items.push(`
+            <div class="revision-activity-attachment-item" data-eai-existing-drive-file-id="${file.id}">
+                <div class="revision-activity-attachment-item__preview-wrap">
+                    <img alt="${escapeHtml(file.fileName || 'Imagem')}"
+                        class="revision-activity-attachment-item__preview eai-creation-existing-preview"
+                        ${eaiCreationDriveFilePreviewAttrs(file)}>
+                </div>
+                ${canEdit ? `
+                    <button type="button"
+                        class="revision-activity-attachment-item__remove eai-creation-remove-existing"
+                        data-eai-remove-existing-id="${file.id}"
+                        aria-label="Remover imagem">×</button>
+                ` : ''}
+            </div>
+        `);
+    });
+
+    (row._creationImageDrafts || []).forEach(draft => {
+        if (!draft?.file) return;
+        items.push(`
+            <div class="revision-activity-attachment-item" data-eai-creation-draft-id="${escapeHtml(draft.id)}">
+                <div class="revision-activity-attachment-item__preview-wrap">
+                    <img src="${escapeHtml(draft.previewUrl || '')}" alt="${escapeHtml(draft.file.name || 'Imagem')}"
+                        class="revision-activity-attachment-item__preview">
+                </div>
+                ${canEdit ? `
+                    <button type="button"
+                        class="revision-activity-attachment-item__remove eai-creation-remove-draft"
+                        data-eai-remove-draft-id="${escapeHtml(draft.id)}"
+                        aria-label="Remover imagem">×</button>
+                ` : ''}
+            </div>
+        `);
+    });
+
+    const listHtml = items.length
+        ? `<div class="revision-activity-attachments__list">${items.join('')}</div>`
+        : '';
+    const addBtn = canEdit && canAddExternalAssemblyInspectionCreationImage(row)
+        ? '<button type="button" class="revision-activity-attachments__add-btn eai-creation-add-image-btn">+ Imagem</button>'
+        : '';
+
+    return `
+        <div class="revision-activity-attachments eai-creation-activity-attachments">
+            ${listHtml}
+            ${addBtn}
+        </div>
+    `;
+}
+
+function bindExternalAssemblyInspectionCreationAttachmentsMount(row, mount, { canEdit = true, onPick } = {}) {
     if (!row || !mount) return;
 
-    mount.querySelector('.eai-create-activity-image-btn')?.addEventListener('click', () => {
-        eaiCreateImageTarget = { rowId: row.dataset.rowId, row };
-        document.getElementById('eai-create-image-input')?.click();
+    mount.querySelector('.eai-creation-add-image-btn')?.addEventListener('click', () => {
+        if (!canAddExternalAssemblyInspectionCreationImage(row)) {
+            alertAppDialog(`Cada atividade aceita até ${EAI_ACTIVITY_CREATION_IMAGE_MAX} imagens.`);
+            return;
+        }
+        onPick?.();
     });
 
-    mount.querySelector('.eai-create-activity-image-remove')?.addEventListener('click', () => {
-        revokeExternalAssemblyInspectionCreatePreview(row);
-        delete row._imageFile;
-        syncExternalAssemblyInspectionCreateActivityImageUi(row);
+    mount.querySelectorAll('.eai-creation-remove-draft').forEach(button => {
+        button.addEventListener('click', () => {
+            const draftId = button.getAttribute('data-eai-remove-draft-id');
+            ensureExternalAssemblyInspectionCreationImageRowState(row);
+            const draft = (row._creationImageDrafts || []).find(item => item.id === draftId);
+            if (draft?.previewUrl) URL.revokeObjectURL(draft.previewUrl);
+            row._creationImageDrafts = (row._creationImageDrafts || []).filter(item => item.id !== draftId);
+            syncExternalAssemblyInspectionCreationImageUi(row);
+        });
     });
 
-    mount.querySelector('.revision-activity-attachment-item__preview')?.addEventListener('click', () => {
-        const url = row._imagePreviewUrl;
-        if (!url || typeof openImageAttachmentLightbox !== 'function') return;
-        openImageAttachmentLightbox(url, row._imageFile?.name || 'Imagem');
+    mount.querySelectorAll('.eai-creation-remove-existing').forEach(button => {
+        button.addEventListener('click', () => {
+            const driveFileId = Number(button.getAttribute('data-eai-remove-existing-id'));
+            if (!driveFileId) return;
+            ensureExternalAssemblyInspectionCreationImageRowState(row);
+            row._creationRemovedDriveFileIds.add(driveFileId);
+            syncExternalAssemblyInspectionCreationImageUi(row);
+        });
+    });
+
+    mount.querySelectorAll('.revision-activity-attachment-item__preview').forEach(img => {
+        img.addEventListener('click', () => {
+            const url = img.currentSrc || img.src || '';
+            if (!url || typeof openImageAttachmentLightbox !== 'function') return;
+            openImageAttachmentLightbox(url, img.getAttribute('alt') || 'Imagem');
+        });
     });
 }
 
-function renderExternalAssemblyInspectionCreateAttachmentMount(row) {
-    const file = row?._imageFile;
+function syncExternalAssemblyInspectionCreationImageUi(row, { canEdit = true, onPick } = {}) {
+    if (!row) return;
+    const mount = row.querySelector('.eai-detail-creation-attachments-mount')
+        || row.querySelector('.eai-create-activity-attachments-mount');
+    if (!mount) return;
+
+    ensureExternalAssemblyInspectionCreationImageRowState(row);
+    mount.innerHTML = renderExternalAssemblyInspectionCreationAttachmentItems(row, { canEdit });
+    bindExternalAssemblyInspectionCreationAttachmentsMount(row, mount, { canEdit, onPick });
+}
+
+function syncExternalAssemblyInspectionCreateActivityImageUi(row) {
+    syncExternalAssemblyInspectionCreationImageUi(row, {
+        onPick: () => {
+            eaiCreateImageTarget = { row };
+            document.getElementById('eai-create-image-input')?.click();
+        }
+    });
+}
+
+function pushExternalAssemblyInspectionCreationImageDraft(row, file) {
+    if (!file) return;
+    ensureExternalAssemblyInspectionCreationImageRowState(row);
+    if (!canAddExternalAssemblyInspectionCreationImage(row)) {
+        alertAppDialog(`Cada atividade aceita até ${EAI_ACTIVITY_CREATION_IMAGE_MAX} imagens.`);
+        return;
+    }
+    row._creationImageDrafts.push({
+        id: newExternalAssemblyInspectionCreationImageDraftId(),
+        file,
+        previewUrl: URL.createObjectURL(file)
+    });
+}
+
+function collectExternalAssemblyInspectionCreationImageDraftFiles(row) {
+    ensureExternalAssemblyInspectionCreationImageRowState(row);
+    return (row._creationImageDrafts || []).map(draft => draft.file).filter(Boolean);
+}
+
+async function persistExternalAssemblyInspectionCreationImageRemovals(rows = []) {
+    const pending = [];
+    (rows || []).forEach(row => {
+        ensureExternalAssemblyInspectionCreationImageRowState(row);
+        (row._creationRemovedDriveFileIds || []).forEach(id => pending.push(Number(id)));
+    });
+    const uniqueIds = [...new Set(pending.filter(Boolean))];
+    if (!uniqueIds.length || typeof deleteDriveFileRecord !== 'function') return;
+
+    const { data, error } = await supabaseClient
+        .from('DriveFile')
+        .select('id, driveFileId, viewerStoragePath, entityId, folderKind, fileName')
+        .in('id', uniqueIds);
+
+    if (error) {
+        console.warn('persistExternalAssemblyInspectionCreationImageRemovals:', error);
+        return;
+    }
+
+    for (const file of data || []) {
+        try {
+            await deleteDriveFileRecord(file);
+        } catch (deleteError) {
+            console.warn('persistExternalAssemblyInspectionCreationImageRemovals file:', deleteError);
+        }
+    }
+}
+
+function renderExternalAssemblyInspectionSingleAttachmentMount(holder) {
+    const file = holder?._imageFile;
     if (!file) {
         return `
-            <div class="revision-activity-attachments eai-create-activity-attachments">
+            <div class="revision-activity-attachments eai-response-activity-attachments">
                 <button type="button"
                     class="revision-activity-attachments__add-btn eai-create-activity-image-btn">
                     + Imagem
@@ -495,9 +681,9 @@ function renderExternalAssemblyInspectionCreateAttachmentMount(row) {
         `;
     }
 
-    const previewUrl = row._imagePreviewUrl || '';
+    const previewUrl = holder._imagePreviewUrl || '';
     return `
-        <div class="revision-activity-attachments eai-create-activity-attachments">
+        <div class="revision-activity-attachments eai-response-activity-attachments">
             <div class="revision-activity-attachments__list">
                 <div class="revision-activity-attachment-item">
                     <div class="revision-activity-attachment-item__preview-wrap">
@@ -511,20 +697,6 @@ function renderExternalAssemblyInspectionCreateAttachmentMount(row) {
             </div>
         </div>
     `;
-}
-
-function syncExternalAssemblyInspectionCreateActivityImageUi(row) {
-    if (!row) return;
-    const mount = row.querySelector('.eai-create-activity-attachments-mount');
-    if (!mount) return;
-
-    revokeExternalAssemblyInspectionCreatePreview(row);
-    if (row._imageFile) {
-        row._imagePreviewUrl = URL.createObjectURL(row._imageFile);
-    }
-
-    mount.innerHTML = renderExternalAssemblyInspectionCreateAttachmentMount(row);
-    bindExternalAssemblyInspectionCreateActivityAttachmentMount(row, mount);
 }
 
 function buildExternalAssemblyInspectionDetailImageAdapter(row, fileKey, previewKey) {
@@ -545,13 +717,16 @@ function buildExternalAssemblyInspectionDetailImageAdapter(row, fileKey, preview
     };
 }
 
-function bindExternalAssemblyInspectionDetailAttachmentMount(mount, adapter, options) {
+function bindExternalAssemblyInspectionDetailAttachmentMount(row, mount, adapter, options) {
     if (!mount || !adapter || !options) return;
 
     mount.querySelector('.eai-create-activity-image-btn')?.addEventListener('click', options.onPick);
     mount.querySelector('.eai-create-activity-image-remove')?.addEventListener('click', () => {
-        revokeExternalAssemblyInspectionCreatePreview(adapter);
-        delete adapter._imageFile;
+        if (row?._responsePreviewUrl) {
+            URL.revokeObjectURL(row._responsePreviewUrl);
+            row._responsePreviewUrl = null;
+        }
+        delete row._responseImageFile;
         options.onSync();
     });
     mount.querySelector('.revision-activity-attachment-item__preview')?.addEventListener('click', () => {
@@ -585,8 +760,8 @@ function syncExternalAssemblyInspectionDetailAttachmentUi(row, {
         return;
     }
 
-    mount.innerHTML = renderExternalAssemblyInspectionCreateAttachmentMount(adapter);
-    bindExternalAssemblyInspectionDetailAttachmentMount(mount, adapter, {
+    mount.innerHTML = renderExternalAssemblyInspectionSingleAttachmentMount(adapter);
+    bindExternalAssemblyInspectionDetailAttachmentMount(row, mount, adapter, {
         onPick,
         onSync: () => syncExternalAssemblyInspectionDetailAttachmentUi(row, {
             mountSelector,
@@ -599,17 +774,9 @@ function syncExternalAssemblyInspectionDetailAttachmentUi(row, {
 }
 
 function syncExternalAssemblyInspectionDetailCreationImageUi(row) {
-    syncExternalAssemblyInspectionDetailAttachmentUi(row, {
-        mountSelector: '.eai-detail-creation-attachments-mount',
-        fileKey: '_creationImageFile',
-        previewKey: '_creationPreviewUrl',
-        existingHtmlKey: '_existingCreationImageHtml',
+    syncExternalAssemblyInspectionCreationImageUi(row, {
         onPick: () => {
-            eaiDetailImageTarget = {
-                activityId: Number(row.dataset.activityId),
-                response: false,
-                row
-            };
+            eaiDetailImageTarget = { row, response: false };
             document.getElementById('eai-detail-image-input')?.click();
         }
     });
@@ -633,10 +800,7 @@ function syncExternalAssemblyInspectionDetailResponseImageUi(row) {
 }
 
 function revokeExternalAssemblyInspectionDetailRowPreviews(row) {
-    if (row._creationPreviewUrl) {
-        URL.revokeObjectURL(row._creationPreviewUrl);
-        row._creationPreviewUrl = null;
-    }
+    revokeExternalAssemblyInspectionCreationImageDrafts(row);
     if (row._responsePreviewUrl) {
         URL.revokeObjectURL(row._responsePreviewUrl);
         row._responsePreviewUrl = null;
@@ -921,9 +1085,68 @@ async function uploadExternalAssemblyInspectionActivityImage(
             context.projectName,
             context.inspectionId
         ),
-        replaceByEntity: true,
+        replaceByEntity: Boolean(context.response),
         fileName: options.fileName
     }, onProgress);
+}
+
+function buildExternalAssemblyInspectionActivityImageUploadFileName(activityId, originalName) {
+    const safeName = String(originalName || 'imagem').trim().replace(/[\\/]/g, '') || 'imagem';
+    const unique = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    return `atividade-${activityId}-${unique}-${safeName}`;
+}
+
+function collectExternalAssemblyInspectionActivityIds(projects = []) {
+    const ids = [];
+    (projects || []).forEach(project => {
+        (project.activities || []).forEach(activity => {
+            const activityId = Number(activity?.id);
+            if (activityId) ids.push(activityId);
+        });
+    });
+    return ids;
+}
+
+/** Remove imagens da atividade (criação e resposta) no Drive e na tabela DriveFile. */
+async function deleteDriveFilesForExternalAssemblyInspectionActivities(activityIds = []) {
+    const ids = [...new Set((activityIds || []).map(Number).filter(Boolean))];
+    if (!ids.length || typeof deleteDriveFileRecord !== 'function') return;
+
+    const entityType = DRIVE_FILE_ENTITY_TYPE.EXTERNAL_ASSEMBLY_INSPECTION_ACTIVITY;
+    const folderKinds = [
+        DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION,
+        DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE
+    ];
+
+    if (typeof ensureGoogleDriveAppsScriptReady === 'function') {
+        try {
+            await ensureGoogleDriveAppsScriptReady();
+        } catch (error) {
+            console.warn('deleteDriveFilesForExternalAssemblyInspectionActivities ready:', error);
+        }
+    }
+
+    const { data, error } = await supabaseClient
+        .from('DriveFile')
+        .select('id, driveFileId, viewerStoragePath, entityId, folderKind, fileName')
+        .eq('entityType', entityType)
+        .in('entityId', ids)
+        .in('folderKind', folderKinds);
+
+    if (error) {
+        console.warn('deleteDriveFilesForExternalAssemblyInspectionActivities:', error);
+        return;
+    }
+
+    for (const file of data || []) {
+        try {
+            await deleteDriveFileRecord(file);
+        } catch (deleteError) {
+            console.warn('deleteDriveFilesForExternalAssemblyInspectionActivities file:', deleteError);
+        }
+    }
 }
 
 function enrichOrderProjectActionsWithExternalAssemblyInspection(project, actions = []) {
@@ -970,10 +1193,26 @@ function closeExternalAssemblyInspectionDetailModal() {
     document.querySelectorAll('#eai-detail-projects-mount tr[data-activity-id]').forEach(row => {
         revokeExternalAssemblyInspectionDetailRowPreviews(row);
     });
+    const listReturn = eaiListState?.orderProjectId
+        ? {
+            orderProjectId: eaiListState.orderProjectId,
+            orderId: eaiListState.orderId,
+            subtitle: eaiListState.subtitle || ''
+        }
+        : null;
+
     toggleModal('external-assembly-inspection-detail-modal', false);
     eaiDetailState = null;
     eaiDetailImageTarget = null;
     eaiDetailActivityDraftCounter = 0;
+
+    if (listReturn?.orderProjectId) {
+        void openExternalAssemblyInspectionListModal(
+            listReturn.orderProjectId,
+            listReturn.subtitle,
+            { orderId: listReturn.orderId }
+        );
+    }
 }
 
 function isExternalAssemblyInspectionDetailDraftRow(row) {
@@ -1123,19 +1362,22 @@ async function persistExternalAssemblyInspectionDetailDraftActivities(rows, now)
         row.dataset.activityId = String(activityRow.id);
         delete row.dataset.isDraft;
 
-        if (row._creationImageFile) {
+        const draftCreationFiles = collectExternalAssemblyInspectionCreationImageDraftFiles(row);
+        if (draftCreationFiles.length) {
             const orderProject = projectRow.orderProject || {};
-            imageUploadQueue.push({
-                file: row._creationImageFile,
-                activityId: activityRow.id,
-                context: {
-                    orderId: eaiDetailState.inspection.orderId,
-                    orderProjectId: orderProject.id,
-                    orderCode: orderProject.order?.orderCode || '',
-                    projectName: orderProject.name || '',
-                    inspectionId,
-                    response: false
-                }
+            draftCreationFiles.forEach(file => {
+                imageUploadQueue.push({
+                    file,
+                    activityId: activityRow.id,
+                    context: {
+                        orderId: eaiDetailState.inspection.orderId,
+                        orderProjectId: orderProject.id,
+                        orderCode: orderProject.order?.orderCode || '',
+                        projectName: orderProject.name || '',
+                        inspectionId,
+                        response: false
+                    }
+                });
             });
         }
     }
@@ -1182,7 +1424,7 @@ async function openExternalAssemblyInspectionListModal(orderProjectId, subtitle 
         }
 
         mount.innerHTML = `
-            <table class="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+            <table class="eai-list-table w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
                 <thead class="bg-slate-50 text-slate-500 uppercase text-[10px]">
                     <tr>
                         <th class="text-left px-3 py-2">#</th>
@@ -1195,10 +1437,10 @@ async function openExternalAssemblyInspectionListModal(orderProjectId, subtitle 
                 <tbody>
                     ${rows.map(row => `
                         <tr class="border-t border-slate-100">
-                            <td class="px-3 py-2 font-mono">${row.id}</td>
-                            <td class="px-3 py-2">${typeof formatDisplayDate === 'function' ? formatDisplayDate(row.createdAt) : (row.createdAt || '—')}</td>
-                            <td class="px-3 py-2">${renderExternalAssemblyInspectionStatusBadge(row.status)}</td>
-                            <td class="px-3 py-2">${renderExternalAssemblyInspectionStatusBadge(row.projectStatusInInspection)}</td>
+                            <td class="px-3 py-2 font-mono" data-eai-label="#">${row.id}</td>
+                            <td class="px-3 py-2" data-eai-label="Criada em">${typeof formatDisplayDate === 'function' ? formatDisplayDate(row.createdAt) : (row.createdAt || '—')}</td>
+                            <td class="px-3 py-2" data-eai-label="Status vistoria">${renderExternalAssemblyInspectionStatusBadge(row.status)}</td>
+                            <td class="px-3 py-2" data-eai-label="Status no projeto">${renderExternalAssemblyInspectionStatusBadge(row.projectStatusInInspection)}</td>
                             <td class="px-3 py-2 text-right">
                                 <button type="button" class="eai-open-detail-btn text-[11px] font-medium text-teal-800 hover:text-teal-900"
                                     data-inspection-id="${row.id}">Ver detalhes</button>
@@ -1385,7 +1627,7 @@ async function submitExternalAssemblyInspectionCreate(event) {
         const activities = activityRows.map((row, index) => ({
             description: row.querySelector('.eai-create-activity-description')?.value.trim() || '',
             sortOrder: index,
-            imageFile: row._imageFile || null
+            imageFiles: collectExternalAssemblyInspectionCreationImageDraftFiles(row)
         })).filter(item => item.description);
 
         if (!activities.length) {
@@ -1461,9 +1703,9 @@ async function submitExternalAssemblyInspectionCreate(event) {
 
                 if (activityError) throw activityError;
 
-                if (activity.imageFile) {
+                (activity.imageFiles || []).forEach(file => {
                     imageUploadQueue.push({
-                        file: activity.imageFile,
+                        file,
                         activityId: activityRow.id,
                         context: {
                             orderId: eaiCreateState.orderId,
@@ -1474,7 +1716,7 @@ async function submitExternalAssemblyInspectionCreate(event) {
                             response: false
                         }
                     });
-                }
+                });
             }
         }
 
@@ -1576,8 +1818,8 @@ function renderExternalAssemblyInspectionDetail(detail) {
             : ''}
                     </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-xs min-w-[640px]">
+                <div class="eai-detail-project-table-wrap overflow-x-auto">
+                    <table class="eai-detail-activities-table w-full text-xs min-w-[640px]">
                         <thead class="text-[10px] uppercase text-slate-500 bg-white">
                             <tr>
                                 <th class="text-left p-2">Atividade</th>
@@ -1625,8 +1867,10 @@ function renderExternalAssemblyInspectionDetail(detail) {
             ? canEditExternalAssemblyInspectionActivities(inspection, project)
             : false;
 
-        row._existingCreationImageHtml = activity?._creationImageHtml || '';
         row._existingResponseImageHtml = activity?._responseImageHtml || '';
+        row._creationExistingDriveFiles = [...(activity?._creationDriveFiles || [])];
+        row._creationImageDrafts = [];
+        row._creationRemovedDriveFileIds = new Set();
 
         if (canEditProjectActivities) {
             syncExternalAssemblyInspectionDetailCreationImageUi(row);
@@ -1649,11 +1893,19 @@ async function hydrateExternalAssemblyInspectionDetailImages(detail) {
     let creationMap = {};
     let responseMap = {};
     try {
-        creationMap = await fetchDriveFilesByEntityIds({
-            entityType: DRIVE_FILE_ENTITY_TYPE.EXTERNAL_ASSEMBLY_INSPECTION_ACTIVITY,
-            entityIds: activityIds,
-            folderKind: DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
-        });
+        if (typeof fetchAllDriveFilesByEntityIds === 'function') {
+            creationMap = await fetchAllDriveFilesByEntityIds({
+                entityType: DRIVE_FILE_ENTITY_TYPE.EXTERNAL_ASSEMBLY_INSPECTION_ACTIVITY,
+                entityIds: activityIds,
+                folderKind: DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
+            });
+        } else {
+            creationMap = await fetchDriveFilesByEntityIds({
+                entityType: DRIVE_FILE_ENTITY_TYPE.EXTERNAL_ASSEMBLY_INSPECTION_ACTIVITY,
+                entityIds: activityIds,
+                folderKind: DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
+            });
+        }
         responseMap = await fetchDriveFilesByEntityIds({
             entityType: DRIVE_FILE_ENTITY_TYPE.EXTERNAL_ASSEMBLY_INSPECTION_ACTIVITY,
             entityIds: activityIds,
@@ -1671,25 +1923,33 @@ async function hydrateExternalAssemblyInspectionDetailImages(detail) {
             : preview;
         if (!preview) return '';
         return `
-            <div class="revision-activity-attachments__readonly mt-1">
-                <button type="button"
-                    class="revision-activity-attachment-thumb eai-activity-image-open"
-                    data-eai-open-image-url="${escapeHtml(viewUrl)}"
-                    title="${escapeHtml(file.fileName || 'Imagem')}">
-                    <img src="${escapeHtml(preview)}" alt="${escapeHtml(file.fileName || 'Imagem')}"
-                        loading="lazy" referrerpolicy="no-referrer">
-                </button>
-            </div>
+            <button type="button"
+                class="revision-activity-attachment-thumb eai-activity-image-open"
+                data-eai-open-image-url="${escapeHtml(viewUrl)}"
+                title="${escapeHtml(file.fileName || 'Imagem')}">
+                <img src="${escapeHtml(preview)}" alt="${escapeHtml(file.fileName || 'Imagem')}"
+                    loading="lazy" referrerpolicy="no-referrer">
+            </button>
         `;
+    };
+
+    const renderCreationThumbsHtml = (files) => {
+        const list = Array.isArray(files) ? files.filter(Boolean) : (files ? [files] : []);
+        if (!list.length) return '';
+        return `<div class="revision-activity-attachments__readonly eai-creation-readonly-list flex flex-wrap gap-1 mt-1">${list.map(renderThumb).join('')}</div>`;
     };
 
     detail.projects.forEach(project => {
         project.activities.forEach(activity => {
             const key = String(activity.id);
-            const creation = creationMap[key];
+            const creationRaw = creationMap[key];
+            const creationFiles = Array.isArray(creationRaw)
+                ? creationRaw
+                : (creationRaw ? [creationRaw] : []);
             const response = responseMap[key];
-            activity._creationImageHtml = renderThumb(creation);
-            activity._responseImageHtml = renderThumb(response);
+            activity._creationDriveFiles = creationFiles;
+            activity._creationImageHtml = renderCreationThumbsHtml(creationFiles);
+            activity._responseImageHtml = response ? `<div class="revision-activity-attachments__readonly mt-1">${renderThumb(response)}</div>` : '';
         });
     });
 
@@ -1702,12 +1962,30 @@ function extractExternalAssemblyInspectionExportImageSrc(html = '') {
     return match ? match[1] : '';
 }
 
+function extractExternalAssemblyInspectionExportImageSrcs(html = '') {
+    return [...String(html || '').matchAll(/\ssrc="([^"]+)"/gi)]
+        .map(match => match[1])
+        .filter(Boolean);
+}
+
 function resolveExternalAssemblyInspectionRowImageSrc(row, selectors, fallbackHtml = '') {
     if (!row) return extractExternalAssemblyInspectionExportImageSrc(fallbackHtml);
     const img = row.querySelector(selectors);
     const src = img?.currentSrc || img?.src || '';
     if (src) return src;
     return extractExternalAssemblyInspectionExportImageSrc(fallbackHtml);
+}
+
+function resolveExternalAssemblyInspectionRowCreationImageUrls(row, activity = {}) {
+    if (row) {
+        const fromDom = [...row.querySelectorAll(
+            '.eai-detail-creation-attachments-mount img, .eai-creation-readonly-list img'
+        )]
+            .map(img => img.currentSrc || img.src || '')
+            .filter(Boolean);
+        if (fromDom.length) return fromDom;
+    }
+    return extractExternalAssemblyInspectionExportImageSrcs(activity._creationImageHtml || '');
 }
 
 function collectExternalAssemblyInspectionExportActivityFromRow(row, activity = {}) {
@@ -1723,11 +2001,7 @@ function collectExternalAssemblyInspectionExportActivityFromRow(row, activity = 
         ? responseInput.value.trim()
         : String(activity.responseComment || '').trim();
 
-    const creationImageUrl = resolveExternalAssemblyInspectionRowImageSrc(
-        row,
-        '.eai-detail-creation-attachments-mount img, .revision-activity-attachments__readonly img',
-        activity._creationImageHtml
-    );
+    const creationImageUrls = resolveExternalAssemblyInspectionRowCreationImageUrls(row, activity);
     const responseImageUrl = resolveExternalAssemblyInspectionRowImageSrc(
         row,
         '.eai-detail-response-attachments-mount img',
@@ -1740,7 +2014,8 @@ function collectExternalAssemblyInspectionExportActivityFromRow(row, activity = 
         isDone,
         doneAt: isDone ? (activity.doneAt || null) : null,
         responseComment,
-        creationImageUrl,
+        creationImageUrls,
+        creationImageUrl: creationImageUrls[0] || '',
         responseImageUrl
     };
 }
@@ -1793,6 +2068,12 @@ function mergeExternalAssemblyInspectionExportSnapshot(uiSnapshot, detail) {
                 description: uiActivity.description,
                 isDone,
                 responseComment: uiActivity.responseComment,
+                creationImageUrls: uiActivity.creationImageUrls?.length
+                    ? uiActivity.creationImageUrls
+                    : (activity._creationDriveFiles || []).map(file =>
+                        (typeof resolveDriveFilePreviewUrl === 'function' ? resolveDriveFilePreviewUrl(file) : '')
+                        || (typeof resolveDriveFileViewUrl === 'function' ? resolveDriveFileViewUrl(file) : '')
+                    ).filter(Boolean),
                 creationImageUrl: uiActivity.creationImageUrl,
                 responseImageUrl: uiActivity.responseImageUrl,
                 doneAt: isDone ? (activity.doneAt || uiActivity.doneAt || null) : null,
@@ -1894,10 +2175,15 @@ function renderExternalAssemblyInspectionExportHtml(snapshot, order = null) {
             const doneCell = formatExternalAssemblyInspectionExportDoneCell(activity);
             const approvedCell = formatExternalAssemblyInspectionExportApprovedCell(activity);
             const responseText = String(activity.responseComment || '').trim() || '—';
-            const creationImg = renderExternalAssemblyInspectionExportImages(
-                activity.creationImageUrl,
-                'Imagem da atividade'
-            );
+            const creationUrls = (activity.creationImageUrls && activity.creationImageUrls.length)
+                ? activity.creationImageUrls
+                : (activity.creationImageUrl ? [activity.creationImageUrl] : []);
+            const creationImg = creationUrls
+                .map((url, index) => renderExternalAssemblyInspectionExportImages(
+                    url,
+                    `Imagem da atividade ${index + 1}`
+                ))
+                .join('');
             const responseImg = renderExternalAssemblyInspectionExportImages(
                 activity.responseImageUrl,
                 'Imagem da resposta'
@@ -2039,7 +2325,7 @@ async function openExternalAssemblyInspectionDetailModal(inspectionId, options =
         eaiDetailOverlay?.setLoading(false);
     }
 
-    closeExternalAssemblyInspectionListModal();
+    toggleModal('external-assembly-inspection-list-modal', false);
     const mountLoading = document.getElementById('eai-detail-projects-mount');
     if (mountLoading) mountLoading.innerHTML = '<p class="text-xs text-slate-400 py-6 text-center">Carregando...</p>';
     toggleModal('external-assembly-inspection-detail-modal', true);
@@ -2133,11 +2419,14 @@ async function saveExternalAssemblyInspectionDetail() {
             if (previous) previous.description = description;
         }
 
+        eaiDetailOverlay?.setLoading(true, 'Atualizando imagens das atividades...');
+        await persistExternalAssemblyInspectionCreationImageRemovals([...rows]);
+
         for (const row of rows) {
             if (isExternalAssemblyInspectionDetailDraftRow(row)) continue;
 
-            const pendingCreation = row._creationImageFile;
-            if (!pendingCreation) continue;
+            const pendingCreationFiles = collectExternalAssemblyInspectionCreationImageDraftFiles(row);
+            if (!pendingCreationFiles.length) continue;
 
             const activityId = Number(row.dataset.activityId);
             if (!activityId) continue;
@@ -2146,17 +2435,19 @@ async function saveExternalAssemblyInspectionDetail() {
             if (!projectRow || !canEditExternalAssemblyInspectionActivities(inspection, projectRow)) continue;
 
             const orderProject = projectRow.orderProject || {};
-            imageUploadQueue.push({
-                file: pendingCreation,
-                activityId,
-                context: {
-                    orderId: eaiDetailState.inspection.orderId,
-                    orderProjectId: orderProject.id,
-                    orderCode: orderProject.order?.orderCode || '',
-                    projectName: orderProject.name || '',
-                    inspectionId,
-                    response: false
-                }
+            pendingCreationFiles.forEach(file => {
+                imageUploadQueue.push({
+                    file,
+                    activityId,
+                    context: {
+                        orderId: eaiDetailState.inspection.orderId,
+                        orderProjectId: orderProject.id,
+                        orderCode: orderProject.order?.orderCode || '',
+                        projectName: orderProject.name || '',
+                        inspectionId,
+                        response: false
+                    }
+                });
             });
         }
 
@@ -2266,6 +2557,8 @@ async function deleteExternalAssemblyInspection() {
 
     try {
         eaiDetailOverlay?.setLoading(true, 'Excluindo...');
+        const activityIds = collectExternalAssemblyInspectionActivityIds(eaiDetailState?.projects);
+        await deleteDriveFilesForExternalAssemblyInspectionActivities(activityIds);
         const { error } = await supabaseClient
             .from('ExternalAssemblyInspection')
             .delete()
@@ -2292,6 +2585,9 @@ async function removeExternalAssemblyInspectionProject(button) {
         return;
     }
     if (!(await confirmAppDialog('Excluir este projeto da vistoria?', { variant: 'danger', confirmLabel: 'Excluir' }))) return;
+
+    const activityIds = (project.activities || []).map(item => Number(item.id)).filter(Boolean);
+    await deleteDriveFilesForExternalAssemblyInspectionActivities(activityIds);
 
     const { error } = await supabaseClient
         .from('ExternalAssemblyInspectionProject')
@@ -2326,15 +2622,17 @@ async function removeExternalAssemblyInspectionActivity(button) {
     }
     if (!(await confirmAppDialog('Excluir esta atividade?', { variant: 'danger', confirmLabel: 'Excluir' }))) return;
 
-    const { error } = await supabaseClient
-        .from('ExternalAssemblyInspectionActivity')
-        .delete()
-        .eq('id', activityId);
-    if (error) {
-        alertAppDialog(error.message);
-        return;
+    try {
+        await deleteDriveFilesForExternalAssemblyInspectionActivities([activityId]);
+        const { error } = await supabaseClient
+            .from('ExternalAssemblyInspectionActivity')
+            .delete()
+            .eq('id', activityId);
+        if (error) throw error;
+        await openExternalAssemblyInspectionDetailModal(eaiDetailState.inspection.id);
+    } catch (error) {
+        alertAppDialog(error?.message || 'Erro ao excluir atividade.');
     }
-    await openExternalAssemblyInspectionDetailModal(eaiDetailState.inspection.id);
 }
 
 function bindExternalAssemblyInspectionEvents() {
@@ -2343,7 +2641,7 @@ function bindExternalAssemblyInspectionEvents() {
     document.getElementById('btn-eai-list-create')?.addEventListener('click', () => {
         const orderId = eaiListState?.orderId ?? activeOrderId;
         const preselectOrderProjectId = eaiListState?.orderProjectId;
-        closeExternalAssemblyInspectionListModal();
+        toggleModal('external-assembly-inspection-list-modal', false);
         void openExternalAssemblyInspectionCreateModal(orderId, { preselectOrderProjectId });
     });
 
@@ -2371,7 +2669,7 @@ function bindExternalAssemblyInspectionEvents() {
         if (!file || !eaiCreateImageTarget?.row) return;
         const row = eaiCreateImageTarget.row;
         void applyExternalAssemblyInspectionPickedImageFile(file, prepared => {
-            row._imageFile = prepared;
+            pushExternalAssemblyInspectionCreationImageDraft(row, prepared);
             syncExternalAssemblyInspectionCreateActivityImageUi(row);
         });
     });
@@ -2390,7 +2688,7 @@ function bindExternalAssemblyInspectionEvents() {
         if (!file || !eaiDetailImageTarget?.row || eaiDetailImageTarget.response) return;
         const row = eaiDetailImageTarget.row;
         void applyExternalAssemblyInspectionPickedImageFile(file, prepared => {
-            row._creationImageFile = prepared;
+            pushExternalAssemblyInspectionCreationImageDraft(row, prepared);
             syncExternalAssemblyInspectionDetailCreationImageUi(row);
             eaiDetailImageTarget = null;
         });

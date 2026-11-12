@@ -3661,9 +3661,9 @@
 
     <!-- MODAL: LISTA — VISTORIA DE MONTAGEM EXTERNA -->
     <div id="external-assembly-inspection-list-modal"
-        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[88]">
-        <div class="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col">
-            <div class="px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3">
+        class="eai-modal hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[88]">
+        <div class="eai-modal__panel bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-200 max-h-[90vh] overflow-hidden flex flex-col min-h-0">
+            <div class="eai-modal__header shrink-0 px-5 py-4 border-b border-slate-100 flex items-start justify-between gap-3 bg-white">
                 <div class="min-w-0">
                     <h3 class="font-bold text-base text-slate-900">Vistoria de Montagem Externa</h3>
                     <div class="flex items-center gap-2 min-w-0 mt-1">
@@ -3677,20 +3677,20 @@
                 <button type="button" id="btn-eai-list-close"
                     class="text-slate-400 hover:text-slate-600 text-xl leading-none" aria-label="Fechar">×</button>
             </div>
-            <div id="eai-list-mount" class="p-4 overflow-y-auto flex-1 text-sm"></div>
-            <div class="p-4 border-t border-slate-100 flex flex-col-reverse sm:flex-row gap-2">
+            <div id="eai-list-mount" class="eai-modal__body p-4 overflow-y-auto flex-1 min-h-0 text-sm"></div>
+            <div class="eai-modal__footer eai-modal__footer--list eai-modal__footer--compact shrink-0 p-4 border-t border-slate-100 flex flex-row gap-2 bg-white">
                 <button type="button" id="btn-eai-list-close-footer"
-                    class="flex-1 bg-slate-100 text-slate-700 py-2 rounded-lg text-xs font-medium hover:bg-slate-200">Fechar</button>
+                    class="bg-slate-100 text-slate-700 py-2 px-3 rounded-lg text-xs font-medium hover:bg-slate-200">Fechar</button>
                 <button type="button" id="btn-eai-list-create"
-                    class="hidden flex-1 bg-teal-700 text-white py-2 rounded-lg text-xs font-semibold hover:bg-teal-800">Criar Vistoria</button>
+                    class="hidden bg-teal-700 text-white py-2 px-3 rounded-lg text-xs font-semibold hover:bg-teal-800">Criar vistoria</button>
             </div>
         </div>
     </div>
 
     <!-- MODAL: NOVA VISTORIA DE MONTAGEM EXTERNA -->
     <div id="external-assembly-inspection-create-modal"
-        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[89]">
-        <div class="bg-white rounded-2xl w-full max-w-4xl shadow-xl border border-slate-200 max-h-[96vh] overflow-hidden flex flex-col relative">
+        class="eai-modal hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[89]">
+        <div class="eai-modal__panel bg-white rounded-2xl w-full max-w-4xl shadow-xl border border-slate-200 max-h-[96vh] overflow-hidden flex flex-col relative min-h-0">
             <div id="eai-create-modal-loading"
                 class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
                 <div class="fm-app-overlay__card">
@@ -3698,8 +3698,8 @@
                     <p class="fm-app-overlay__message">Processando...</p>
                 </div>
             </div>
-            <div class="p-5 border-b border-slate-100 flex justify-between items-start gap-3">
-                <div>
+            <div class="eai-modal__header shrink-0 p-5 border-b border-slate-100 flex justify-between items-start gap-3 bg-white">
+                <div class="min-w-0">
                     <h3 class="font-bold text-base text-slate-900">Nova Vistoria de Montagem Externa</h3>
                     <div class="flex items-center gap-2 min-w-0 mt-1">
                         <span id="eai-create-order-code"
@@ -3711,8 +3711,8 @@
                 <button type="button" id="btn-eai-create-close"
                     class="text-slate-400 hover:text-slate-600 text-xl leading-none" aria-label="Fechar">×</button>
             </div>
-            <form id="eai-create-form" class="flex flex-col flex-1 min-h-0 overflow-hidden">
-                <div class="p-5 overflow-y-auto flex-1 space-y-4">
+            <form id="eai-create-form" class="eai-modal__form flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div class="eai-modal__body p-5 overflow-y-auto flex-1 min-h-0 space-y-4">
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 mb-1" for="eai-create-observation">Observação da vistoria</label>
                         <textarea id="eai-create-observation" rows="2"
@@ -3720,7 +3720,7 @@
                             placeholder="Contexto geral da vistoria"></textarea>
                     </div>
                     <div class="space-y-2">
-                        <div class="flex flex-wrap items-center gap-2">
+                        <div class="eai-create-project-toolbar flex flex-wrap items-center gap-2">
                             <label class="text-xs font-semibold text-slate-500" for="eai-create-add-project">Projeto</label>
                             <select id="eai-create-add-project"
                                 class="flex-1 min-w-[12rem] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white"></select>
@@ -3731,12 +3731,11 @@
                         <div id="eai-create-projects-mount" class="space-y-4"></div>
                     </div>
                 </div>
-                <div class="p-4 border-t border-slate-100 flex flex-wrap gap-2">
+                <div class="eai-modal__footer eai-modal__footer--actions eai-modal__footer--compact shrink-0 p-4 border-t border-slate-100 flex flex-row flex-wrap gap-2 bg-white">
                     <button type="button" id="btn-eai-create-cancel"
-                        class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Cancelar</button>
-                    <div class="flex-1 min-w-[0.5rem]"></div>
+                        class="text-xs bg-slate-100 text-slate-600 px-3 py-2 rounded-lg font-medium">Cancelar</button>
                     <button type="submit" id="btn-eai-create-save"
-                        class="text-xs bg-teal-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-teal-800">Salvar vistoria</button>
+                        class="text-xs bg-teal-700 text-white px-3 py-2 rounded-lg font-medium hover:bg-teal-800">Salvar</button>
                 </div>
             </form>
             <input type="file" id="eai-create-image-input" accept="image/*" class="hidden">
@@ -3745,8 +3744,8 @@
 
     <!-- MODAL: DETALHE — VISTORIA DE MONTAGEM EXTERNA -->
     <div id="external-assembly-inspection-detail-modal"
-        class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[90]">
-        <div class="bg-white rounded-2xl w-full max-w-5xl shadow-xl border border-slate-200 max-h-[96vh] overflow-hidden flex flex-col relative">
+        class="eai-modal hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[90]">
+        <div class="eai-modal__panel bg-white rounded-2xl w-full max-w-5xl shadow-xl border border-slate-200 max-h-[96vh] overflow-hidden flex flex-col relative min-h-0">
             <div id="eai-detail-modal-loading"
                 class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
                 <div class="fm-app-overlay__card">
@@ -3754,7 +3753,7 @@
                     <p class="fm-app-overlay__message">Processando...</p>
                 </div>
             </div>
-            <div class="p-5 border-b border-slate-100 flex flex-wrap items-start justify-between gap-3">
+            <div class="eai-modal__header shrink-0 p-5 border-b border-slate-100 flex flex-wrap items-start justify-between gap-3 bg-white">
                 <div class="min-w-0 space-y-1">
                     <div class="flex flex-wrap items-center gap-2">
                         <h3 class="font-bold text-base text-slate-900">Vistoria de Montagem Externa</h3>
@@ -3775,7 +3774,7 @@
                         class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
                 </div>
             </div>
-            <div class="p-5 overflow-y-auto flex-1 space-y-4">
+            <div class="eai-modal__body p-5 overflow-y-auto flex-1 min-h-0 space-y-4">
                 <div id="eai-detail-summary-mount"></div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="eai-detail-observation">Observação da vistoria</label>
@@ -3784,15 +3783,15 @@
                 </div>
                 <div id="eai-detail-projects-mount" class="space-y-4"></div>
             </div>
-            <div class="p-4 border-t border-slate-100 flex flex-wrap gap-2">
+            <div class="eai-modal__footer eai-modal__footer--actions eai-modal__footer--detail eai-modal__footer--compact shrink-0 p-4 border-t border-slate-100 flex flex-row gap-2 bg-white">
                 <button type="button" id="btn-eai-detail-close-footer"
                     class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
                 <button type="button" id="btn-eai-detail-export-pdf"
                     class="text-xs bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50"
                     title="Abrir visualização para salvar como PDF">Gerar PDF</button>
-                <div class="flex-1 min-w-[0.5rem]"></div>
+                <div class="eai-modal__footer-spacer flex-1 min-w-[0.5rem]"></div>
                 <button type="button" id="btn-eai-detail-save"
-                    class="text-xs bg-teal-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-teal-800">Salvar</button>
+                    class="eai-modal__footer-primary text-xs bg-teal-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-teal-800">Salvar</button>
             </div>
             <input type="file" id="eai-detail-image-input" accept="image/*" class="hidden">
             <input type="file" id="eai-detail-response-image-input" accept="image/*" class="hidden">
