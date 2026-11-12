@@ -5153,6 +5153,33 @@ body.is-mobile .eai-modal input:not([type="checkbox"]):not([type="radio"]):not([
     }
 }
 
+/* Teclado aberto: modal usa só a altura visível e esconde o rodapé. */
+body.eai-modal-keyboard-open .eai-modal.eai-modal--keyboard-open:not(.hidden) {
+    inset: auto;
+    left: 0;
+    right: 0;
+    top: var(--eai-visual-offset-top, 0px);
+    width: 100%;
+    height: var(--eai-visual-vh, 100dvh);
+    max-height: var(--eai-visual-vh, 100dvh);
+    padding: 0 !important;
+    align-items: stretch;
+}
+
+body.eai-modal-keyboard-open .eai-modal--keyboard-open .eai-modal__panel {
+    height: 100%;
+    max-height: 100%;
+}
+
+body.eai-modal-keyboard-open .eai-modal--keyboard-open .eai-modal__footer {
+    display: none !important;
+}
+
+body.eai-modal-keyboard-open .eai-modal--keyboard-open .eai-modal__header {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+}
+
 body.is-mobile .eai-modal:not(.hidden) {
     padding: 0 !important;
     align-items: stretch;

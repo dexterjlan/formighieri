@@ -268,6 +268,12 @@ function renderMobileMenuGrid() {
     const frame = mobileMenuStack[mobileMenuStack.length - 1];
     titleEl.textContent = frame?.title || 'Menu';
 
+    const versionEl = document.getElementById('app-mobile-menu-version');
+    const isRootMenu = !frame || frame.id === 'root';
+    if (versionEl) {
+        versionEl.classList.toggle('hidden', !isRootMenu);
+    }
+
     const showBack = mobileMenuStack.length > 1;
     backBtn?.classList.toggle('hidden', !showBack);
 

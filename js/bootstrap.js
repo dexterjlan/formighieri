@@ -265,7 +265,7 @@ async function loadScriptsSequential(scripts, onProgress) {
 }
 
 async function loadAppVersion() {
-    const els = document.querySelectorAll('#app-version, #login-app-version');
+    const els = document.querySelectorAll('#app-version, #login-app-version, #app-mobile-menu-version');
     if (!els.length) return;
 
     let version = APP_CACHE_VERSION;
@@ -283,6 +283,9 @@ async function loadAppVersion() {
 
     els.forEach(el => {
         el.textContent = el.id === 'app-version' ? ` v${version}` : `v${version}`;
+        if (el.id === 'app-mobile-menu-version') {
+            el.classList.remove('hidden');
+        }
     });
 }
 
