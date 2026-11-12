@@ -5167,11 +5167,29 @@ body.is-mobile .eai-modal:not(.hidden) .eai-modal__panel {
     border-radius: 0;
 }
 
-/* Teclado aberto (mobile): painel encolhe com a área visível; rodapé some — sem reposicionar o overlay. */
+/* Vistoria em tela cheia: some a topbar do app (evita “Pedidos” aparecer no iOS). */
+body.is-mobile.eai-modal-screen-open .app-mobile-topbar {
+    display: none !important;
+}
+
+/* Teclado aberto: overlay segue a visualViewport; cabeçalho da vistoria some; rodapé some. */
 @media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
-    body.eai-modal-keyboard-open .eai-modal.eai-modal--keyboard-open:not(.hidden) .eai-modal__panel {
+    body.eai-modal-keyboard-open .eai-modal.eai-modal--keyboard-open:not(.hidden) {
+        inset: auto;
+        left: 0;
+        right: 0;
+        top: var(--eai-visual-offset-top, 0px);
+        width: 100%;
         height: var(--eai-visual-vh, 100dvh);
         max-height: var(--eai-visual-vh, 100dvh);
+        padding: 0 !important;
+        align-items: stretch;
+        justify-content: stretch;
+    }
+
+    body.eai-modal-keyboard-open .eai-modal.eai-modal--keyboard-open:not(.hidden) .eai-modal__panel {
+        height: 100%;
+        max-height: 100%;
     }
 
     body.eai-modal-keyboard-open .eai-modal--keyboard-open:not(.hidden) .eai-modal__footer {
@@ -5179,17 +5197,33 @@ body.is-mobile .eai-modal:not(.hidden) .eai-modal__panel {
     }
 
     body.eai-modal-keyboard-open .eai-modal--keyboard-open:not(.hidden) .eai-modal__header {
-        padding-top: 0.45rem;
-        padding-bottom: 0.45rem;
+        display: none !important;
     }
 }
 
-body.is-mobile.eai-modal-keyboard-open .eai-modal.eai-modal--keyboard-open:not(.hidden) .eai-modal__panel {
+body.is-mobile.eai-modal-keyboard-open .eai-modal.eai-modal--keyboard-open:not(.hidden) {
+    inset: auto;
+    left: 0;
+    right: 0;
+    top: var(--eai-visual-offset-top, 0px);
+    width: 100%;
     height: var(--eai-visual-vh, 100dvh);
     max-height: var(--eai-visual-vh, 100dvh);
+    padding: 0 !important;
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+body.is-mobile.eai-modal-keyboard-open .eai-modal.eai-modal--keyboard-open:not(.hidden) .eai-modal__panel {
+    height: 100%;
+    max-height: 100%;
 }
 
 body.is-mobile.eai-modal-keyboard-open .eai-modal--keyboard-open:not(.hidden) .eai-modal__footer {
+    display: none !important;
+}
+
+body.is-mobile.eai-modal-keyboard-open .eai-modal--keyboard-open:not(.hidden) .eai-modal__header {
     display: none !important;
 }
 
