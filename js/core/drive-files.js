@@ -149,6 +149,112 @@ function mimeTypeForDriveUpload(fileName, mimeType) {
     return String(mimeType || 'application/octet-stream');
 }
 
+const DRIVE_IMAGE_UPLOAD_MAX_DIMENSION = 1920;
+const DRIVE_IMAGE_UPLOAD_JPEG_QUALITY = 0.82;
+const DRIVE_IMAGE_UPLOAD_MIN_JPEG_QUALITY = 0.55;
+const DRIVE_IMAGE_UPLOAD_OUTPUT_MIME = 'image/jpeg';
+
+function loadHtmlImageElement(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Não foi possível ler a imagem.'));
+        img.src = src;
+    });
+}
+
+function driveImageUploadOutputFileName(originalName) {
+    const base = String(originalName || 'imagem').replace(/\.[^.\\/]+$/, '') || 'imagem';
+    return `${base}.jpg`;
+}
+
+function canvasToJpegBlob(canvas, quality) {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(
+            blob => (blob ? resolve(blob) : reject(new Error('Falha ao compactar imagem.'))),
+            DRIVE_IMAGE_UPLOAD_OUTPUT_MIME,
+            quality
+        );
+    });
+}
+
+async function encodeDriveImageJpegBlob(source, width, height, maxBytes) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        throw new Error('Canvas não disponível.');
+    }
+    ctx.drawImage(source, 0, 0, width, height);
+
+    let quality = DRIVE_IMAGE_UPLOAD_JPEG_QUALITY;
+    let blob = await canvasToJpegBlob(canvas, quality);
+    while (blob.size > maxBytes && quality > DRIVE_IMAGE_UPLOAD_MIN_JPEG_QUALITY) {
+        quality = Math.max(DRIVE_IMAGE_UPLOAD_MIN_JPEG_QUALITY, quality - 0.08);
+        blob = await canvasToJpegBlob(canvas, quality);
+    }
+    if (blob.size > maxBytes && Math.max(width, height) > 640) {
+        const scale = Math.sqrt(maxBytes / blob.size) * 0.92;
+        const nextW = Math.max(1, Math.round(width * scale));
+        const nextH = Math.max(1, Math.round(height * scale));
+        if (nextW < width || nextH < height) {
+            return encodeDriveImageJpegBlob(source, nextW, nextH, maxBytes);
+        }
+    }
+    return blob;
+}
+
+/**
+ * Reduz resolução e tamanho de fotos (ex.: câmera do celular) antes do upload ao Drive.
+ * Mantém o arquivo original se já estiver dentro dos limites ou se o navegador não conseguir decodificar.
+ */
+async function prepareDriveImageUploadFile(file, options = {}) {
+    if (!file || !(file instanceof Blob)) return file;
+
+    const type = String(file.type || '').toLowerCase();
+    if (type === 'image/gif') return file;
+
+    const ext = getDriveFileExtension(file.name);
+    const mimeOk = type.startsWith('image/');
+    const extOk = DRIVE_FILE_IMAGE_EXTENSIONS.includes(ext);
+    if (!mimeOk && !extOk) return file;
+
+    const maxDimension = options.maxDimension ?? DRIVE_IMAGE_UPLOAD_MAX_DIMENSION;
+    const maxBytes = options.maxBytes ?? DRIVE_FILE_REVISION_IMAGE_MAX_BYTES;
+
+    const objectUrl = URL.createObjectURL(file);
+    try {
+        const img = await loadHtmlImageElement(objectUrl);
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+        if (!width || !height) return file;
+
+        const needsResize = width > maxDimension || height > maxDimension;
+        const underByteLimit = file.size <= maxBytes;
+        const alreadyJpeg = type === 'image/jpeg' || type === 'image/jpg' || ext === 'jpg' || ext === 'jpeg';
+        if (!needsResize && underByteLimit && alreadyJpeg) return file;
+
+        const scale = needsResize
+            ? Math.min(1, maxDimension / Math.max(width, height))
+            : 1;
+        const targetW = Math.max(1, Math.round(width * scale));
+        const targetH = Math.max(1, Math.round(height * scale));
+
+        const blob = await encodeDriveImageJpegBlob(img, targetW, targetH, maxBytes);
+        const outName = driveImageUploadOutputFileName(file.name);
+        return new File([blob], outName, {
+            type: DRIVE_IMAGE_UPLOAD_OUTPUT_MIME,
+            lastModified: Date.now()
+        });
+    } catch (error) {
+        console.warn('prepareDriveImageUploadFile:', error);
+        return file;
+    } finally {
+        URL.revokeObjectURL(objectUrl);
+    }
+}
+
 function resolveDriveFileModel3dUrl(file) {
     const driveFileId = String(file?.driveFileId || '').trim();
     if (driveFileId) {
@@ -1079,6 +1185,8 @@ window.buildImplementationListDriveFileName = buildImplementationListDriveFileNa
 window.DRIVE_FILE_IMPLEMENTATION_LIST_INPUT_ACCEPT = DRIVE_FILE_IMPLEMENTATION_LIST_INPUT_ACCEPT;
 window.formatDriveFileSize = formatDriveFileSize;
 window.validateDriveUploadFiles = validateDriveUploadFiles;
+window.prepareDriveImageUploadFile = prepareDriveImageUploadFile;
+window.DRIVE_IMAGE_UPLOAD_MAX_DIMENSION = DRIVE_IMAGE_UPLOAD_MAX_DIMENSION;
 window.fetchDriveFiles = fetchDriveFiles;
 window.fetchDriveFilesByEntityIds = fetchDriveFilesByEntityIds;
 window.resolveDriveFileDownloadUrl = resolveDriveFileDownloadUrl;

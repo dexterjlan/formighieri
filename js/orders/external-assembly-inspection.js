@@ -70,6 +70,43 @@ function setExternalAssemblyInspectionOverlayMessage(message, status) {
     }
 }
 
+function clearExternalAssemblyInspectionOverlayMessage() {
+    const createModal = document.getElementById('external-assembly-inspection-create-modal');
+    const detailModal = document.getElementById('external-assembly-inspection-detail-modal');
+    if (createModal && !createModal.classList.contains('hidden')) {
+        eaiCreateOverlay?.setLoading(false);
+        return;
+    }
+    if (detailModal && !detailModal.classList.contains('hidden')) {
+        eaiDetailOverlay?.setLoading(false);
+    }
+}
+
+async function applyExternalAssemblyInspectionPickedImageFile(file, onReady) {
+    if (!file || typeof onReady !== 'function') return;
+    try {
+        setExternalAssemblyInspectionOverlayMessage('Otimizando imagem...');
+        let prepared = file;
+        if (typeof prepareDriveImageUploadFile === 'function') {
+            prepared = await prepareDriveImageUploadFile(file, {
+                maxBytes: typeof DRIVE_FILE_REVISION_IMAGE_MAX_BYTES !== 'undefined'
+                    ? DRIVE_FILE_REVISION_IMAGE_MAX_BYTES
+                    : (2 * 1024 * 1024)
+            });
+        }
+        const validation = validateExternalAssemblyInspectionImageFile(prepared);
+        if (validation) {
+            alertAppDialog(validation);
+            return;
+        }
+        onReady(prepared);
+    } catch (error) {
+        alertAppDialog(error?.message || 'Não foi possível preparar a imagem.');
+    } finally {
+        clearExternalAssemblyInspectionOverlayMessage();
+    }
+}
+
 function updateExternalAssemblyInspectionImageUploadProgress(sent, total) {
     if (!total) return;
     const pct = Math.min(100, Math.round((sent / total) * 100));
@@ -101,9 +138,21 @@ async function persistExternalAssemblyInspectionActivityImages(uploads) {
         for (const item of queue) {
             eaiDriveUploadBatch.index += 1;
             eaiDriveUploadBatch.response = Boolean(item.context?.response);
-            const safeName = String(item.file?.name || 'imagem').trim() || 'imagem';
+            let uploadFile = item.file;
+            if (typeof prepareDriveImageUploadFile === 'function') {
+                uploadFile = await prepareDriveImageUploadFile(item.file, {
+                    maxBytes: typeof DRIVE_FILE_REVISION_IMAGE_MAX_BYTES !== 'undefined'
+                        ? DRIVE_FILE_REVISION_IMAGE_MAX_BYTES
+                        : (2 * 1024 * 1024)
+                });
+            }
+            const uploadValidation = validateExternalAssemblyInspectionImageFile(uploadFile);
+            if (uploadValidation) {
+                throw new Error(uploadValidation);
+            }
+            const safeName = String(uploadFile?.name || 'imagem').trim() || 'imagem';
             await uploadExternalAssemblyInspectionActivityImage(
-                item.file,
+                uploadFile,
                 item.activityId,
                 item.context,
                 updateExternalAssemblyInspectionImageUploadProgress,
@@ -2320,13 +2369,11 @@ function bindExternalAssemblyInspectionEvents() {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file || !eaiCreateImageTarget?.row) return;
-        const validation = validateExternalAssemblyInspectionImageFile(file);
-        if (validation) {
-            alertAppDialog(validation);
-            return;
-        }
-        eaiCreateImageTarget.row._imageFile = file;
-        syncExternalAssemblyInspectionCreateActivityImageUi(eaiCreateImageTarget.row);
+        const row = eaiCreateImageTarget.row;
+        void applyExternalAssemblyInspectionPickedImageFile(file, prepared => {
+            row._imageFile = prepared;
+            syncExternalAssemblyInspectionCreateActivityImageUi(row);
+        });
     });
 
     document.getElementById('btn-eai-detail-close')?.addEventListener('click', closeExternalAssemblyInspectionDetailModal);
@@ -2341,30 +2388,24 @@ function bindExternalAssemblyInspectionEvents() {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file || !eaiDetailImageTarget?.row || eaiDetailImageTarget.response) return;
-        const validation = validateExternalAssemblyInspectionImageFile(file);
-        if (validation) {
-            alertAppDialog(validation);
-            return;
-        }
         const row = eaiDetailImageTarget.row;
-        row._creationImageFile = file;
-        syncExternalAssemblyInspectionDetailCreationImageUi(row);
-        eaiDetailImageTarget = null;
+        void applyExternalAssemblyInspectionPickedImageFile(file, prepared => {
+            row._creationImageFile = prepared;
+            syncExternalAssemblyInspectionDetailCreationImageUi(row);
+            eaiDetailImageTarget = null;
+        });
     });
 
     document.getElementById('eai-detail-response-image-input')?.addEventListener('change', event => {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file || !eaiDetailImageTarget?.row || !eaiDetailImageTarget.response) return;
-        const validation = validateExternalAssemblyInspectionImageFile(file);
-        if (validation) {
-            alertAppDialog(validation);
-            return;
-        }
         const row = eaiDetailImageTarget.row;
-        row._responseImageFile = file;
-        syncExternalAssemblyInspectionDetailResponseImageUi(row);
-        eaiDetailImageTarget = null;
+        void applyExternalAssemblyInspectionPickedImageFile(file, prepared => {
+            row._responseImageFile = prepared;
+            syncExternalAssemblyInspectionDetailResponseImageUi(row);
+            eaiDetailImageTarget = null;
+        });
     });
 
     document.getElementById('btn-project-view-external-assembly-inspection')?.addEventListener('click', () => {
