@@ -35,18 +35,22 @@ const PART_REQUEST_STATUS_HISTORY_CHANGED_BY_EMBED =
 
 const PART_REQUEST_SELECT = `
     id, pieceName, description, thicknessMm, material, drawingJson, status,
-    cabinetMakerId, clientId, orderId, createdAt, updatedAt, createdById,
+    cabinetMakerId, montadorId, deliveryDueDate,
+    clientId, orderId, createdAt, updatedAt, createdById,
     client:Client(id, name),
     order:salesOrders(id, orderCode),
     cabinetMaker:CabinetMaker(id, name),
+    montador:Installer(id, name),
     createdBy:appUsers!PartRequest_createdById_fkey(id, name)
 `;
 
 const PART_REQUEST_SELECT_FALLBACK = `
     id, pieceName, description, thicknessMm, material, drawingJson, status,
-    cabinetMakerId, clientId, orderId, createdAt, updatedAt, createdById,
+    cabinetMakerId, montadorId, deliveryDueDate,
+    clientId, orderId, createdAt, updatedAt, createdById,
     client:Client(id, name),
-    order:salesOrders(id, orderCode)
+    order:salesOrders(id, orderCode),
+    cabinetMaker:CabinetMaker(id, name)
 `;
 
 const REQUISICOES_PART_REQUEST_TABLE_ID = 'requisicoes-part-request';
@@ -62,7 +66,33 @@ const partRequestModalOverlay = typeof createAppOverlayHelper === 'function'
     : null;
 
 function partRequestSqlHint() {
-    return 'Execute supabase/feats/create-part-request.sql e, se a tabela já existia, part-request-workflow-status-history.sql no Supabase SQL Editor (DEV).';
+    return 'Execute supabase/feats/part-request-delivery-montador.sql (e scripts de PartRequest anteriores, se ainda não rodou) no Supabase SQL Editor (DEV).';
+}
+
+function toPartRequestDateInputValue(dateStr) {
+    if (!dateStr) return '';
+    const raw = String(dateStr).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+}
+
+function fromPartRequestDateInputValue(value) {
+    const trimmed = String(value || '').trim();
+    if (!trimmed) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+    return trimmed;
+}
+
+function formatPartRequestDeliveryDueLabel(deliveryDueDate) {
+    const raw = fromPartRequestDateInputValue(toPartRequestDateInputValue(deliveryDueDate));
+    if (!raw) return '—';
+    if (typeof formatDate === 'function') {
+        return formatDate(`${raw}T12:00:00`);
+    }
+    const [year, month, day] = raw.split('-');
+    return `${day}/${month}/${year}`;
 }
 
 function getPartRequestStatusLabel(status) {
@@ -105,6 +135,15 @@ function getPartRequestCabinetMakerId(record = partRequestEditingRecord) {
         if (raw) return Number(raw);
     }
     const persisted = record?.cabinetMakerId ?? record?.cabinetMaker?.id;
+    return persisted ? Number(persisted) : null;
+}
+
+function getPartRequestMontadorId(record = partRequestEditingRecord) {
+    if (isPartRequestModalOpenFor(record)) {
+        const raw = document.getElementById('part-request-montador-id')?.value?.trim() || '';
+        if (raw) return Number(raw);
+    }
+    const persisted = record?.montadorId ?? record?.montador?.id;
     return persisted ? Number(persisted) : null;
 }
 
@@ -187,12 +226,52 @@ async function ensurePartRequestCabinetMakerOptions(selectedId = null) {
     select.disabled = !canEditPartRequestMarceneiro(partRequestEditingRecord);
 }
 
+async function ensurePartRequestMontadorOptions(selectedId = null) {
+    const select = document.getElementById('part-request-montador-id');
+    if (!select) return;
+    const montadores = typeof loadGestaoMontadores === 'function'
+        ? await loadGestaoMontadores(true)
+        : (typeof getGestaoActiveMontadores === 'function' ? getGestaoActiveMontadores() : []);
+    const rows = (montadores || []).filter(item => item.isActive !== false);
+    const options = rows.map(item => (
+        `<option value="${item.id}">${escapeHtml(item.name || '')}</option>`
+    )).join('');
+    select.innerHTML = `<option value="">Selecione…</option>${options}`;
+    const normalizedId = selectedId ?? getPartRequestMontadorId(partRequestEditingRecord);
+    select.value = normalizedId ? String(normalizedId) : '';
+    select.disabled = !canEditPartRequestMontador(partRequestEditingRecord);
+}
+
+function canEditPartRequestMontador(record = partRequestEditingRecord) {
+    if (!canActPartRequestWorkflow()) return canEditPartRequestMetadata(record);
+    const status = normalizePartRequestStatus(record?.status);
+    if (status === PART_REQUEST_STATUS_OPEN && canEditPartRequestMetadata(record)) return true;
+    return canEditPartRequestMarceneiro(record);
+}
+
 function syncPartRequestMarceneiroField(record = partRequestEditingRecord) {
     const select = document.getElementById('part-request-cabinet-maker-id');
     if (!select) return;
     const selectedId = record?.cabinetMakerId || record?.cabinetMaker?.id || '';
     select.value = selectedId ? String(selectedId) : '';
     select.disabled = !canEditPartRequestMarceneiro(record);
+}
+
+function syncPartRequestMontadorField(record = partRequestEditingRecord) {
+    const select = document.getElementById('part-request-montador-id');
+    if (!select) return;
+    const selectedId = record?.montadorId || record?.montador?.id || '';
+    select.value = selectedId ? String(selectedId) : '';
+    select.disabled = !canEditPartRequestMontador(record);
+}
+
+function syncPartRequestDeliveryDueField(record = partRequestEditingRecord) {
+    const input = document.getElementById('part-request-delivery-due-date');
+    if (!input) return;
+    input.value = toPartRequestDateInputValue(record?.deliveryDueDate);
+    const editable = !record || canEditPartRequestMetadata(record);
+    input.disabled = !editable;
+    input.readOnly = !editable;
 }
 
 function syncPartRequestModalChrome(record = partRequestEditingRecord) {
@@ -206,11 +285,14 @@ function syncPartRequestModalChrome(record = partRequestEditingRecord) {
     const saveBtn = document.getElementById('btn-part-request-save');
     const canFullEdit = canEditPartRequestMetadata(record);
     const canMarceneiro = canEditPartRequestMarceneiro(record);
+    const canMontador = canEditPartRequestMontador(record);
     if (saveBtn) {
-        saveBtn.classList.toggle('hidden', !canFullEdit && !canMarceneiro);
-        saveBtn.textContent = canFullEdit ? 'Salvar' : 'Salvar marceneiro';
+        saveBtn.classList.toggle('hidden', !canFullEdit && !canMarceneiro && !canMontador);
+        saveBtn.textContent = canFullEdit ? 'Salvar' : 'Salvar atribuições';
     }
     syncPartRequestMarceneiroField(record);
+    syncPartRequestMontadorField(record);
+    syncPartRequestDeliveryDueField(record);
 }
 
 async function fetchPartRequestStatusHistory(partRequestId) {
@@ -405,6 +487,8 @@ function mapPartRequestInteractiveRow(record) {
         orderCode: record?.order?.orderCode || '—',
         clientName: record?.client?.name || '—',
         cabinetMakerName: record?.cabinetMaker?.name || '—',
+        montadorName: record?.montador?.name || '—',
+        deliveryDueLabel: formatPartRequestDeliveryDueLabel(record?.deliveryDueDate),
         status: record?.status || '',
         statusLabel: getPartRequestStatusLabel(record?.status),
         createdAt: record?.createdAt || null,
@@ -434,6 +518,13 @@ function getRequisicoesPartRequestColumns() {
             cellClass: 'p-3 text-xs font-mono tabular-nums text-slate-600 whitespace-nowrap w-[4.75rem] max-w-[4.75rem]'
         },
         { key: 'clientName', label: 'Cliente', cellClass: 'p-3 text-xs text-slate-700' },
+        {
+            key: 'deliveryDueLabel',
+            label: 'Prazo entrega',
+            sortKey: 'deliveryDueDate',
+            cellClass: 'p-3 text-xs text-slate-600 whitespace-nowrap'
+        },
+        { key: 'montadorName', label: 'Montador', cellClass: 'p-3 text-xs text-slate-600' },
         { key: 'cabinetMakerName', label: 'Marceneiro', cellClass: 'p-3 text-xs text-slate-600' },
         {
             key: 'statusLabel',
@@ -470,7 +561,7 @@ function mountRequisicoesPartRequestTable(container) {
         defaultSort: [],
         emptyMessage: 'Nenhuma solicitação de fabricação de peça.',
         filteredEmptyMessage: 'Nenhum registro com os filtros aplicados.',
-        minWidth: '880px'
+        minWidth: '1040px'
     });
 }
 
@@ -519,7 +610,7 @@ async function loadPartRequests(options = {}) {
         .select(PART_REQUEST_SELECT)
         .order('id', { ascending: false });
 
-    if (result.error && /relationship|embed|appUsers|CabinetMaker|schema cache/i.test(result.error.message || '')) {
+    if (result.error && /relationship|embed|appUsers|CabinetMaker|Installer|deliveryDueDate|montadorId|schema cache/i.test(result.error.message || '')) {
         result = await supabaseClient
             .from('PartRequest')
             .select(PART_REQUEST_SELECT_FALLBACK)
@@ -553,6 +644,10 @@ function resetPartRequestForm() {
         renderPartRequestStatusBadge(PART_REQUEST_STATUS_OPEN);
     const cabinetMakerSelect = document.getElementById('part-request-cabinet-maker-id');
     if (cabinetMakerSelect) cabinetMakerSelect.value = '';
+    const montadorSelect = document.getElementById('part-request-montador-id');
+    if (montadorSelect) montadorSelect.value = '';
+    const deliveryInput = document.getElementById('part-request-delivery-due-date');
+    if (deliveryInput) deliveryInput.value = '';
     const statusActions = document.getElementById('part-request-status-actions');
     if (statusActions) statusActions.innerHTML = '';
     document.getElementById('btn-part-request-status-history')?.classList.add('hidden');
@@ -569,7 +664,9 @@ function syncPartRequestFormReadOnly(readOnly) {
         'btn-part-request-order-picker',
         'btn-part-request-save',
         'btn-part-request-print',
-        'part-request-cabinet-maker-id'
+        'part-request-cabinet-maker-id',
+        'part-request-montador-id',
+        'part-request-delivery-due-date'
     ];
     ids.forEach(id => {
         const el = document.getElementById(id);
@@ -589,6 +686,16 @@ function syncPartRequestFormReadOnly(readOnly) {
     if (cabinetMakerSelect && partRequestEditingRecord) {
         cabinetMakerSelect.disabled = readOnly && !canEditPartRequestMarceneiro(partRequestEditingRecord);
     }
+    const montadorSelect = document.getElementById('part-request-montador-id');
+    if (montadorSelect && partRequestEditingRecord) {
+        montadorSelect.disabled = readOnly && !canEditPartRequestMontador(partRequestEditingRecord);
+    }
+    const deliveryInput = document.getElementById('part-request-delivery-due-date');
+    if (deliveryInput && partRequestEditingRecord) {
+        const metaEditable = canEditPartRequestMetadata(partRequestEditingRecord);
+        deliveryInput.disabled = readOnly || !metaEditable;
+        deliveryInput.readOnly = readOnly || !metaEditable;
+    }
     syncPartRequestModalChrome(partRequestEditingRecord);
 }
 
@@ -601,6 +708,11 @@ async function collectPartRequestFormMeta() {
     const orderId = Number(document.getElementById('part-request-order-id')?.value) || null;
     const cabinetMakerRaw = document.getElementById('part-request-cabinet-maker-id')?.value || '';
     const cabinetMakerId = cabinetMakerRaw ? Number(cabinetMakerRaw) : null;
+    const montadorRaw = document.getElementById('part-request-montador-id')?.value || '';
+    const montadorId = montadorRaw ? Number(montadorRaw) : null;
+    const deliveryDueDate = fromPartRequestDateInputValue(
+        document.getElementById('part-request-delivery-due-date')?.value
+    );
 
     const metadataEditable = !partRequestEditingRecord || canEditPartRequestMetadata(partRequestEditingRecord);
     if (metadataEditable && !pieceName) {
@@ -624,11 +736,16 @@ async function collectPartRequestFormMeta() {
         material: material || null,
         clientId,
         orderId,
-        cabinetMakerId: Number.isFinite(cabinetMakerId) ? cabinetMakerId : null
+        cabinetMakerId: Number.isFinite(cabinetMakerId) ? cabinetMakerId : null,
+        montadorId: Number.isFinite(montadorId) ? montadorId : null,
+        deliveryDueDate
     };
 
     if (partRequestEditingRecord && !canEditPartRequestMetadata(partRequestEditingRecord)) {
-        return { cabinetMakerId: base.cabinetMakerId };
+        return {
+            cabinetMakerId: base.cabinetMakerId,
+            montadorId: base.montadorId
+        };
     }
 
     let drawingJson = null;
@@ -678,7 +795,10 @@ async function openPartRequestForm(record = null) {
         : 'Solicitação de fabricação — peça com defeito';
 
     const readOnly = record && !canEditPartRequestDrawing(record);
-    await ensurePartRequestCabinetMakerOptions(record?.cabinetMakerId || record?.cabinetMaker?.id);
+    await Promise.all([
+        ensurePartRequestCabinetMakerOptions(record?.cabinetMakerId || record?.cabinetMaker?.id),
+        ensurePartRequestMontadorOptions(record?.montadorId || record?.montador?.id)
+    ]);
     if (record) {
         partRequestEditingId = Number(record.id);
         partRequestEditingRecord = record;
@@ -689,6 +809,8 @@ async function openPartRequestForm(record = null) {
         }
         document.getElementById('part-request-material').value = record.material || '';
         syncPartRequestMarceneiroField(record);
+        syncPartRequestMontadorField(record);
+        syncPartRequestDeliveryDueField(record);
         if (record.clientId) {
             setPartRequestClient({ id: record.clientId, name: record.client?.name || '' });
         }
@@ -734,7 +856,8 @@ async function savePartRequest(event) {
     event.preventDefault();
     const canFullEdit = !partRequestEditingRecord || canEditPartRequestMetadata(partRequestEditingRecord);
     const canMarceneiro = partRequestEditingRecord && canEditPartRequestMarceneiro(partRequestEditingRecord);
-    if (partRequestEditingRecord && !canFullEdit && !canMarceneiro) {
+    const canMontador = partRequestEditingRecord && canEditPartRequestMontador(partRequestEditingRecord);
+    if (partRequestEditingRecord && !canFullEdit && !canMarceneiro && !canMontador) {
         alertAppDialog('Esta requisição não pode ser alterada.');
         return;
     }
@@ -752,7 +875,12 @@ async function savePartRequest(event) {
         if (partRequestEditingId) {
             const updatePayload = canFullEdit
                 ? { ...payload, updatedAt: now, updatedById: userId }
-                : { cabinetMakerId: payload.cabinetMakerId, updatedAt: now, updatedById: userId };
+                : {
+                    cabinetMakerId: payload.cabinetMakerId,
+                    montadorId: payload.montadorId,
+                    updatedAt: now,
+                    updatedById: userId
+                };
             const { error } = await supabaseClient
                 .from('PartRequest')
                 .update(updatePayload)
@@ -783,7 +911,7 @@ async function savePartRequest(event) {
         await loadPartRequests({ silent: true });
     } catch (error) {
         setPartRequestModalLoading(false);
-        const missing = /PartRequest|schema cache|does not exist/i.test(error.message || '');
+        const missing = /PartRequest|deliveryDueDate|montadorId|schema cache|does not exist/i.test(error.message || '');
         alertAppDialog(missing ? `${error.message}. ${partRequestSqlHint()}` : `Erro ao salvar: ${error.message}`);
     }
 }
@@ -821,12 +949,23 @@ function buildPartRequestPrintMeta(record = null) {
         createdByName: fromRecord
             ? (record.createdBy?.name || '—')
             : (currentUser?.name || '—'),
-        cabinetMakerName: fromRecord ? (record.cabinetMaker?.name || '') : ''
+        cabinetMakerName: fromRecord ? (record.cabinetMaker?.name || '') : '',
+        montadorName: fromRecord ? (record.montador?.name || '') : '',
+        deliveryDueLabel: fromRecord
+            ? formatPartRequestDeliveryDueLabel(record.deliveryDueDate)
+            : formatPartRequestDeliveryDueLabel(
+                fromPartRequestDateInputValue(document.getElementById('part-request-delivery-due-date')?.value)
+            )
     };
     const cabinetMakerSelect = document.getElementById('part-request-cabinet-maker-id');
     const selectedOption = cabinetMakerSelect?.selectedOptions?.[0];
     if (!meta.cabinetMakerName && selectedOption?.value) {
         meta.cabinetMakerName = selectedOption.textContent?.trim() || '';
+    }
+    const montadorSelect = document.getElementById('part-request-montador-id');
+    const montadorOption = montadorSelect?.selectedOptions?.[0];
+    if (!meta.montadorName && montadorOption?.value) {
+        meta.montadorName = montadorOption.textContent?.trim() || '';
     }
     return meta;
 }
@@ -898,6 +1037,9 @@ function bindPartRequestEvents() {
         document.getElementById(id)?.addEventListener('click', resetProjectStatusHistoryModalZIndex);
     });
     document.getElementById('part-request-cabinet-maker-id')?.addEventListener('change', () => {
+        if (partRequestEditingRecord) renderPartRequestModalStatusActions(partRequestEditingRecord);
+    });
+    document.getElementById('part-request-montador-id')?.addEventListener('change', () => {
         if (partRequestEditingRecord) renderPartRequestModalStatusActions(partRequestEditingRecord);
     });
     document.getElementById('btn-part-request-client-picker')?.addEventListener('click', () => {
