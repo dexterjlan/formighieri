@@ -1271,10 +1271,17 @@ const implantacaoModalOverlay = typeof createAppOverlayHelper === 'function'
             'btn-implantacao-encerrar',
             'btn-implantacao-salvar',
             'btn-implantacao-detalhamento-select-file',
-            'btn-implantacao-detalhamento-send'
+            'btn-implantacao-detalhamento-send',
+            'btn-implantacao-compras-select-file',
+            'btn-implantacao-compras-upload',
+            'btn-implantacao-ferragens-select-file',
+            'btn-implantacao-ferragens-upload',
+            'btn-implantacao-tintas-select-file',
+            'btn-implantacao-tintas-upload'
         ],
         closeButtonSelector: '#implantacao-modal button[onclick="closeImplantacaoModal()"]',
-        disableFormSelector: '#implantacao-modal input:not([disabled]), #implantacao-modal textarea:not([disabled]), #implantacao-modal select:not([disabled])',
+        // Não desabilitar input[type=file]: após upload o .click() do próximo "Escolher arquivo" deixa de abrir o seletor.
+        disableFormSelector: '#implantacao-modal input:not([type="file"]):not([disabled]), #implantacao-modal textarea:not([disabled]), #implantacao-modal select:not([disabled])',
         disableDatasetKey: 'implantacaoLoadingDisabled'
     })
     : null;
@@ -1282,9 +1289,18 @@ const implantacaoModalOverlay = typeof createAppOverlayHelper === 'function'
 function setImplantacaoModalLoading(active, message = 'Processando...', status = 'loading') {
     implantacaoModalOverlay?.setLoading(active, message, status);
     if (!active) {
+        if (typeof ensureImplantacaoListFileInputsInteractable === 'function') {
+            ensureImplantacaoListFileInputsInteractable();
+        }
         updateImplantacaoActionButtons(activeImplantacaoRecord);
         if (typeof refreshImplantacaoDetalhamentoUploadSection === 'function') {
             refreshImplantacaoDetalhamentoUploadSection(activeImplantacaoRecord).catch(() => {});
+        }
+        if (typeof IMPLANTACAO_STANDARD_PURCHASE_UI !== 'undefined'
+            && typeof updateImplantacaoListUploadButtons === 'function') {
+            IMPLANTACAO_STANDARD_PURCHASE_UI.forEach(config => {
+                updateImplantacaoListUploadButtons(config.purchaseType);
+            });
         }
     }
 }

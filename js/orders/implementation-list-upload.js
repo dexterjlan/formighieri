@@ -80,6 +80,30 @@ async function resolveImplantacaoListDriveContext(purchaseType) {
     };
 }
 
+function ensureImplantacaoListFileInputsInteractable() {
+    const configs = typeof IMPLANTACAO_STANDARD_PURCHASE_UI !== 'undefined'
+        ? IMPLANTACAO_STANDARD_PURCHASE_UI
+        : [];
+    const datasetKey = 'implantacaoLoadingDisabled';
+    configs.forEach(config => {
+        const input = document.getElementById(config.fileInputId);
+        if (!input) return;
+        delete input.dataset[datasetKey];
+        input.disabled = false;
+        input.removeAttribute('disabled');
+    });
+}
+
+function openImplantacaoListFilePicker(purchaseType) {
+    const config = getImplantacaoListUiConfig(purchaseType);
+    if (!config) return;
+    ensureImplantacaoListFileInputsInteractable();
+    const input = document.getElementById(config.fileInputId);
+    if (!input || input.disabled) return;
+    input.value = '';
+    input.click();
+}
+
 function clearImplantacaoListFileSelection(purchaseType) {
     implantacaoListSelectedFiles[purchaseType] = null;
     const config = getImplantacaoListUiConfig(purchaseType);
@@ -109,7 +133,7 @@ function updateImplantacaoListUploadButtons(purchaseType) {
 
     const btnSelect = document.getElementById(config.selectFileBtnId);
     const btnUpload = document.getElementById(config.uploadBtnId);
-    const canAct = typeof canActImplantacao === 'function' && canActImplantacao();
+    const canAct = typeof canActImplantacao === 'function' && canActImplantacao(activeImplantacaoRecord);
     const selectDisabled = !canAct || locked;
 
     if (btnSelect) btnSelect.disabled = selectDisabled;
@@ -370,12 +394,14 @@ function bindImplantacaoListUploadEvents() {
     const configs = typeof IMPLANTACAO_STANDARD_PURCHASE_UI !== 'undefined'
         ? IMPLANTACAO_STANDARD_PURCHASE_UI
         : [];
+    if (document.body?.dataset?.implantacaoListUploadBound === '1') return;
+    if (document.body) document.body.dataset.implantacaoListUploadBound = '1';
 
     configs.forEach(config => {
         const purchaseType = config.purchaseType;
 
         document.getElementById(config.selectFileBtnId)?.addEventListener('click', () => {
-            document.getElementById(config.fileInputId)?.click();
+            openImplantacaoListFilePicker(purchaseType);
         });
 
         document.getElementById(config.fileInputId)?.addEventListener('change', (event) => {
@@ -450,6 +476,7 @@ window.isImplantacaoStandardPurchaseItemFulfilled = isImplantacaoStandardPurchas
 window.refreshImplantacaoListUploadSections = refreshImplantacaoListUploadSections;
 window.resetImplantacaoListUploadSections = resetImplantacaoListUploadSections;
 window.bindImplantacaoListUploadEvents = bindImplantacaoListUploadEvents;
+window.ensureImplantacaoListFileInputsInteractable = ensureImplantacaoListFileInputsInteractable;
 window.updateImplantacaoListUploadButtons = updateImplantacaoListUploadButtons;
 window.hasImplantacaoListDriveFileUploaded = hasImplantacaoListDriveFileUploaded;
 window.updateImplantacaoListComercialCheckboxState = updateImplantacaoListComercialCheckboxState;

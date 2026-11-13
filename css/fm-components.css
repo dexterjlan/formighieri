@@ -317,6 +317,61 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
     color: var(--fm-ink-muted, #5c6658);
 }
 
+/* Implantação — ações fixas no rodapé do modal (conteúdo rola acima). */
+.implantacao-modal__panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.implantacao-modal__body {
+    -webkit-overflow-scrolling: touch;
+}
+
+.implantacao-modal__footer {
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 -4px 16px rgb(15 23 42 / 0.08);
+}
+
+.implantacao-modal__action-btn {
+    touch-action: manipulation;
+}
+
+@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
+    #implantacao-modal:not(.hidden) {
+        padding: 0;
+        align-items: stretch;
+    }
+
+    .implantacao-modal__panel {
+        max-width: none;
+        width: 100%;
+        max-height: 100dvh;
+        height: 100dvh;
+        border-radius: 0;
+    }
+
+    .implantacao-modal__body {
+        padding-bottom: 0.5rem;
+    }
+
+    .implantacao-modal__footer {
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+        padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+        padding-right: calc(1rem + env(safe-area-inset-right, 0px));
+    }
+
+    .implantacao-modal__action-btn {
+        flex: 1 1 calc(50% - 0.25rem);
+        min-height: 2.75rem;
+    }
+
+    .implantacao-modal__footer #btn-implantacao-salvar {
+        flex: 1 1 100%;
+    }
+}
+
 /* Requisição de peça — modal (desktop, tablet touch, celular). Tablet: FM_TABLET_TOUCH em responsive.js */
 .part-request-modal__form {
     display: flex;
