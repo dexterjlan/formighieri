@@ -246,6 +246,19 @@ async function saveGestaoMarceneiroRow(row) {
             return;
         }
 
+        if (typeof loadGestaoFactoryRoles === 'function') {
+            await loadGestaoFactoryRoles(false);
+        }
+        const marceneiroRoleId = typeof getGestaoMarceneiroFactoryRoleId === 'function'
+            ? getGestaoMarceneiroFactoryRoleId()
+            : null;
+        if (marceneiroRoleId) {
+            await supabaseClient
+                .from('FactoryEmployee')
+                .update({ name, sortOrder, isActive, factoryRoleId: marceneiroRoleId, updatedAt: now })
+                .eq('legacyCabinetMakerId', cabinetMakerId);
+        }
+
         await loadGestaoMarceneirosList();
     });
 }
@@ -304,18 +317,38 @@ async function addGestaoMarceneiro(event) {
 
     await withGestaoCadastroSaveOverlay(document.getElementById('gestao-marceneiros-panel'), async () => {
         const now = new Date().toISOString();
-        const { error } = await supabaseClient
+        const { data: created, error } = await supabaseClient
             .from('CabinetMaker')
             .insert({
                 name,
                 sortOrder,
                 isActive: true,
                 updatedAt: now
-            });
+            })
+            .select('id')
+            .single();
 
         if (error) {
             alertAppDialog('Erro ao adicionar marceneiro: ' + error.message);
             return;
+        }
+
+        if (typeof loadGestaoFactoryRoles === 'function') {
+            await loadGestaoFactoryRoles(false);
+        }
+        const marceneiroRoleId = typeof getGestaoMarceneiroFactoryRoleId === 'function'
+            ? getGestaoMarceneiroFactoryRoleId()
+            : null;
+        if (marceneiroRoleId && created?.id) {
+            await supabaseClient.from('FactoryEmployee').insert({
+                name,
+                sortOrder,
+                isActive: true,
+                factoryRoleId: marceneiroRoleId,
+                legacyCabinetMakerId: created.id,
+                createdAt: now,
+                updatedAt: now
+            });
         }
 
         document.getElementById('gestao-new-marceneiro-form')?.reset();

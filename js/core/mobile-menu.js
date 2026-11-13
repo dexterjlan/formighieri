@@ -28,6 +28,8 @@ const MOBILE_MENU_ICON_PATHS = {
     'gestao-nav-architects': '<path d="M3 21h18"/><path d="M6 21V7l6-4 6 4v14"/><path d="M10 10h4"/>',
     'gestao-nav-addr': '<path d="M12 21s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11Z"/><circle cx="12" cy="10" r="2.5"/>',
     'gestao-nav-marceneiros': '<path d="M14 7l-3-3-3 3"/><path d="M11 4v12"/><path d="m7 21 5-4 5 4"/><path d="M5 16h14"/>',
+    'gestao-nav-factory-roles': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-2 2-2-2"/><path d="M18 9v6"/>',
+    'gestao-nav-factory-employees': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
     'gestao-nav-alterar-status-projeto': '<path d="M4 7h16v10H4z"/><path d="M9 7V4h6v3"/><path d="M8 12h8"/>',
     'gestao-nav-alterar-status-terceiros': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
     'gestao-nav-montadores': '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="8" r="3"/><path d="M22 11l-3 3-2-2"/>',

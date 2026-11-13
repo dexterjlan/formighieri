@@ -108,6 +108,8 @@
                                 <button type="button" id="gestao-nav-architects" class="app-nav-item app-nav-item--nested">Arquitetos</button>
                                 <button type="button" id="gestao-nav-addr" class="app-nav-item app-nav-item--nested">Endereços</button>
                                 <button type="button" id="gestao-nav-marceneiros" class="app-nav-item app-nav-item--nested">Marceneiros</button>
+                                <button type="button" id="gestao-nav-factory-roles" class="app-nav-item app-nav-item--nested">Funções fábrica</button>
+                                <button type="button" id="gestao-nav-factory-employees" class="app-nav-item app-nav-item--nested">Funcionários fábrica</button>
                                 <button type="button" id="gestao-nav-alterar-status-projeto" class="app-nav-item app-nav-item--nested">Alterar Status Projeto</button>
                                 <button type="button" id="gestao-nav-alterar-status-terceiros" class="app-nav-item app-nav-item--nested">Alterar Status Terceiros</button>
                                 <button type="button" id="gestao-nav-agrupar-projetos" class="app-nav-item app-nav-item--nested hidden">Agrupar Projetos</button>
@@ -2238,7 +2240,7 @@
                     <div id="gestao-marceneiros-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                             <h3 class="font-bold text-sm text-slate-900">Marceneiros</h3>
-                            <p class="text-xs text-slate-400 mt-0.5">Cadastre os marceneiros responsáveis pela montagem interna dos projetos.</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Legado — prefira <strong class="font-semibold text-slate-500">Funcionários fábrica</strong> (função Marceneiro). Este cadastro ainda alimenta vínculos antigos no sistema.</p>
                         </div>
                         <div class="p-4 md:p-5 space-y-4">
                             <form id="gestao-new-marceneiro-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
@@ -2269,6 +2271,92 @@
                                         </tr>
                                     </thead>
                                     <tbody id="gestao-marceneiros-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-factory-roles-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Funções fábrica</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Cargos na fábrica (marceneiro, operador de máquina, pintura, expedição, etc.).</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-factory-role-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[180px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Nova função</label>
+                                    <input type="text" id="gestao-new-factory-role-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Ex.: Operador de máquina">
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ordem</label>
+                                    <input type="number" id="gestao-new-factory-role-sort" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-factory-roles-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="gestao-factory-employees-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                            <h3 class="font-bold text-sm text-slate-900">Funcionários fábrica</h3>
+                            <p class="text-xs text-slate-400 mt-0.5">Equipe da fábrica por função. Funcionários com função <strong class="font-semibold text-slate-500">Marceneiro</strong> continuam sincronizados com o cadastro legado de marceneiros.</p>
+                        </div>
+                        <div class="p-4 md:p-5 space-y-4">
+                            <form id="gestao-new-factory-employee-form" class="flex flex-wrap gap-2 items-end border border-slate-200 rounded-xl p-3 bg-slate-50/40">
+                                <div class="flex-1 min-w-[160px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Novo funcionário</label>
+                                    <input type="text" id="gestao-new-factory-employee-name" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                                        placeholder="Nome">
+                                </div>
+                                <div class="flex-1 min-w-[160px]">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Função</label>
+                                    <select id="gestao-new-factory-employee-role" required
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                                        <option value="">Selecione…</option>
+                                    </select>
+                                </div>
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">Ordem</label>
+                                    <input type="number" id="gestao-new-factory-employee-sort" min="0" step="1" value="1"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                                </div>
+                                <button type="submit"
+                                    class="bg-indigo-700 text-white text-xs px-3 py-2 rounded-lg font-medium hover:bg-indigo-800">
+                                    + Adicionar
+                                </button>
+                            </form>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm min-w-[640px]">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-left p-3 font-semibold min-w-[140px]">Função</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-factory-employees-list" class="divide-y divide-slate-100"></tbody>
                                 </table>
                             </div>
                         </div>

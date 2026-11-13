@@ -90,6 +90,7 @@ const SCRIPTS = [
     'js/gestao/gestao-order-schedule.js',
     'js/gestao/gestao-project-scheduling.js',
     'js/gestao/gestao-cadastros-status-people.js',
+    'js/gestao/gestao-cadastros-factory.js',
     'js/gestao/gestao-cadastros-woodwork-checklist.js',
     'js/gestao/gestao-cadastros-catalog.js',
     'js/gestao/gestao-cadastros-purchase-types.js',

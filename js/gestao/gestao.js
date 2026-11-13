@@ -24,7 +24,7 @@ function setGestaoProjectFormLoading(active, message = 'Processando...', status 
     gestaoProjectFormOverlay?.setLoading(active, message, status);
 }
 
-const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'alterar-status-terceiros', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons', 'wps-item-types', 'woodwork-checklist-items'];
+const GESTAO_CADASTRO_NAV_KEYS = ['pedido', 'alterar-status-projeto', 'alterar-status-terceiros', 'agrupar-projetos', 'clientes', 'architects', 'addr', 'marceneiros', 'factory-roles', 'factory-employees', 'montadores', 'characteristics', 'third-party-subtypes', 'purchase-reasons', 'wps-item-types', 'woodwork-checklist-items'];
 
 function setGestaoCadastroSaveOverlayLoading(active, message = 'Salvando...', status = 'loading') {
     if (typeof getAppGlobalOverlayConfig !== 'function') return;
@@ -95,6 +95,8 @@ function setGestaoNavActive(navKey) {
         architects: document.getElementById('gestao-nav-architects'),
         addr: document.getElementById('gestao-nav-addr'),
         marceneiros: document.getElementById('gestao-nav-marceneiros'),
+        'factory-roles': document.getElementById('gestao-nav-factory-roles'),
+        'factory-employees': document.getElementById('gestao-nav-factory-employees'),
         montadores: document.getElementById('gestao-nav-montadores'),
         characteristics: document.getElementById('gestao-nav-characteristics'),
         'third-party-subtypes': document.getElementById('gestao-nav-third-party-subtypes'),
@@ -310,6 +312,8 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-deal-stages-panel')?.classList.add('hidden');
     document.getElementById('gestao-lost-reasons-panel')?.classList.add('hidden');
     document.getElementById('gestao-marceneiros-panel')?.classList.add('hidden');
+    document.getElementById('gestao-factory-roles-panel')?.classList.add('hidden');
+    document.getElementById('gestao-factory-employees-panel')?.classList.add('hidden');
     document.getElementById('gestao-montadores-panel')?.classList.add('hidden');
     document.getElementById('gestao-characteristics-panel')?.classList.add('hidden');
     document.getElementById('gestao-third-party-subtypes-panel')?.classList.add('hidden');
@@ -1375,6 +1379,18 @@ function showGestaoMarceneirosPanel() {
     setGestaoNavActive('marceneiros');
 }
 
+function showGestaoFactoryRolesPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-factory-roles-panel')?.classList.remove('hidden');
+    setGestaoNavActive('factory-roles');
+}
+
+function showGestaoFactoryEmployeesPanel() {
+    hideAllGestaoPanels();
+    document.getElementById('gestao-factory-employees-panel')?.classList.remove('hidden');
+    setGestaoNavActive('factory-employees');
+}
+
 function showGestaoMontadoresPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-montadores-panel')?.classList.remove('hidden');
@@ -1636,6 +1652,16 @@ function bindGestaoEvents() {
         showGestaoMarceneirosPanel();
         loadGestaoMarceneirosList();
     });
+    document.getElementById('gestao-nav-factory-roles')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoFactoryRolesPanel();
+        if (typeof loadGestaoFactoryRolesList === 'function') loadGestaoFactoryRolesList();
+    });
+    document.getElementById('gestao-nav-factory-employees')?.addEventListener('click', async () => {
+        editingGestaoOrderId = null;
+        showGestaoFactoryEmployeesPanel();
+        if (typeof loadGestaoFactoryEmployeesList === 'function') loadGestaoFactoryEmployeesList();
+    });
     document.getElementById('gestao-nav-montadores')?.addEventListener('click', async () => {
         editingGestaoOrderId = null;
         showGestaoMontadoresPanel();
@@ -1707,6 +1733,7 @@ function bindGestaoEvents() {
     });
     if (typeof bindGestaoDealStagesEvents === 'function') bindGestaoDealStagesEvents();
     if (typeof bindGestaoLostReasonsEvents === 'function') bindGestaoLostReasonsEvents();
+    if (typeof bindGestaoFactoryEvents === 'function') bindGestaoFactoryEvents();
     if (typeof bindGestaoArchitectEvents === 'function') bindGestaoArchitectEvents();
     if (typeof bindGestaoContactEvents === 'function') bindGestaoContactEvents();
     document.getElementById('gestao-clientes-list')?.addEventListener('click', (event) => {
