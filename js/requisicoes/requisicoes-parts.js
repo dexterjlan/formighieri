@@ -35,10 +35,11 @@ const PART_REQUEST_STATUS_HISTORY_CHANGED_BY_EMBED =
 
 const PART_REQUEST_SELECT = `
     id, pieceName, description, thicknessMm, material, drawingJson, status,
-    factoryEmployeeId, montadorId, deliveryDueDate,
+    factoryEmployeeId, montadorId, deliveryDueDate, orderProjectId,
     clientId, orderId, createdAt, updatedAt, createdById,
     client:Client(id, name),
     order:salesOrders(id, orderCode),
+    orderProject:OrderProject(id, name, projectCode, cabinetMakerId, cabinetMaker:CabinetMaker(id, name)),
     factoryEmployee:FactoryEmployee(id, name, factoryRole:FactoryRole(id, name)),
     montador:Installer(id, name),
     createdBy:appUsers!PartRequest_createdById_fkey(id, name)
@@ -58,8 +59,10 @@ const REQUISICOES_PART_REQUEST_TABLE_ID = 'requisicoes-part-request';
 let partRequestsCache = [];
 let partRequestEditingId = null;
 let partRequestEditingRecord = null;
+let partRequestOrderProjectsCache = [];
 let partRequestEventsBound = false;
 let partRequestModalLayoutBound = false;
+let partRequestListLayoutBound = false;
 const partRequestModalOverlay = typeof createAppOverlayHelper === 'function'
     ? createAppOverlayHelper('part-request-modal', {
         closeButtonSelector: '#btn-part-request-close'
@@ -67,7 +70,161 @@ const partRequestModalOverlay = typeof createAppOverlayHelper === 'function'
     : null;
 
 function partRequestSqlHint() {
-    return 'Execute supabase/feats/part-request-factory-employee.sql (e demais scripts de PartRequest pendentes) no Supabase SQL Editor (DEV).';
+    return 'Execute os scripts de PartRequest em supabase/feats/ (ver PENDING-PROD-SQL.md) no Supabase SQL Editor (DEV).';
+}
+
+function getPartRequestProjectOptionLabel(project) {
+    const name = String(project?.name || '').trim() || 'Projeto';
+    const code = String(project?.projectCode || '').trim();
+    return code ? `${code} — ${name}` : name;
+}
+
+function filterPartRequestSelectableOrderProjects(projects = []) {
+    return (projects || []).filter(project => {
+        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+            return false;
+        }
+        if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
+            return false;
+        }
+        return true;
+    });
+}
+
+function getPartRequestProjectCabinetMakerName(project) {
+    if (!project) return '';
+    return String(project.cabinetMaker?.name || '').trim();
+}
+
+async function fetchPartRequestOrderProjects(orderId) {
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) return [];
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('id, name, projectCode, cabinetMakerId, parentProjectId, replacedByProjectId, cabinetMaker:CabinetMaker(id, name)')
+        .eq('orderId', normalizedOrderId)
+        .order('name', { ascending: true });
+
+    if (result.error?.message?.match(/cabinetMaker|relationship|schema cache/i)) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, projectCode, cabinetMakerId, parentProjectId, replacedByProjectId')
+            .eq('orderId', normalizedOrderId)
+            .order('name', { ascending: true });
+    }
+
+    if (result.error) {
+        console.error('fetchPartRequestOrderProjects:', result.error);
+        return [];
+    }
+
+    const rows = result.data || [];
+    if (typeof enrichOrderProjectsForList === 'function') {
+        return filterPartRequestSelectableOrderProjects(await enrichOrderProjectsForList(rows));
+    }
+    return filterPartRequestSelectableOrderProjects(rows);
+}
+
+function clearPartRequestOrderProjectUi() {
+    partRequestOrderProjectsCache = [];
+    const wrap = document.getElementById('part-request-order-project-wrap');
+    const select = document.getElementById('part-request-order-project-id');
+    const makerWrap = document.getElementById('part-request-project-cabinet-maker-wrap');
+    const makerName = document.getElementById('part-request-project-cabinet-maker-name');
+    if (wrap) wrap.classList.add('hidden');
+    if (select) {
+        select.innerHTML = '<option value="">Selecione…</option>';
+        select.value = '';
+        select.disabled = false;
+    }
+    if (makerWrap) makerWrap.classList.add('hidden');
+    if (makerName) makerName.textContent = '';
+}
+
+function syncPartRequestProjectCabinetMakerDisplay(project) {
+    const makerWrap = document.getElementById('part-request-project-cabinet-maker-wrap');
+    const makerName = document.getElementById('part-request-project-cabinet-maker-name');
+    if (!makerWrap || !makerName) return;
+
+    const label = getPartRequestProjectCabinetMakerName(project);
+    if (!label) {
+        makerWrap.classList.add('hidden');
+        makerName.textContent = '';
+        return;
+    }
+    makerName.textContent = label;
+    makerWrap.classList.remove('hidden');
+}
+
+function syncPartRequestOrderProjectSelection(selectedProjectId = null) {
+    const select = document.getElementById('part-request-order-project-id');
+    if (!select) return;
+    const normalized = selectedProjectId != null ? Number(selectedProjectId) : Number(select.value);
+    if (normalized) {
+        select.value = String(normalized);
+    }
+    const project = partRequestOrderProjectsCache.find(item => Number(item.id) === normalized) || null;
+    syncPartRequestProjectCabinetMakerDisplay(project);
+}
+
+async function refreshPartRequestOrderProjects(orderId, selectedProjectId = null) {
+    const wrap = document.getElementById('part-request-order-project-wrap');
+    const select = document.getElementById('part-request-order-project-id');
+    if (!wrap || !select) return;
+
+    const normalizedOrderId = Number(orderId);
+    if (!normalizedOrderId) {
+        clearPartRequestOrderProjectUi();
+        return;
+    }
+
+    partRequestOrderProjectsCache = await fetchPartRequestOrderProjects(normalizedOrderId);
+
+    if (!partRequestOrderProjectsCache.length) {
+        wrap.classList.remove('hidden');
+        select.innerHTML = '<option value="">Nenhum projeto neste pedido</option>';
+        select.value = '';
+        select.disabled = true;
+        syncPartRequestProjectCabinetMakerDisplay(null);
+        return;
+    }
+
+    const options = partRequestOrderProjectsCache.map(project => {
+        const selected = selectedProjectId != null && Number(project.id) === Number(selectedProjectId);
+        return `<option value="${project.id}"${selected ? ' selected' : ''}>${escapeHtml(getPartRequestProjectOptionLabel(project))}</option>`;
+    }).join('');
+
+    select.innerHTML = `<option value="">Selecione…</option>${options}`;
+    wrap.classList.remove('hidden');
+    select.disabled = false;
+
+    const normalizedSelected = selectedProjectId != null
+        ? Number(selectedProjectId)
+        : (Number(select.value) || null);
+    if (normalizedSelected) {
+        select.value = String(normalizedSelected);
+    }
+    syncPartRequestOrderProjectSelection(normalizedSelected);
+}
+
+function getPartRequestOrderProjectLabelFromRecord(record = partRequestEditingRecord) {
+    if (!record?.orderProject) return '';
+    return getPartRequestProjectOptionLabel(record.orderProject);
+}
+
+function getPartRequestProjectCabinetMakerNameFromRecord(record = partRequestEditingRecord) {
+    if (!record) return '';
+    if (record.orderProject) {
+        const fromProject = getPartRequestProjectCabinetMakerName(record.orderProject);
+        if (fromProject) return fromProject;
+    }
+    const selectedId = Number(document.getElementById('part-request-order-project-id')?.value);
+    if (selectedId) {
+        const project = partRequestOrderProjectsCache.find(item => Number(item.id) === selectedId);
+        return getPartRequestProjectCabinetMakerName(project);
+    }
+    return '';
 }
 
 function toPartRequestDateInputValue(dateStr) {
@@ -348,6 +505,12 @@ function adaptPartRequestStatusHistoryEntries(entries = []) {
     }));
 }
 
+function resolvePartRequestPrintId(record = null) {
+    const raw = record?.id ?? partRequestEditingId ?? partRequestEditingRecord?.id;
+    const id = Number(raw);
+    return Number.isFinite(id) && id > 0 ? id : null;
+}
+
 function buildPartRequestStatusHistorySubtitle(record = partRequestEditingRecord) {
     const requestId = Number(record?.id || partRequestEditingId);
     const pieceName = String(record?.pieceName || '').trim() || '—';
@@ -578,21 +741,140 @@ function getRequisicoesPartRequestColumns() {
     ];
 }
 
-function mountRequisicoesPartRequestTable(container) {
-    if (!container || typeof mountInteractiveTable !== 'function') return;
-    mountInteractiveTable(container, {
-        tableId: REQUISICOES_PART_REQUEST_TABLE_ID,
-        rows: (partRequestsCache || []).map(mapPartRequestInteractiveRow),
-        columns: getRequisicoesPartRequestColumns(),
-        defaultSort: [],
+function shouldUseRequisicoesPartRequestMobileLayout() {
+    if (typeof isMobileViewport === 'function' && isMobileViewport()) return true;
+    if (typeof isTabletTouchViewport === 'function' && isTabletTouchViewport()) return true;
+    return false;
+}
+
+function partRequestRowMatchesMobileSearch(row, queryNorm) {
+    if (!queryNorm) return true;
+    const haystack = typeof normalizeProgramacoesMobileSearchText === 'function'
+        ? normalizeProgramacoesMobileSearchText([
+            row.pieceName,
+            row.orderCode,
+            row.clientName,
+            row.executorName,
+            row.montadorName,
+            row.material,
+            row.thicknessLabel,
+            row.deliveryDueLabel,
+            row.statusLabel,
+            row.id
+        ].join(' '))
+        : String([
+            row.pieceName,
+            row.orderCode,
+            row.clientName,
+            row.statusLabel,
+            row.id
+        ].join(' ')).toLowerCase();
+    return haystack.includes(queryNorm);
+}
+
+function renderRequisicoesPartRequestMobileCard(row) {
+    const detailFields = [
+        typeof renderProgramacoesMobileInlineField === 'function'
+            ? renderProgramacoesMobileInlineField('Pedido', row.orderCode)
+            : '',
+        typeof renderProgramacoesMobileInlineField === 'function'
+            ? renderProgramacoesMobileInlineField('Cliente', row.clientName)
+            : '',
+        typeof renderProgramacoesMobileInlineField === 'function'
+            ? renderProgramacoesMobileInlineField('Prazo', row.deliveryDueLabel)
+            : '',
+        typeof renderProgramacoesMobileInlineField === 'function'
+            ? renderProgramacoesMobileInlineField('Executor', row.executorName)
+            : '',
+        typeof renderProgramacoesMobileInlineField === 'function'
+            ? renderProgramacoesMobileInlineField('Montador', row.montadorName)
+            : '',
+        typeof renderProgramacoesMobileInlineField === 'function'
+            ? renderProgramacoesMobileInlineField('Material', row.material)
+            : '',
+        typeof renderProgramacoesMobileInlineField === 'function'
+            ? renderProgramacoesMobileInlineField('Espessura', row.thicknessLabel)
+            : ''
+    ].join('');
+
+    const createdLine = row.createdLabel && row.createdLabel !== '—'
+        ? `<p class="requisicoes-part-request-mobile__created text-[11px] text-slate-400 mt-1">${escapeHtml(row.createdLabel)}</p>`
+        : '';
+
+    const actionsHtml = `
+        <div class="requisicoes-part-request-mobile__actions">
+            <button type="button"
+                class="part-request-edit-btn requisicoes-part-request-mobile__btn requisicoes-part-request-mobile__btn--primary"
+                data-part-request-id="${Number(row.id)}">Abrir</button>
+            <button type="button"
+                class="part-request-print-list-btn requisicoes-part-request-mobile__btn"
+                data-part-request-id="${Number(row.id)}">Imprimir</button>
+        </div>
+    `;
+
+    return `
+        <article class="programacoes-projects-mobile__card requisicoes-part-request-mobile__card" data-part-request-id="${Number(row.id)}">
+            <div class="programacoes-projects-mobile__headline requisicoes-part-request-mobile__headline">
+                <p class="programacoes-projects-mobile__order">
+                    <span class="font-semibold text-slate-900">${escapeHtml(String(row.pieceName || '—'))}</span>
+                    <span class="text-slate-300" aria-hidden="true">·</span>
+                    <span class="font-mono text-slate-500">Nº ${escapeHtml(String(row.id || '—'))}</span>
+                </p>
+                <p class="programacoes-projects-mobile__client">
+                    <span class="font-mono">${escapeHtml(String(row.orderCode || '—'))}</span>
+                    <span class="text-slate-300" aria-hidden="true"> · </span>
+                    ${escapeHtml(String(row.clientName || '—'))}
+                </p>
+                ${createdLine}
+            </div>
+            <div class="programacoes-projects-mobile__status">${renderPartRequestStatusBadge(row.status)}</div>
+            <div class="programacoes-projects-mobile__details">${detailFields}</div>
+            ${actionsHtml}
+        </article>
+    `;
+}
+
+function renderRequisicoesPartRequestMobileScreen(content, options = {}) {
+    const rows = (partRequestsCache || []).map(mapPartRequestInteractiveRow);
+    const headerActionsHtml = `
+        <button type="button" id="btn-part-request-new"
+            class="text-xs bg-slate-900 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-slate-800 w-full sm:w-auto justify-center min-h-[2.75rem]">
+            Nova solicitação
+        </button>
+    `;
+
+    if (typeof renderProgramacoesMobileListScreen !== 'function') {
+        renderPartRequestScreenDesktop(content, options);
+        return;
+    }
+
+    renderProgramacoesMobileListScreen(content, {
+        screenId: 'requisicoes-peca',
+        title: 'Peça',
+        subtitle: 'Solicitações de fabricação com desenho draw.io, material e vínculo ao pedido.',
+        headerActionsHtml,
+        rows,
         emptyMessage: 'Nenhuma solicitação de fabricação de peça.',
-        filteredEmptyMessage: 'Nenhum registro com os filtros aplicados.',
-        minWidth: '1040px'
+        searchPlaceholder: 'Buscar peça, pedido, cliente, executor, status…',
+        rowMatchesSearch: partRequestRowMatchesMobileSearch,
+        renderCard: renderRequisicoesPartRequestMobileCard,
+        onScreenReady(screenContent) {
+            screenContent.querySelector('.programacoes-projects-mobile__preview-hint')?.remove();
+            if (!options.sqlError) return;
+            const shell = screenContent.querySelector('.programacoes-projects-mobile');
+            const header = shell?.querySelector('.p-4.border-b');
+            if (!header) return;
+            const hint = document.createElement('div');
+            hint.id = 'part-request-sql-hint';
+            hint.className = 'text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2';
+            hint.textContent = options.sqlError;
+            header.appendChild(hint);
+        }
     });
 }
 
-function renderPartRequestScreen(options = {}) {
-    const content = document.getElementById('requisicoes-content');
+function renderPartRequestScreenDesktop(content, options = {}) {
+    if (!content) content = document.getElementById('requisicoes-content');
     if (!content) return;
 
     content.innerHTML = `
@@ -616,6 +898,53 @@ function renderPartRequestScreen(options = {}) {
     mountRequisicoesPartRequestTable(document.getElementById('part-request-table-mount'));
 }
 
+function mountRequisicoesPartRequestTable(container) {
+    if (!container || typeof mountInteractiveTable !== 'function') return;
+    mountInteractiveTable(container, {
+        tableId: REQUISICOES_PART_REQUEST_TABLE_ID,
+        rows: (partRequestsCache || []).map(mapPartRequestInteractiveRow),
+        columns: getRequisicoesPartRequestColumns(),
+        defaultSort: [],
+        emptyMessage: 'Nenhuma solicitação de fabricação de peça.',
+        filteredEmptyMessage: 'Nenhum registro com os filtros aplicados.',
+        minWidth: '1040px'
+    });
+}
+
+function renderPartRequestScreen(options = {}) {
+    const content = document.getElementById('requisicoes-content');
+    if (!content) return;
+
+    if (shouldUseRequisicoesPartRequestMobileLayout()) {
+        renderRequisicoesPartRequestMobileScreen(content, options);
+        return;
+    }
+
+    renderPartRequestScreenDesktop(content, options);
+}
+
+function isRequisicoesPartRequestSectionActive() {
+    const section = typeof requisicoesActiveSection !== 'undefined'
+        ? requisicoesActiveSection
+        : '';
+    return section === 'parts' || section === 'part';
+}
+
+function bindPartRequestListLayoutWatch() {
+    if (partRequestListLayoutBound) return;
+    partRequestListLayoutBound = true;
+    let resizeTimer = 0;
+    window.addEventListener('resize', () => {
+        window.clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => {
+            if (!isRequisicoesPartRequestSectionActive()) return;
+            if (typeof renderPartRequestScreen === 'function') {
+                renderPartRequestScreen();
+            }
+        }, 200);
+    });
+}
+
 function canUsePartRequestScreen() {
     return typeof canAccessRequisicoesPartRequest === 'function' && canAccessRequisicoesPartRequest();
 }
@@ -636,7 +965,7 @@ async function loadPartRequests(options = {}) {
         .select(PART_REQUEST_SELECT)
         .order('id', { ascending: false });
 
-    if (result.error && /relationship|embed|appUsers|FactoryEmployee|FactoryRole|CabinetMaker|Installer|factoryEmployeeId|deliveryDueDate|montadorId|schema cache/i.test(result.error.message || '')) {
+    if (result.error && /relationship|embed|appUsers|FactoryEmployee|FactoryRole|CabinetMaker|Installer|OrderProject|factoryEmployeeId|orderProjectId|deliveryDueDate|montadorId|schema cache/i.test(result.error.message || '')) {
         result = await supabaseClient
             .from('PartRequest')
             .select(PART_REQUEST_SELECT_FALLBACK)
@@ -677,6 +1006,7 @@ function resetPartRequestForm() {
     const statusActions = document.getElementById('part-request-status-actions');
     if (statusActions) statusActions.innerHTML = '';
     document.getElementById('btn-part-request-status-history')?.classList.add('hidden');
+    clearPartRequestOrderProjectUi();
     syncPartRequestFormReadOnly(false);
 }
 
@@ -692,7 +1022,8 @@ function syncPartRequestFormReadOnly(readOnly) {
         'btn-part-request-print',
         'part-request-executor-id',
         'part-request-montador-id',
-        'part-request-delivery-due-date'
+        'part-request-delivery-due-date',
+        'part-request-order-project-id'
     ];
     ids.forEach(id => {
         const el = document.getElementById(id);
@@ -732,6 +1063,8 @@ async function collectPartRequestFormMeta() {
     const material = document.getElementById('part-request-material')?.value.trim() || '';
     const clientId = Number(document.getElementById('part-request-client-id')?.value) || null;
     const orderId = Number(document.getElementById('part-request-order-id')?.value) || null;
+    const orderProjectRaw = document.getElementById('part-request-order-project-id')?.value || '';
+    const orderProjectId = orderProjectRaw ? Number(orderProjectRaw) : null;
     const factoryEmployeeRaw = document.getElementById('part-request-executor-id')?.value || '';
     const factoryEmployeeId = factoryEmployeeRaw ? Number(factoryEmployeeRaw) : null;
     const montadorRaw = document.getElementById('part-request-montador-id')?.value || '';
@@ -762,6 +1095,7 @@ async function collectPartRequestFormMeta() {
         material: material || null,
         clientId,
         orderId,
+        orderProjectId: orderId && Number.isFinite(orderProjectId) ? orderProjectId : null,
         factoryEmployeeId: Number.isFinite(factoryEmployeeId) ? factoryEmployeeId : null,
         montadorId: Number.isFinite(montadorId) ? montadorId : null,
         deliveryDueDate
@@ -795,18 +1129,31 @@ function setPartRequestClient(client) {
     if (idInput) idInput.value = client?.id ? String(client.id) : '';
 }
 
-function applyPartRequestOrder(order) {
+async function applyPartRequestOrder(order, selectedProjectId = null) {
     if (!order) return;
     const orderInput = document.getElementById('part-request-order-code');
     const orderIdInput = document.getElementById('part-request-order-id');
+    const previousOrderId = Number(orderIdInput?.value) || null;
+    const nextOrderId = order.id ? Number(order.id) : null;
     if (orderInput) orderInput.value = order.orderCode || '';
-    if (orderIdInput) orderIdInput.value = order.id ? String(order.id) : '';
+    if (orderIdInput) orderIdInput.value = nextOrderId ? String(nextOrderId) : '';
     if (order.clientId || order.client) {
         setPartRequestClient({
             id: order.clientId || order.client?.id,
             name: order.client?.name || (typeof getOrderClientName === 'function' ? getOrderClientName(order) : '')
         });
     }
+    if (!nextOrderId) {
+        clearPartRequestOrderProjectUi();
+        return;
+    }
+    const explicitProjectId = selectedProjectId != null ? Number(selectedProjectId) : null;
+    const keepProjectId = explicitProjectId
+        ? explicitProjectId
+        : (previousOrderId === nextOrderId
+            ? Number(document.getElementById('part-request-order-project-id')?.value) || null
+            : null);
+    await refreshPartRequestOrderProjects(nextOrderId, keepProjectId);
 }
 
 async function openPartRequestForm(record = null) {
@@ -841,12 +1188,14 @@ async function openPartRequestForm(record = null) {
             setPartRequestClient({ id: record.clientId, name: record.client?.name || '' });
         }
         if (record.orderId) {
-            applyPartRequestOrder({
+            await applyPartRequestOrder({
                 id: record.orderId,
                 orderCode: record.order?.orderCode,
                 clientId: record.clientId,
                 client: record.client
-            });
+            }, record.orderProjectId || record.orderProject?.id);
+        } else {
+            clearPartRequestOrderProjectUi();
         }
     }
 
@@ -939,7 +1288,7 @@ async function savePartRequest(event) {
         await loadPartRequests({ silent: true });
     } catch (error) {
         setPartRequestModalLoading(false);
-        const missing = /PartRequest|factoryEmployeeId|deliveryDueDate|montadorId|schema cache|does not exist/i.test(error.message || '');
+        const missing = /PartRequest|factoryEmployeeId|orderProjectId|deliveryDueDate|montadorId|schema cache|does not exist/i.test(error.message || '');
         alertAppDialog(missing ? `${error.message}. ${partRequestSqlHint()}` : `Erro ao salvar: ${error.message}`);
     }
 }
@@ -947,7 +1296,7 @@ async function savePartRequest(event) {
 function buildPartRequestPrintMeta(record = null) {
     const fromRecord = Boolean(record?.id);
     const meta = {
-        requestId: fromRecord ? record.id : (partRequestEditingId || null),
+        requestId: resolvePartRequestPrintId(record),
         pieceName: fromRecord
             ? record.pieceName
             : (document.getElementById('part-request-piece-name')?.value.trim() || ''),
@@ -985,7 +1334,13 @@ function buildPartRequestPrintMeta(record = null) {
             ? formatPartRequestDeliveryDueLabel(record.deliveryDueDate)
             : formatPartRequestDeliveryDueLabel(
                 fromPartRequestDateInputValue(document.getElementById('part-request-delivery-due-date')?.value)
-            )
+            ),
+        projectLabel: fromRecord
+            ? getPartRequestOrderProjectLabelFromRecord(record)
+            : '',
+        projectCabinetMakerName: fromRecord
+            ? getPartRequestProjectCabinetMakerNameFromRecord(record)
+            : ''
     };
     const executorSelect = document.getElementById('part-request-executor-id');
     const executorOption = executorSelect?.selectedOptions?.[0];
@@ -994,8 +1349,19 @@ function buildPartRequestPrintMeta(record = null) {
     }
     const montadorSelect = document.getElementById('part-request-montador-id');
     const montadorOption = montadorSelect?.selectedOptions?.[0];
+    const projectSelect = document.getElementById('part-request-order-project-id');
+    const projectOption = projectSelect?.selectedOptions?.[0];
+    if (!meta.projectLabel && projectOption?.value) {
+        meta.projectLabel = projectOption.textContent?.trim() || '';
+    }
+    if (!meta.projectCabinetMakerName) {
+        meta.projectCabinetMakerName = getPartRequestProjectCabinetMakerNameFromRecord() || '';
+    }
     if (!meta.montadorName && montadorOption?.value) {
         meta.montadorName = montadorOption.textContent?.trim() || '';
+    }
+    if (!meta.requestId) {
+        meta.requestId = resolvePartRequestPrintId(record);
     }
     return meta;
 }
@@ -1012,7 +1378,9 @@ async function printPartRequestFromRecord(record) {
 }
 
 async function printPartRequestFromForm() {
-    const meta = buildPartRequestPrintMeta(partRequestEditingRecord);
+    const printRecord = partRequestEditingRecord
+        || (partRequestEditingId ? { id: partRequestEditingId } : null);
+    const meta = buildPartRequestPrintMeta(printRecord);
     try {
         setPartRequestModalLoading(true, 'Gerando impressão...');
         const png = await partRequestDrawioExportPng();
@@ -1028,6 +1396,7 @@ function bindPartRequestEvents() {
     if (partRequestEventsBound) return;
     partRequestEventsBound = true;
     bindPartRequestModalLayoutWatch();
+    bindPartRequestListLayoutWatch();
 
     document.getElementById('requisicoes-content')?.addEventListener('click', event => {
         if (event.target.closest('#btn-part-request-new')) {
@@ -1066,6 +1435,9 @@ function bindPartRequestEvents() {
     });
     ['btn-close-project-status-history', 'btn-close-project-status-history-footer'].forEach(id => {
         document.getElementById(id)?.addEventListener('click', resetProjectStatusHistoryModalZIndex);
+    });
+    document.getElementById('part-request-order-project-id')?.addEventListener('change', () => {
+        syncPartRequestOrderProjectSelection();
     });
     document.getElementById('part-request-executor-id')?.addEventListener('change', () => {
         if (partRequestEditingRecord) renderPartRequestModalStatusActions(partRequestEditingRecord);

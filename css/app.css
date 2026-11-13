@@ -3362,6 +3362,54 @@ body.gestao-kanban-fullscreen-active {
     border-top: 1px solid rgb(241 245 249);
 }
 
+.requisicoes-part-request-mobile__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid rgb(241 245 249);
+}
+
+.requisicoes-part-request-mobile__btn {
+    min-height: 2.75rem;
+    width: 100%;
+    touch-action: manipulation;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(248 250 252);
+    color: rgb(51 65 85);
+}
+
+.requisicoes-part-request-mobile__btn--primary {
+    background: rgb(238 242 255);
+    border-color: rgb(199 210 254);
+    color: rgb(67 56 202);
+}
+
+.requisicoes-part-request-mobile__headline .programacoes-projects-mobile__order {
+    align-items: baseline;
+}
+
+@media (max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse)) {
+    .requisicoes-part-request-mobile__actions {
+        grid-template-columns: 1fr;
+    }
+
+    #requisicoes-view .programacoes-projects-mobile__search {
+        font-size: 16px;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1366px) and ((hover: none) or (pointer: coarse)) {
+  #requisicoes-view .programacoes-projects-mobile__list {
+        padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+}
+
 .view3d-mobile__actions {
     margin-top: 0.65rem;
     padding-top: 0.55rem;

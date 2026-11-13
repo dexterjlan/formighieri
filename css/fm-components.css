@@ -557,7 +557,36 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
     height: 1px;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
+    white-space: normal;
+}
+
+.part-request-print-surface:not([hidden]) {
+    width: max(100%, 210mm);
+    height: auto;
+    overflow: visible;
+    clip: auto;
+}
+
+.part-request-print-page {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+}
+
+.part-request-print-page__divider {
+    flex: 0 0 auto;
+    height: 0;
+    margin: 1.5mm 0;
+    border-top: 1px dashed #94a3b8;
+}
+
+.part-request-print-page__copy {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: calc((277mm - 3mm) / 2);
+    overflow: hidden;
 }
 
 .part-request-print-sheet {
@@ -566,6 +595,111 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
     color: #0f172a;
     font-size: 11px;
     line-height: 1.35;
+}
+
+.part-request-print-page__copy .part-request-print-sheet {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.part-request-print-sheet--compact .part-request-print-sheet__header {
+    margin-bottom: 2px;
+    padding-bottom: 2px;
+    border-bottom-width: 1px;
+}
+
+.part-request-print-sheet--compact .part-request-print-sheet__kicker {
+    font-size: 7px;
+    line-height: 1.2;
+    letter-spacing: 0.03em;
+}
+
+.part-request-print-sheet--compact .part-request-print-sheet__title {
+    font-size: 10px;
+    margin: 1px 0 2px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.part-request-print-sheet--compact .part-request-print-sheet__fields {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+}
+
+.part-request-print-sheet--compact .part-request-print-field {
+    padding: 1px 4px;
+    min-height: 0;
+    border-radius: 3px;
+}
+
+.part-request-print-sheet--compact .part-request-print-field__label {
+    font-size: 6px;
+    letter-spacing: 0.02em;
+    line-height: 1.1;
+}
+
+.part-request-print-sheet--compact .part-request-print-field__value {
+    margin-top: 0;
+    font-size: 7.5px;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.part-request-print-sheet--compact .part-request-print-sheet__defect-box {
+    margin-top: 2px;
+    padding: 2px 4px;
+    max-height: 2.6em;
+    overflow: hidden;
+}
+
+.part-request-print-sheet--compact .part-request-print-sheet__defect {
+    margin: 1px 0 0;
+    font-size: 7.5px;
+    line-height: 1.2;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.part-request-print-page__copy .part-request-print-sheet__header {
+    flex: 0 0 auto;
+}
+
+.part-request-print-page__copy .part-request-print-sheet__drawing {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.part-request-print-page__copy .part-request-print-sheet__img-wrap {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+    height: 0;
+    padding: 1px;
+}
+
+.part-request-print-page__copy .part-request-print-sheet__img-wrap img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.part-request-print-page__copy .part-request-print-sheet__footer {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    font-size: 6px;
+    line-height: 1.1;
 }
 
 .part-request-print-sheet__header {
@@ -701,6 +835,19 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
         height: auto;
         overflow: visible;
         clip: auto;
+        white-space: normal;
+    }
+
+    .part-request-print-page {
+        height: 277mm;
+        max-height: 277mm;
+        page-break-after: avoid;
+        page-break-inside: avoid;
+    }
+
+    .part-request-print-page__copy {
+        max-height: calc((277mm - 3mm) / 2);
+        overflow: hidden;
     }
 
     .part-request-print-sheet__img-wrap {
@@ -710,6 +857,17 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
 
     .part-request-print-sheet__img-wrap img {
         max-height: calc(297mm - 95mm);
+    }
+
+    .part-request-print-page .part-request-print-sheet__img-wrap {
+        min-height: 0;
+        max-height: none;
+    }
+
+    .part-request-print-page .part-request-print-sheet__img-wrap img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
     }
 }
 

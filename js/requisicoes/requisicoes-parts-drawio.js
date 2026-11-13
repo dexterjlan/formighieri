@@ -262,8 +262,9 @@ async function partRequestDrawioGetDocumentPayload() {
 
 function partRequestDrawioEscapePrintMeta(meta = {}) {
     const pieceName = escapeHtml(String(meta.pieceName || 'Peça').trim() || '—');
-    const requestId = meta.requestId != null && meta.requestId !== ''
-        ? escapeHtml(String(meta.requestId))
+    const requestIdNumber = Number(meta.requestId);
+    const requestId = Number.isFinite(requestIdNumber) && requestIdNumber > 0
+        ? escapeHtml(String(requestIdNumber))
         : '—';
     return {
         pieceName,
@@ -280,6 +281,8 @@ function partRequestDrawioEscapePrintMeta(meta = {}) {
         createdByName: escapeHtml(String(meta.createdByName || '—').trim() || '—'),
         executorName: escapeHtml(String(meta.executorName || meta.cabinetMakerName || '—').trim() || '—'),
         montadorName: escapeHtml(String(meta.montadorName || '—').trim() || '—'),
+        projectLabel: escapeHtml(String(meta.projectLabel || '—').trim() || '—'),
+        projectCabinetMakerName: escapeHtml(String(meta.projectCabinetMakerName || '—').trim() || '—'),
         deliveryDueLabel: escapeHtml(String(meta.deliveryDueLabel || '—').trim() || '—'),
         printedLabel: escapeHtml(
             typeof formatDateTime === 'function'
@@ -296,7 +299,8 @@ function partRequestDrawioPrintFieldBox(label, value) {
     </div>`;
 }
 
-function partRequestDrawioBuildPrintSheetHtml(meta = {}) {
+function partRequestDrawioBuildPrintSheetHtml(meta = {}, options = {}) {
+    const copyIndex = options.copyIndex != null ? Number(options.copyIndex) : null;
     const row = partRequestDrawioEscapePrintMeta(meta);
     const defectBlock = row.description
         ? `<div class="part-request-print-sheet__defect-box">
@@ -305,36 +309,79 @@ function partRequestDrawioBuildPrintSheetHtml(meta = {}) {
           </div>`
         : '';
 
-    const fieldsHtml = [
-        partRequestDrawioPrintFieldBox('Requisição Nº', row.requestId),
-        partRequestDrawioPrintFieldBox('Status', row.statusLabel),
-        partRequestDrawioPrintFieldBox('Cliente', row.clientName),
-        partRequestDrawioPrintFieldBox('Pedido', row.orderCode),
-        partRequestDrawioPrintFieldBox('Espessura', row.thickness),
-        partRequestDrawioPrintFieldBox('Material', row.material),
-        partRequestDrawioPrintFieldBox('Prazo de entrega', row.deliveryDueLabel),
-        partRequestDrawioPrintFieldBox('Montador', row.montadorName),
-        partRequestDrawioPrintFieldBox('Executor', row.executorName),
-        partRequestDrawioPrintFieldBox('Criado em', row.createdLabel),
-        partRequestDrawioPrintFieldBox('Solicitante', row.createdByName)
-    ].join('');
+    const requestKickerSuffix = row.requestId !== '—' ? ` · Nº ${row.requestId}` : '';
+    const copySuffix = Number.isFinite(copyIndex) && copyIndex > 0 ? ` · Via ${copyIndex}` : '';
+
+    const isCompact = Number.isFinite(copyIndex) && copyIndex > 0;
+    const fieldsHtml = isCompact
+        ? [
+            partRequestDrawioPrintFieldBox('Nº', row.requestId),
+            partRequestDrawioPrintFieldBox('Status', row.statusLabel),
+            partRequestDrawioPrintFieldBox('Pedido', row.orderCode),
+            partRequestDrawioPrintFieldBox('Cliente', row.clientName),
+            partRequestDrawioPrintFieldBox('Projeto', row.projectLabel),
+            partRequestDrawioPrintFieldBox('Marceneiro', row.projectCabinetMakerName),
+            partRequestDrawioPrintFieldBox('Material', row.material),
+            partRequestDrawioPrintFieldBox('Esp.', row.thickness),
+            partRequestDrawioPrintFieldBox('Prazo', row.deliveryDueLabel),
+            partRequestDrawioPrintFieldBox('Executor', row.executorName),
+            partRequestDrawioPrintFieldBox('Montador', row.montadorName)
+        ].join('')
+        : [
+            partRequestDrawioPrintFieldBox('Requisição Nº', row.requestId),
+            partRequestDrawioPrintFieldBox('Status', row.statusLabel),
+            partRequestDrawioPrintFieldBox('Cliente', row.clientName),
+            partRequestDrawioPrintFieldBox('Pedido', row.orderCode),
+            partRequestDrawioPrintFieldBox('Projeto', row.projectLabel),
+            partRequestDrawioPrintFieldBox('Marceneiro do projeto', row.projectCabinetMakerName),
+            partRequestDrawioPrintFieldBox('Espessura', row.thickness),
+            partRequestDrawioPrintFieldBox('Material', row.material),
+            partRequestDrawioPrintFieldBox('Prazo de entrega', row.deliveryDueLabel),
+            partRequestDrawioPrintFieldBox('Montador', row.montadorName),
+            partRequestDrawioPrintFieldBox('Executor', row.executorName),
+            partRequestDrawioPrintFieldBox('Criado em', row.createdLabel),
+            partRequestDrawioPrintFieldBox('Solicitante', row.createdByName)
+        ].join('');
+
+    const printedAtBlock = isCompact
+        ? ''
+        : `<p class="part-request-print-sheet__printed-at">Impresso em: ${row.printedLabel}</p>`;
+    const drawingTitle = isCompact
+        ? ''
+        : '<h2 class="part-request-print-sheet__drawing-title">Desenho da peça</h2>';
+    const footerBlock = isCompact
+        ? '<footer class="part-request-print-sheet__footer">mm (draw.io)</footer>'
+        : '<footer class="part-request-print-sheet__footer">Unidades em mm no desenho (draw.io)</footer>';
 
     return `
-        <div class="part-request-print-sheet">
+        <div class="part-request-print-sheet${isCompact ? ' part-request-print-sheet--compact' : ''}">
             <header class="part-request-print-sheet__header">
-                <p class="part-request-print-sheet__kicker">FGP · Solicitação de fabricação · Peça</p>
+                <p class="part-request-print-sheet__kicker">FGP · Peça${requestKickerSuffix}${copySuffix}</p>
                 <h1 class="part-request-print-sheet__title">${row.pieceName}</h1>
                 <div class="part-request-print-sheet__fields">${fieldsHtml}</div>
                 ${defectBlock}
-                <p class="part-request-print-sheet__printed-at">Impresso em: ${row.printedLabel}</p>
+                ${printedAtBlock}
             </header>
-            <section aria-label="Desenho da peça">
-                <h2 class="part-request-print-sheet__drawing-title">Desenho da peça</h2>
+            <section class="part-request-print-sheet__drawing" aria-label="Desenho da peça">
+                ${drawingTitle}
                 <div class="part-request-print-sheet__img-wrap">
                     <img class="part-request-print-sheet__img" alt="Desenho da peça" />
                 </div>
             </section>
-            <footer class="part-request-print-sheet__footer">Unidades em mm no desenho (draw.io)</footer>
+            ${footerBlock}
+        </div>
+    `;
+}
+
+/** Duas vias na mesma folha A4 retrato (uma acima da outra). */
+function partRequestDrawioBuildPrintPageHtml(meta = {}) {
+    const firstCopy = partRequestDrawioBuildPrintSheetHtml(meta, { copyIndex: 1 });
+    const secondCopy = partRequestDrawioBuildPrintSheetHtml(meta, { copyIndex: 2 });
+    return `
+        <div class="part-request-print-page" role="document" aria-label="Solicitação de peça — duas vias">
+            <div class="part-request-print-page__copy">${firstCopy}</div>
+            <div class="part-request-print-page__divider" aria-hidden="true"></div>
+            <div class="part-request-print-page__copy">${secondCopy}</div>
         </div>
     `;
 }
@@ -359,11 +406,12 @@ function printPartRequestDrawingPage(meta = {}, imageDataUrl = '') {
     }
 
     const surface = partRequestDrawioEnsurePrintSurface();
-    surface.innerHTML = partRequestDrawioBuildPrintSheetHtml(meta);
+    surface.innerHTML = partRequestDrawioBuildPrintPageHtml(meta);
     surface.hidden = false;
+    surface.removeAttribute('hidden');
     surface.removeAttribute('aria-hidden');
 
-    const img = surface.querySelector('.part-request-print-sheet__img');
+    const images = surface.querySelectorAll('.part-request-print-sheet__img');
     const previousDocumentTitle = document.title;
 
     const cleanup = () => {
@@ -371,6 +419,7 @@ function printPartRequestDrawingPage(meta = {}, imageDataUrl = '') {
         document.body.classList.remove('part-request-print-active');
         surface.innerHTML = '';
         surface.hidden = true;
+        surface.setAttribute('hidden', '');
         surface.setAttribute('aria-hidden', 'true');
         window.removeEventListener('afterprint', cleanup);
     };
@@ -385,16 +434,27 @@ function printPartRequestDrawingPage(meta = {}, imageDataUrl = '') {
         window.print();
     };
 
-    if (img) {
-        img.onload = triggerPrint;
-        img.onerror = () => {
-            alertAppDialog('Falha ao carregar imagem para impressão.');
-            cleanup();
+    if (images.length) {
+        let settled = 0;
+        const markSettled = () => {
+            settled += 1;
+            if (settled >= images.length) triggerPrint();
         };
-        img.src = imageDataUrl;
-        if (img.complete) {
-            requestAnimationFrame(triggerPrint);
-        }
+        images.forEach(img => {
+            let imgSettled = false;
+            const settle = () => {
+                if (imgSettled) return;
+                imgSettled = true;
+                markSettled();
+            };
+            img.onerror = () => {
+                alertAppDialog('Falha ao carregar imagem para impressão.');
+                cleanup();
+            };
+            img.onload = settle;
+            img.src = imageDataUrl;
+            if (img.complete) settle();
+        });
         return;
     }
 
