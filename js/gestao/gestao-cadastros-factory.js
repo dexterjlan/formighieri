@@ -465,10 +465,23 @@ async function saveGestaoFactoryEmployeeRow(row) {
     });
 }
 
+async function countFactoryEmployeePartRequestUsage(factoryEmployeeId) {
+    const { count, error } = await supabaseClient
+        .from('PartRequest')
+        .select('id', { count: 'exact', head: true })
+        .eq('factoryEmployeeId', factoryEmployeeId);
+    if (error) {
+        if (/factoryEmployeeId|PartRequest|schema cache/i.test(error.message || '')) {
+            return { count: 0, error: null };
+        }
+        return { error };
+    }
+    return { count: count || 0 };
+}
+
 async function countLegacyCabinetMakerUsage(cabinetMakerId) {
     const tables = [
         { table: 'OrderProject', column: 'cabinetMakerId' },
-        { table: 'PartRequest', column: 'cabinetMakerId' },
         { table: 'AssistanceRequest', column: 'cabinetMakerId' }
     ];
     let total = 0;
@@ -507,6 +520,18 @@ async function deleteGestaoFactoryEmployeeRow(row) {
             );
             return;
         }
+    }
+
+    const partRequestUsage = await countFactoryEmployeePartRequestUsage(factoryEmployeeId);
+    if (partRequestUsage.error) {
+        alertAppDialog('Erro ao verificar uso em requisições de peça: ' + partRequestUsage.error.message);
+        return;
+    }
+    if (partRequestUsage.count > 0) {
+        alertAppDialog(
+            `O funcionário "${name}" está vinculado a ${partRequestUsage.count} requisição(ões) de peça. Desative-o em vez de excluir.`
+        );
+        return;
     }
 
     if (!(await confirmAppDialog(`Excluir o funcionário "${name}"?`))) return;

@@ -48,6 +48,7 @@ const SCRIPTS = [
     'js/core/revision-core.js',
     'js/core/utils.js',
     'js/core/cabinet-maker.js',
+    'js/core/factory-employee.js',
     'js/core/attachment-lightbox.js',
     'js/core/dialog.js',
     'js/core/order-code-picker.js',

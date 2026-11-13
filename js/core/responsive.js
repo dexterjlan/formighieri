@@ -1,9 +1,16 @@
 /** Portrait (≤767px) ou celular deitado (altura baixa + touch). Manter alinhado ao CSS mobile. */
 const FM_MOBILE_LAYOUT_MEDIA_QUERY = '(max-width: 767px), (max-height: 520px) and (max-width: 1024px) and ((hover: none) or (pointer: coarse))';
 const MOBILE_LAYOUT_MEDIA = window.matchMedia(FM_MOBILE_LAYOUT_MEDIA_QUERY);
+/** iPad / tablet touch — alinhar ao CSS de `.part-request-modal` em fm-components.css */
+const FM_TABLET_TOUCH_MEDIA_QUERY = '(min-width: 768px) and (max-width: 1366px) and ((hover: none) or (pointer: coarse))';
+const TABLET_TOUCH_LAYOUT_MEDIA = window.matchMedia(FM_TABLET_TOUCH_MEDIA_QUERY);
 
 function isMobileViewport() {
     return MOBILE_LAYOUT_MEDIA.matches;
+}
+
+function isTabletTouchViewport() {
+    return TABLET_TOUCH_LAYOUT_MEDIA.matches && !isMobileViewport();
 }
 
 const APP_SUBNAV_COLLAPSED_KEY = 'fgp-subnav-collapsed';
@@ -379,6 +386,7 @@ window.clearEaiModalKeyboardLayout = clearEaiModalKeyboardLayout;
 window.setAppMobileTopbarTitle = setAppMobileTopbarTitle;
 
 window.isMobileViewport = isMobileViewport;
+window.isTabletTouchViewport = isTabletTouchViewport;
 window.closeMobileMenu = closeMobileMenu;
 window.bindResponsiveLayout = bindResponsiveLayout;
 window.syncDashboardMobileDetailState = syncDashboardMobileDetailState;

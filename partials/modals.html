@@ -2613,7 +2613,7 @@
 
     <!-- MODAL: REQUISIÇÃO PEÇA (desenho 2D) -->
     <div id="part-request-modal"
-        class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[94]">
+        class="part-request-modal hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 z-[94]">
         <div class="part-request-modal__panel bg-white rounded-2xl shadow-xl relative w-full max-w-[min(1240px,98vw)] max-h-[96vh] overflow-hidden flex flex-col">
             <div id="part-request-modal-loading"
                 class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
@@ -2623,11 +2623,13 @@
                 </div>
             </div>
             <div class="part-request-modal__head px-4 sm:px-6 py-4 border-b border-slate-200 shrink-0">
-                <h3 id="part-request-modal-title" class="font-bold text-base text-slate-900">Solicitação de fabricação — peça com defeito</h3>
-                <p class="text-[11px] text-slate-400 mt-0.5">Desenhe a peça de reposição (draw.io, A4, mm) para a fábrica executar o corte/usinagem.</p>
+                <h3 id="part-request-modal-title" class="font-bold text-base sm:text-lg text-slate-900">Solicitação de fabricação — peça com defeito</h3>
+                <p class="part-request-modal__subtitle text-[11px] sm:text-xs text-slate-400 mt-0.5">Desenhe a peça de reposição (draw.io, A4, mm) para a fábrica executar o corte/usinagem.</p>
             </div>
-            <form id="part-request-form" class="part-request-modal__body flex flex-col min-h-0 flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-3">
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <form id="part-request-form" class="part-request-modal__form flex flex-col min-h-0 flex-1">
+                <div class="part-request-modal__scroll flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-6 py-4 space-y-3">
+                <div class="part-request-modal__meta space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 part-request-modal__grid part-request-modal__grid--primary">
                     <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-piece-name">Nome da peça <span class="text-red-500">*</span></label>
                         <input type="text" id="part-request-piece-name" required
@@ -2655,7 +2657,7 @@
                                 class="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50" />
                             <input type="hidden" id="part-request-client-id" />
                             <button type="button" id="btn-part-request-client-picker" title="Buscar cliente"
-                                class="shrink-0 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">···</button>
+                                class="part-request-modal__picker-btn shrink-0 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">···</button>
                         </div>
                     </div>
                     <div>
@@ -2665,7 +2667,7 @@
                                 class="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 font-mono" />
                             <input type="hidden" id="part-request-order-id" />
                             <button type="button" id="btn-part-request-order-picker" title="Buscar pedido"
-                                class="shrink-0 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">···</button>
+                                class="part-request-modal__picker-btn shrink-0 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">···</button>
                         </div>
                     </div>
                 </div>
@@ -2675,7 +2677,7 @@
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg resize-y focus:outline-none focus:border-slate-400"
                         placeholder="O que aconteceu, referência no projeto/módulo, urgência, cor de MDF/fita se souber…"></textarea>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 part-request-modal__grid part-request-modal__grid--meta">
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-delivery-due-date">Prazo de entrega</label>
                         <input type="date" id="part-request-delivery-due-date"
@@ -2689,8 +2691,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-cabinet-maker-id">Marceneiro</label>
-                        <select id="part-request-cabinet-maker-id"
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-executor-id">Executor</label>
+                        <select id="part-request-executor-id"
                             class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400">
                             <option value="">Selecione…</option>
                         </select>
@@ -2703,18 +2705,22 @@
                         </div>
                     </div>
                 </div>
+                </div>
+                <div class="part-request-modal__drawio-section flex flex-col min-h-0 gap-2">
                 <div id="part-request-drawio-host" class="part-request-drawio-host rounded-xl border border-slate-200 overflow-hidden bg-slate-100"></div>
-                <p class="text-[10px] text-slate-400">Desenhe contorno, furos e usinagens da peça de reposição. Use cotas em mm. Salvar envia o desenho (XML) junto com os dados ao FGP.</p>
-                <div class="flex flex-wrap gap-2 pt-2 shrink-0 border-t border-slate-100">
+                <p class="part-request-modal__drawio-hint text-[10px] sm:text-xs text-slate-400">Desenhe contorno, furos e usinagens da peça de reposição. Use cotas em mm. Salvar envia o desenho (XML) junto com os dados ao FGP.</p>
+                </div>
+                </div>
+                <div class="part-request-modal__footer flex flex-wrap gap-2 px-4 sm:px-6 py-3 shrink-0 border-t border-slate-200 bg-white">
                     <button type="button" id="btn-part-request-close"
-                        class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
+                        class="part-request-modal__action-btn text-sm bg-slate-100 text-slate-600 px-4 py-2.5 rounded-lg font-medium">Fechar</button>
                     <button type="button" id="btn-part-request-print"
-                        class="text-xs bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50">Imprimir</button>
+                        class="part-request-modal__action-btn text-sm bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-medium hover:bg-slate-50">Imprimir</button>
                     <button type="button" id="btn-part-request-status-history"
-                        class="hidden text-xs bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50">Histórico de status</button>
-                    <div class="flex-1"></div>
+                        class="part-request-modal__action-btn hidden text-sm bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-medium hover:bg-slate-50">Histórico de status</button>
+                    <div class="flex-1 min-w-[0.5rem]"></div>
                     <button type="submit" id="btn-part-request-save"
-                        class="text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-800">Salvar</button>
+                        class="part-request-modal__action-btn part-request-modal__action-btn--primary text-sm bg-slate-900 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-slate-800">Salvar</button>
                 </div>
             </form>
         </div>

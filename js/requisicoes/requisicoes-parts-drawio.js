@@ -278,7 +278,7 @@ function partRequestDrawioEscapePrintMeta(meta = {}) {
         description: escapeHtml(String(meta.description || '').trim()),
         createdLabel: escapeHtml(String(meta.createdLabel || '—').trim() || '—'),
         createdByName: escapeHtml(String(meta.createdByName || '—').trim() || '—'),
-        cabinetMakerName: escapeHtml(String(meta.cabinetMakerName || '—').trim() || '—'),
+        executorName: escapeHtml(String(meta.executorName || meta.cabinetMakerName || '—').trim() || '—'),
         montadorName: escapeHtml(String(meta.montadorName || '—').trim() || '—'),
         deliveryDueLabel: escapeHtml(String(meta.deliveryDueLabel || '—').trim() || '—'),
         printedLabel: escapeHtml(
@@ -314,7 +314,7 @@ function partRequestDrawioBuildPrintSheetHtml(meta = {}) {
         partRequestDrawioPrintFieldBox('Material', row.material),
         partRequestDrawioPrintFieldBox('Prazo de entrega', row.deliveryDueLabel),
         partRequestDrawioPrintFieldBox('Montador', row.montadorName),
-        partRequestDrawioPrintFieldBox('Marceneiro', row.cabinetMakerName),
+        partRequestDrawioPrintFieldBox('Executor', row.executorName),
         partRequestDrawioPrintFieldBox('Criado em', row.createdLabel),
         partRequestDrawioPrintFieldBox('Solicitante', row.createdByName)
     ].join('');
