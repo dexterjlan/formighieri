@@ -100,7 +100,7 @@ async function requisicoesOrderArchitectLabel(order) {
     return name || '—';
 }
 
-function isRequisicoesProjectRequestAllowed(project, statuses) {
+function isRequisicoesProjectRequestAllowed(project) {
     if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
         return false;
     }
@@ -110,17 +110,7 @@ function isRequisicoesProjectRequestAllowed(project, statuses) {
     if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
         return false;
     }
-    if (typeof getConvProjectStatusSortOrder !== 'function') return true;
-
-    const endStatusName = typeof CONV_PROJECT_STATUS_END === 'string'
-        ? CONV_PROJECT_STATUS_END
-        : 'Em Produção';
-    const endStatus = (statuses || []).find(status => status.name === endStatusName);
-    const maxSortOrder = endStatus?.sortOrder != null ? Number(endStatus.sortOrder) : null;
-    if (maxSortOrder == null) return true;
-
-    const sortOrder = getConvProjectStatusSortOrder(project, statuses);
-    return sortOrder != null && sortOrder <= maxSortOrder;
+    return true;
 }
 
 function renderRequisicoesOrderProjectRows(orderId, projects, statuses = []) {
@@ -148,7 +138,7 @@ function renderRequisicoesOrderProjectRows(orderId, projects, statuses = []) {
                 : `Entrega do projeto técnico: ${deliveryDate}`;
             const designerName = project.designer?.name || '—';
             const projectId = Number(project.id);
-            const canCreateRequest = isRequisicoesProjectRequestAllowed(project, statuses);
+            const canCreateRequest = isRequisicoesProjectRequestAllowed(project);
             const notices = [
                 typeof renderComplementarProjectNoticeHtml === 'function' ? renderComplementarProjectNoticeHtml(project) : '',
                 typeof renderReplacedProjectNoticeHtml === 'function' ? renderReplacedProjectNoticeHtml(project) : '',
@@ -297,11 +287,8 @@ async function openRequisicoesProjectRequest(project) {
         alertAppDialog('Projeto substituído não recebe requisição.');
         return;
     }
-    const projectStatuses = typeof loadConvProjectStatusesForFilter === 'function'
-        ? await loadConvProjectStatusesForFilter()
-        : [];
-    if (!isRequisicoesProjectRequestAllowed(project, projectStatuses)) {
-        alertAppDialog('Requisição de projeto só pode ser criada até o status Em Produção.');
+    if (!isRequisicoesProjectRequestAllowed(project)) {
+        alertAppDialog('Este projeto não pode receber requisição (complementar, substituído ou ambiente agrupado).');
         return;
     }
     if (typeof openConvModal !== 'function') {

@@ -1,8 +1,6 @@
 let convOrderProjectsCache = [];
 let convModalContext = getDefaultConvModalContext();
 
-const CONV_PROJECT_STATUS_END = 'Em Produção';
-
 function getDefaultConvModalContext() {
     return {
         requestType: REQUEST_TYPE_PROJECT,
@@ -95,73 +93,23 @@ async function refreshPendenciasRequestListsIfVisible() {
     }
 }
 
-async function loadConvProjectStatusesForFilter() {
-    if (typeof loadGestaoProjectStatuses === 'function') {
-        return loadGestaoProjectStatuses(true);
+function isProjectEligibleForConvPicker(project) {
+    if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+        return false;
     }
-
-    const { data, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id, name, sortOrder')
-        .order('sortOrder', { ascending: true });
-
-    if (error) {
-        console.error('loadConvProjectStatusesForFilter:', error);
-        return [];
-    }
-
-    return data || [];
-}
-
-function getConvProjectStatusSortOrder(project, statuses = []) {
-    const statusFromProject = project?.projectStatus;
-    if (statusFromProject?.sortOrder != null) {
-        return Number(statusFromProject.sortOrder);
-    }
-
-    const statusId = project?.statusId || statusFromProject?.id;
-    const status = statusId
-        ? statuses.find(item => Number(item.id) === Number(statusId))
-        : null;
-    if (status?.sortOrder != null) {
-        return Number(status.sortOrder);
-    }
-
-    const statusName = statusFromProject?.name || status?.name;
-    const byName = statusName
-        ? statuses.find(item => item.name === statusName)
-        : null;
-    return byName?.sortOrder != null ? Number(byName.sortOrder) : null;
-}
-
-function shouldFilterConvProjectsByCurrentDesigner() {
-    return currentUser?.role === 'Projetista';
-}
-
-function isProjectAssignedToCurrentDesigner(project) {
-    return Number(project?.designerId) === Number(currentUser?.id);
-}
-
-function isProjectEligibleForConvPicker(project, statuses, maxSortOrder) {
     if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
         return false;
     }
     if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) {
         return false;
     }
-    if (shouldFilterConvProjectsByCurrentDesigner() && !isProjectAssignedToCurrentDesigner(project)) {
-        return false;
-    }
-    if (maxSortOrder == null) return true;
-
-    const sortOrder = getConvProjectStatusSortOrder(project, statuses);
-    return sortOrder != null && sortOrder <= maxSortOrder;
+    return true;
 }
 
-function filterProjectsForConvPicker(projects, selectedId, statuses, maxSortOrder) {
+function filterProjectsForConvPicker(projects, selectedId) {
     const selectedNum = Number(selectedId);
     return (projects || []).filter(project =>
-        isProjectEligibleForConvPicker(project, statuses, maxSortOrder)
+        isProjectEligibleForConvPicker(project)
         || (selectedNum && Number(project.id) === selectedNum)
     );
 }
@@ -178,7 +126,7 @@ function shouldRetryDesignerRequestOrderSelect(error) {
         || message.includes('Client');
 }
 
-async function fetchOrderProjectsPagesForDesigner(designerId, selectColumns) {
+async function fetchOrderProjectsPagesForRequest(selectColumns) {
     const pageSize = 1000;
     const projects = [];
     let from = 0;
@@ -186,8 +134,7 @@ async function fetchOrderProjectsPagesForDesigner(designerId, selectColumns) {
     while (true) {
         let query = supabaseClient
             .from('OrderProject')
-            .select(selectColumns)
-            .eq('designerId', designerId);
+            .select(selectColumns);
 
         if (selectColumns.includes('isComplementary')) {
             query = query.eq('isComplementary', false);
@@ -213,20 +160,16 @@ async function fetchOrderProjectsPagesForDesigner(designerId, selectColumns) {
 }
 
 async function fetchEligibleOrdersForCurrentDesignerRequest() {
-    const designerId = Number(currentUser?.id);
-    if (currentUser?.role !== 'Projetista' || !designerId) {
+    if (currentUser?.role !== 'Projetista') {
         return { error: null, orders: [] };
     }
 
-    const statuses = await loadConvProjectStatusesForFilter();
-    const endStatus = statuses.find(status => status.name === CONV_PROJECT_STATUS_END);
-    const maxSortOrder = endStatus?.sortOrder != null ? Number(endStatus.sortOrder) : null;
     const orderEmbed = typeof getOrderSalesOrderEmbed === 'function'
         ? getOrderSalesOrderEmbed()
         : 'order:salesOrders(id, orderCode, clientId, consultantUserId, client:Client(name), consultor:appUsers!consultantUserId(name))';
 
     const selects = [
-        `id, orderId, designerId, statusId, isComplementary, isReplaced, projectStatus:OrderProjectStatus(id, name, sortOrder), ${orderEmbed}`,
+        `id, orderId, designerId, statusId, isComplementary, isReplaced, aggregatorOrderProjectId, projectStatus:OrderProjectStatus(id, name, sortOrder), ${orderEmbed}`,
         `id, orderId, designerId, statusId, isComplementary, isReplaced, projectStatus:OrderProjectStatus(id, name), ${orderEmbed}`,
         `id, orderId, designerId, statusId, projectStatus:OrderProjectStatus(id, name, sortOrder), ${orderEmbed}`,
         `id, orderId, designerId, statusId, ${orderEmbed}`,
@@ -237,7 +180,7 @@ async function fetchEligibleOrdersForCurrentDesignerRequest() {
     let lastError = null;
 
     for (const selectColumns of selects) {
-        const result = await fetchOrderProjectsPagesForDesigner(designerId, selectColumns);
+        const result = await fetchOrderProjectsPagesForRequest(selectColumns);
         if (!result.error) {
             projects = result.projects;
             lastError = null;
@@ -254,9 +197,7 @@ async function fetchEligibleOrdersForCurrentDesignerRequest() {
         return { error: lastError, orders: [] };
     }
 
-    const eligible = projects.filter(project =>
-        isProjectEligibleForConvPicker(project, statuses, maxSortOrder)
-    );
+    const eligible = projects.filter(project => isProjectEligibleForConvPicker(project));
 
     const ordersById = new Map();
     eligible.forEach(project => {
@@ -380,28 +321,20 @@ async function loadConvOrderProjects(selectedId) {
     const select = document.getElementById('conv-order-project');
     if (!select) return;
 
-    const [projects, statuses] = await Promise.all([
-        activeOrderId ? fetchOrderProjectsForOrder(activeOrderId) : Promise.resolve([]),
-        loadConvProjectStatusesForFilter()
-    ]);
+    const projects = activeOrderId
+        ? await fetchOrderProjectsForOrder(activeOrderId)
+        : [];
 
-    const endStatus = statuses.find(status => status.name === CONV_PROJECT_STATUS_END);
-    const maxSortOrder = endStatus?.sortOrder != null ? Number(endStatus.sortOrder) : null;
-    const filteredProjects = filterProjectsForConvPicker(projects, selectedId, statuses, maxSortOrder);
+    const filteredProjects = filterProjectsForConvPicker(projects, selectedId);
 
     convOrderProjectsCache = filteredProjects;
 
     select.innerHTML = '<option value="">Selecione...</option>';
 
     if (!filteredProjects.length) {
-        const assignedCount = shouldFilterConvProjectsByCurrentDesigner()
-            ? projects.filter(isProjectAssignedToCurrentDesigner).length
-            : projects.length;
         const emptyLabel = !projects.length
             ? 'Nenhum projeto cadastrado no pedido'
-            : !assignedCount
-                ? 'Nenhum projeto associado a você neste pedido'
-                : 'Nenhum projeto elegível (status até Em Produção)';
+            : 'Nenhum projeto elegível para requisição neste pedido';
         select.innerHTML += `<option value="" disabled>${emptyLabel}</option>`;
         return;
     }

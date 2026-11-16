@@ -502,10 +502,10 @@ async function openCreateRequestFromPendencias() {
         pickerConfig.hideSearchButton = true;
         pickerConfig.loadOrders = fetchEligibleOrdersForCurrentDesignerRequest;
         pickerConfig.title = 'Selecionar pedido';
-        pickerConfig.description = 'Pedidos com projetos associados a você, elegíveis para requisição. Filtre pelo cliente se quiser.';
+        pickerConfig.description = 'Pedidos com projetos elegíveis para requisição. Filtre pelo cliente se quiser.';
         pickerConfig.searchLabel = 'Filtrar pelo cliente';
         pickerConfig.searchPlaceholder = 'Nome do cliente';
-        pickerConfig.emptySourceMessage = 'Nenhum pedido com projeto associado a você elegível para requisição.';
+        pickerConfig.emptySourceMessage = 'Nenhum pedido com projeto elegível para requisição.';
     }
 
     openOrderCodePicker(pickerConfig);
