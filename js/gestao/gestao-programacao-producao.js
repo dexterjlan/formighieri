@@ -115,7 +115,8 @@ function getProgramacaoProducaoProjectInternalAssemblyEndMonthKey(project) {
 // Faixas de sortOrder do status do projeto (OrderProjectStatus.sortOrder).
 const PROGRAMACAO_PRODUCAO_MONTH_STAGES = [
     { key: 'pendente', label: 'Pendente', min: 1, max: 7, color: '#94a3b8' },
-    { key: 'projetando', label: 'Projetando', min: 8, max: 17, color: '#6366f1' },
+    { key: 'projetando', label: 'Projetando', min: 8, max: 12, color: '#6366f1' },
+    { key: 'implantacao', label: 'Implantação', min: 13, max: 17, color: '#92400e' },
     { key: 'liberado', label: 'Liberado', min: 18, max: 18, color: '#0ea5e9' },
     { key: 'produzindo', label: 'Produzindo', min: 19, max: 19, color: '#f59e0b' },
     { key: 'realizado', label: 'Realizado', min: 20, max: 23, color: '#22c55e' }
@@ -264,7 +265,7 @@ function sumProgramacaoProducaoRootProjectsUnitCount(projects) {
     );
 }
 
-function computeProgramacaoProducaoMonthStageSummary(monthKey) {
+function computeProgramacaoProducaoStageSummaryForRoots(rootProjects, monthKey) {
     const statusById = getProgramacaoProducaoStatusById();
     const stageCounts = Object.fromEntries(PROGRAMACAO_PRODUCAO_MONTH_STAGES.map(stage => [stage.key, 0]));
     const stageValues = Object.fromEntries(PROGRAMACAO_PRODUCAO_MONTH_STAGES.map(stage => [stage.key, 0]));
@@ -273,27 +274,26 @@ function computeProgramacaoProducaoMonthStageSummary(monthKey) {
     let realizadoCount = 0;
     let realizadoValue = 0;
 
-    getProgramacaoProducaoProgramadoRootProjects(monthKey).forEach(project => {
+    (rootProjects || []).forEach(project => {
+        if (!isProgramacaoProducaoScheduleRootProject(project)) return;
+        if (getProgramacaoProducaoProjectProductionMonthKey(project) !== monthKey) return;
+
         const stageKey = getProgramacaoProducaoProjectStageKey(project, statusById);
-        if (!stageKey || stageKey === 'realizado') return;
+        if (!stageKey) return;
 
         const safeValue = getProgramacaoProducaoScheduleRootSaleValue(project, monthKey);
         const unitCount = getProgramacaoProducaoScheduleRootUnitCount(project);
 
         stageCounts[stageKey] += unitCount;
         stageValues[stageKey] += safeValue;
-        programadoCount += unitCount;
-        programadoValue += safeValue;
-    });
 
-    getProgramacaoProducaoRealizadoRootProjects(monthKey).forEach(project => {
-        const safeValue = getProgramacaoProducaoScheduleRootSaleValue(project, monthKey);
-        const unitCount = getProgramacaoProducaoScheduleRootUnitCount(project);
-
-        stageCounts.realizado += unitCount;
-        stageValues.realizado += safeValue;
-        realizadoCount += unitCount;
-        realizadoValue += safeValue;
+        if (stageKey === 'realizado') {
+            realizadoCount += unitCount;
+            realizadoValue += safeValue;
+        } else {
+            programadoCount += unitCount;
+            programadoValue += safeValue;
+        }
     });
 
     const total = PROGRAMACAO_PRODUCAO_MONTH_STAGES.reduce(
@@ -309,6 +309,60 @@ function computeProgramacaoProducaoMonthStageSummary(monthKey) {
         programadoValue,
         realizadoCount,
         realizadoValue
+    };
+}
+
+function computeProgramacaoProducaoMonthStageSummary(monthKey) {
+    const roots = [
+        ...getProgramacaoProducaoProgramadoRootProjects(monthKey),
+        ...getProgramacaoProducaoRealizadoRootProjects(monthKey)
+    ];
+    return computeProgramacaoProducaoStageSummaryForRoots(roots, monthKey);
+}
+
+function getProgramacaoProducaoClientScheduleRootProjects(clientGroup) {
+    const roots = [];
+    const seen = new Set();
+
+    (clientGroup?.orders || []).forEach(orderGroup => {
+        (orderGroup.projects || []).forEach(project => {
+            if (!isProgramacaoProducaoScheduleRootProject(project)) return;
+            const projectId = Number(project.id);
+            if (!projectId || seen.has(projectId)) return;
+            seen.add(projectId);
+            roots.push(project);
+        });
+    });
+
+    return roots;
+}
+
+function getProgramacaoProducaoProgramadoClientStageSummary(clientGroup, monthKey) {
+    const roots = getProgramacaoProducaoClientScheduleRootProjects(clientGroup);
+    return computeProgramacaoProducaoStageSummaryForRoots(roots, monthKey);
+}
+
+function getProgramacaoProducaoRealizadoClientStageSummary(clientGroup, monthKey) {
+    const roots = (clientGroup?.projects || []).filter(project =>
+        isProgramacaoProducaoScheduleRootProject(project)
+    );
+    return computeProgramacaoProducaoStageSummaryForRoots(roots, monthKey);
+}
+
+function getProgramacaoProducaoClientGroupRenderOptions(clientGroup, monthKey) {
+    return {
+        includeProjectCode: false,
+        projectsById: programacaoProducaoCache.projectsById || {},
+        clientStageSummary: getProgramacaoProducaoProgramadoClientStageSummary(clientGroup, monthKey),
+        renderStageProgressBar: renderProgramacaoProducaoClientStageCounts
+    };
+}
+
+function getProgramacaoProducaoRealizadoClientGroupRenderOptionsWithStage(clientGroup, monthKey) {
+    return {
+        ...getProgramacaoProducaoRealizadoClientGroupRenderOptions(),
+        clientStageSummary: getProgramacaoProducaoRealizadoClientStageSummary(clientGroup, monthKey),
+        renderStageProgressBar: renderProgramacaoProducaoClientStageCounts
     };
 }
 
@@ -501,6 +555,29 @@ function renderProgramacaoProducaoMonthProgressBar(stageSummary) {
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">${legendHtml}</div>
         </div>
     `;
+}
+
+function renderProgramacaoProducaoClientStageCounts(stageSummary) {
+    if (!stageSummary?.total) return '';
+
+    const items = PROGRAMACAO_PRODUCAO_MONTH_STAGES
+        .map(stage => ({
+            ...stage,
+            count: stageSummary.stageCounts[stage.key] || 0
+        }))
+        .filter(item => item.count > 0);
+
+    if (!items.length) return '';
+
+    const legendHtml = items.map(item => `
+        <span class="inline-flex items-center gap-1 text-[10px] text-slate-600 whitespace-nowrap">
+            <span class="w-2 h-2 rounded-sm shrink-0" style="background-color: ${item.color};"></span>
+            <span class="font-medium text-slate-700">${escapeHtml(item.label)}</span>
+            <span>${item.count}</span>
+        </span>
+    `).join('');
+
+    return `<div class="flex flex-wrap items-center gap-x-3 gap-y-1 basis-full sm:basis-auto">${legendHtml}</div>`;
 }
 
 function getProgramacaoProducaoProjectReferenceDate(project) {
@@ -1069,15 +1146,13 @@ function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel)
     const pendingBody = programadoClients.length
         ? programadoClients.map(clientGroup =>
             typeof renderGestaoRelatorioPedidosPendentesClientGroup === 'function'
-                ? renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup, {
-                    includeProjectCode: false,
-                    projectsById: context.projectsById || {}
-                })
+                ? renderGestaoRelatorioPedidosPendentesClientGroup(
+                    clientGroup,
+                    getProgramacaoProducaoClientGroupRenderOptions(clientGroup, monthKey)
+                )
                 : ''
         ).join('')
         : '';
-
-    const realizadoRenderOptions = getProgramacaoProducaoRealizadoClientGroupRenderOptions();
     const fechamentoBody = realizadoClients.length
         ? `
             <div class="space-y-2 ${pendingBody ? 'mt-2 pt-2 border-t border-emerald-100' : ''}">
@@ -1085,7 +1160,10 @@ function renderProgramacaoProducaoSummaryMonthGroup(monthGroup, emptyMonthLabel)
                 <p class="text-[10px] text-slate-400 px-1">Agrupados pelo mês programado; a coluna Fim mont. interna mostra quando a produção terminou. * quando o mês da data difere do programado.</p>
                 ${realizadoClients.map(clientGroup =>
                     typeof renderGestaoRelatorioFechamentoProducaoClientGroup === 'function'
-                        ? renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, realizadoRenderOptions)
+                        ? renderGestaoRelatorioFechamentoProducaoClientGroup(
+                            clientGroup,
+                            getProgramacaoProducaoRealizadoClientGroupRenderOptionsWithStage(clientGroup, monthKey)
+                        )
                         : ''
                 ).join('')}
             </div>

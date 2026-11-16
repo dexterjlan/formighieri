@@ -850,17 +850,21 @@ function getGestaoRelatorioPedidosPendentesClientDeliveryDatesLabel(clientGroup)
 function renderGestaoRelatorioPedidosPendentesClientGroup(clientGroup, options = {}) {
     const totalLabel = formatGestaoRelatorioSaleValue(clientGroup.totalSaleValue);
     const orderDatesLabel = getGestaoRelatorioPedidosPendentesClientDeliveryDatesLabel(clientGroup);
+    const progressBarHtml = typeof options.renderStageProgressBar === 'function' && options.clientStageSummary?.total
+        ? options.renderStageProgressBar(options.clientStageSummary)
+        : '';
 
     return `
         <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
-            <div class="collapsible-list-header px-3 py-2 bg-white border-b border-slate-100 cursor-pointer flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 min-w-0">
+            <div class="collapsible-list-header px-3 py-2 bg-white border-b border-slate-100 cursor-pointer flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2 min-w-0 flex-1">
                     <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                         aria-label="Expandir">▶</button>
                     <span class="text-xs font-medium text-slate-800 truncate">${escapeHtml(clientGroup.clientName)}</span>
                     ${orderDatesLabel ? `<span class="text-[10px] text-slate-500 shrink-0 whitespace-nowrap">${escapeHtml(orderDatesLabel)}</span>` : ''}
                     <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.orderCount} pedido${clientGroup.orderCount === 1 ? '' : 's'}</span>
                     <span class="text-[10px] text-slate-500 shrink-0">${clientGroup.projectCount} projeto${clientGroup.projectCount === 1 ? '' : 's'}</span>
+                    ${progressBarHtml}
                 </div>
                 <span class="text-xs font-semibold text-indigo-700 shrink-0">${escapeHtml(totalLabel)}</span>
             </div>
@@ -1269,15 +1273,19 @@ function renderGestaoRelatorioFechamentoProducaoClientGroup(clientGroup, options
     const projectCount = Number.isFinite(clientGroup.scheduleProjectCount)
         ? clientGroup.scheduleProjectCount
         : clientGroup.projects.length;
+    const progressBarHtml = typeof options.renderStageProgressBar === 'function' && options.clientStageSummary?.total
+        ? options.renderStageProgressBar(options.clientStageSummary)
+        : '';
 
     return `
         <div class="collapsible-list-card border border-slate-200 rounded-lg overflow-hidden bg-white">
-            <div class="collapsible-list-header px-3 py-2 bg-white border-b border-slate-100 cursor-pointer flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 min-w-0">
+            <div class="collapsible-list-header px-3 py-2 bg-white border-b border-slate-100 cursor-pointer flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2 min-w-0 flex-1">
                     <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-800 text-[10px]"
                         aria-label="Expandir">▶</button>
                     <span class="text-xs font-medium text-slate-800 truncate">${escapeHtml(clientGroup.clientName)}</span>
                     <span class="text-[10px] text-slate-500 shrink-0">${projectCount} projeto${projectCount === 1 ? '' : 's'}</span>
+                    ${progressBarHtml}
                 </div>
                 <span class="text-xs font-semibold text-emerald-700 shrink-0">${escapeHtml(totalLabel)}</span>
             </div>
