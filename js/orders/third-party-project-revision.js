@@ -605,6 +605,15 @@ async function updateThirdPartyProjectStatus(thirdPartyProjectId, newStatus, pre
     if (newStatus === THIRD_PARTY_PROJECT_STATUS_APPROVED) {
         updatePayload.approvedAt = now;
     }
+    if (newStatus === THIRD_PARTY_PROJECT_STATUS_CANCELED) {
+        const cancelObservation = String(options.cancelObservation || '').trim();
+        if (!cancelObservation) {
+            throw new Error('Informe a observação do cancelamento.');
+        }
+        updatePayload.cancelObservation = cancelObservation;
+    } else if (previousStatus === THIRD_PARTY_PROJECT_STATUS_CANCELED) {
+        updatePayload.cancelObservation = null;
+    }
 
     const { data, error } = await supabaseClient
         .from('ThirdPartyProject')

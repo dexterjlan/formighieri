@@ -66,7 +66,8 @@ const THIRD_PARTY_PROJECT_STATUS_BADGE_CLASSES = {
     Open: 'bg-slate-100 text-slate-700',
     Sent: 'bg-sky-100 text-sky-800',
     InReview: 'bg-amber-100 text-amber-800',
-    Approved: 'bg-emerald-100 text-emerald-800'
+    Approved: 'bg-emerald-100 text-emerald-800',
+    Canceled: 'bg-rose-100 text-rose-800'
 };
 
 const PURCHASE_STATUS_BADGE_CLASSES = {

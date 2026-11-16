@@ -1,12 +1,49 @@
 let gestaoAlterarStatusTerceirosCache = [];
 
+const GESTAO_THIRD_PARTY_CANCELED_STATUS = typeof THIRD_PARTY_PROJECT_STATUS_CANCELED === 'string'
+    ? THIRD_PARTY_PROJECT_STATUS_CANCELED
+    : 'Canceled';
+
 function getGestaoThirdPartyStatusOptions() {
     return [
         typeof THIRD_PARTY_PROJECT_STATUS_OPEN === 'string' ? THIRD_PARTY_PROJECT_STATUS_OPEN : 'Open',
         typeof THIRD_PARTY_PROJECT_STATUS_SENT === 'string' ? THIRD_PARTY_PROJECT_STATUS_SENT : 'Sent',
         typeof THIRD_PARTY_PROJECT_STATUS_IN_REVIEW === 'string' ? THIRD_PARTY_PROJECT_STATUS_IN_REVIEW : 'InReview',
-        typeof THIRD_PARTY_PROJECT_STATUS_APPROVED === 'string' ? THIRD_PARTY_PROJECT_STATUS_APPROVED : 'Approved'
+        typeof THIRD_PARTY_PROJECT_STATUS_APPROVED === 'string' ? THIRD_PARTY_PROJECT_STATUS_APPROVED : 'Approved',
+        GESTAO_THIRD_PARTY_CANCELED_STATUS
     ];
+}
+
+function isGestaoThirdPartyCanceledStatus(status) {
+    return status === GESTAO_THIRD_PARTY_CANCELED_STATUS;
+}
+
+function toggleGestaoAlterarStatusTerceirosCancelObservationRow(row, show) {
+    if (!row) return;
+    const wrap = row.querySelector('.gestao-alterar-status-terceiros-cancel-wrap');
+    if (!wrap) return;
+    wrap.classList.toggle('hidden', !show);
+    const textarea = wrap.querySelector('.gestao-alterar-status-terceiros-cancel-observation');
+    if (textarea) {
+        textarea.required = Boolean(show);
+        if (!show) {
+            textarea.value = '';
+        }
+    }
+}
+
+function syncGestaoAlterarStatusTerceirosCancelObservationForRow(row) {
+    if (!row) return;
+    const select = row.querySelector('.gestao-alterar-status-terceiros-new');
+    const newStatus = select?.value || '';
+    const currentStatus = select?.dataset.currentStatus || '';
+    const changingToCanceled = isGestaoThirdPartyCanceledStatus(newStatus) && newStatus !== currentStatus;
+    const textarea = row.querySelector('.gestao-alterar-status-terceiros-cancel-observation');
+    if (changingToCanceled && textarea && !textarea.value.trim()) {
+        const existing = row.dataset.cancelObservation || '';
+        if (existing) textarea.value = existing;
+    }
+    toggleGestaoAlterarStatusTerceirosCancelObservationRow(row, changingToCanceled);
 }
 
 function getGestaoThirdPartyStatusLabel(status) {
@@ -66,6 +103,10 @@ function collectGestaoAlterarStatusTerceirosPendingChanges() {
         const project = gestaoAlterarStatusTerceirosCache.find(item => Number(item.id) === projectId);
         if (!project) return;
 
+        const cancelObservation = isGestaoThirdPartyCanceledStatus(newStatus)
+            ? (row.querySelector('.gestao-alterar-status-terceiros-cancel-observation')?.value || '').trim()
+            : '';
+
         changes.push({
             projectId,
             project,
@@ -73,6 +114,7 @@ function collectGestaoAlterarStatusTerceirosPendingChanges() {
             select,
             currentStatus,
             newStatus,
+            cancelObservation,
             currentStatusName: getGestaoThirdPartyStatusLabel(currentStatus),
             newStatusName: getGestaoThirdPartyStatusLabel(newStatus)
         });
@@ -122,24 +164,42 @@ async function fetchGestaoAlterarStatusTerceiros(filters = {}) {
     const orderById = Object.fromEntries(orders.map(order => [Number(order.id), order]));
     const orderIds = orders.map(order => order.id);
 
-    const { data, error } = await supabaseClient
-        .from('ThirdPartyProject')
-        .select(`
+    const selectWithCancelObs = `
+            id, orderId, orderProjectId, status, cancelObservation,
+            thirdPartySubtype:ThirdPartySubtype(id, name),
+            projectCharacteristic:ProjectCharacteristic(id, name),
+            orderProject:OrderProject(id, name)
+        `;
+    const selectMinimal = `
             id, orderId, orderProjectId, status,
             thirdPartySubtype:ThirdPartySubtype(id, name),
             projectCharacteristic:ProjectCharacteristic(id, name),
             orderProject:OrderProject(id, name)
-        `)
+        `;
+
+    let result = await supabaseClient
+        .from('ThirdPartyProject')
+        .select(selectWithCancelObs)
         .in('orderId', orderIds)
         .order('orderId', { ascending: true });
 
-    if (error) {
+    if (result.error?.message?.includes('cancelObservation')) {
+        result = await supabaseClient
+            .from('ThirdPartyProject')
+            .select(selectMinimal)
+            .in('orderId', orderIds)
+            .order('orderId', { ascending: true });
+    }
+
+    if (result.error) {
         throw new Error(
             typeof formatThirdPartyProjectMutationError === 'function'
-                ? formatThirdPartyProjectMutationError(error)
-                : error.message
+                ? formatThirdPartyProjectMutationError(result.error)
+                : result.error.message
         );
     }
+
+    const data = result.data;
 
     const projects = (data || []).map(project => ({
         ...project,
@@ -188,25 +248,47 @@ function renderGestaoAlterarStatusTerceirosList(projects = gestaoAlterarStatusTe
 
     tbody.innerHTML = projects.map(project => {
         const currentStatus = project.status || '';
+        const cancelObservation = String(project.cancelObservation || '').trim();
         return `
-            <tr data-third-party-project-id="${project.id}">
+            <tr data-third-party-project-id="${project.id}"
+                data-cancel-observation="${escapeHtml(cancelObservation)}">
                 <td class="p-3 font-mono text-xs text-indigo-800 whitespace-nowrap">${escapeHtml(project.order?.orderCode || '—')}</td>
                 <td class="p-3 text-xs text-slate-700">${escapeHtml(getOrderClientName(project.order) || '—')}</td>
                 <td class="p-3 text-xs text-slate-800">${escapeHtml(project.orderProject?.name || '—')}</td>
                 <td class="p-3 text-xs text-slate-700">${escapeHtml(getGestaoAlterarStatusTerceiroName(project))}</td>
-                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">${escapeHtml(getGestaoThirdPartyStatusLabel(currentStatus))}</td>
+                <td class="p-3 text-xs text-slate-600 whitespace-nowrap">
+                    ${escapeHtml(getGestaoThirdPartyStatusLabel(currentStatus))}
+                    ${isGestaoThirdPartyCanceledStatus(currentStatus) && cancelObservation
+                        ? `<p class="text-[10px] text-slate-400 mt-1 max-w-xs whitespace-normal" title="${escapeHtml(cancelObservation)}">${escapeHtml(cancelObservation.length > 80 ? `${cancelObservation.slice(0, 80)}…` : cancelObservation)}</p>`
+                        : ''}
+                </td>
                 <td class="p-3">
                     <select class="gestao-alterar-status-terceiros-new w-full min-w-[140px] px-2 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-500"
                         data-current-status="${escapeHtml(currentStatus)}">
                         ${getGestaoThirdPartyStatusOptionsHtml(currentStatus)}
                     </select>
+                    <div class="gestao-alterar-status-terceiros-cancel-wrap hidden mt-2 space-y-1">
+                        <label class="block text-[10px] font-semibold text-rose-700">
+                            Observação do cancelamento <span class="text-rose-600">*</span>
+                        </label>
+                        <textarea class="gestao-alterar-status-terceiros-cancel-observation w-full min-h-[3.5rem] px-2 py-1.5 text-xs border border-rose-200 rounded-lg bg-white focus:outline-none focus:border-rose-500 resize-y"
+                            rows="2"
+                            placeholder="Motivo do cancelamento (obrigatório)"></textarea>
+                    </div>
                 </td>
             </tr>
         `;
     }).join('');
 
-    tbody.querySelectorAll('.gestao-alterar-status-terceiros-new').forEach(select => {
-        select.addEventListener('change', syncGestaoAlterarStatusTerceirosSaveButton);
+    tbody.querySelectorAll('tr[data-third-party-project-id]').forEach(row => {
+        const select = row.querySelector('.gestao-alterar-status-terceiros-new');
+        const observationInput = row.querySelector('.gestao-alterar-status-terceiros-cancel-observation');
+        select?.addEventListener('change', () => {
+            syncGestaoAlterarStatusTerceirosCancelObservationForRow(row);
+            syncGestaoAlterarStatusTerceirosSaveButton();
+        });
+        observationInput?.addEventListener('input', syncGestaoAlterarStatusTerceirosSaveButton);
+        syncGestaoAlterarStatusTerceirosCancelObservationForRow(row);
     });
 
     syncGestaoAlterarStatusTerceirosSaveButton();
@@ -218,6 +300,17 @@ async function saveGestaoAlterarStatusTerceirosPendingChanges() {
     const changes = collectGestaoAlterarStatusTerceirosPendingChanges();
     if (!changes.length) {
         alertAppDialog('Nenhuma alteração de status para salvar.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const missingObservation = changes.filter(
+        change => isGestaoThirdPartyCanceledStatus(change.newStatus) && !change.cancelObservation
+    );
+    if (missingObservation.length) {
+        alertAppDialog(
+            'Informe a observação do cancelamento para todos os projetos com status Cancelado.',
+            { variant: 'warning', title: 'Aviso' }
+        );
         return;
     }
 
@@ -248,13 +341,26 @@ async function saveGestaoAlterarStatusTerceirosPendingChanges() {
                 }
 
                 await updateThirdPartyProjectStatus(change.projectId, change.newStatus, change.currentStatus, {
-                    skipNotify: true
+                    skipNotify: true,
+                    cancelObservation: change.cancelObservation
                 });
 
                 change.project.status = change.newStatus;
+                if (isGestaoThirdPartyCanceledStatus(change.newStatus)) {
+                    change.project.cancelObservation = change.cancelObservation;
+                    if (change.row) {
+                        change.row.dataset.cancelObservation = change.cancelObservation;
+                    }
+                } else {
+                    change.project.cancelObservation = null;
+                    if (change.row) {
+                        change.row.dataset.cancelObservation = '';
+                    }
+                }
                 if (change.select) {
                     change.select.dataset.currentStatus = change.newStatus;
                 }
+                syncGestaoAlterarStatusTerceirosCancelObservationForRow(change.row);
 
                 const statusCell = change.row?.querySelector('td:nth-child(5)');
                 if (statusCell) statusCell.textContent = change.newStatusName;

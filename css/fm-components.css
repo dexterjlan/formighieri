@@ -2139,6 +2139,11 @@ html[data-theme="formighieri-sage"] .app-sidebar .pendencias-subitem-btn.is-sele
     border-radius: inherit;
 }
 
+/* Visualização 3D — overlay acima do combobox de pedido (z-30). */
+.view3d-panel-overlay.fm-app-overlay--contained {
+    z-index: 40;
+}
+
 .fm-app-overlay--modal-layer {
     position: fixed;
     inset: 0;

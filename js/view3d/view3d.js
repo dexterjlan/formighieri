@@ -1,4 +1,8 @@
 let view3dSearchRows = [];
+let view3dOrdersCache = [];
+let view3dSelectedOrderId = null;
+let view3dOrderHighlight = -1;
+let view3dOrderQuery = '';
 let view3dThreeViewer = null;
 let view3dCurrentBlobUrl = null;
 let view3dThreeModulePromise = null;
@@ -113,6 +117,9 @@ const view3dPanelOverlay = typeof createAppOverlayHelper === 'function'
     : null;
 
 function setView3dLoading(active, message = 'Carregando...', status = 'loading') {
+    if (active) {
+        setView3dOrderListOpen(false);
+    }
     view3dPanelOverlay?.setLoading(active, message, status);
 }
 
@@ -136,13 +143,191 @@ function buildView3dDriveContext(orderProject, order) {
     };
 }
 
-async function fetchView3dOrders(orderCodeFilter, clientFilter) {
-    const orderCode = String(orderCodeFilter || '').trim();
-    const clientNeedle = typeof normalizeSearchText === 'function'
+function view3dOrderLabel(order) {
+    const clientName = typeof getOrderClientName === 'function'
+        ? (getOrderClientName(order) || '')
+        : (order?.client?.name || '');
+    if (clientName && order?.orderCode) return `${order.orderCode} — ${clientName}`;
+    return order?.orderCode || clientName || `Pedido ${order?.id || ''}`;
+}
+
+function getView3dClientSearchTerm() {
+    return document.getElementById('view3d-filter-client')?.value.trim() || '';
+}
+
+function orderMatchesView3dClientFilter(order, clientTerm) {
+    const term = typeof normalizeSearchText === 'function'
+        ? normalizeSearchText(clientTerm)
+        : String(clientTerm || '').trim().toLowerCase();
+    if (!term) return true;
+    const clientName = typeof getOrderClientName === 'function'
+        ? getOrderClientName(order)
+        : (order.client?.name || '');
+    const clientNorm = typeof normalizeSearchText === 'function'
+        ? normalizeSearchText(clientName)
+        : String(clientName).toLowerCase();
+    return clientNorm.includes(term);
+}
+
+function filterView3dOrders(query) {
+    const term = typeof normalizeSearchText === 'function'
+        ? normalizeSearchText(query)
+        : String(query || '').trim().toLowerCase();
+    let source = view3dOrdersCache || [];
+    const clientTerm = getView3dClientSearchTerm();
+    if (clientTerm) {
+        source = source.filter(order => orderMatchesView3dClientFilter(order, clientTerm));
+    }
+    const matches = !term
+        ? source
+        : source.filter(order => {
+            const clientName = typeof getOrderClientName === 'function'
+                ? getOrderClientName(order)
+                : (order.client?.name || '');
+            const clientNorm = typeof normalizeSearchText === 'function'
+                ? normalizeSearchText(clientName)
+                : String(clientName).toLowerCase();
+            const codeNorm = typeof normalizeSearchText === 'function'
+                ? normalizeSearchText(order.orderCode)
+                : String(order.orderCode || '').toLowerCase();
+            return codeNorm.includes(term) || clientNorm.includes(term);
+        });
+    return matches.slice(0, 40);
+}
+
+function setView3dOrderListOpen(open) {
+    const list = document.getElementById('view3d-order-list');
+    const input = document.getElementById('view3d-order-search');
+    if (!list || !input) return;
+    list.classList.toggle('hidden', !open);
+    input.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (!open) view3dOrderHighlight = -1;
+}
+
+function renderView3dOrderOptions() {
+    const list = document.getElementById('view3d-order-list');
+    if (!list) return;
+
+    const matches = filterView3dOrders(view3dOrderQuery);
+    if (!matches.length) {
+        view3dOrderHighlight = -1;
+        list.innerHTML = '<p class="px-3 py-2 text-xs text-slate-400">Nenhum pedido encontrado.</p>';
+        return;
+    }
+
+    list.innerHTML = matches.map((order, index) => {
+        const active = index === view3dOrderHighlight ? ' bg-slate-100' : '';
+        return `<button type="button" class="view3d-order-option w-full text-left px-3 py-2 text-sm text-slate-800 hover:bg-slate-50${active}" data-order-id="${order.id}" data-option-index="${index}" role="option">${escapeHtml(view3dOrderLabel(order))}</button>`;
+    }).join('');
+}
+
+async function loadView3dOrderOptions() {
+    const input = document.getElementById('view3d-order-search');
+    if (!input) return;
+    if (view3dOrdersCache.length) {
+        const selected = view3dOrdersCache.find(order => Number(order.id) === Number(view3dSelectedOrderId));
+        input.value = selected ? view3dOrderLabel(selected) : input.value;
+        renderView3dOrderOptions();
+        return;
+    }
+
+    const { data, error } = await supabaseClient
+        .from('salesOrders')
+        .select('id, orderCode, client:Client(name)')
+        .order('orderCode', { ascending: false })
+        .limit(1000);
+
+    if (error) throw error;
+    view3dOrdersCache = data || [];
+
+    const selected = view3dOrdersCache.find(order => Number(order.id) === Number(view3dSelectedOrderId));
+    input.value = selected ? view3dOrderLabel(selected) : '';
+    view3dOrderQuery = '';
+    renderView3dOrderOptions();
+}
+
+function selectView3dOrder(orderId) {
+    const order = view3dOrdersCache.find(item => Number(item.id) === Number(orderId));
+    const input = document.getElementById('view3d-order-search');
+    const clientInput = document.getElementById('view3d-filter-client');
+    view3dSelectedOrderId = order ? Number(order.id) : null;
+    if (input) input.value = order ? view3dOrderLabel(order) : '';
+    if (clientInput && order) {
+        const clientName = typeof getOrderClientName === 'function'
+            ? (getOrderClientName(order) || '')
+            : (order.client?.name || '');
+        if (clientName) clientInput.value = clientName;
+    }
+    view3dOrderQuery = '';
+    setView3dOrderListOpen(false);
+}
+
+function resolveView3dSearch() {
+    const clientFilter = getView3dClientSearchTerm();
+    const clientNorm = typeof normalizeSearchText === 'function'
         ? normalizeSearchText(clientFilter)
-        : String(clientFilter || '').trim().toLowerCase();
-    if (!orderCode && !clientNeedle) {
-        return { error: new Error('Informe o pedido ou o cliente para buscar.') };
+        : clientFilter.toLowerCase();
+
+    const selected = view3dOrdersCache.find(order => Number(order.id) === Number(view3dSelectedOrderId));
+    if (selected?.orderCode) {
+        return {
+            mode: 'code',
+            orderCode: String(selected.orderCode).trim(),
+            exact: true,
+            clientFilter
+        };
+    }
+
+    const pedidoInput = document.getElementById('view3d-order-search');
+    const query = pedidoInput?.value.trim() || '';
+    const selectedLabel = selected ? view3dOrderLabel(selected) : '';
+
+    if (query && query !== selectedLabel) {
+        const term = typeof normalizeSearchText === 'function' ? normalizeSearchText(query) : query.toLowerCase();
+        const matches = filterView3dOrders(query);
+        if (matches.length === 1) {
+            return {
+                mode: 'code',
+                orderCode: String(matches[0].orderCode || '').trim(),
+                exact: true,
+                clientFilter
+            };
+        }
+        const exactCode = matches.find(
+            order => (typeof normalizeSearchText === 'function'
+                ? normalizeSearchText(order.orderCode)
+                : String(order.orderCode || '').toLowerCase()) === term
+        );
+        if (exactCode) {
+            return {
+                mode: 'code',
+                orderCode: String(exactCode.orderCode).trim(),
+                exact: true,
+                clientFilter
+            };
+        }
+        if (matches.length > 1) {
+            return { error: new Error('Selecione um pedido na lista (vários resultados para esse filtro).') };
+        }
+        return {
+            mode: 'code',
+            orderCode: query,
+            exact: false,
+            clientFilter
+        };
+    }
+
+    if (clientNorm) {
+        return { mode: 'client', clientFilter };
+    }
+
+    return { error: new Error('Informe o cliente e/ou selecione um pedido para buscar.') };
+}
+
+async function fetchView3dOrdersByCode(orderCode, exact = false) {
+    const code = String(orderCode || '').trim();
+    if (!code) {
+        return { error: new Error('Informe o código do pedido para buscar.') };
     }
 
     let query = supabaseClient
@@ -151,27 +336,37 @@ async function fetchView3dOrders(orderCodeFilter, clientFilter) {
         .order('orderCode', { ascending: true })
         .limit(80);
 
-    if (orderCode) {
-        query = query.ilike('orderCode', `%${orderCode}%`);
-    }
+    query = exact ? query.eq('orderCode', code) : query.ilike('orderCode', `%${code}%`);
 
     const { data, error } = await query;
     if (error) return { error, orders: [] };
 
-    let orders = data || [];
-    if (clientNeedle) {
-        orders = orders.filter(order => {
-            const clientName = typeof getOrderClientName === 'function'
-                ? (getOrderClientName(order) || '')
-                : (order.client?.name || '');
-            const clientNorm = typeof normalizeSearchText === 'function'
-                ? normalizeSearchText(clientName)
-                : clientName.toLowerCase();
-            return clientNorm.includes(clientNeedle);
-        });
+    return { error: null, orders: data || [] };
+}
+
+async function fetchView3dOrdersForSearch(resolved) {
+    if (resolved.mode === 'client') {
+        if (!view3dOrdersCache.length) {
+            try {
+                await loadView3dOrderOptions();
+            } catch (error) {
+                return { error, orders: [] };
+            }
+        }
+        const orders = view3dOrdersCache.filter(order => orderMatchesView3dClientFilter(order, resolved.clientFilter));
+        return { error: null, orders: orders.slice(0, 80) };
     }
 
-    return { error: null, orders };
+    const { error, orders } = await fetchView3dOrdersByCode(resolved.orderCode, resolved.exact);
+    if (error) return { error, orders: [] };
+
+    const clientFilter = resolved.clientFilter;
+    if (!clientFilter) {
+        return { error: null, orders };
+    }
+
+    const filtered = orders.filter(order => orderMatchesView3dClientFilter(order, clientFilter));
+    return { error: null, orders: filtered };
 }
 
 async function fetchView3dProjectsForOrders(orders) {
@@ -206,13 +401,42 @@ async function fetchView3dProjectsForOrders(orders) {
     });
 }
 
+function view3dRowHasModelFile(row) {
+    return Boolean(row?.driveFile?.driveFileId || row?.driveFile?.url);
+}
+
+function sortView3dSearchRows(rows) {
+    return [...(rows || [])].sort((a, b) => {
+        const clientCmp = String(a.clientName || '').localeCompare(String(b.clientName || ''), 'pt-BR', {
+            sensitivity: 'base'
+        });
+        if (clientCmp !== 0) return clientCmp;
+
+        const orderCmp = String(a.orderCode || '').localeCompare(String(b.orderCode || ''), 'pt-BR', {
+            numeric: true,
+            sensitivity: 'base'
+        });
+        if (orderCmp !== 0) return orderCmp;
+
+        const fileCmp = Number(view3dRowHasModelFile(b)) - Number(view3dRowHasModelFile(a));
+        if (fileCmp !== 0) return fileCmp;
+
+        return String(a.projectLabel || '').localeCompare(String(b.projectLabel || ''), 'pt-BR', {
+            sensitivity: 'base'
+        });
+    });
+}
+
 async function searchView3dProjects() {
-    const orderFilter = document.getElementById('view3d-filter-order')?.value || '';
-    const clientFilter = document.getElementById('view3d-filter-client')?.value || '';
+    const resolved = resolveView3dSearch();
+    if (resolved.error) {
+        alertAppDialog(resolved.error.message, { variant: 'warning', title: 'Aviso' });
+        return;
+    }
 
     setView3dLoading(true, 'Buscando projetos...');
     try {
-        const { error, orders } = await fetchView3dOrders(orderFilter, clientFilter);
+        const { error, orders } = await fetchView3dOrdersForSearch(resolved);
         if (error) {
             alertAppDialog(error.message, { variant: 'warning', title: 'Aviso' });
             view3dSearchRows = [];
@@ -242,7 +466,7 @@ async function searchView3dProjects() {
         const mobileSearch = document.getElementById('view3d-mobile-search');
         if (mobileSearch) mobileSearch.value = '';
 
-        view3dSearchRows = projects.map(project => {
+        view3dSearchRows = sortView3dSearchRows(projects.map(project => {
             const order = orderById[Number(project.orderId)] || {};
             const driveFile = driveByProjectId[String(project.id)] || null;
             return {
@@ -255,7 +479,7 @@ async function searchView3dProjects() {
                 projectLabel: project.name || project.projectCode || 'Projeto',
                 driveFile
             };
-        });
+        }));
         renderView3dResults();
     } catch (searchError) {
         console.error('searchView3dProjects:', searchError);
@@ -523,6 +747,7 @@ async function handleView3dUploadClick(orderProjectId) {
         try {
             const saved = await saveDriveFileUpload(file, context);
             row.driveFile = saved;
+            view3dSearchRows = sortView3dSearchRows(view3dSearchRows);
             renderView3dResults();
             alertAppDialog('Modelo 3D enviado com sucesso.', { variant: 'success', title: 'OK' });
         } catch (uploadError) {
@@ -554,6 +779,9 @@ function showView3d() {
     updateView3dNav();
     renderView3dResults();
     persistView3dNavState();
+    loadView3dOrderOptions().catch(error => {
+        console.error('loadView3dOrderOptions:', error);
+    });
 }
 
 async function restoreView3dView() {
@@ -578,6 +806,94 @@ function bindView3dEvents() {
         event.preventDefault();
         searchView3dProjects();
     });
+
+    const view3dClientInput = document.getElementById('view3d-filter-client');
+    const view3dOrderInput = document.getElementById('view3d-order-search');
+    const view3dOrderList = document.getElementById('view3d-order-list');
+
+    view3dClientInput?.addEventListener('input', () => {
+        const selected = view3dOrdersCache.find(order => Number(order.id) === Number(view3dSelectedOrderId));
+        if (selected && !orderMatchesView3dClientFilter(selected, view3dClientInput.value)) {
+            view3dSelectedOrderId = null;
+            if (view3dOrderInput) view3dOrderInput.value = '';
+        }
+        if (view3dOrderList && !view3dOrderList.classList.contains('hidden')) {
+            view3dOrderQuery = view3dOrderInput?.value || '';
+            renderView3dOrderOptions();
+        }
+    });
+
+    view3dOrderInput?.addEventListener('focus', async () => {
+        try {
+            await loadView3dOrderOptions();
+        } catch (error) {
+            alertAppDialog(error.message || 'Erro ao carregar pedidos.');
+            return;
+        }
+        const selected = view3dOrdersCache.find(order => Number(order.id) === Number(view3dSelectedOrderId));
+        const selectedLabel = selected ? view3dOrderLabel(selected) : '';
+        view3dOrderHighlight = -1;
+        view3dOrderQuery = view3dOrderInput.value === selectedLabel ? '' : view3dOrderInput.value;
+        renderView3dOrderOptions();
+        setView3dOrderListOpen(true);
+    });
+
+    view3dOrderInput?.addEventListener('input', () => {
+        view3dOrderQuery = view3dOrderInput.value;
+        const selected = view3dOrdersCache.find(order => Number(order.id) === Number(view3dSelectedOrderId));
+        const selectedLabel = selected ? view3dOrderLabel(selected) : '';
+        if (view3dOrderInput.value.trim() !== selectedLabel) {
+            view3dSelectedOrderId = null;
+        }
+        view3dOrderHighlight = -1;
+        renderView3dOrderOptions();
+        setView3dOrderListOpen(true);
+    });
+
+    view3dOrderInput?.addEventListener('keydown', event => {
+        const optionCount = view3dOrderList?.querySelectorAll('.view3d-order-option').length || 0;
+        if (event.key === 'Escape') {
+            setView3dOrderListOpen(false);
+            return;
+        }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            if (!optionCount) return;
+            setView3dOrderListOpen(true);
+            const delta = event.key === 'ArrowDown' ? 1 : -1;
+            view3dOrderHighlight = (view3dOrderHighlight + delta + optionCount) % optionCount;
+            renderView3dOrderOptions();
+            view3dOrderList?.querySelector(`[data-option-index="${view3dOrderHighlight}"]`)
+                ?.scrollIntoView({ block: 'nearest' });
+            return;
+        }
+        if (event.key === 'Enter') {
+            const options = [...(view3dOrderList?.querySelectorAll('.view3d-order-option') || [])];
+            const highlighted = options[view3dOrderHighlight] || (options.length === 1 ? options[0] : null);
+            if (!highlighted) return;
+            event.preventDefault();
+            selectView3dOrder(highlighted.dataset.orderId);
+        }
+    });
+
+    view3dOrderList?.addEventListener('mousedown', event => {
+        event.preventDefault();
+    });
+
+    view3dOrderList?.addEventListener('click', event => {
+        const button = event.target.closest('[data-order-id]');
+        if (!button) return;
+        selectView3dOrder(button.dataset.orderId);
+    });
+
+    if (!window.__view3dOrderOutsideBound) {
+        window.__view3dOrderOutsideBound = true;
+        document.addEventListener('mousedown', event => {
+            const wrap = document.getElementById('view3d-order-wrap');
+            if (!wrap || wrap.contains(event.target)) return;
+            setView3dOrderListOpen(false);
+        });
+    }
     document.getElementById('view3d-view')?.addEventListener('click', event => {
         const openBtn = event.target.closest('.view3d-open-btn');
         if (openBtn) {

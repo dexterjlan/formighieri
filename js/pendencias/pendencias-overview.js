@@ -192,7 +192,8 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                     .from('ThirdPartyProject')
                     .select('id', { count: 'exact', head: true })
                     .is('designerId', null)
-                    .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED);
+                    .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED)
+                    .neq('status', THIRD_PARTY_PROJECT_STATUS_CANCELED);
                 if (error?.message?.includes('ThirdPartyProject')) return 0;
                 if (error) return null;
                 return count ?? 0;

@@ -2,6 +2,7 @@ const THIRD_PARTY_PROJECT_STATUS_OPEN = 'Open';
 const THIRD_PARTY_PROJECT_STATUS_SENT = 'Sent';
 const THIRD_PARTY_PROJECT_STATUS_IN_REVIEW = 'InReview';
 const THIRD_PARTY_PROJECT_STATUS_APPROVED = 'Approved';
+const THIRD_PARTY_PROJECT_STATUS_CANCELED = 'Canceled';
 
 const THIRD_PARTY_PROJECT_DESIGNER_EMBED = 'designer:appUsers!ThirdPartyProject_designerId_fkey(id, name)';
 const THIRD_PARTY_PROJECT_STATUS_HISTORY_CHANGED_BY_EMBED =
@@ -11,8 +12,14 @@ const THIRD_PARTY_PROJECT_STATUS_LABELS = {
     [THIRD_PARTY_PROJECT_STATUS_OPEN]: 'Aberto',
     [THIRD_PARTY_PROJECT_STATUS_SENT]: 'Enviado',
     [THIRD_PARTY_PROJECT_STATUS_IN_REVIEW]: 'Em Revisão',
-    [THIRD_PARTY_PROJECT_STATUS_APPROVED]: 'Aprovado'
+    [THIRD_PARTY_PROJECT_STATUS_APPROVED]: 'Aprovado',
+    [THIRD_PARTY_PROJECT_STATUS_CANCELED]: 'Cancelado'
 };
+
+function isThirdPartyProjectWorkflowClosed(status) {
+    return status === THIRD_PARTY_PROJECT_STATUS_APPROVED
+        || status === THIRD_PARTY_PROJECT_STATUS_CANCELED;
+}
 
 function getThirdPartyProjectStatusLabel(status) {
     if (!status) return '—';
@@ -34,6 +41,10 @@ function formatThirdPartyProjectMutationError(error) {
     if (normalized.includes('projectcharacteristicid')
         && normalized.includes('not-null')) {
         return 'Execute supabase/feats/third-party-project-nullable-characteristic.sql no SQL Editor do ambiente (DEV/produção).';
+    }
+    if (normalized.includes('cancelobservation')
+        || (normalized.includes('thirdpartyproject_status_check') && normalized.includes('canceled'))) {
+        return 'Execute supabase/feats/third-party-project-status-canceled.sql no SQL Editor do ambiente (DEV/produção).';
     }
     return message || 'Erro ao gravar projeto de terceiros.';
 }
@@ -339,6 +350,7 @@ async function fetchThirdPartyProjectStatusHistory(thirdPartyProjectId) {
             changedAt,
             changedById,
             previousStatusDurationSeconds,
+            observation,
             ${THIRD_PARTY_PROJECT_STATUS_HISTORY_CHANGED_BY_EMBED}
         `)
         .eq('thirdPartyProjectId', normalizedId)
@@ -950,6 +962,7 @@ async function fetchThirdPartyProjectsWithoutDesigner() {
         `)
         .is('designerId', null)
         .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED)
+        .neq('status', THIRD_PARTY_PROJECT_STATUS_CANCELED)
         .order('createdAt', { ascending: true });
 
     if (error) {
@@ -987,6 +1000,7 @@ async function fetchThirdPartyProjectsForProjetista(designerId, options = {}) {
             order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
         `)
         .neq('status', THIRD_PARTY_PROJECT_STATUS_APPROVED)
+        .neq('status', THIRD_PARTY_PROJECT_STATUS_CANCELED)
         .order('updatedAt', { ascending: false });
 
     if (!includeAll) {
