@@ -1,7 +1,477 @@
+const PROGRAMACOES_THIRD_PARTY_MIN_ORDER_PROJECT_SORT = 13;
+
+let programacoesThirdPartyProjectsCache = [];
+
+const PROGRAMACOES_INLINE_LINK_ARROW_SVG = `<svg class="fm-inline-link-arrow w-3 h-3 shrink-0 opacity-80" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 10.5 10.5 5.5"/><path d="M6.5 5.5h4v4"/></svg>`;
+
+function renderProgramacoesInlineLinkArrowIconHtml() {
+    return PROGRAMACOES_INLINE_LINK_ARROW_SVG;
+}
+
+function renderProgramacoesOrderLinkWithArrowHtml(row, className = 'text-xs') {
+    const orderId = Number(row.orderId);
+    const orderCode = row.orderCode === null || row.orderCode === undefined ? '' : String(row.orderCode);
+    const display = orderCode.trim() || '—';
+    if (!orderId || display === '—') {
+        return escapeHtml(display);
+    }
+
+    const canNavigate = typeof canAccessOrdersDashboard === 'function'
+        ? canAccessOrdersDashboard()
+        : true;
+    if (!canNavigate) {
+        return `<span class="inline-flex items-center gap-0.5 font-mono text-slate-600 ${escapeHtml(className)}">${escapeHtml(display)}</span>`;
+    }
+
+    return `<span class="inline-flex items-center gap-0.5">
+        <button type="button"
+            class="fm-order-code-link inline-flex items-center gap-0.5 font-mono text-indigo-600 hover:text-indigo-800 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded ${escapeHtml(className)}"
+            data-order-id="${orderId}"
+            title="Abrir pedido">
+            <span>${escapeHtml(display)}</span>
+            ${renderProgramacoesInlineLinkArrowIconHtml()}
+        </button>
+    </span>`;
+}
+
 function isMissingProjectProductionQueueError(error) {
     const message = String(error?.message || error || '');
     return /projectproductionqueue/i.test(message)
         && /could not find|does not exist|schema cache|não encontr/i.test(message);
+}
+
+function isProgramacoesThirdPartyStatusOpen(status) {
+    if (typeof isThirdPartyProjectWorkflowClosed === 'function') {
+        return !isThirdPartyProjectWorkflowClosed(status);
+    }
+    return status !== 'Approved' && status !== 'Canceled';
+}
+
+function isProgramacoesThirdPartyEligible(project, statusById = {}) {
+    if (!project || !isProgramacoesThirdPartyStatusOpen(project.status)) return false;
+    const orderProject = project.orderProject;
+    if (!orderProject) return false;
+    if (typeof getGestaoRelatorioStatusSortOrder !== 'function') return false;
+    const sortOrder = getGestaoRelatorioStatusSortOrder(orderProject, statusById);
+    return Number.isFinite(sortOrder)
+        && sortOrder >= PROGRAMACOES_THIRD_PARTY_MIN_ORDER_PROJECT_SORT
+        && sortOrder !== 9999;
+}
+
+async function fetchProgramacoesThirdPartyProjects() {
+    const statuses = typeof loadOrderProjectStatusesCache === 'function'
+        ? await loadOrderProjectStatusesCache()
+        : (typeof loadGestaoProjectStatuses === 'function'
+            ? await loadGestaoProjectStatuses(true)
+            : []);
+    const statusById = Object.fromEntries((statuses || []).map(status => [status.id, status]));
+
+    const orderSalesEmbed = typeof getOrderSalesOrderEmbed === 'function'
+        ? getOrderSalesOrderEmbed('clientDeliveryDate')
+        : `order:salesOrders(id, orderCode, clientId, consultantUserId, clientDeliveryDate, client:Client(name), consultor:appUsers!consultantUserId(name))`;
+
+    const selectWithSort = `
+        id,
+        orderId,
+        orderProjectId,
+        status,
+        designerId,
+        sentAt,
+        updatedAt,
+        projectCharacteristic:ProjectCharacteristic(id, name),
+        thirdPartySubtype:ThirdPartySubtype(id, name),
+        designer:appUsers!ThirdPartyProject_designerId_fkey(id, name),
+        orderProject:OrderProject(
+            id, orderId, name, projectCode, statusId, deliveryPhaseId, deliveryDate, productionMonth,
+            projectStatus:OrderProjectStatus(id, name, sortOrder)
+        ),
+        ${orderSalesEmbed}
+    `;
+
+    const selectFallback = `
+        id,
+        orderId,
+        orderProjectId,
+        status,
+        designerId,
+        sentAt,
+        updatedAt,
+        projectCharacteristic:ProjectCharacteristic(id, name),
+        thirdPartySubtype:ThirdPartySubtype(id, name),
+        designer:appUsers!ThirdPartyProject_designerId_fkey(id, name),
+        orderProject:OrderProject(
+            id, orderId, name, projectCode, statusId, deliveryPhaseId, deliveryDate, productionMonth,
+            projectStatus:OrderProjectStatus(id, name)
+        ),
+        ${orderSalesEmbed}
+    `;
+
+    const runQuery = async (select) => {
+        let query = supabaseClient
+            .from('ThirdPartyProject')
+            .select(select)
+            .neq('status', 'Approved')
+            .neq('status', 'Canceled')
+            .order('updatedAt', { ascending: true });
+        return query;
+    };
+
+    let data = null;
+    let lastError = null;
+    for (const select of [selectWithSort, selectFallback]) {
+        const result = await runQuery(select);
+        if (!result.error) {
+            data = result.data;
+            break;
+        }
+        lastError = result.error;
+        if (result.error?.message?.includes('ThirdPartyProject')) {
+            return [];
+        }
+    }
+
+    if (lastError && !data) {
+        console.error('fetchProgramacoesThirdPartyProjects:', lastError);
+        return [];
+    }
+
+    return (data || [])
+        .filter(project => isProgramacoesThirdPartyEligible(project, statusById))
+        .map(project => {
+            const orderProject = project.orderProject;
+            if (!orderProject?.projectStatus?.name && orderProject?.statusId) {
+                const status = statusById[orderProject.statusId];
+                if (status) {
+                    orderProject.projectStatus = status;
+                }
+            }
+            return project;
+        });
+}
+
+function mapProgramacoesThirdPartyRow(project) {
+    const order = project.order;
+    const orderProject = project.orderProject;
+    const orderId = Number(project.orderId || order?.id || orderProject?.orderId) || null;
+    const orderCode = order?.orderCode || '—';
+    const clientName = typeof getOrderClientName === 'function'
+        ? (getOrderClientName(order) || '—')
+        : (order?.client?.name || '—');
+    const consultantName = typeof getOrderConsultantNameFromRecord === 'function'
+        ? (getOrderConsultantNameFromRecord(order) || '—')
+        : (order?.consultor?.name || '—');
+    const thirdPartyStatusLabel = typeof getThirdPartyProjectStatusLabel === 'function'
+        ? getThirdPartyProjectStatusLabel(project.status)
+        : (project.status || '—');
+    const orderProjectStatusName = typeof getPendenciasProjectStatusName === 'function' && orderProject
+        ? getPendenciasProjectStatusName(orderProject)
+        : (orderProject?.projectStatus?.name || '—');
+    const productionMonth = orderProject?.productionMonth || null;
+    const productionMonthLabel = formatProgramacoesProductionMonthLabel(productionMonth);
+    const productionMonthSortKey = productionMonth
+        ? String(productionMonth).slice(0, 7)
+        : '';
+
+    return {
+        id: project.id,
+        thirdPartyProjectId: Number(project.id),
+        orderId,
+        orderCode,
+        clientName,
+        projectName: orderProject?.name || '—',
+        subtypeName: project.thirdPartySubtype?.name || '—',
+        characteristicName: project.projectCharacteristic?.name || '—',
+        thirdPartyStatusLabel,
+        thirdPartyStatus: project.status,
+        orderProjectStatusName,
+        designerName: project.designer?.name || '—',
+        consultantName,
+        productionMonth,
+        productionMonthLabel,
+        productionMonthSortKey,
+        thirdPartyProject: project
+    };
+}
+
+function renderProgramacoesThirdPartyProjectNameLinkHtml(row) {
+    const name = row.projectName || '—';
+    const projectId = Number(row.thirdPartyProjectId);
+    if (!projectId || typeof openThirdPartyProjectDetailModal !== 'function') {
+        return escapeHtml(name);
+    }
+
+    return `<button type="button"
+        class="programacoes-third-party-project-link inline-flex items-center gap-0.5 text-left font-medium text-slate-900 hover:text-black hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 rounded"
+        data-third-party-project-id="${projectId}"
+        title="Abrir detalhe do projeto de terceiros">
+        <span>${escapeHtml(name)}</span>
+        ${renderProgramacoesInlineLinkArrowIconHtml()}
+    </button>`;
+}
+
+function bindProgramacoesThirdPartyDetailLinks(root) {
+    root?.querySelectorAll('.programacoes-third-party-project-link').forEach(button => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const projectId = Number(button.dataset.thirdPartyProjectId);
+            const project = programacoesThirdPartyProjectsCache.find(item => Number(item.id) === projectId);
+            if (project && typeof openThirdPartyProjectDetailModal === 'function') {
+                openThirdPartyProjectDetailModal(project);
+            }
+        });
+    });
+}
+
+function programacoesThirdPartyRowMatchesMobileSearch(row, queryNorm) {
+    if (!queryNorm) return true;
+    const haystack = normalizeProgramacoesMobileSearchText([
+        row.orderCode,
+        row.clientName,
+        row.projectName,
+        row.subtypeName,
+        row.characteristicName,
+        row.thirdPartyStatusLabel,
+        row.orderProjectStatusName,
+        row.designerName,
+        row.consultantName,
+        row.productionMonthLabel
+    ].join(' '));
+    return haystack.includes(queryNorm);
+}
+
+function renderProgramacoesThirdPartyMobileCard(row) {
+    const statusClass = typeof getThirdPartyProjectStatusBadgeClass === 'function'
+        ? getThirdPartyProjectStatusBadgeClass(row.thirdPartyStatus)
+        : 'bg-slate-100 text-slate-700';
+    const orderStatusClass = typeof getPendenciasProjectStatusBadgeClass === 'function'
+        ? getPendenciasProjectStatusBadgeClass(row.orderProjectStatusName)
+        : 'bg-slate-100 text-slate-600';
+    const orderCodeHtml = renderProgramacoesOrderLinkWithArrowHtml(row, 'text-sm');
+
+    return `
+        <article class="programacoes-projects-mobile__card programacoes-third-party-mobile__card" data-third-party-project-id="${Number(row.thirdPartyProjectId)}">
+            <div class="programacoes-projects-mobile__headline">
+                <p class="programacoes-projects-mobile__order flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    ${orderCodeHtml}
+                    <span class="text-slate-300" aria-hidden="true">·</span>
+                    <span class="inline-flex items-center min-w-0">${renderProgramacoesThirdPartyProjectNameLinkHtml(row)}</span>
+                </p>
+                <p class="programacoes-projects-mobile__client">${escapeHtml(String(row.clientName || '—'))}</p>
+            </div>
+            <div class="programacoes-projects-mobile__status flex flex-wrap items-center gap-1.5">
+                <span class="inline-flex items-center text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(row.thirdPartyStatusLabel)}</span>
+                <span class="inline-flex items-center text-[10px] px-2 py-1 rounded-full font-bold uppercase ${orderStatusClass}">${escapeHtml(row.orderProjectStatusName)}</span>
+            </div>
+            <div class="programacoes-projects-mobile__details">
+                ${renderProgramacoesMobileInlineField('Subtipo', row.subtypeName)}
+                ${renderProgramacoesMobileInlineField('Projetista', row.designerName)}
+                ${renderProgramacoesMobileInlineField('Consultor', row.consultantName)}
+                ${renderProgramacoesMobileInlineField('Mês prog. prod.', row.productionMonthLabel)}
+            </div>
+        </article>
+    `;
+}
+
+function getProgramacoesThirdPartyTableColumns() {
+    return [
+        {
+            key: 'orderCode',
+            label: 'Pedido',
+            thClass: 'programacoes-col-order whitespace-nowrap',
+            cellClass: 'programacoes-col-order px-2 py-2 text-xs whitespace-nowrap',
+            render: (row) => renderProgramacoesOrderLinkWithArrowHtml(row, 'text-xs')
+        },
+        {
+            key: 'clientName',
+            label: 'Cliente',
+            thClass: 'programacoes-col-client',
+            cellClass: 'px-2 py-2 text-xs text-slate-600 programacoes-col-client',
+            render: (row) => {
+                const name = row.clientName || '—';
+                return `<span class="programacoes-col-client-text" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`;
+            }
+        },
+        {
+            key: 'projectName',
+            label: 'Projeto',
+            cellClass: 'p-3 text-xs font-medium text-slate-800',
+            getFilterValue: row => [row.projectName, row.subtypeName, row.characteristicName].join(' '),
+            render: (row) => {
+                const subtype = row.subtypeName && row.subtypeName !== '—'
+                    ? `<span class="block text-[10px] font-normal text-slate-400">${escapeHtml(row.subtypeName)}</span>`
+                    : '';
+                return `<span class="inline-flex flex-col items-start gap-0.5">${renderProgramacoesThirdPartyProjectNameLinkHtml(row)}${subtype}</span>`;
+            }
+        },
+        {
+            key: 'thirdPartyStatusLabel',
+            label: 'Status terceiro',
+            thClass: 'whitespace-nowrap',
+            cellClass: 'p-3 whitespace-nowrap',
+            getFilterValue: row => row.thirdPartyStatusLabel || '',
+            render: (row) => {
+                const statusClass = typeof getThirdPartyProjectStatusBadgeClass === 'function'
+                    ? getThirdPartyProjectStatusBadgeClass(row.thirdPartyStatus)
+                    : 'bg-slate-100 text-slate-700';
+                return `<span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(row.thirdPartyStatusLabel || '—')}</span>`;
+            }
+        },
+        {
+            key: 'orderProjectStatusName',
+            label: 'Status projeto',
+            thClass: 'whitespace-nowrap',
+            cellClass: 'p-3 whitespace-nowrap',
+            render: (row) => {
+                const statusName = row.orderProjectStatusName || '—';
+                const statusClass = typeof getPendenciasProjectStatusBadgeClass === 'function'
+                    ? getPendenciasProjectStatusBadgeClass(statusName)
+                    : 'bg-slate-100 text-slate-600';
+                return `<span class="inline-flex items-center whitespace-nowrap text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>`;
+            }
+        },
+        {
+            key: 'designerName',
+            label: 'Projetista',
+            cellClass: 'p-3 text-xs text-slate-700'
+        },
+        {
+            key: 'consultantName',
+            label: 'Consultor',
+            cellClass: 'p-3 text-xs text-slate-600'
+        },
+        {
+            key: 'productionMonthLabel',
+            label: 'Mês Prog. Prod.',
+            title: 'Mês Programação Produção',
+            thClass: 'whitespace-nowrap',
+            cellClass: 'p-3 text-xs text-slate-600 whitespace-nowrap',
+            getFilterValue: row => [row.productionMonthLabel, row.productionMonth].filter(Boolean).join(' '),
+            getSortValue: (row) => row.productionMonthSortKey || '9999-99'
+        }
+    ];
+}
+
+function mountProgramacoesThirdPartyTable(mountEl, rows, onBind) {
+    if (!mountEl || typeof mountInteractiveTable !== 'function') {
+        if (mountEl) {
+            mountEl.innerHTML = '<p class="text-xs text-red-500 text-center py-6 px-4">Tabela indisponível.</p>';
+        }
+        return;
+    }
+
+    mountInteractiveTable(mountEl, {
+        tableId: 'programacoes-third-party-projects',
+        rows,
+        columns: getProgramacoesThirdPartyTableColumns(),
+        emptyMessage: 'Nenhum projeto de terceiros na programação.',
+        filteredEmptyMessage: 'Nenhum projeto de terceiros encontrado com os filtros aplicados.',
+        minWidth: '72rem',
+        disableSort: false,
+        defaultSort: { key: 'productionMonthLabel', direction: 'asc' },
+        onBind(tbody) {
+            if (typeof bindOrderCodeLinks === 'function') {
+                bindOrderCodeLinks(tbody);
+            }
+            bindProgramacoesThirdPartyDetailLinks(tbody);
+            if (onBind) onBind(tbody);
+        }
+    });
+}
+
+function renderProgramacoesThirdPartyDesktopSection(parentEl, thirdPartyRows) {
+    if (!parentEl) return;
+
+    const count = thirdPartyRows.length;
+    const section = document.createElement('div');
+    section.innerHTML = `
+        <div class="collapsible-list-card border border-amber-200 rounded-xl overflow-hidden bg-amber-50/30 shadow-sm">
+            <div class="collapsible-list-header px-4 py-3 bg-amber-50/80 border-b border-amber-100 cursor-pointer flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2 min-w-0 flex-1">
+                    <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-amber-800 hover:text-amber-950 text-[10px]"
+                        aria-label="Expandir">▼</button>
+                    <div>
+                        <h3 class="font-bold text-sm text-slate-900">Projetos de terceiros</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">Em aberto, com ambiente do pedido no status Implantação ou posterior (ordem ≥ ${PROGRAMACOES_THIRD_PARTY_MIN_ORDER_PROJECT_SORT}).</p>
+                    </div>
+                    <span class="text-[10px] text-slate-500 shrink-0">${count} registro${count === 1 ? '' : 's'}</span>
+                </div>
+            </div>
+            <div class="collapsible-list-body bg-white p-2 sm:p-3">
+                <div id="programacoes-third-party-mount"></div>
+            </div>
+        </div>
+    `;
+    parentEl.prepend(section.firstElementChild);
+
+    const mountEl = parentEl.querySelector('#programacoes-third-party-mount');
+    mountProgramacoesThirdPartyTable(mountEl, thirdPartyRows);
+
+    if (typeof bindCollapsibleListCardToggles === 'function') {
+        bindCollapsibleListCardToggles(parentEl, { defaultCollapsed: false });
+    }
+}
+
+function renderProgramacoesThirdPartyMobileSection(parentEl, thirdPartyRows) {
+    if (!parentEl) return;
+
+    const mountId = 'programacoes-third-party-mobile-list';
+    const searchId = 'programacoes-third-party-mobile-search';
+    const countId = 'programacoes-third-party-mobile-count';
+
+    const section = document.createElement('div');
+    section.innerHTML = `
+        <div class="collapsible-list-card border border-amber-200 rounded-xl overflow-hidden bg-white shadow-sm mb-4">
+            <div class="collapsible-list-header px-4 py-3 bg-amber-50/80 border-b border-amber-100 cursor-pointer flex flex-wrap items-center gap-2">
+                <button type="button" class="list-card-toggle shrink-0 w-5 h-5 flex items-center justify-center text-amber-800 text-[10px]"
+                    aria-label="Expandir">▼</button>
+                <div class="min-w-0 flex-1">
+                    <h3 class="font-bold text-sm text-slate-900">Projetos de terceiros</h3>
+                    <p class="text-[11px] text-slate-500 mt-0.5">Abertos · ambiente com status ≥ ${PROGRAMACOES_THIRD_PARTY_MIN_ORDER_PROJECT_SORT}</p>
+                </div>
+                <span id="${countId}" class="text-[10px] text-slate-500 shrink-0" aria-live="polite">${thirdPartyRows.length} registro${thirdPartyRows.length === 1 ? '' : 's'}</span>
+            </div>
+            <div class="collapsible-list-body p-3 space-y-3">
+                <label class="programacoes-projects-mobile__search-wrap block">
+                    <input type="search" id="${searchId}" class="programacoes-projects-mobile__search w-full"
+                        placeholder="Buscar terceiros…" autocomplete="off">
+                </label>
+                <div id="${mountId}" class="programacoes-projects-mobile__list space-y-2"></div>
+            </div>
+        </div>
+    `;
+    parentEl.prepend(section.firstElementChild);
+
+    const listEl = parentEl.querySelector(`#${mountId}`);
+    const searchEl = parentEl.querySelector(`#${searchId}`);
+    const countEl = parentEl.querySelector(`#${countId}`);
+
+    const renderList = () => {
+        const queryNorm = normalizeProgramacoesMobileSearchText(searchEl?.value || '');
+        const visible = thirdPartyRows.filter(row => programacoesThirdPartyRowMatchesMobileSearch(row, queryNorm));
+        if (countEl) {
+            countEl.textContent = queryNorm
+                ? `${visible.length} de ${thirdPartyRows.length}`
+                : `${thirdPartyRows.length} registro${thirdPartyRows.length === 1 ? '' : 's'}`;
+        }
+        if (!listEl) return;
+        if (!visible.length) {
+            listEl.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">${queryNorm ? 'Nenhum resultado na busca.' : 'Nenhum projeto de terceiros.'}</p>`;
+            return;
+        }
+        listEl.innerHTML = visible.map(row => renderProgramacoesThirdPartyMobileCard(row)).join('');
+        if (typeof bindOrderCodeLinks === 'function') {
+            bindOrderCodeLinks(listEl);
+        }
+        bindProgramacoesThirdPartyDetailLinks(listEl);
+    };
+
+    searchEl?.addEventListener('input', renderList);
+    renderList();
+
+    if (typeof bindCollapsibleListCardToggles === 'function') {
+        bindCollapsibleListCardToggles(parentEl, { defaultCollapsed: false });
+    }
 }
 
 function getProgramacoesProjectsSelect() {
@@ -277,7 +747,8 @@ function renderProgramacoesProjectsTable(
     queueRows = [],
     phasesByOrderId = {},
     characteristicsMap = new Map(),
-    revisionInProgressIds = new Set()
+    revisionInProgressIds = new Set(),
+    thirdPartyRows = []
 ) {
     const content = document.getElementById('programacoes-content');
     if (!content) return;
@@ -351,8 +822,16 @@ function renderProgramacoesProjectsTable(
             });
     });
 
+    content.innerHTML = '<div id="programacoes-projects-screen" class="space-y-4"></div>';
+    const screen = document.getElementById('programacoes-projects-screen');
+    if (!screen) return;
+
+    const mainMount = document.createElement('div');
+    screen.appendChild(mainMount);
+
     if (typeof isMobileViewport === 'function' && isMobileViewport()) {
-        renderProgramacoesProjectsMobileScreen(content, {
+        renderProgramacoesThirdPartyMobileSection(screen, thirdPartyRows);
+        renderProgramacoesProjectsMobileScreen(mainMount, {
             rows,
             canReorder,
             maxSequence,
@@ -360,6 +839,8 @@ function renderProgramacoesProjectsTable(
         });
         return;
     }
+
+    renderProgramacoesThirdPartyDesktopSection(screen, thirdPartyRows);
 
     const columns = [
         {
@@ -379,9 +860,7 @@ function renderProgramacoesProjectsTable(
             thClass: 'programacoes-col-order whitespace-nowrap',
             cellClass: 'programacoes-col-order px-2 py-2 text-xs whitespace-nowrap',
             filterInputClass: 'interactive-table-filter-input--compact',
-            render: (row) => (typeof renderOrderCodeLinkHtml === 'function'
-                ? renderOrderCodeLinkHtml(row.orderId, row.orderCode, { className: 'text-xs text-slate-600' })
-                : escapeHtml(String(row.orderCode || '—')))
+            render: (row) => renderProgramacoesOrderLinkWithArrowHtml(row, 'text-xs')
         },
         {
             key: 'clientName',
@@ -495,7 +974,7 @@ function renderProgramacoesProjectsTable(
         return;
     }
 
-    renderPendenciasInteractiveTableScreen(content, {
+    renderPendenciasInteractiveTableScreen(mainMount, {
         title: 'Projetos',
         subtitle: 'Prioridade do time de projetos para entregar à produção. Quanto mais acima, maior a prioridade.',
         refreshButtonId: 'btn-programacoes-refresh-projects',
@@ -565,7 +1044,11 @@ async function loadProgramacoesProjects(options = {}) {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando programações...</p>';
     }
 
-    const result = await fetchProgramacoesProjectsQueue();
+    const [result, thirdPartyProjects] = await Promise.all([
+        fetchProgramacoesProjectsQueue(),
+        fetchProgramacoesThirdPartyProjects()
+    ]);
+
     if (result.error) {
         console.error('loadProgramacoesProjects:', result.error);
         const message = isMissingProjectProductionQueueError(result.error)
@@ -596,7 +1079,17 @@ async function loadProgramacoesProjects(options = {}) {
         : new Map();
     const revisionInProgressIds = await fetchProgramacoesRevisionInProgressIds(projects);
 
-    renderProgramacoesProjectsTable(queueRows, phasesByOrderId, characteristicsMap, revisionInProgressIds);
+    programacoesThirdPartyProjectsCache = thirdPartyProjects;
+    const thirdPartyRows = thirdPartyProjects
+        .map(project => mapProgramacoesThirdPartyRow(project));
+
+    renderProgramacoesProjectsTable(
+        queueRows,
+        phasesByOrderId,
+        characteristicsMap,
+        revisionInProgressIds,
+        thirdPartyRows
+    );
 }
 
 window.loadProgramacoesProjects = loadProgramacoesProjects;
