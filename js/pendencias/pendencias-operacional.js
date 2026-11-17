@@ -660,39 +660,6 @@ async function updatePendenciasPpcpProjectStatus(projectId, expectedStatusName, 
 
     if (!projectId || !expectedStatusName || !targetStatusName) return;
 
-    const { data: rawProject, error: readError } = await supabaseClient
-        .from('OrderProject')
-        .select('id, statusId, projectStatus:OrderProjectStatus(id, name)')
-        .eq('id', projectId)
-        .maybeSingle();
-
-    let project = rawProject;
-
-    if (readError?.message?.includes('projectStatus')) {
-        const fallback = await supabaseClient
-            .from('OrderProject')
-            .select('id, statusId')
-            .eq('id', projectId)
-            .maybeSingle();
-
-        if (fallback.error || !fallback.data) {
-            alertAppDialog('Projeto não encontrado.');
-            return;
-        }
-
-        project = (await enrichPendenciasProjectsWithStatus([fallback.data]))[0];
-    } else if (readError || !project) {
-        alertAppDialog('Projeto não encontrado.');
-        return;
-    }
-
-    const currentStatusName = getPendenciasProjectStatusName(project);
-    if (currentStatusName !== expectedStatusName) {
-        alertAppDialog('O status do projeto foi alterado. Atualize a lista.');
-        await reloadActivePendenciasPpcpList();
-        return;
-    }
-
     if (!(await confirmAppDialog(confirmMessage || `Alterar status do projeto para "${targetStatusName}"?`))) return;
 
     const statusId = await getPendenciasStatusIdByName(targetStatusName);
@@ -701,32 +668,118 @@ async function updatePendenciasPpcpProjectStatus(projectId, expectedStatusName, 
         return;
     }
 
-    const now = new Date().toISOString();
-    const { error } = await supabaseClient
-        .from('OrderProject')
-        .update({
-            statusId,
-            updatedById: currentUser.id,
-            updatedAt: now
-        })
-        .eq('id', projectId);
+    const isStartingImplantacao = targetStatusName === PENDENCIAS_STATUS_IMPLANTACAO;
 
-    if (error) {
-        alertAppDialog('Erro ao alterar status: ' + error.message);
-        return;
+    try {
+        if (typeof setPendenciasActionLoading === 'function') {
+            setPendenciasActionLoading(true, 'Verificando projeto...');
+        }
+
+        const { data: rawProject, error: readError } = await supabaseClient
+            .from('OrderProject')
+            .select('id, statusId, projectStatus:OrderProjectStatus(id, name)')
+            .eq('id', projectId)
+            .maybeSingle();
+
+        let project = rawProject;
+
+        if (readError?.message?.includes('projectStatus')) {
+            const fallback = await supabaseClient
+                .from('OrderProject')
+                .select('id, statusId')
+                .eq('id', projectId)
+                .maybeSingle();
+
+            if (fallback.error || !fallback.data) {
+                alertAppDialog('Projeto não encontrado.');
+                return;
+            }
+
+            project = (await enrichPendenciasProjectsWithStatus([fallback.data]))[0];
+        } else if (readError || !project) {
+            alertAppDialog('Projeto não encontrado.');
+            return;
+        }
+
+        const currentStatusName = getPendenciasProjectStatusName(project);
+        if (currentStatusName !== expectedStatusName) {
+            alertAppDialog('O status do projeto foi alterado. Atualize a lista.');
+            if (typeof setPendenciasActionLoading === 'function') {
+                setPendenciasActionLoading(true, 'Atualizando lista...');
+            }
+            await reloadActivePendenciasPpcpList();
+            return;
+        }
+
+        if (typeof setPendenciasActionLoading === 'function') {
+            setPendenciasActionLoading(
+                true,
+                isStartingImplantacao ? 'Iniciando implantação...' : `Alterando status para ${targetStatusName}...`
+            );
+        }
+
+        const now = new Date().toISOString();
+        const { error } = await supabaseClient
+            .from('OrderProject')
+            .update({
+                statusId,
+                updatedById: currentUser.id,
+                updatedAt: now
+            })
+            .eq('id', projectId);
+
+        if (error) throw error;
+
+        if (isStartingImplantacao && typeof createImplantacaoForProject === 'function') {
+            if (typeof setPendenciasActionLoading === 'function') {
+                setPendenciasActionLoading(true, 'Criando registro de implantação...');
+            }
+            await createImplantacaoForProject(projectId);
+        }
+
+        if (isStartingImplantacao && typeof notifyOrderProjectStatusChangeForProjects === 'function') {
+            if (typeof setPendenciasActionLoading === 'function') {
+                setPendenciasActionLoading(true, 'Enviando notificações...');
+            }
+            await notifyOrderProjectStatusChangeForProjects([projectId], PENDENCIAS_STATUS_IMPLANTACAO);
+        }
+
+        if (typeof setPendenciasActionLoading === 'function') {
+            setPendenciasActionLoading(true, 'Atualizando lista...');
+        }
+        await reloadActivePendenciasPpcpList();
+
+        if (typeof setPendenciasActionLoading === 'function') {
+            const successMessage = isStartingImplantacao
+                ? 'Implantação iniciada com sucesso!'
+                : 'Status atualizado com sucesso!';
+            setPendenciasActionLoading(true, successMessage, 'success');
+            const waitMs = typeof APP_OVERLAY_SUCCESS_MS === 'number' ? APP_OVERLAY_SUCCESS_MS : 800;
+            if (typeof waitPendenciasStatus === 'function') {
+                await waitPendenciasStatus(waitMs);
+            } else {
+                await new Promise(resolve => setTimeout(resolve, waitMs));
+            }
+        }
+    } catch (error) {
+        console.error('updatePendenciasPpcpProjectStatus:', error);
+        if (typeof setPendenciasActionLoading === 'function') {
+            const detail = error?.message || 'Erro ao alterar status.';
+            setPendenciasActionLoading(true, `Erro: ${detail}`, 'error');
+            const waitMs = typeof APP_OVERLAY_ERROR_MS === 'number' ? APP_OVERLAY_ERROR_MS : 2000;
+            if (typeof waitPendenciasStatus === 'function') {
+                await waitPendenciasStatus(waitMs);
+            } else {
+                await new Promise(resolve => setTimeout(resolve, waitMs));
+            }
+        } else {
+            alertAppDialog('Erro ao alterar status: ' + (error?.message || error));
+        }
+    } finally {
+        if (typeof setPendenciasActionLoading === 'function') {
+            setPendenciasActionLoading(false);
+        }
     }
-
-    if (targetStatusName === PENDENCIAS_STATUS_IMPLANTACAO
-        && typeof createImplantacaoForProject === 'function') {
-        await createImplantacaoForProject(projectId);
-    }
-
-    if (targetStatusName === PENDENCIAS_STATUS_IMPLANTACAO
-        && typeof notifyOrderProjectStatusChangeForProjects === 'function') {
-        await notifyOrderProjectStatusChangeForProjects([projectId], PENDENCIAS_STATUS_IMPLANTACAO);
-    }
-
-    await reloadActivePendenciasPpcpList();
 }
 
 async function reloadActivePendenciasPpcpList() {

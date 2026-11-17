@@ -59,6 +59,7 @@ function normalizeAppUserProfile(profile) {
         isFactoryManager: Boolean(profile.isFactoryManager),
         isFactoryAdministrative: Boolean(profile.isFactoryAdministrative),
         isDetailing: Boolean(profile.isDetailing),
+        isBudgetEstimator: Boolean(profile.isBudgetEstimator),
         isReviewer: Boolean(profile.isReviewer ?? profile.isProjectLeader),
         isThirdParty: Boolean(profile.isThirdParty),
         isInstaller: Boolean(profile.isInstaller),
@@ -93,6 +94,10 @@ function isDetalhamento(user = currentUser) {
     if (!user) return false;
     if (user.role === 'Admin') return true;
     return user.role === 'Projetista' && Boolean(user.isDetailing);
+}
+
+function isBudgetEstimator(user = currentUser) {
+    return user?.role === 'Projetista' && Boolean(user?.isBudgetEstimator);
 }
 
 function isGestorFabrica(user = currentUser) {

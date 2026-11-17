@@ -1,7 +1,7 @@
 let pendenciasGestorDetalhamentoRowsCache = [];
 
 const DETALHAMENTO_PENDENCIAS_SELECT = `
-    id, orderProjectId, status, projectFilePath, serverFolderPath, designerId, startedAt, completedAt,
+    id, orderProjectId, detailingType, status, projectFilePath, serverFolderPath, designerId, startedAt, completedAt,
     designer:appUsers!Detailing_designerId_fkey(id, name),
     orderProject:OrderProject(
         id, orderId, projectCode, name, statusId, deliveryDate,
@@ -68,6 +68,10 @@ function mapPendenciasDetalhamentoRow(record) {
     const project = record.orderProject || {};
     return {
         detalhamentoId: record.id,
+        detailingType: record.detailingType,
+        detailingTypeLabel: typeof formatDetailingTypeLabel === 'function'
+            ? formatDetailingTypeLabel(record.detailingType)
+            : (record.detailingType || 'Montagem'),
         detalhamentoStatus: record.status,
         projectFilePath: record.projectFilePath,
         designerName: record.designer?.name || '—',
@@ -281,19 +285,21 @@ function renderPendenciasGestorDetalhamentoList(records) {
 
     const rows = (records || []).map(record => mapPendenciasInteractiveIdentity(record, {
         detalhamentoId: record.detalhamentoId,
+        detailingTypeLabel: record.detailingTypeLabel,
         projectFilePath: record.projectFilePath || '',
         statusName: record.detalhamentoStatus,
         statusClass: typeof getDetalhamentoStatusBadgeClass === 'function'
             ? getDetalhamentoStatusBadgeClass(record.detalhamentoStatus)
             : 'bg-slate-100 text-slate-600',
-        deliveryLabel: formatPendenciasDeliveryDate(record.deliveryDate),
-        deliveryDate: record.deliveryDate
+        orderProjectStatusName: typeof getPendenciasProjectStatusName === 'function'
+            ? getPendenciasProjectStatusName(record)
+            : (record.projectStatus?.name || '—')
     }));
 
     pendenciasGestorDetalhamentoRowsCache = rows;
 
     renderPendenciasInteractiveTableScreen(content, {
-        title: 'Aguardando Detalhamento',
+        title: 'Detalhamento sem projetista',
         subtitle: 'Selecione o projetista em cada linha; use o botão no topo para associar todos de uma vez.',
         headerActionsHtml: `<button type="button" id="pendencias-gestor-detalhamento-save-all" disabled
             class="text-xs bg-violet-700 text-white px-4 py-2 rounded-lg font-medium hover:bg-violet-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
@@ -308,11 +314,19 @@ function renderPendenciasGestorDetalhamentoList(records) {
         emptyMessage: 'Nenhum projeto aguardando associação.',
         columns: [
             ...getPendenciasInteractiveIdentityColumns(),
-            getPendenciasInteractiveDateColumn({
-                key: 'deliveryLabel',
-                label: 'Entrega Proj. Téc.',
-                sortKey: 'deliveryDate'
-            }),
+            {
+                key: 'orderProjectStatusName',
+                label: 'Status projeto',
+                thClass: 'whitespace-nowrap',
+                cellClass: 'p-3 whitespace-nowrap',
+                render: (row) => {
+                    const statusName = row.orderProjectStatusName || '—';
+                    const statusClass = typeof getPendenciasProjectStatusBadgeClass === 'function'
+                        ? getPendenciasProjectStatusBadgeClass(statusName)
+                        : 'bg-slate-100 text-slate-600';
+                    return `<span class="inline-flex text-[10px] px-2 py-1 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>`;
+                }
+            },
             {
                 key: 'projectFilePath',
                 label: 'Pasta (implantação)',
@@ -320,6 +334,13 @@ function renderPendenciasGestorDetalhamentoList(records) {
                 render: (row) => `<span title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</span>`
             },
             getPendenciasInteractiveStatusColumn(),
+            {
+                key: 'detailingTypeLabel',
+                label: 'Tipo',
+                thClass: 'whitespace-nowrap',
+                cellClass: 'p-3 text-xs text-slate-700 whitespace-nowrap',
+                render: (row) => escapeHtml(row.detailingTypeLabel || 'Montagem')
+            },
             {
                 key: 'designerSelect',
                 label: 'Projetista',
@@ -375,6 +396,8 @@ function renderPendenciasProjetistaDetalhamentoList(records, overviewMode = fals
 
     const rows = (records || []).map(record => mapPendenciasInteractiveIdentity(record, {
         detalhamentoId: record.detalhamentoId,
+        detailingType: record.detailingType,
+        detailingTypeLabel: record.detailingTypeLabel,
         projectFilePath: record.projectFilePath || '',
         designerName: record.designerName || '—',
         statusName: record.detalhamentoStatus,
@@ -413,17 +436,28 @@ function renderPendenciasProjetistaDetalhamentoList(records, overviewMode = fals
                 cellClass: 'p-3 text-xs text-slate-600 max-w-[12rem] truncate',
                 render: (row) => `<span title="${escapeHtml(row.projectFilePath || '')}">${escapeHtml(row.projectFilePath || '—')}</span>`
             },
+            {
+                key: 'detailingTypeLabel',
+                label: 'Tipo',
+                thClass: 'whitespace-nowrap',
+                cellClass: 'p-3 text-xs text-slate-700 whitespace-nowrap',
+                render: (row) => escapeHtml(row.detailingTypeLabel || 'Montagem')
+            },
             getPendenciasInteractiveStatusColumn(),
             getPendenciasInteractiveActionColumn({
                 cellClass: 'p-3 text-right whitespace-nowrap space-x-1',
                 render: (row) => {
                     const projectName = escapeHtml(row.projectName || 'Projeto');
+                    const detailingId = Number(row.detalhamentoId) || '';
+                    const detailingType = escapeHtml(row.detailingType || '');
                     return `
                         ${row.canStart
                             ? `<button type="button"
                                 class="pendencias-detalhamento-iniciar-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-violet-100 text-violet-800 hover:bg-violet-200"
                                 data-project-id="${row.id}"
-                                data-project-name="${projectName}">
+                                data-project-name="${projectName}"
+                                data-detailing-id="${detailingId}"
+                                data-detailing-type="${detailingType}">
                                 Iniciar
                             </button>`
                             : ''}
@@ -431,7 +465,9 @@ function renderPendenciasProjetistaDetalhamentoList(records, overviewMode = fals
                             ? `<button type="button"
                                 class="pendencias-detalhamento-open-btn text-xs px-2.5 py-1 rounded-lg font-medium bg-indigo-100 text-indigo-800 hover:bg-indigo-200"
                                 data-project-id="${row.id}"
-                                data-project-name="${projectName}">
+                                data-project-name="${projectName}"
+                                data-detailing-id="${detailingId}"
+                                data-detailing-type="${detailingType}">
                                 Abrir
                             </button>`
                             : ''}
@@ -444,8 +480,10 @@ function renderPendenciasProjetistaDetalhamentoList(records, overviewMode = fals
                 button.addEventListener('click', () => {
                     const projectId = Number(button.dataset.projectId);
                     const projectName = button.dataset.projectName || 'Projeto';
+                    const detailingId = Number(button.dataset.detailingId) || null;
+                    const detailingType = button.dataset.detailingType || null;
                     if (projectId && typeof openDetalhamentoModal === 'function') {
-                        openDetalhamentoModal(projectId, projectName);
+                        openDetalhamentoModal(projectId, projectName, { detailingId, detailingType });
                     }
                 });
             });
@@ -454,9 +492,11 @@ function renderPendenciasProjetistaDetalhamentoList(records, overviewMode = fals
                 button.addEventListener('click', async () => {
                     const projectId = Number(button.dataset.projectId);
                     const projectName = button.dataset.projectName || 'Projeto';
+                    const detailingId = Number(button.dataset.detailingId) || null;
+                    const detailingType = button.dataset.detailingType || null;
                     if (!projectId || typeof openDetalhamentoModal !== 'function') return;
 
-                    await openDetalhamentoModal(projectId, projectName);
+                    await openDetalhamentoModal(projectId, projectName, { detailingId, detailingType });
                     if (typeof handleDetalhamentoIniciar === 'function') {
                         await handleDetalhamentoIniciar();
                     }

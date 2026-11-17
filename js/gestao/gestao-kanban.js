@@ -127,6 +127,7 @@ function renderGestaoKanbanProjectRow(project, options = {}) {
     const eaiBtnTone = typeof normalizeExternalAssemblyInspectionKanbanButtonTone === 'function'
         ? normalizeExternalAssemblyInspectionKanbanButtonTone(eaiSummary.tone, eaiSummary)
         : (eaiSummary.total ? 'gray' : 'none');
+    const eaiOrderId = Number(project.orderId || order?.id || 0);
     const aggregatorTooltip = (typeof isOrderProjectAggregator === 'function' && isOrderProjectAggregator(project)
         && aggregatorChildLabels.length)
         ? aggregatorChildLabels.join(', ')
@@ -156,6 +157,7 @@ function renderGestaoKanbanProjectRow(project, options = {}) {
                 class="gestao-kanban-eai-btn text-[10px] border px-2 py-0.5 rounded-md font-medium"
                 data-eai-tone="${escapeHtml(eaiBtnTone)}"
                 data-order-project-id="${project.id}"
+                data-order-id="${eaiOrderId || ''}"
                 data-project-label="${escapeHtml(eaiLabel)}"
                 title="Vistoria de Montagem Externa (${eaiSummary.finished}/${eaiSummary.total})">
                 ${escapeHtml(eaiBtnLabel)}

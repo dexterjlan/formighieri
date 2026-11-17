@@ -2,6 +2,12 @@ const DETALHAMENTO_STATUS_AGUARDANDO = 'Aguardando Detalhamento';
 const DETALHAMENTO_STATUS_EM_ANDAMENTO = 'Detalhamento';
 const DETALHAMENTO_STATUS_PRONTO = 'Pronto';
 const DETALHAMENTO_PROJECT_STATUS_EM_PRODUCAO = 'Em Produção';
+const DETAILING_TYPE_ASSEMBLY = 'Assembly';
+const DETAILING_TYPE_PAINTING = 'Painting';
+const DETAILING_TYPE_LABELS = {
+    [DETAILING_TYPE_ASSEMBLY]: 'Montagem',
+    [DETAILING_TYPE_PAINTING]: 'Pintura'
+};
 
 let activeDetalhamentoOrderProjectId = null;
 let activeDetalhamentoRecord = null;
@@ -32,20 +38,141 @@ function canAccessDetalhamentoModal() {
     return Boolean(activeDetalhamentoRecord?.id);
 }
 
-async function fetchDetailingByOrderProjectId(orderProjectId) {
-    const { data, error } = await supabaseClient
+function normalizeDetailingType(detailingType) {
+    return detailingType === DETAILING_TYPE_PAINTING ? DETAILING_TYPE_PAINTING : DETAILING_TYPE_ASSEMBLY;
+}
+
+function formatDetailingTypeLabel(detailingType) {
+    return DETAILING_TYPE_LABELS[normalizeDetailingType(detailingType)] || DETAILING_TYPE_LABELS[DETAILING_TYPE_ASSEMBLY];
+}
+
+function formatDetalhamentoModalTitle(detailingType) {
+    return `Detalhamento - ${formatDetailingTypeLabel(detailingType)}`;
+}
+
+const DETAILING_EMBED_SELECT = '*, designer:appUsers!Detailing_designerId_fkey(id, name)';
+
+function pickDetailingFromRows(rows, detailingType = DETAILING_TYPE_ASSEMBLY) {
+    const normalized = normalizeDetailingType(detailingType);
+    const list = rows || [];
+    const match = list.find(row => normalizeDetailingType(row?.detailingType) === normalized);
+    if (match) return match;
+    if (normalized === DETAILING_TYPE_ASSEMBLY && list.length === 1) return list[0];
+    return null;
+}
+
+async function fetchDetailingsByOrderProjectId(orderProjectId) {
+    if (!orderProjectId) return [];
+
+    let result = await supabaseClient
         .from('Detailing')
-        .select('*, designer:appUsers!Detailing_designerId_fkey(id, name)')
+        .select(DETAILING_EMBED_SELECT)
         .eq('orderProjectId', orderProjectId)
+        .order('detailingType', { ascending: true });
+
+    if (result.error?.message?.includes('detailingType')) {
+        result = await supabaseClient
+            .from('Detailing')
+            .select(DETAILING_EMBED_SELECT)
+            .eq('orderProjectId', orderProjectId)
+            .order('createdAt', { ascending: true });
+    }
+
+    if (result.error?.message?.includes('Detailing')) return [];
+    if (result.error) throw result.error;
+    return result.data || [];
+}
+
+async function fetchDetailingByOrderProjectId(orderProjectId, options = {}) {
+    if (!orderProjectId) return null;
+
+    const detailingType = normalizeDetailingType(options.detailingType);
+    const detailingId = Number(options.detailingId || 0);
+
+    if (detailingId) {
+        const { data, error } = await supabaseClient
+            .from('Detailing')
+            .select(DETAILING_EMBED_SELECT)
+            .eq('id', detailingId)
+            .maybeSingle();
+        if (error?.message?.includes('Detailing')) return null;
+        if (error) throw error;
+        return data;
+    }
+
+    let result = await supabaseClient
+        .from('Detailing')
+        .select(DETAILING_EMBED_SELECT)
+        .eq('orderProjectId', orderProjectId)
+        .eq('detailingType', detailingType)
         .maybeSingle();
 
-    if (error?.message?.includes('Detailing')) return null;
-    if (error) throw error;
-    return data;
+    if (result.error?.message?.includes('detailingType')) {
+        result = await supabaseClient
+            .from('Detailing')
+            .select(DETAILING_EMBED_SELECT)
+            .eq('orderProjectId', orderProjectId)
+            .maybeSingle();
+        if (result.data && !result.error) {
+            if (detailingType === DETAILING_TYPE_PAINTING) return null;
+            return result.data;
+        }
+    }
+
+    if (result.error?.message?.includes('Detailing')) return null;
+    if (result.error) throw result.error;
+    if (result.data) return result.data;
+
+    const rows = await fetchDetailingsByOrderProjectId(orderProjectId);
+    return pickDetailingFromRows(rows, detailingType);
+}
+
+function isTintaItemEligibleForPaintingDetailing(tintaItem) {
+    if (!tintaItem || tintaItem.isNotApplicable) return false;
+    return typeof isImplementationPurchaseItemSentToCompras === 'function'
+        && isImplementationPurchaseItemSentToCompras(tintaItem);
+}
+
+async function orderProjectImplementationHasPaintList(orderProjectId, options = {}) {
+    const projectKey = Number(orderProjectId || 0);
+    if (!projectKey) return false;
+
+    if (Array.isArray(options.purchaseItems)) {
+        const tinta = options.purchaseItems.find(
+            item => String(item?.purchaseType || '').trim() === 'Tinta'
+        );
+        return isTintaItemEligibleForPaintingDetailing(tinta);
+    }
+
+    if (typeof fetchImplantacaoByOrderProjectId !== 'function') return false;
+
+    const implantacao = await fetchImplantacaoByOrderProjectId(projectKey);
+    if (!implantacao?.id || typeof fetchImplementationPurchaseItems !== 'function') return false;
+
+    const items = await fetchImplementationPurchaseItems(implantacao.id);
+    const tinta = (items || []).find(
+        item => String(item?.purchaseType || '').trim() === 'Tinta'
+    );
+    if (!tinta || tinta.isNotApplicable) return false;
+
+    if (typeof loadImplantacaoCompraLinkedPurchaseItemIds === 'function') {
+        await loadImplantacaoCompraLinkedPurchaseItemIds(
+            implantacao.id,
+            items,
+            projectKey
+        );
+    }
+
+    return isTintaItemEligibleForPaintingDetailing(tinta);
 }
 
 window.fetchDetailingByOrderProjectId = fetchDetailingByOrderProjectId;
 window.fetchDetalhamentoByOrderProjectId = fetchDetailingByOrderProjectId;
+window.fetchDetailingsByOrderProjectId = fetchDetailingsByOrderProjectId;
+window.formatDetailingTypeLabel = formatDetailingTypeLabel;
+window.normalizeDetailingType = normalizeDetailingType;
+window.DETAILING_TYPE_ASSEMBLY = DETAILING_TYPE_ASSEMBLY;
+window.DETAILING_TYPE_PAINTING = DETAILING_TYPE_PAINTING;
 
 async function fetchDetalhamentoProjetoPathFromImplantacao(orderProjectId) {
     if (typeof fetchImplantacaoByOrderProjectId !== 'function') return '';
@@ -53,48 +180,99 @@ async function fetchDetalhamentoProjetoPathFromImplantacao(orderProjectId) {
     return implantacao?.projectFilePath?.trim() || '';
 }
 
-async function createDetalhamentoRecord(orderProjectId) {
+async function createDetalhamentoRecord(orderProjectId, detailingType = DETAILING_TYPE_ASSEMBLY) {
     const projectFilePath = await fetchDetalhamentoProjetoPathFromImplantacao(orderProjectId);
     const now = new Date().toISOString();
+    const normalizedType = normalizeDetailingType(detailingType);
 
-    const { data, error } = await supabaseClient
+    let payload = {
+        orderProjectId,
+        status: DETALHAMENTO_STATUS_AGUARDANDO,
+        projectFilePath: projectFilePath || null,
+        detailingType: normalizedType,
+        createdById: currentUser?.id || null,
+        updatedById: currentUser?.id || null,
+        updatedAt: now
+    };
+
+    let result = await supabaseClient
         .from('Detailing')
-        .insert({
-            orderProjectId,
-            status: DETALHAMENTO_STATUS_AGUARDANDO,
-            projectFilePath: projectFilePath || null,
-            createdById: currentUser?.id || null,
-            updatedById: currentUser?.id || null,
-            updatedAt: now
-        })
-        .select('*, designer:appUsers!Detailing_designerId_fkey(id, name)')
+        .insert(payload)
+        .select(DETAILING_EMBED_SELECT)
         .single();
 
-    if (error) throw error;
-    return data;
+    if (result.error?.message?.includes('detailingType')) {
+        const { detailingType: _omit, ...legacyPayload } = payload;
+        result = await supabaseClient
+            .from('Detailing')
+            .insert(legacyPayload)
+            .select(DETAILING_EMBED_SELECT)
+            .single();
+    }
+
+    if (result.error) throw result.error;
+    return result.data;
 }
 
-async function ensureDetalhamentoRecord(orderProjectId) {
-    const existing = await fetchDetailingByOrderProjectId(orderProjectId);
+async function ensureDetailingRecord(orderProjectId, detailingType = DETAILING_TYPE_ASSEMBLY) {
+    const existing = await fetchDetailingByOrderProjectId(orderProjectId, { detailingType });
     if (existing) return existing;
-    return createDetalhamentoRecord(orderProjectId);
+    return createDetalhamentoRecord(orderProjectId, detailingType);
 }
 
-async function createDetailingForProject(orderProjectId) {
+async function ensureDetalhamentoRecord(orderProjectId, detailingType = DETAILING_TYPE_ASSEMBLY) {
+    return ensureDetailingRecord(orderProjectId, detailingType);
+}
+
+async function notifyNewDetailingCreated(orderProjectId, record) {
+    if (!record || typeof notifyAguardandoDetalhamentoEmail !== 'function') return;
+    await notifyAguardandoDetalhamentoEmail({
+        orderProjectId,
+        projectFilePath: record.projectFilePath || '',
+        detailingType: record.detailingType
+    });
+}
+
+async function createDetailingForProject(orderProjectId, options = {}) {
+    const reportProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
+
     try {
-        const existing = await fetchDetailingByOrderProjectId(orderProjectId);
-        if (existing) return existing;
+        const projectKey = Number(orderProjectId || 0);
+        if (!projectKey) return null;
 
-        const record = await createDetalhamentoRecord(orderProjectId);
+        const createdRecords = [];
 
-        if (record && typeof notifyAguardandoDetalhamentoEmail === 'function') {
-            await notifyAguardandoDetalhamentoEmail({
-                orderProjectId,
-                projectFilePath: record.projectFilePath || ''
-            });
+        reportProgress?.('Verificando detalhamento Montagem...');
+        if (!await fetchDetailingByOrderProjectId(projectKey, { detailingType: DETAILING_TYPE_ASSEMBLY })) {
+            reportProgress?.('Criando detalhamento Montagem...');
+            const assembly = await createDetalhamentoRecord(projectKey, DETAILING_TYPE_ASSEMBLY);
+            createdRecords.push(assembly);
         }
 
-        return record;
+        const hasPaintList = await orderProjectImplementationHasPaintList(projectKey, options);
+        if (hasPaintList) {
+            reportProgress?.('Lista de tintas enviada às compras — verificando detalhamento Pintura...');
+            if (!await fetchDetailingByOrderProjectId(projectKey, { detailingType: DETAILING_TYPE_PAINTING })) {
+                reportProgress?.('Criando detalhamento Pintura...');
+                const painting = await createDetalhamentoRecord(projectKey, DETAILING_TYPE_PAINTING);
+                createdRecords.push(painting);
+            }
+        }
+
+        if (createdRecords.length) {
+            reportProgress?.('Enviando notificações de detalhamento...');
+            for (const record of createdRecords) {
+                await notifyNewDetailingCreated(projectKey, record);
+            }
+        } else {
+            reportProgress?.(hasPaintList
+                ? 'Detalhamentos Montagem e Pintura já existem.'
+                : 'Detalhamento Montagem já existe.');
+        }
+
+        return await fetchDetailingByOrderProjectId(projectKey, { detailingType: DETAILING_TYPE_ASSEMBLY })
+            || createdRecords[0]
+            || null;
     } catch (error) {
         console.warn('createDetailingForProject:', orderProjectId, error);
         return null;
@@ -182,6 +360,11 @@ function populateDetalhamentoForm(record) {
         badge.className = `text-[10px] px-2.5 py-1 rounded-full font-bold uppercase ${getDetalhamentoStatusBadgeClass(record?.status)}`;
     }
 
+    const titleEl = document.getElementById('detalhamento-modal-title');
+    if (titleEl) {
+        titleEl.textContent = formatDetalhamentoModalTitle(record?.detailingType);
+    }
+
     if (projectFilePath) projectFilePath.value = record?.projectFilePath || '';
     if (serverFolderPath) serverFolderPath.value = record?.serverFolderPath || '';
     if (designerSelect) designerSelect.value = record?.designerId ? String(record.designerId) : '';
@@ -251,6 +434,10 @@ function updateDetalhamentoActionButtons(record = activeDetalhamentoRecord) {
         serverInput.readOnly = !serverEditable;
         serverInput.classList.toggle('bg-slate-50', !serverEditable);
     }
+
+    if (typeof syncDetailingDriveUploadUi === 'function') {
+        syncDetailingDriveUploadUi();
+    }
 }
 
 async function refreshDetalhamentoRelatedViews(orderProjectId) {
@@ -273,7 +460,7 @@ async function refreshDetalhamentoRelatedViews(orderProjectId) {
     }
 }
 
-async function openDetailingModal(orderProjectId, projectName = '') {
+async function openDetailingModal(orderProjectId, projectName = '', options = {}) {
     if (typeof primeGoogleDriveAppsScript === 'function') {
         primeGoogleDriveAppsScript();
     }
@@ -283,7 +470,10 @@ async function openDetailingModal(orderProjectId, projectName = '') {
     activeDetalhamentoProjectName = projectName || 'Projeto';
 
     try {
-        activeDetalhamentoRecord = await fetchDetailingByOrderProjectId(activeDetalhamentoOrderProjectId);
+        activeDetalhamentoRecord = await fetchDetailingByOrderProjectId(activeDetalhamentoOrderProjectId, {
+            detailingType: options.detailingType,
+            detailingId: options.detailingId
+        });
         if (!activeDetalhamentoRecord) {
             alertAppDialog('Detalhamento não encontrado para este projeto.', { variant: 'warning', title: 'Aviso' });
             return;
@@ -296,7 +486,10 @@ async function openDetailingModal(orderProjectId, projectName = '') {
             designerSelect.innerHTML = `<option value="">Selecione...</option>${getDetalhamentoProjetistaOptionsHtml(activeDetalhamentoRecord.designerId)}`;
         }
 
-        document.getElementById('detalhamento-modal-project-name').textContent = activeDetalhamentoProjectName;
+        const nameEl = document.getElementById('detalhamento-modal-project-name');
+        if (nameEl) {
+            nameEl.textContent = activeDetalhamentoProjectName;
+        }
         populateDetalhamentoForm(activeDetalhamentoRecord);
         await loadDetalhamentoHeaderContext();
         toggleModal('detalhamento-modal', true);
@@ -871,17 +1064,27 @@ function renderProjectViewDetailingSection(record) {
     const wrap = document.getElementById('project-view-detalhamento-wrap');
     if (!wrap) return;
 
-    if (!record) {
+    const records = Array.isArray(record) ? record : (record ? [record] : []);
+    if (!records.length) {
         wrap.classList.add('hidden');
         return;
     }
 
     wrap.classList.remove('hidden');
 
+    const primary = records[0];
+    const statusSummary = records
+        .map(item => `${formatDetailingTypeLabel(item.detailingType)}: ${item.status || DETALHAMENTO_STATUS_AGUARDANDO}`)
+        .join(' · ');
+
     const statusEl = document.getElementById('project-view-detalhamento-status');
     if (statusEl) {
-        statusEl.textContent = record.status || DETALHAMENTO_STATUS_AGUARDANDO;
-        statusEl.className = `text-[10px] px-2 py-0.5 rounded-full font-semibold ${getDetalhamentoStatusBadgeClass(record.status)}`;
+        statusEl.textContent = records.length > 1
+            ? statusSummary
+            : (primary.status || DETALHAMENTO_STATUS_AGUARDANDO);
+        statusEl.className = records.length > 1
+            ? 'text-[10px] px-2 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-700'
+            : `text-[10px] px-2 py-0.5 rounded-full font-semibold ${getDetalhamentoStatusBadgeClass(primary.status)}`;
     }
 
     const setText = (id, value) => {
@@ -889,19 +1092,19 @@ function renderProjectViewDetailingSection(record) {
         if (el) el.textContent = value || '—';
     };
 
-    setText('project-view-detalhamento-designer', record.designer?.name || '—');
-    setText('project-view-detalhamento-started-at', formatDetalhamentoViewDate(record.startedAt));
-    setText('project-view-detalhamento-completed-at', formatDetalhamentoViewDate(record.completedAt));
+    setText('project-view-detalhamento-designer', primary.designer?.name || '—');
+    setText('project-view-detalhamento-started-at', formatDetalhamentoViewDate(primary.startedAt));
+    setText('project-view-detalhamento-completed-at', formatDetalhamentoViewDate(primary.completedAt));
 
     const projectFilePathEl = document.getElementById('project-view-detalhamento-projeto-path');
-    const projectFilePath = record.projectFilePath || '—';
+    const projectFilePath = primary.projectFilePath || '—';
     if (projectFilePathEl) {
         projectFilePathEl.textContent = projectFilePath;
         projectFilePathEl.classList.toggle('project-view-path--empty', projectFilePath === '—');
     }
 
     const serverPathEl = document.getElementById('project-view-detalhamento-server-path');
-    const serverPath = record.serverFolderPath || '—';
+    const serverPath = primary.serverFolderPath || '—';
     if (serverPathEl) {
         serverPathEl.textContent = serverPath;
         serverPathEl.classList.toggle('project-view-path--empty', serverPath === '—');
@@ -909,6 +1112,7 @@ function renderProjectViewDetailingSection(record) {
 }
 
 window.renderProjectViewDetailingSection = renderProjectViewDetailingSection;
+window.orderProjectImplementationHasPaintList = orderProjectImplementationHasPaintList;
 
 function bindDetailingEvents() {
     document.getElementById('btn-close-detalhamento-modal')?.addEventListener('click', closeDetailingModal);
@@ -932,6 +1136,8 @@ function bindDetailingEvents() {
 }
 
 const bindDetalhamentoEvents = bindDetailingEvents;
+window.bindDetailingEvents = bindDetailingEvents;
+window.bindDetalhamentoEvents = bindDetalhamentoEvents;
 
 const fetchDetalhamentoByOrderProjectId = fetchDetailingByOrderProjectId;
 const createDetalhamentoForProject = createDetailingForProject;

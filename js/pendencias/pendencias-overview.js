@@ -31,7 +31,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'carga-por-projetista': 'Carga atual de cada projetista: Aguardando Projeto Técnico até Detalhamento, mais projetos de terceiros. Projetista inativo aparece em Outros. Implantação conta para quem iniciou.',
         'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.',
         'terceiros-sem-projetistas': 'Projetos de terceiros sem projetista responsável.',
-        'aguardando-detalhamento': 'Projetos em produção aguardando associação de projetista de detalhamento.',
+        'aguardando-detalhamento': 'Detalhamentos sem projetista associado — associe na lista dedicada.',
         expedicao: 'Projetos em expedição aguardando início da montagem externa.',
         'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
     },
@@ -341,7 +341,7 @@ function renderPendenciasSectionOverview(section, cards) {
             </div>
             <div class="p-4">
                 <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                    ${cardsHtml}
+                    ${cardsHtml || '<p class="text-xs text-slate-400 text-center py-8 col-span-full">Nenhum submenu disponível para o seu perfil.</p>'}
                 </div>
                 ${hasError
                     ? '<p class="text-xs text-amber-600 mt-4">Alguns totais não puderam ser carregados. Tente atualizar.</p>'

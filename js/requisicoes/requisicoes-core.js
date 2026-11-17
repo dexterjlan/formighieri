@@ -147,6 +147,24 @@ function openRequisicoesPurchaseFromImplementation(draft) {
     showRequisicoes('purchases');
 }
 
+function openRequisicoesPurchaseFromExternalAssemblyInspection(draft) {
+    if (typeof openExternalAssemblyInspectionPurchaseRequestFormModal === 'function') {
+        void openExternalAssemblyInspectionPurchaseRequestFormModal(draft);
+        return;
+    }
+    requisicoesPurchaseDraft = {
+        origin: 'externalAssemblyInspection',
+        externalAssemblyInspectionId: draft?.externalAssemblyInspectionId || null,
+        orderId: draft?.orderId || null,
+        orderProjectId: draft?.orderProjectId || null,
+        purchaseReasonId: draft?.purchaseReasonId || null,
+        projectLabel: draft?.projectLabel || ''
+    };
+    if (typeof showRequisicoes === 'function') {
+        showRequisicoes('purchases');
+    }
+}
+
 function takeRequisicoesPurchaseDraft() {
     return requisicoesPurchaseDraft;
 }
@@ -185,4 +203,5 @@ window.showRequisicoes = showRequisicoes;
 window.restoreRequisicoesView = restoreRequisicoesView;
 window.updateRequisicoesNav = updateRequisicoesNav;
 window.openRequisicoesPurchaseFromImplementation = openRequisicoesPurchaseFromImplementation;
+window.openRequisicoesPurchaseFromExternalAssemblyInspection = openRequisicoesPurchaseFromExternalAssemblyInspection;
 window.bindRequisicoesEvents = bindRequisicoesEvents;

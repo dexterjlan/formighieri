@@ -289,6 +289,7 @@ async function loadDetailingDriveFiles() {
         const files = await fetchDriveFiles(detailingDriveEntityParams());
         renderDetailingDriveFiles(files);
         setDetailingDriveStatus('');
+        syncDetailingDriveUploadUi();
     } catch (error) {
         console.error('loadDetailingDriveFiles:', error);
         renderDetailingDriveFiles([]);
@@ -303,10 +304,30 @@ let detailingDriveUploadKindInput = null;
 let detailingDrivePendingFile = null;
 let detailingDrivePendingKind = 'detailing';
 
+function isDetailingDriveUploadBlocked() {
+    const status = typeof activeDetalhamentoRecord !== 'undefined'
+        ? activeDetalhamentoRecord?.status
+        : null;
+    const pronto = typeof DETALHAMENTO_STATUS_PRONTO !== 'undefined'
+        ? DETALHAMENTO_STATUS_PRONTO
+        : 'Pronto';
+    return status === pronto;
+}
+
+function syncDetailingDriveUploadUi() {
+    const blocked = isDetailingDriveUploadBlocked();
+    document.getElementById('btn-detalhamento-drive-upload')?.classList.toggle('hidden', blocked);
+    document.getElementById('btn-detalhamento-drive-send')?.classList.toggle('hidden', blocked);
+    if (blocked) {
+        clearDetailingDriveFileSelection();
+    }
+    syncDetailingDriveSendButton();
+}
+
 function syncDetailingDriveSendButton() {
     const button = document.getElementById('btn-detalhamento-drive-send');
     if (!button) return;
-    button.disabled = !detailingDrivePendingFile;
+    button.disabled = !detailingDrivePendingFile || isDetailingDriveUploadBlocked();
 }
 
 function clearDetailingDriveFileSelection() {
@@ -348,6 +369,10 @@ function validateDetailingDriveUploadByKind(files, uploadKind) {
 
 function openDetailingDriveUploadKindModal(input) {
     if (!input) return;
+    if (isDetailingDriveUploadBlocked()) {
+        alertAppDialog('Detalhamento finalizado: não é possível enviar novos arquivos.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
     detailingDriveUploadKindInput = input;
     toggleModal('detailing-drive-upload-kind-modal', true);
 }
@@ -371,6 +396,11 @@ function chooseDetailingDriveUploadKind(uploadKind) {
 async function uploadFilesToDetailingDrive(fileList, context, options = {}) {
     const files = Array.from(fileList || []);
     if (!files.length || !context) return false;
+
+    if (isDetailingDriveUploadBlocked()) {
+        alertAppDialog('Detalhamento finalizado: não é possível enviar novos arquivos.', { variant: 'warning', title: 'Aviso' });
+        return false;
+    }
 
     const uploadKind = options.uploadKind === 'project' ? 'project' : 'detailing';
 
@@ -433,6 +463,12 @@ async function uploadFilesToDetailingDrive(fileList, context, options = {}) {
 async function uploadDetailingDriveFiles(fileList, uploadKind) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
+
+    if (isDetailingDriveUploadBlocked()) {
+        alertAppDialog('Detalhamento finalizado: não é possível enviar novos arquivos.', { variant: 'warning', title: 'Aviso' });
+        clearDetailingDriveFileSelection();
+        return;
+    }
 
     if (!detailingDriveContext) {
         detailingDriveContext = await resolveDetailingDriveContext();
@@ -510,6 +546,7 @@ function bindDetailingDriveEvents() {
     });
 }
 
+window.syncDetailingDriveUploadUi = syncDetailingDriveUploadUi;
 window.loadDetailingDriveFiles = loadDetailingDriveFiles;
 window.loadDetailingDescriptiveSection = loadDetailingDescriptiveSection;
 window.resetDetailingDescriptiveSection = resetDetailingDescriptiveSection;

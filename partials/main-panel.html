@@ -2496,20 +2496,43 @@
                     <div id="gestao-purchase-reasons-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                         <div class="p-4 border-b border-slate-100">
                             <h2 class="font-bold text-sm text-slate-900">Motivos de Compra</h2>
-                            <p class="text-xs text-slate-400 mt-0.5">Motivos usados em Requisições → Compras.</p>
+                            <p class="text-xs text-slate-400 mt-0.5">Motivos em Requisições → Compras. Marque <span class="font-medium text-slate-500">Sistema</span> para fluxos automáticos (não aparecem em requisição manual).</p>
                         </div>
                         <div class="p-4 space-y-3">
                             <p id="gestao-purchase-reasons-sql-hint" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                                 Execute <code>supabase/feats/add-purchase-request-reasons.sql</code> no Supabase SQL Editor.
                             </p>
                             <form id="gestao-purchase-reason-form" class="flex flex-wrap gap-2 items-end">
+                                <div class="w-24">
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1" for="gestao-purchase-reason-sort">Ordem</label>
+                                    <input id="gestao-purchase-reason-sort" type="number" min="0" step="1" value="0"
+                                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                                </div>
                                 <div class="min-w-[16rem] flex-1">
                                     <label class="block text-[10px] font-semibold text-slate-500 mb-1" for="gestao-purchase-reason-name">Novo motivo</label>
                                     <input id="gestao-purchase-reason-name" type="text" required class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
                                 </div>
+                                <label class="flex items-center gap-2 text-xs text-slate-600 pb-2 shrink-0" title="Não aparece em requisição manual de compra">
+                                    <input id="gestao-purchase-reason-is-system" type="checkbox"
+                                        class="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                                    Sistema
+                                </label>
                                 <button type="submit" class="text-xs bg-slate-900 text-white px-3 py-2 rounded-lg font-medium">Adicionar</button>
                             </form>
-                            <div id="gestao-purchase-reasons-list" class="space-y-2"></div>
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                        <tr>
+                                            <th class="text-left p-3 font-semibold w-20">Ordem</th>
+                                            <th class="text-left p-3 font-semibold">Nome</th>
+                                            <th class="text-center p-3 font-semibold w-20" title="Reservado a fluxos automáticos; oculto em requisição manual">Sistema</th>
+                                            <th class="text-center p-3 font-semibold w-20">Ativo</th>
+                                            <th class="text-left p-3 font-semibold w-36">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gestao-purchase-reasons-list" class="divide-y divide-slate-100"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                     <div id="gestao-wps-item-types-panel" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

@@ -1,3 +1,15 @@
+function resolvePendenciasPurchaseReasonName(compra, reasonsById = {}) {
+    const fromCadastro = reasonsById[compra.purchaseReasonId];
+    if (fromCadastro) return fromCadastro;
+    if (compra.assistanceRequestId) return 'Assistência';
+    if (compra.externalAssemblyInspectionId) return 'Vistoria';
+    if (compra.implementationId || compra.implementationPurchaseItemId) return 'Implantação';
+    if (compra.requestOrigin === 'assistance') return 'Assistência';
+    if (compra.requestOrigin === 'externalAssemblyInspection') return 'Vistoria';
+    if (compra.requestOrigin === 'implementation') return 'Implantação';
+    return '';
+}
+
 async function fetchPendenciasEnviadosCompras() {
     const { error, compras } = await fetchComprasAbertas();
 
@@ -49,6 +61,20 @@ async function fetchPendenciasEnviadosCompras() {
         }
     }
 
+    const assistanceIds = [...new Set(compras.map(item => item.assistanceRequestId).filter(Boolean))];
+    let assistanceById = {};
+
+    if (assistanceIds.length) {
+        const assistanceResult = await supabaseClient
+            .from('AssistanceRequest')
+            .select('id, orderId, clientId, client:Client(id, name), order:salesOrders(id, orderCode, client:Client(name))')
+            .in('id', assistanceIds);
+
+        if (!assistanceResult.error && assistanceResult.data) {
+            assistanceById = Object.fromEntries(assistanceResult.data.map(row => [row.id, row]));
+        }
+    }
+
     const purchaseItemIds = [...new Set(compras.map(item => item.implementationPurchaseItemId).filter(Boolean))];
     let purchaseItemsById = {};
 
@@ -63,21 +89,30 @@ async function fetchPendenciasEnviadosCompras() {
         }
     }
 
-    const items = compras
-        .map(compra => {
-            const project = projectsById[compra.orderProjectId];
-            const purchaseItem = purchaseItemsById[compra.implementationPurchaseItemId] || null;
-            const subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
-            return {
-                ...compra,
-                project,
-                clientName: getOrderClientName(project?.order) || '',
-                projectName: project?.name || '',
-                subtypeName,
-                reasonName: reasonsById[compra.purchaseReasonId] || ''
-            };
-        })
-        .filter(item => item.project);
+    const items = compras.map(compra => {
+        const project = compra.orderProjectId ? projectsById[compra.orderProjectId] : null;
+        const assistance = assistanceById[compra.assistanceRequestId] || null;
+        const purchaseItem = purchaseItemsById[compra.implementationPurchaseItemId] || null;
+        const subtypeName = purchaseItem?.thirdPartySubtype?.name || '';
+        const clientName = getOrderClientName(project?.order)
+            || assistance?.client?.name
+            || getOrderClientName(assistance?.order)
+            || '';
+        const orderCode = project?.order?.orderCode
+            || assistance?.order?.orderCode
+            || '—';
+
+        return {
+            ...compra,
+            project,
+            assistance,
+            clientName,
+            orderCode,
+            projectName: project?.name || '—',
+            subtypeName,
+            reasonName: resolvePendenciasPurchaseReasonName(compra, reasonsById)
+        };
+    });
 
     return { error: null, items };
 }
@@ -110,13 +145,13 @@ function renderPendenciasEnviadosComprasList(items) {
     const canView = canSeeCompraModal();
     const rows = (items || []).map(item => mapPendenciasInteractiveIdentity(item.project, {
         id: item.id,
-        orderCode: item.orderCode || item.project?.order?.orderCode || '—',
-        clientName: item.clientName || getOrderClientName(item.project?.order) || '—',
-        projectName: item.projectName || item.project?.name || '—',
+        orderCode: item.orderCode || '—',
+        clientName: item.clientName || '—',
+        projectName: item.projectName || '—',
         tipoLabel: typeof formatCompraTipoLabel === 'function'
             ? formatCompraTipoLabel(item.purchaseType, item.subtypeName)
             : (item.purchaseType || '—'),
-        reasonName: item.reasonName || '—',
+        reasonName: item.reasonName || resolvePendenciasPurchaseReasonName(item) || '—',
         statusName: item.status || '—',
         statusClass: typeof getCompraStatusBadgeClass === 'function'
             ? getCompraStatusBadgeClass(item.status)
@@ -124,7 +159,7 @@ function renderPendenciasEnviadosComprasList(items) {
     }));
 
     const subtitle = canActCompraModal()
-        ? 'Solicitações de compra geradas pela implantação.'
+        ? 'Solicitações de compra em aberto (implantação, vistoria, assistência e demais motivos).'
         : 'Visualização das solicitações de compra em aberto.';
 
     renderPendenciasInteractiveTableScreen(content, {
@@ -151,7 +186,10 @@ function renderPendenciasEnviadosComprasList(items) {
             {
                 key: 'reasonName',
                 label: 'Motivo',
-                cellClass: 'p-3 text-xs text-slate-600'
+                cellClass: 'p-3',
+                render: (row) => (typeof renderPurchaseReasonBadge === 'function'
+                    ? renderPurchaseReasonBadge(row.reasonName)
+                    : escapeHtml(row.reasonName || '—'))
             },
             getPendenciasInteractiveStatusColumn(),
             getPendenciasInteractiveActionColumn({

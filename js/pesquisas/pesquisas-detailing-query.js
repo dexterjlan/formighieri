@@ -19,11 +19,12 @@ async function fetchPesquisasDetailings() {
     const selectColumns = typeof DETALHAMENTO_PENDENCIAS_SELECT === 'string'
         ? DETALHAMENTO_PENDENCIAS_SELECT
         : `
-            id, orderProjectId, status, designerId, startedAt, completedAt,
+            id, orderProjectId, detailingType, status, designerId, startedAt, completedAt,
             designer:appUsers!Detailing_designerId_fkey(id, name),
             orderProject:OrderProject(
-                id, orderId, projectCode, name,
-                order:salesOrders(${typeof getSalesOrderMinimalEmbedSelect === 'function' ? getSalesOrderMinimalEmbedSelect() : 'id, orderCode'})
+                id, orderId, projectCode, name, statusId,
+                order:salesOrders(${typeof getSalesOrderMinimalEmbedSelect === 'function' ? getSalesOrderMinimalEmbedSelect() : 'id, orderCode'}),
+                projectStatus:OrderProjectStatus(id, name)
             )
         `;
 
@@ -47,11 +48,20 @@ function mapPesquisasDetailingRow(record) {
     return mapPendenciasInteractiveIdentity(record, {
         id: record.id,
         projectId: project.id || record.orderProjectId,
+        project,
         orderCode: order.orderCode || '—',
         clientName: typeof getOrderClientName === 'function' ? (getOrderClientName(order) || '—') : '—',
         projectName: project.name || '—',
+        orderProjectStatusName: typeof getPendenciasProjectStatusName === 'function'
+            ? getPendenciasProjectStatusName(project)
+            : (project.projectStatus?.name || '—'),
         designerName: record.designer?.name || '—',
         designerId: record.designerId || record.designer?.id || null,
+        detailingId: record.id,
+        detailingType: record.detailingType,
+        detailingTypeLabel: typeof formatDetailingTypeLabel === 'function'
+            ? formatDetailingTypeLabel(record.detailingType)
+            : 'Montagem',
         statusName,
         statusClass: typeof getDetalhamentoStatusBadgeClass === 'function'
             ? getDetalhamentoStatusBadgeClass(statusName)
@@ -89,22 +99,49 @@ async function populatePesquisasDetailingDesignerFilter() {
     });
 }
 
-async function openPesquisasDetailingDetail(projectId, projectName) {
+async function openPesquisasDetailingDetail(projectId, projectName, options = {}) {
     const id = Number(projectId);
     if (!id) return;
 
     if (typeof openDetalhamentoModal === 'function') {
-        await openDetalhamentoModal(id, projectName || 'Projeto');
+        await openDetalhamentoModal(id, projectName || 'Projeto', options);
         return;
     }
     if (typeof openDetailingModal === 'function') {
-        await openDetailingModal(id, projectName || 'Projeto');
+        await openDetailingModal(id, projectName || 'Projeto', options);
         return;
     }
     alertAppDialog('Não foi possível abrir o detalhamento.');
 }
 
 window.openPesquisasDetailingDetail = openPesquisasDetailingDetail;
+
+function renderPesquisasDetailingProjectNameWithStatusHtml(row) {
+    const nameHtml = typeof renderPendenciasProjectNameHtml === 'function'
+        ? renderPendenciasProjectNameHtml(row.project, row.projectName)
+        : escapeHtml(row.projectName || '—');
+    const statusName = row.orderProjectStatusName || '—';
+    if (statusName === '—') {
+        return `<span class="inline-flex flex-wrap items-center gap-1.5">${nameHtml}</span>`;
+    }
+    const statusClass = typeof getPendenciasProjectStatusBadgeClass === 'function'
+        ? getPendenciasProjectStatusBadgeClass(statusName)
+        : 'bg-slate-100 text-slate-600';
+    const badge = `<span class="inline-flex text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${statusClass}">${escapeHtml(statusName)}</span>`;
+    return `<span class="inline-flex flex-wrap items-center gap-1.5">${nameHtml}${badge}</span>`;
+}
+
+function getPesquisasDetailingIdentityColumns() {
+    return getPendenciasInteractiveIdentityColumns({ projectLabel: 'Nome do projeto' }).map(column =>
+        column.key === 'projectName'
+            ? {
+                ...column,
+                getFilterValue: row => [row.projectName, row.orderProjectStatusName].filter(Boolean).join(' '),
+                render: (row) => renderPesquisasDetailingProjectNameWithStatusHtml(row)
+            }
+            : column
+    );
+}
 
 function renderPesquisasDetailingTable(rows = []) {
     const mountEl = document.getElementById('pesquisas-detailing-table-mount');
@@ -118,13 +155,16 @@ function renderPesquisasDetailingTable(rows = []) {
         minWidth: '980px',
         emptyMessage: 'Nenhum detalhamento encontrado.',
         columns: [
-            ...getPendenciasInteractiveIdentityColumns({
-                projectLabel: 'Nome do projeto'
-            }),
+            ...getPesquisasDetailingIdentityColumns(),
             {
                 key: 'designerName',
                 label: 'Projetista',
                 cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'detailingTypeLabel',
+                label: 'Tipo',
+                cellClass: 'p-3 text-xs text-slate-600 whitespace-nowrap'
             },
             getPendenciasInteractiveStatusColumn(),
             getPendenciasInteractiveDateColumn({
@@ -144,7 +184,9 @@ function renderPesquisasDetailingTable(rows = []) {
                     ? `<button type="button"
                         class="pesquisas-detailing-open-btn text-xs bg-indigo-100 text-indigo-800 hover:bg-indigo-200 px-2.5 py-1 rounded-lg font-medium"
                         data-project-id="${Number(row.projectId)}"
-                        data-project-name="${escapeHtml(row.projectName || 'Projeto')}">
+                        data-project-name="${escapeHtml(row.projectName || 'Projeto')}"
+                        data-detailing-id="${Number(row.detailingId) || ''}"
+                        data-detailing-type="${escapeHtml(row.detailingType || '')}">
                         Detalhe
                     </button>`
                     : '<span class="text-xs text-slate-300">—</span>'
@@ -153,7 +195,10 @@ function renderPesquisasDetailingTable(rows = []) {
         onBind(tbody) {
             tbody?.querySelectorAll('.pesquisas-detailing-open-btn').forEach(button => {
                 button.addEventListener('click', () => {
-                    openPesquisasDetailingDetail(button.dataset.projectId, button.dataset.projectName);
+                    openPesquisasDetailingDetail(button.dataset.projectId, button.dataset.projectName, {
+                        detailingId: Number(button.dataset.detailingId) || null,
+                        detailingType: button.dataset.detailingType || null
+                    });
                 });
             });
         }

@@ -72,14 +72,14 @@ async function queryAppUserById(userId) {
 
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
         .eq('id', normalizedId)
         .maybeSingle();
 
     if (result.error?.message?.includes('matrixUserId')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
             .eq('id', normalizedId)
             .maybeSingle();
     }
@@ -87,7 +87,7 @@ async function queryAppUserById(userId) {
     if (result.error?.message?.includes('receiveEmailCopy')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, calendarColor')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, calendarColor')
             .eq('id', normalizedId)
             .maybeSingle();
     }
@@ -95,7 +95,7 @@ async function queryAppUserById(userId) {
     if (result.error?.message?.includes('calendarColor')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty')
             .eq('id', normalizedId)
             .maybeSingle();
     }
@@ -103,19 +103,27 @@ async function queryAppUserById(userId) {
     if (result.error?.message?.includes('isInstaller')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty, calendarColor')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isThirdParty, calendarColor')
             .eq('id', normalizedId)
             .maybeSingle();
         if (result.error?.message?.includes('calendarColor')) {
             result = await supabaseClient
                 .from('appUsers')
-                .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty')
+                .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isThirdParty')
                 .eq('id', normalizedId)
                 .maybeSingle();
         }
     }
 
-    if (result.error?.message?.includes('isFactoryAdministrative') || result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isThirdParty')) {
+    if (result.error?.message?.includes('isBudgetEstimator')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
+            .eq('id', normalizedId)
+            .maybeSingle();
+    }
+
+    if (result.error?.message?.includes('isFactoryAdministrative') || result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isBudgetEstimator') || result.error?.message?.includes('isThirdParty')) {
         result = await supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager')

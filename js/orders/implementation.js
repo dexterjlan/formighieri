@@ -8,6 +8,12 @@ const IMPLANTACAO_PURCHASE_TYPE_MATERIAL = 'Material';
 const IMPLANTACAO_PURCHASE_TYPE_FERRAGEM = 'Ferragem';
 const IMPLANTACAO_PURCHASE_TYPE_TINTA = 'Tinta';
 const IMPLANTACAO_PURCHASE_TYPE_TERCEIRO = 'Terceiro';
+const ORDER_PROJECT_CHARACTERISTIC_MANDATORY_TINTA_LIST_NAMES = [
+    'Laca',
+    'Lâmina Natural',
+    'Provençal',
+    'Pintura'
+];
 
 const IMPLANTACAO_STANDARD_PURCHASE_UI = [
     {
@@ -76,6 +82,7 @@ let activeImplementationPurchaseItems = [];
 let activeImplantacaoCompraLinkedPurchaseItemIds = new Set();
 let activeImplantacaoCompraLockedStandardPurchaseTypes = new Set();
 let activeImplantacaoThirdPartyProjects = [];
+let activeImplantacaoOrderProjectRequiresMandatoryTintaList = false;
 let implantacaoThirdPartySubtypesCache = [];
 
 const IMPLANTACAO_STANDARD_PURCHASE_TYPES = new Set([
@@ -197,6 +204,121 @@ function canActImplantacao(record = activeImplantacaoRecord) {
     return designerId === Number(currentUser?.id);
 }
 
+function normalizeOrderProjectCharacteristicNameForMatch(name) {
+    return String(name || '')
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+}
+
+function isOrderProjectCharacteristicMandatoryTintaListName(name) {
+    const normalized = normalizeOrderProjectCharacteristicNameForMatch(name);
+    return ORDER_PROJECT_CHARACTERISTIC_MANDATORY_TINTA_LIST_NAMES.some(
+        target => normalizeOrderProjectCharacteristicNameForMatch(target) === normalized
+    );
+}
+
+function isOrderProjectCharacteristicRowsMandatoryTintaList(rows = []) {
+    return (rows || []).some(row => isOrderProjectCharacteristicMandatoryTintaListName(row?.characteristic?.name));
+}
+
+function isImplantacaoMandatoryTintaListRequired() {
+    return Boolean(activeImplantacaoOrderProjectRequiresMandatoryTintaList);
+}
+
+function isImplantacaoProvencalPaintListRequired() {
+    return isImplantacaoMandatoryTintaListRequired();
+}
+
+async function loadActiveImplantacaoOrderProjectMandatoryTintaFlag(orderProjectId = activeImplantacaoOrderProjectId) {
+    activeImplantacaoOrderProjectRequiresMandatoryTintaList = false;
+    const projectId = Number(orderProjectId || 0);
+    if (!projectId || typeof fetchOrderProjectCharacteristicsMap !== 'function') {
+        return false;
+    }
+
+    const map = await fetchOrderProjectCharacteristicsMap([projectId]);
+    const rows = map.get(projectId) || [];
+    activeImplantacaoOrderProjectRequiresMandatoryTintaList = isOrderProjectCharacteristicRowsMandatoryTintaList(rows);
+    return activeImplantacaoOrderProjectRequiresMandatoryTintaList;
+}
+
+async function loadActiveImplantacaoOrderProjectProvencalFlag(orderProjectId = activeImplantacaoOrderProjectId) {
+    return loadActiveImplantacaoOrderProjectMandatoryTintaFlag(orderProjectId);
+}
+
+function updateImplantacaoProvencalTintasSectionUi() {
+    const titleEl = document.getElementById('implantacao-tintas-title');
+    const notApplicableWrap = document.getElementById('implantacao-tintas-nao-possui-wrap');
+    const notApplicableInput = document.getElementById('implantacao-tintas-nao-possui');
+    const required = isImplantacaoMandatoryTintaListRequired();
+
+    if (titleEl) {
+        titleEl.innerHTML = required
+            ? 'Lista de Tintas <span class="text-rose-600" title="Obrigatória em projetos Laca, Lâmina Natural, Provençal ou Pintura">*</span>'
+            : 'Lista de Tintas';
+    }
+
+    if (notApplicableWrap) {
+        notApplicableWrap.classList.toggle('hidden', required);
+    }
+
+    if (required && notApplicableInput) {
+        notApplicableInput.checked = false;
+        notApplicableInput.disabled = true;
+    }
+}
+
+function isImplantacaoStandardPurchaseItemFulfilledForProducao(item) {
+    if (!item) return false;
+    if (
+        isImplantacaoMandatoryTintaListRequired()
+        && item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TINTA
+    ) {
+        return isImplementationPurchaseItemSentToCompras(item);
+    }
+    if (item.isNotApplicable) return true;
+    return isImplementationPurchaseItemSentToCompras(item);
+}
+
+function buildImplantacaoEnviarProducaoListsMessage(formValues) {
+    const standardItems = IMPLANTACAO_STANDARD_PURCHASE_UI.map(config => (
+        formValues.purchaseItems.find(row => row.purchaseType === config.purchaseType)
+    ));
+    const labelByType = Object.fromEntries(
+        IMPLANTACAO_STANDARD_PURCHASE_UI.map(config => [config.purchaseType, config.label])
+    );
+
+    if (isImplantacaoMandatoryTintaListRequired()) {
+        const tinta = standardItems.find(row => row?.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TINTA);
+        if (!isImplementationPurchaseItemSentToCompras(tinta)) {
+            return 'Este projeto exige lista de tintas (Laca, Lâmina Natural, Provençal ou Pintura): envie a lista de tintas para compras antes de enviar para produção.';
+        }
+    }
+
+    const pending = standardItems.filter(row => !isImplantacaoStandardPurchaseItemFulfilledForProducao(row));
+    if (!pending.length) return '';
+
+    const labels = pending.map(row => labelByType[row?.purchaseType] || row?.purchaseType || 'Lista').join(', ');
+    return `Para enviar para produção, cada lista padrão deve estar enviada para compras ou marcada como "Não possui". Pendente: ${labels}.`;
+}
+
+function isImplantacaoStandardPurchaseItemFulfilledForClose(item) {
+    if (
+        isImplantacaoMandatoryTintaListRequired()
+        && item?.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TINTA
+    ) {
+        return isImplementationPurchaseItemSentToCompras(item);
+    }
+
+    if (typeof isImplantacaoStandardPurchaseItemFulfilled === 'function') {
+        return isImplantacaoStandardPurchaseItemFulfilled(item);
+    }
+
+    return Boolean(item?.isNotApplicable) || Boolean(String(item?.folderPath || '').trim());
+}
+
 function resolveImplementationDesignerId(options = {}) {
     const fromOptions = Number(options.designerId || 0);
     if (fromOptions) return fromOptions;
@@ -262,9 +384,15 @@ function readImplantacaoStandardPurchaseRowFromForm(config) {
     const sentToCommercial = isImplementationPurchaseItemSentToCompras(existing);
     const notApplicableInput = document.getElementById(config.notApplicableId);
     const comercialInput = document.getElementById(config.comercialId);
-    const isNotApplicable = sentToCommercial
+    let isNotApplicable = sentToCommercial
         ? Boolean(existing?.isNotApplicable)
         : Boolean(notApplicableInput?.checked);
+    if (
+        config.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TINTA
+        && isImplantacaoMandatoryTintaListRequired()
+    ) {
+        isNotApplicable = false;
+    }
     const folderPath = isNotApplicable
         ? ''
         : (existing?.folderPath || '');
@@ -349,6 +477,7 @@ function readImplantacaoFormValues() {
 }
 
 function populateImplantacaoStandardPurchaseFields() {
+    updateImplantacaoProvencalTintasSectionUi();
     if (typeof refreshImplantacaoListUploadSections === 'function') {
         refreshImplantacaoListUploadSections(activeImplantacaoRecord);
     }
@@ -541,7 +670,9 @@ function setImplantacaoFormDisabled(disabled) {
         const locked = disabled || sentToCommercial;
         const notApplicableEl = document.getElementById(config.notApplicableId);
         const comercialEl = document.getElementById(config.comercialId);
-        if (notApplicableEl) notApplicableEl.disabled = locked;
+        const mandatoryTintaLocked = config.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TINTA
+            && isImplantacaoMandatoryTintaListRequired();
+        if (notApplicableEl) notApplicableEl.disabled = locked || mandatoryTintaLocked;
         if (comercialEl && !sentToCommercial) {
             const hasFile = typeof hasImplantacaoListDriveFileUploaded === 'function'
                 ? hasImplantacaoListDriveFileUploaded(config.purchaseType, item)
@@ -667,11 +798,19 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
         btnReabrir.disabled = true;
     }
 
+    const standardItemsForProducao = IMPLANTACAO_STANDARD_PURCHASE_UI.map(config => (
+        values.purchaseItems.find(item => item.purchaseType === config.purchaseType)
+    ));
+    const allStandardListsReadyForProducao = standardItemsForProducao.every(
+        item => isImplantacaoStandardPurchaseItemFulfilledForProducao(item)
+    );
+
     const canEnviarProducao = canAct
         && !isEnviadoProducao
         && values.isProjectChecked
         && Boolean(values.projectFilePath)
-        && Boolean(values.wpsOpCode);
+        && Boolean(values.wpsOpCode)
+        && allStandardListsReadyForProducao;
 
     const canEnviarCompras = canAct
         && (values.purchaseItems || []).some(canSendImplementationPurchaseItem);
@@ -679,11 +818,7 @@ function updateImplantacaoActionButtons(record = activeImplantacaoRecord) {
     const standardItems = IMPLANTACAO_STANDARD_PURCHASE_UI.map(config => (
         values.purchaseItems.find(item => item.purchaseType === config.purchaseType)
     ));
-    const allStandardChecked = standardItems.every(item => (
-        typeof isImplantacaoStandardPurchaseItemFulfilled === 'function'
-            ? isImplantacaoStandardPurchaseItemFulfilled(item)
-            : Boolean(item?.isChecked)
-    ));
+    const allStandardChecked = standardItems.every(item => isImplantacaoStandardPurchaseItemFulfilledForClose(item));
 
     const canEncerrar = canAct
         && values.isProjectChecked
@@ -897,6 +1032,10 @@ function buildImplantacaoUpdatePayload(formValues, extra = {}) {
 
 function buildImplementationPurchaseItemPayload(item, implementationId) {
     const now = new Date().toISOString();
+    let isNotApplicable = Boolean(item.isNotApplicable);
+    if (item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TINTA && isImplantacaoMandatoryTintaListRequired()) {
+        isNotApplicable = false;
+    }
     return {
         implementationId,
         purchaseType: item.purchaseType,
@@ -904,7 +1043,7 @@ function buildImplementationPurchaseItemPayload(item, implementationId) {
             ? (item.thirdPartySubtypeId || null)
             : null,
         folderPath: item.folderPath || null,
-        isNotApplicable: Boolean(item.isNotApplicable),
+        isNotApplicable,
         isChecked: Boolean(item.isChecked),
         sentToCommercial: Boolean(item.sentToCommercial),
         sentToCommercialAt: item.sentToCommercialAt || null,
@@ -1085,6 +1224,8 @@ async function refreshImplantacaoModalThirdPartyState() {
         );
     }
 
+    await loadActiveImplantacaoOrderProjectProvencalFlag(activeImplantacaoOrderProjectId);
+
     populateImplantacaoForm(activeImplantacaoRecord);
     updateImplantacaoActionButtons(activeImplantacaoRecord);
 }
@@ -1205,6 +1346,8 @@ async function openImplementationModal(orderProjectId, projectName = '', options
             activeImplantacaoThirdPartyProjects = [];
         }
 
+        await loadActiveImplantacaoOrderProjectProvencalFlag(activeImplantacaoOrderProjectId);
+
         document.getElementById('implantacao-modal-project-name').textContent = activeImplantacaoProjectName;
         populateImplantacaoForm(activeImplantacaoRecord);
         updateImplantacaoActionButtons(activeImplantacaoRecord);
@@ -1241,6 +1384,7 @@ function closeImplementationModal() {
     activeImplantacaoCompraLinkedPurchaseItemIds = new Set();
     activeImplantacaoCompraLockedStandardPurchaseTypes = new Set();
     activeImplantacaoThirdPartyProjects = [];
+    activeImplantacaoOrderProjectRequiresMandatoryTintaList = false;
 }
 window.closeImplementationModal = closeImplementationModal;
 window.openImplementationModal = openImplementationModal;
@@ -1252,6 +1396,12 @@ window.isImplantacaoModalOpen = isImplantacaoModalOpen;
 window.refreshImplantacaoModalThirdPartyState = refreshImplantacaoModalThirdPartyState;
 window.openImplantacaoModal = openImplementationModal;
 window.isImplementationPurchaseItemSentToCompras = isImplementationPurchaseItemSentToCompras;
+window.loadImplantacaoCompraLinkedPurchaseItemIds = loadImplantacaoCompraLinkedPurchaseItemIds;
+window.isImplantacaoMandatoryTintaListRequired = isImplantacaoMandatoryTintaListRequired;
+window.isImplantacaoProvencalPaintListRequired = isImplantacaoProvencalPaintListRequired;
+window.isImplantacaoStandardPurchaseItemFulfilledForProducao = isImplantacaoStandardPurchaseItemFulfilledForProducao;
+window.isImplantacaoStandardPurchaseItemFulfilledForClose = isImplantacaoStandardPurchaseItemFulfilledForClose;
+window.updateImplantacaoProvencalTintasSectionUi = updateImplantacaoProvencalTintasSectionUi;
 window.ensureImplantacaoRecordsForProjects = ensureImplementationRecordsForProjects;
 window.fetchOrderProjectsInImplantacaoStatus = fetchOrderProjectsInImplementationStatus;
 window.syncImplantacaoRecordsMapForProjects = syncImplementationRecordsMapForProjects;
@@ -1342,6 +1492,12 @@ async function handleImplantacaoEnviarProducao() {
         return;
     }
 
+    const producaoListsMessage = buildImplantacaoEnviarProducaoListsMessage(formValues);
+    if (producaoListsMessage) {
+        alertAppDialog(producaoListsMessage);
+        return;
+    }
+
     const confirmed = await confirmAppDialog(
         'O status do projeto será alterado para enviado à produção.',
         {
@@ -1352,9 +1508,18 @@ async function handleImplantacaoEnviarProducao() {
     if (!confirmed) return;
 
     try {
-        setImplantacaoModalLoading(true, 'Salvando e enviando para produção...');
-        await saveImplementationPurchaseItems(getImplementationPurchaseItemsForSave(), activeImplantacaoRecord.id);
+        setImplantacaoModalLoading(true, 'Salvando listas e dados da implantação...');
+        const savedPurchaseItems = await saveImplementationPurchaseItems(
+            getImplementationPurchaseItemsForSave(),
+            activeImplantacaoRecord.id
+        );
+        await loadImplantacaoCompraLinkedPurchaseItemIds(
+            activeImplantacaoRecord.id,
+            savedPurchaseItems,
+            activeImplantacaoOrderProjectId
+        );
 
+        setImplantacaoModalLoading(true, 'Marcando implantação como Enviado para Produção...');
         const payload = buildImplantacaoUpdatePayload(formValues, {
             status: IMPLANTACAO_STATUS_ENVIADO_PRODUCAO
         });
@@ -1368,23 +1533,41 @@ async function handleImplantacaoEnviarProducao() {
 
         if (error) throw error;
 
-        setImplantacaoModalLoading(true, 'Atualizando status do projeto...');
+        setImplantacaoModalLoading(true, 'Atualizando status do ambiente para Em Produção...');
         await updateOrderProjectStatusForImplantacao(
             activeImplantacaoOrderProjectId,
             IMPLANTACAO_PROJECT_STATUS_EM_PRODUCAO
         );
 
-        if (typeof createDetalhamentoForProject === 'function') {
-            await createDetalhamentoForProject(activeImplantacaoOrderProjectId);
+        const hasPaintList = typeof orderProjectImplementationHasPaintList === 'function'
+            && await orderProjectImplementationHasPaintList(activeImplantacaoOrderProjectId, {
+                purchaseItems: savedPurchaseItems
+            });
+
+        setImplantacaoModalLoading(true, hasPaintList
+            ? 'Criando detalhamentos (Montagem e Pintura)...'
+            : 'Criando detalhamento Montagem...');
+
+        if (typeof createDetailingForProject === 'function') {
+            await createDetailingForProject(activeImplantacaoOrderProjectId, {
+                purchaseItems: savedPurchaseItems,
+                onProgress: message => setImplantacaoModalLoading(true, message)
+            });
+        } else if (typeof createDetalhamentoForProject === 'function') {
+            await createDetalhamentoForProject(activeImplantacaoOrderProjectId, {
+                onProgress: message => setImplantacaoModalLoading(true, message)
+            });
         }
 
         activeImplantacaoRecord = data;
         populateImplantacaoForm(data);
         if (typeof refreshImplantacaoDetalhamentoUploadSection === 'function') {
+            setImplantacaoModalLoading(true, 'Atualizando arquivos de detalhamento na implantação...');
             await refreshImplantacaoDetalhamentoUploadSection(data);
         }
 
         if (typeof notifyImplantacaoEnviarProducaoEmail === 'function') {
+            setImplantacaoModalLoading(true, 'Enviando e-mail de envio para produção...');
             let orderId = activeOrderId;
             let designerId = null;
 
@@ -1500,20 +1683,26 @@ function buildImplantacaoEnviarComprasConfirmMessage(items = []) {
 }
 
 async function resolveImplementationPurchaseReasonId() {
-    const { data, error } = await supabaseClient
+    let result = await supabaseClient
         .from('PurchaseReason')
-        .select('id, name')
+        .select('id, name, isSystem')
         .eq('isActive', true);
 
-    if (error) {
-        console.warn('resolveImplementationPurchaseReasonId:', error.message);
+    if (result.error?.message?.includes('isSystem')) {
+        result = await supabaseClient
+            .from('PurchaseReason')
+            .select('id, name')
+            .eq('isActive', true);
+    }
+
+    if (result.error) {
+        console.warn('resolveImplementationPurchaseReasonId:', result.error.message);
         return null;
     }
 
-    const match = (data || []).find(reason => {
-        const name = String(reason.name || '').trim().toLocaleLowerCase('pt-BR');
-        return name === 'implantação' || name === 'implantacao';
-    });
+    const match = typeof findSystemPurchaseReason === 'function'
+        ? findSystemPurchaseReason(result.data || [])
+        : null;
     return match?.id ? Number(match.id) : null;
 }
 
@@ -1698,12 +1887,19 @@ async function handleImplantacaoEncerrar() {
         formValues.purchaseItems.find(item => item.purchaseType === config.purchaseType)
     ));
 
-    const allListsFulfilled = standardItems.every(item => (
-        typeof isImplantacaoStandardPurchaseItemFulfilled === 'function'
-            ? isImplantacaoStandardPurchaseItemFulfilled(item)
-            : Boolean(item?.isChecked)
-    ));
+    const allListsFulfilled = standardItems.every(item => isImplantacaoStandardPurchaseItemFulfilledForClose(item));
     if (!formValues.isProjectChecked || !allListsFulfilled) {
+        if (isImplantacaoMandatoryTintaListRequired()) {
+            const tintaItem = formValues.purchaseItems.find(
+                item => item.purchaseType === IMPLANTACAO_PURCHASE_TYPE_TINTA
+            );
+            if (!isImplementationPurchaseItemSentToCompras(tintaItem)) {
+                alertAppDialog(
+                    'Projeto com Laca, Lâmina Natural, Provençal ou Pintura: envie a lista de tintas para compras antes de encerrar a implantação.'
+                );
+                return;
+            }
+        }
         alertAppDialog('Envie todas as listas (PDF) ou marque "Não possui" antes de encerrar a implantação.');
         return;
     }

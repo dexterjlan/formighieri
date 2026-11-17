@@ -369,7 +369,8 @@ async function notifyOrderRequestEmail(eventType, requestData) {
 }
 
 async function notifyRequisicoesPurchaseEmail(details = {}) {
-    if (!NOTIFICATIONS_ENABLED || !details.orderProjectId) return;
+    if (!NOTIFICATIONS_ENABLED) return;
+    if (!details.orderProjectId && !details.assistanceRequestId) return;
 
     if (typeof notifyMatrixRequisicoesPurchaseToCompras === 'function') {
         try {
@@ -386,7 +387,15 @@ async function notifyRequisicoesPurchaseEmail(details = {}) {
 
     try {
         const [context, recipients] = await Promise.all([
-            fetchCompraLiberacaoNotificationContext(details.orderProjectId),
+            details.orderProjectId
+                ? fetchCompraLiberacaoNotificationContext(details.orderProjectId)
+                : Promise.resolve({
+                    orderCode: details.orderCode || '—',
+                    clientName: details.clientName || '—',
+                    projectName: details.projectName || '—',
+                    consultantName: '—',
+                    projetistaName: '—'
+                }),
             fetchActiveComprasRecipientEmails()
         ]);
         const subtypeName = details.subtypeName || '';

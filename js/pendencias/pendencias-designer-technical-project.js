@@ -379,6 +379,7 @@ function getDefaultPendenciasCargaProjetistaDisplayFilters() {
     return {
         projetista: true,
         detalhamento: true,
+        orcamentista: true,
         conferente: true,
         gestor: true
     };
@@ -414,6 +415,7 @@ function readPendenciasCargaProjetistaDisplayFiltersFromDom(root = document) {
     return {
         projetista: getChecked('pendencias-carga-filter-projetista'),
         detalhamento: getChecked('pendencias-carga-filter-detalhamento'),
+        orcamentista: getChecked('pendencias-carga-filter-orcamentista'),
         conferente: getChecked('pendencias-carga-filter-conferente'),
         gestor: getChecked('pendencias-carga-filter-gestor')
     };
@@ -424,11 +426,13 @@ function getPendenciasProjetistaProfileFlags(projetistaId) {
         item => Number(item.id) === Number(projetistaId)
     );
     const isDetailing = Boolean(meta?.isDetailing);
+    const isOrcamentista = Boolean(meta?.isBudgetEstimator);
     const isConferente = Boolean(meta?.isConferenceReviewer);
     const isGestor = Boolean(meta?.isProjectsManager);
     return {
-        projetista: !isDetailing && !isConferente && !isGestor,
+        projetista: !isDetailing && !isOrcamentista && !isConferente && !isGestor,
         detalhamento: isDetailing,
+        orcamentista: isOrcamentista,
         conferente: isConferente,
         gestor: isGestor
     };
@@ -445,13 +449,14 @@ function pendenciasCargaProjetistaRowMatchesDisplayFilters(
     }
 
     const anyChecked = Boolean(
-        filters.projetista || filters.detalhamento || filters.conferente || filters.gestor
+        filters.projetista || filters.detalhamento || filters.orcamentista || filters.conferente || filters.gestor
     );
     if (!anyChecked) return false;
 
     const flags = getPendenciasProjetistaProfileFlags(row.designerId);
     if (filters.projetista && flags.projetista) return true;
     if (filters.detalhamento && flags.detalhamento) return true;
+    if (filters.orcamentista && flags.orcamentista) return true;
     if (filters.conferente && flags.conferente) return true;
     if (filters.gestor && flags.gestor) return true;
     return false;
@@ -474,13 +479,22 @@ function filterPendenciasCargaProjetistaWorkload(
 let pendenciasCargaPorProjetistaRenderCache = null;
 
 async function fetchPendenciasActiveProjetistas() {
-    const selectWithFlags = 'id, name, isDetailing, isConferenceReviewer, isProjectsManager';
+    const selectWithFlags = 'id, name, isDetailing, isBudgetEstimator, isConferenceReviewer, isProjectsManager';
     let result = await supabaseClient
         .from('appUsers')
         .select(selectWithFlags)
         .eq('role', 'Projetista')
         .eq('isActive', true)
         .order('name', { ascending: true });
+
+    if (result.error?.message?.includes('isBudgetEstimator')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, isDetailing, isConferenceReviewer, isProjectsManager')
+            .eq('role', 'Projetista')
+            .eq('isActive', true)
+            .order('name', { ascending: true });
+    }
 
     if (result.error?.message?.includes('isDetailing')
         || result.error?.message?.includes('isConferenceReviewer')
@@ -886,7 +900,7 @@ async function fetchPendenciasWorkloadDetalhamentoByDesigner() {
     const { data, error } = await supabaseClient
         .from('Detailing')
         .select(`
-            id, designerId, status, orderProjectId,
+            id, designerId, status, orderProjectId, detailingType,
             orderProject:OrderProject(
                 id, name, projectCode,
                 order:salesOrders(${getSalesOrderMinimalEmbedSelect()})
@@ -1105,6 +1119,11 @@ function renderPendenciasWorkloadDetalhamentoSection(detalhamentoEntry = null) {
                                     <p class="text-xs font-medium text-slate-800 truncate" title="${escapeHtml(itemTitle)}">
                                         ${escapeHtml(projectName)}
                                     </p>
+                                    <span class="text-[9px] px-1.5 py-0.5 rounded-full font-medium bg-indigo-50 text-indigo-800 shrink-0">${escapeHtml(
+                                        typeof formatDetailingTypeLabel === 'function'
+                                            ? formatDetailingTypeLabel(record.detailingType)
+                                            : 'Montagem'
+                                    )}</span>
                                     ${isInProgress
                                         ? '<span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-amber-100 text-amber-800 shrink-0">Em andamento</span>'
                                         : '<span class="text-[9px] px-1.5 py-0.5 rounded-full font-semibold bg-slate-100 text-slate-600 shrink-0">Aguardando</span>'}
@@ -1394,6 +1413,11 @@ function renderPendenciasCargaPorProjetista(
                     <input type="checkbox" id="pendencias-carga-filter-detalhamento" class="pendencias-carga-projetista-filter rounded border-slate-300 text-violet-700 focus:ring-violet-500"
                         ${displayFilters.detalhamento ? 'checked' : ''}>
                     Detalhamento
+                </label>
+                <label class="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input type="checkbox" id="pendencias-carga-filter-orcamentista" class="pendencias-carga-projetista-filter rounded border-slate-300 text-violet-700 focus:ring-violet-500"
+                        ${displayFilters.orcamentista ? 'checked' : ''}>
+                    Orçamentista
                 </label>
                 <label class="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                     <input type="checkbox" id="pendencias-carga-filter-conferente" class="pendencias-carga-projetista-filter rounded border-slate-300 text-violet-700 focus:ring-violet-500"

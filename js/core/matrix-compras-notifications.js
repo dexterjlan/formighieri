@@ -75,12 +75,17 @@ function buildMatrixComprasActorLine() {
 }
 
 async function notifyMatrixRequisicoesPurchaseToCompras(details = {}) {
-    if (!NOTIFICATIONS_ENABLED || !details.orderProjectId) return null;
+    if (!NOTIFICATIONS_ENABLED) return null;
+    if (!details.orderProjectId && !details.assistanceRequestId) return null;
 
     try {
-        const context = typeof fetchCompraLiberacaoNotificationContext === 'function'
+        const context = details.orderProjectId && typeof fetchCompraLiberacaoNotificationContext === 'function'
             ? await fetchCompraLiberacaoNotificationContext(details.orderProjectId)
-            : {};
+            : {
+                orderCode: details.orderCode || '—',
+                clientName: details.clientName || '—',
+                projectName: '—'
+            };
 
         const tipoLabel = formatMatrixComprasPurchaseTypeLabel({}, details);
         const lines = [

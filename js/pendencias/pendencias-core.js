@@ -162,7 +162,57 @@ function isImplantacaoPendenciasOverviewMode() {
     return isAdmin() || isGestorProjetos();
 }
 
+function shouldApplyPendenciasProjetistaProfileMenuFilter() {
+    return !canSeeAllPendenciasMenus() && currentUser?.role === 'Projetista';
+}
+
+/** Submenus Projetista conforme flags do usuário (Detalhamento, Orçamentista, Conferente, Revisor, PPCP). */
+function getPendenciasProjetistaMenuItemsForProfile() {
+    if (typeof isDetalhamento === 'function' && isDetalhamento()) {
+        return [{ id: 'detalhamento', label: 'Detalhamento' }];
+    }
+
+    if (typeof isBudgetEstimator === 'function' && isBudgetEstimator()) {
+        return [];
+    }
+
+    if (typeof isConferente === 'function' && isConferente()) {
+        return [
+            { id: 'aguardando-medicao', label: 'Aguardando Medição' },
+            { id: 'aguardando-planta', label: 'Aguardando Planta' },
+            { id: 'conferencias', label: 'Conferências' }
+        ];
+    }
+
+    const items = [
+        { id: 'aguardando-projeto-tecnico', label: 'Aguardando Projeto Técnico' },
+        { id: 'projeto-tecnico', label: 'Projeto Técnico' },
+        { id: 'projetos-terceiros', label: 'Projetos de Terceiros' },
+        { id: 'em-revisao', label: 'Em Revisão Comercial Proj.' },
+        { id: 'em-revisao-tecnica-proj', label: 'Em Revisão Técnica Proj.' },
+        { id: 'requisicao', label: 'Requisição' },
+        { id: 'nomear', label: 'Nomear' }
+    ];
+
+    if (typeof isReviewer === 'function' && isReviewer()) {
+        items.splice(4, 0, { id: 'em-revisao-tecnica-revisor', label: 'Em Revisão Técnica Revisor' });
+    }
+
+    if (typeof isPpcp === 'function' && isPpcp()) {
+        items.push(
+            { id: 'aguardando-ppcp', label: 'Aguardando PPCP' },
+            { id: 'implantacao', label: 'Implantação' }
+        );
+    }
+
+    return items;
+}
+
 function getPendenciasProjetistaMenuItems() {
+    if (shouldApplyPendenciasProjetistaProfileMenuFilter()) {
+        return getPendenciasProjetistaMenuItemsForProfile();
+    }
+
     const items = [];
     const showProjetistaWork = canSeeAllPendenciasMenus() || currentUser?.role === 'Projetista';
 
@@ -310,7 +360,7 @@ function getPendenciasSidebarSections() {
                 { id: 'carga-por-projetista', label: 'Carga por projetista' },
                 { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
                 { id: 'terceiros-sem-projetistas', label: 'Terceiros Sem Projetistas' },
-                { id: 'aguardando-detalhamento', label: 'Aguardando Detalhamento' },
+                { id: 'aguardando-detalhamento', label: 'Detalhamento sem projetista' },
                 { id: 'expedicao', label: 'Expedição' },
                 { id: 'montagem-externa', label: 'Montagem Externa' }
             ]

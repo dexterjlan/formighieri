@@ -8,6 +8,7 @@ const COMPRA_TIPO_TERCEIRO = 'Terceiro';
 
 let activeCompraRecord = null;
 let activeCompraThirdPartyDriveFile = null;
+let activeCompraModalReadOnly = false;
 let compraStatusesCache = [];
 let compraStatusesActiveOnlyCache = true;
 
@@ -321,6 +322,32 @@ async function fetchImplementationForCompraContext({ implementationId, orderProj
     return result.data;
 }
 
+async function fetchAssistanceForCompraContext(assistanceRequestId) {
+    const key = Number(assistanceRequestId);
+    if (!key) return null;
+
+    const { data, error } = await supabaseClient
+        .from('AssistanceRequest')
+        .select('id, orderId, clientId, client:Client(id, name), order:salesOrders(id, orderCode, client:Client(name))')
+        .eq('id', key)
+        .maybeSingle();
+
+    if (error) {
+        if (error.message?.includes('AssistanceRequest')) {
+            return null;
+        }
+        console.warn('fetchAssistanceForCompraContext:', error);
+        return null;
+    }
+    return data;
+}
+
+function isCompraAssistanceOrigin(record) {
+    const origin = String(record?.requestOrigin || '').trim().toLowerCase();
+    if (origin === 'assistance') return true;
+    return Boolean(Number(record?.assistanceRequestId));
+}
+
 async function enrichCompraRecord(record) {
     if (!record) return record;
 
@@ -343,6 +370,33 @@ async function enrichCompraRecord(record) {
 
     if (record.purchaseReasonId) {
         enriched.reasonName = await fetchCompraLookupName('PurchaseReason', record.purchaseReasonId);
+    }
+
+    if (isCompraAssistanceOrigin(record)) {
+        try {
+            const assistanceId = Number(record.assistanceRequestId);
+            const assistance = assistanceId
+                ? await fetchAssistanceForCompraContext(assistanceId)
+                : null;
+
+            if (assistance) {
+                const clientFromAssistance = assistance.client?.name
+                    || (typeof getOrderClientName === 'function' ? getOrderClientName(assistance.order) : '')
+                    || '';
+                if (!String(enriched.clientName || '').trim()) {
+                    enriched.clientName = clientFromAssistance;
+                }
+                if (!String(enriched.orderCode || '').trim()) {
+                    enriched.orderCode = assistance.order?.orderCode || '';
+                }
+            }
+
+            if (!String(enriched.reasonName || '').trim()) {
+                enriched.reasonName = 'Assistência';
+            }
+        } catch (error) {
+            console.warn('enrichCompraRecord assistance:', error);
+        }
     }
 
     if (record.createdById) {
@@ -454,7 +508,9 @@ const PURCHASE_OPTIONAL_INSERT_COLUMNS = [
     'requestObservation',
     'attachmentPath',
     'attachmentFileName',
-    'fallbackPurchaseType'
+    'fallbackPurchaseType',
+    'externalAssemblyInspectionId',
+    'assistanceRequestId'
 ];
 
 async function insertPurchaseRows(rows) {
@@ -508,21 +564,82 @@ async function createManualPurchaseRequest(payload) {
     const now = new Date().toISOString();
     return insertPurchaseRows([{
         implementationId: null,
-        orderProjectId: payload.orderProjectId,
+        orderProjectId: payload.orderProjectId ?? null,
         purchaseType: payload.purchaseType,
         fallbackPurchaseType: payload.purchaseType,
         status: getDefaultCompraStatusName(),
         createdById: currentUser?.id || null,
         updatedById: currentUser?.id || null,
         updatedAt: now,
-        requestOrigin: 'manual',
+        requestOrigin: payload.requestOrigin || 'manual',
         purchaseReasonId: payload.purchaseReasonId || null,
         thirdPartySubtypeId: payload.thirdPartySubtypeId || null,
         requestObservation: payload.observation || null,
         attachmentPath: payload.attachmentPath || null,
-        attachmentFileName: payload.attachmentFileName || null
+        attachmentFileName: payload.attachmentFileName || null,
+        externalAssemblyInspectionId: payload.externalAssemblyInspectionId || null,
+        assistanceRequestId: payload.assistanceRequestId || null
     }]);
 }
+
+async function fetchPurchasesByAssistanceRequestId(assistanceRequestId) {
+    const key = Number(assistanceRequestId);
+    if (!key) return { rows: [], missingColumn: false, error: null };
+
+    let result = await supabaseClient
+        .from('Purchase')
+        .select(`
+            id,
+            orderProjectId,
+            purchaseType,
+            status,
+            requestObservation,
+            createdAt,
+            purchaseReasonId,
+            purchaseReason:PurchaseReason(name)
+        `)
+        .eq('assistanceRequestId', key)
+        .order('createdAt', { ascending: false });
+
+    if (result.error?.message?.includes('assistanceRequestId')) {
+        return { rows: [], missingColumn: true, error: null };
+    }
+    if (result.error) {
+        return { rows: [], missingColumn: false, error: result.error };
+    }
+    return { rows: result.data || [], missingColumn: false, error: null };
+}
+
+async function fetchPurchasesByExternalAssemblyInspectionId(inspectionId) {
+    const key = Number(inspectionId);
+    if (!key) return { rows: [], missingColumn: false, error: null };
+
+    let result = await supabaseClient
+        .from('Purchase')
+        .select(`
+            id,
+            orderProjectId,
+            purchaseType,
+            status,
+            requestObservation,
+            createdAt,
+            purchaseReasonId,
+            purchaseReason:PurchaseReason(name)
+        `)
+        .eq('externalAssemblyInspectionId', key)
+        .order('createdAt', { ascending: false });
+
+    if (result.error?.message?.includes('externalAssemblyInspectionId')) {
+        return { rows: [], missingColumn: true, error: null };
+    }
+    if (result.error) {
+        return { rows: [], missingColumn: false, error: result.error };
+    }
+    return { rows: result.data || [], missingColumn: false, error: null };
+}
+
+window.fetchPurchasesByExternalAssemblyInspectionId = fetchPurchasesByExternalAssemblyInspectionId;
+window.fetchPurchasesByAssistanceRequestId = fetchPurchasesByAssistanceRequestId;
 
 function formatCompraDisplayDate(dateStr) {
     const value = toCompraDateInputValue(dateStr);
@@ -960,7 +1077,15 @@ function downloadCompraThirdPartyDriveFile() {
     }
 }
 
-async function openPurchaseModal(compraId) {
+function syncCompraModalReadOnlyUi(readOnly) {
+    const saveButton = document.getElementById('btn-compra-salvar');
+    if (saveButton) {
+        saveButton.classList.toggle('hidden', readOnly);
+    }
+    setCompraFormDisabled(readOnly || !canActCompraModal());
+}
+
+async function openPurchaseModal(compraId, options = {}) {
     if (!compraId) return;
 
     try {
@@ -972,9 +1097,15 @@ async function openPurchaseModal(compraId) {
             return;
         }
 
+        activeCompraModalReadOnly = Boolean(options.readOnly);
         activeCompraRecord = await enrichCompraRecord(record);
         populateCompraForm(activeCompraRecord);
-        setCompraFormDisabled(!canActCompraModal());
+        syncCompraModalReadOnlyUi(activeCompraModalReadOnly);
+        const compraModalEl = document.getElementById('compra-modal');
+        if (activeCompraModalReadOnly && compraModalEl) {
+            compraModalEl.classList.remove('z-50');
+            compraModalEl.classList.add('z-[97]');
+        }
         toggleModal('compra-modal', true);
     } catch (error) {
         if (error.message?.includes('Purchase') || error.message?.includes('does not exist')) {
@@ -990,6 +1121,13 @@ function closePurchaseModal() {
     toggleModal('compra-modal', false);
     activeCompraRecord = null;
     activeCompraThirdPartyDriveFile = null;
+    activeCompraModalReadOnly = false;
+    document.getElementById('btn-compra-salvar')?.classList.remove('hidden');
+    const compraModalEl = document.getElementById('compra-modal');
+    if (compraModalEl) {
+        compraModalEl.classList.add('z-50');
+        compraModalEl.classList.remove('z-[97]');
+    }
 }
 window.closePurchaseModal = closePurchaseModal;
 window.openPurchaseModal = openPurchaseModal;
@@ -1060,7 +1198,7 @@ async function handleCompraSalvar() {
         setCompraModalLoading(true, `Erro ao salvar compra: ${error.message}`, 'error');
         await new Promise(resolve => setTimeout(resolve, 2200));
         setCompraModalLoading(false);
-        setCompraFormDisabled(!canActCompraModal());
+        syncCompraModalReadOnlyUi(activeCompraModalReadOnly);
     }
 }
 

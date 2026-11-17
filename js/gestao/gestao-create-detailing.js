@@ -36,10 +36,17 @@ async function fetchGestaoCreateDetailingByProjectIds(projectIds) {
 
     for (let index = 0; index < ids.length; index += chunkSize) {
         const chunk = ids.slice(index, index + chunkSize);
-        const { data, error } = await supabaseClient
+        let { data, error } = await supabaseClient
             .from('Detailing')
-            .select('id, orderProjectId, status')
+            .select('id, orderProjectId, status, detailingType')
             .in('orderProjectId', chunk);
+
+        if (error?.message?.includes('detailingType')) {
+            ({ data, error } = await supabaseClient
+                .from('Detailing')
+                .select('id, orderProjectId, status')
+                .in('orderProjectId', chunk));
+        }
 
         if (error?.message?.includes('Detailing')) {
             throw new Error('Tabela Detailing não encontrada.');
@@ -48,8 +55,9 @@ async function fetchGestaoCreateDetailingByProjectIds(projectIds) {
 
         (data || []).forEach(row => {
             const projectId = Number(row.orderProjectId);
-            if (!projectId || byProjectId[projectId]) return;
-            byProjectId[projectId] = row;
+            if (!projectId) return;
+            if (!byProjectId[projectId]) byProjectId[projectId] = [];
+            byProjectId[projectId].push(row);
         });
     }
 
@@ -120,7 +128,7 @@ async function fetchGestaoCreateDetailingProjects(filters = {}) {
         projects: projects.map(project => ({
             ...project,
             order: orderById[Number(project.orderId)] || null,
-            detailing: detailingByProjectId[Number(project.id)] || null
+            detailings: detailingByProjectId[Number(project.id)] || []
         }))
     };
 }
@@ -153,14 +161,21 @@ function renderGestaoCreateDetailingProjectsList(projects = gestaoCreateDetailin
             ? getOrderProjectStatusBadgeClass(statusName)
             : 'bg-slate-100 text-slate-700';
         const projectName = project.name || '—';
-        const hasDetailing = Boolean(project.detailing?.id);
-        const actionButton = hasDetailing
-            ? `<button type="button"
-                    class="gestao-create-detailing-open text-[10px] bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
-                    data-project-id="${project.id}"
-                    data-project-name="${escapeHtml(projectName)}">
-                    Detalhamento
-                </button>`
+        const detailings = project.detailings || [];
+        const actionButton = detailings.length
+            ? detailings.map(row => {
+                const typeLabel = typeof formatDetailingTypeLabel === 'function'
+                    ? formatDetailingTypeLabel(row.detailingType)
+                    : 'Montagem';
+                return `<button type="button"
+                        class="gestao-create-detailing-open text-[10px] bg-indigo-700 text-white hover:bg-indigo-800 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
+                        data-project-id="${project.id}"
+                        data-project-name="${escapeHtml(projectName)}"
+                        data-detailing-id="${Number(row.id)}"
+                        data-detailing-type="${escapeHtml(row.detailingType || '')}">
+                        ${escapeHtml(typeLabel)}
+                    </button>`;
+            }).join(' ')
             : `<button type="button"
                     class="gestao-create-detailing-create text-[10px] bg-emerald-700 text-white hover:bg-emerald-800 px-2.5 py-1 rounded-lg font-medium whitespace-nowrap"
                     data-project-id="${project.id}"
@@ -233,13 +248,13 @@ function resetGestaoCreateDetailingFilters() {
     }
 }
 
-async function openGestaoCreateDetailingRecord(projectId, projectName) {
+async function openGestaoCreateDetailingRecord(projectId, projectName, options = {}) {
     if (typeof openDetailingModal === 'function') {
-        await openDetailingModal(projectId, projectName);
+        await openDetailingModal(projectId, projectName, options);
         return;
     }
     if (typeof openDetalhamentoModal === 'function') {
-        await openDetalhamentoModal(projectId, projectName);
+        await openDetalhamentoModal(projectId, projectName, options);
     }
 }
 
@@ -259,7 +274,9 @@ async function createGestaoCreateDetailingRecord(projectId, projectName, button)
         setGestaoCreateDetailingLoading(true, 'Criando detalhamento...');
 
         let record = null;
-        if (typeof createDetalhamentoRecord === 'function') {
+        if (typeof createDetailingForProject === 'function') {
+            record = await createDetailingForProject(projectId);
+        } else if (typeof createDetalhamentoRecord === 'function') {
             record = await createDetalhamentoRecord(projectId);
             if (record && typeof notifyAguardandoDetalhamentoEmail === 'function') {
                 setGestaoCreateDetailingLoading(true, 'Enviando notificação...');
@@ -268,8 +285,6 @@ async function createGestaoCreateDetailingRecord(projectId, projectName, button)
                     projectFilePath: record.projectFilePath || ''
                 });
             }
-        } else if (typeof createDetailingForProject === 'function') {
-            record = await createDetailingForProject(projectId);
         } else {
             throw new Error('Módulo de detalhamento não carregado.');
         }
@@ -334,7 +349,11 @@ function bindGestaoCreateDetailingEvents() {
         if (openButton) {
             await openGestaoCreateDetailingRecord(
                 Number(openButton.dataset.projectId),
-                openButton.dataset.projectName || ''
+                openButton.dataset.projectName || '',
+                {
+                    detailingId: Number(openButton.dataset.detailingId) || null,
+                    detailingType: openButton.dataset.detailingType || null
+                }
             );
             return;
         }

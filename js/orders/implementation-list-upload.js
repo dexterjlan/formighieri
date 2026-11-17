@@ -204,6 +204,18 @@ async function refreshImplantacaoListUploadSection(purchaseType, record = active
     const config = getImplantacaoListUiConfig(purchaseType);
     if (!config) return;
 
+    if (purchaseType === 'Tinta' && typeof updateImplantacaoProvencalTintasSectionUi === 'function') {
+        updateImplantacaoProvencalTintasSectionUi();
+    }
+
+    const mandatoryTintaRequired = purchaseType === 'Tinta'
+        && (
+            (typeof isImplantacaoMandatoryTintaListRequired === 'function'
+                && isImplantacaoMandatoryTintaListRequired())
+            || (typeof isImplantacaoProvencalPaintListRequired === 'function'
+                && isImplantacaoProvencalPaintListRequired())
+        );
+
     clearImplantacaoListFileSelection(purchaseType);
     renderImplantacaoListCurrentFile(purchaseType, null);
 
@@ -221,8 +233,9 @@ async function refreshImplantacaoListUploadSection(purchaseType, record = active
     const notApplicableInput = document.getElementById(config.notApplicableId);
 
     if (notApplicableInput) {
-        notApplicableInput.checked = Boolean(item?.isNotApplicable);
-        notApplicableInput.disabled = !canAct || sentToCommercial || formLocked;
+        const notApplicableValue = mandatoryTintaRequired ? false : Boolean(item?.isNotApplicable);
+        notApplicableInput.checked = notApplicableValue;
+        notApplicableInput.disabled = !canAct || sentToCommercial || formLocked || mandatoryTintaRequired;
     }
 
     if (comercialInput && sentToCommercial) {
@@ -239,7 +252,7 @@ async function refreshImplantacaoListUploadSection(purchaseType, record = active
     }
 
     const uploadSection = document.getElementById(config.uploadSectionId);
-    const notApplicable = Boolean(item?.isNotApplicable);
+    const notApplicable = mandatoryTintaRequired ? false : Boolean(item?.isNotApplicable);
     const uploadLocked = sentToCommercial || notApplicable;
     if (uploadSection) {
         uploadSection.classList.toggle('opacity-50', uploadLocked);
@@ -252,6 +265,10 @@ async function refreshImplantacaoListUploadSection(purchaseType, record = active
             hint.textContent = 'Enviado para compras — não é possível alterar esta lista.';
         } else if (notApplicable) {
             hint.textContent = 'Lista marcada como não possui — envio de PDF desabilitado.';
+        } else if (mandatoryTintaRequired) {
+            hint.textContent = canAct
+                ? 'Lista de tintas obrigatória (Laca, Lâmina Natural, Provençal ou Pintura). Envie o PDF e use "Enviar para Compras".'
+                : 'Lista de tintas obrigatória neste projeto.';
         } else {
             hint.textContent = canAct
                 ? 'Envie um PDF (até 100 MB). Um novo envio substitui o arquivo anterior.'
@@ -426,6 +443,20 @@ function bindImplantacaoListUploadEvents() {
             ?.addEventListener('click', () => downloadImplantacaoListDriveFile(purchaseType));
 
         document.getElementById(config.notApplicableId)?.addEventListener('change', async () => {
+            if (
+                purchaseType === 'Tinta'
+                && (
+                    (typeof isImplantacaoMandatoryTintaListRequired === 'function'
+                        && isImplantacaoMandatoryTintaListRequired())
+                    || (typeof isImplantacaoProvencalPaintListRequired === 'function'
+                        && isImplantacaoProvencalPaintListRequired())
+                )
+            ) {
+                const input = document.getElementById(config.notApplicableId);
+                if (input) input.checked = false;
+                return;
+            }
+
             const item = typeof getImplantacaoStandardPurchaseItem === 'function'
                 ? getImplantacaoStandardPurchaseItem(purchaseType)
                 : null;

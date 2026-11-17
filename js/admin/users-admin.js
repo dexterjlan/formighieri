@@ -36,6 +36,12 @@ const USER_FLAG_CONFIG = [
         appliesTo: role => role === 'Projetista'
     },
     {
+        id: 'orcamentista',
+        label: 'Orçamentista',
+        hint: 'Atributo de projetista orçamentista',
+        appliesTo: role => role === 'Projetista'
+    },
+    {
         id: 'gestor-fabrica',
         label: 'Gestor de Fábrica',
         hint: 'Aba Fábrica do pedido, Gestão e programação de montagem',
@@ -132,6 +138,7 @@ function buildUserRoleBadges(u) {
     if (isProjetistaUser && u.isPpcp) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">PPCP</span>');
     if (isProjetistaUser && u.isReviewer) badges.push('<span class="text-[10px] bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-teal-100">Revisor</span>');
     if (isProjetistaUser && u.isDetailing) badges.push('<span class="text-[10px] bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-100">Detalhamento</span>');
+    if (isProjetistaUser && u.isBudgetEstimator) badges.push('<span class="text-[10px] bg-rose-50 text-rose-800 px-2 py-0.5 rounded border border-rose-100">Orçamentista</span>');
     if (isFabricaUser && u.isFactoryManager) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
     if (isFabricaUser && u.isFactoryAdministrative) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Administrativo</span>');
     if (isFabricaUser && u.isInstaller) badges.push('<span class="text-[10px] bg-cyan-50 text-cyan-900 px-2 py-0.5 rounded border border-cyan-100">Montador (3D)</span>');
@@ -157,6 +164,7 @@ function buildUserFlagCheckbox(u, flag) {
         administrativo: Boolean(u.isFactoryAdministrative),
         montador: Boolean(u.isInstaller),
         detalhamento: Boolean(u.isDetailing),
+        orcamentista: Boolean(u.isBudgetEstimator),
         terceiro: Boolean(u.isThirdParty),
         'receive-email-copy': Boolean(u.receiveEmailCopy)
     };
@@ -207,6 +215,7 @@ function mergeUserFlagChecks(u, checks) {
         isFactoryAdministrative: checks.administrativo ?? u.isFactoryAdministrative,
         isInstaller: checks.montador ?? u.isInstaller,
         isDetailing: checks.detalhamento ?? u.isDetailing,
+        isBudgetEstimator: checks.orcamentista ?? u.isBudgetEstimator,
         isThirdParty: checks.terceiro ?? u.isThirdParty,
         receiveEmailCopy: checks['receive-email-copy'] ?? u.receiveEmailCopy
     };
@@ -420,27 +429,27 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
         .order('name', { ascending: true });
 
     if (result.error?.message?.includes('matrixUserId')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, calendarColor')
             .order('name', { ascending: true });
     }
 
     if (result.error?.message?.includes('receiveEmailCopy')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, calendarColor')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, calendarColor')
             .order('name', { ascending: true });
     }
 
     if (result.error?.message?.includes('calendarColor')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty')
             .order('name', { ascending: true });
     }
 
@@ -448,19 +457,26 @@ async function loadUsersAdminList() {
         usersAdminInstallerColumnAvailable = false;
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty, calendarColor')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isThirdParty, calendarColor')
             .order('name', { ascending: true });
         if (result.error?.message?.includes('calendarColor')) {
             result = await supabaseClient
                 .from('appUsers')
-                .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isThirdParty')
+                .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isThirdParty')
                 .order('name', { ascending: true });
         }
     } else if (!result.error) {
         usersAdminInstallerColumnAvailable = true;
     }
 
-    if (result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isThirdParty')) {
+    if (result.error?.message?.includes('isBudgetEstimator')) {
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
+            .order('name', { ascending: true });
+    }
+
+    if (result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isBudgetEstimator') || result.error?.message?.includes('isThirdParty')) {
         result = await supabaseClient
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager')
@@ -527,6 +543,7 @@ async function saveUserRole(userId) {
     const ppcpCheck = document.getElementById(`ppcp-check-${userId}`);
     const revisorCheck = document.getElementById(`revisor-check-${userId}`);
     const detalhamentoCheck = document.getElementById(`detalhamento-check-${userId}`);
+    const orcamentistaCheck = document.getElementById(`orcamentista-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const administrativoCheck = document.getElementById(`administrativo-check-${userId}`);
     const montadorCheck = document.getElementById(`montador-check-${userId}`);
@@ -544,6 +561,7 @@ async function saveUserRole(userId) {
     const isPpcp = role === 'Projetista' && Boolean(ppcpCheck?.checked);
     const isReviewer = role === 'Projetista' && Boolean(revisorCheck?.checked);
     const isDetailing = role === 'Projetista' && Boolean(detalhamentoCheck?.checked);
+    const isBudgetEstimator = role === 'Projetista' && Boolean(orcamentistaCheck?.checked);
     const isFactoryRole = role === 'Fábrica' || role === 'Marceneiro';
     const isFactoryManager = isFactoryRole && Boolean(gestorFabricaCheck?.checked);
     const isFactoryAdministrative = isFactoryRole && Boolean(administrativoCheck?.checked);
@@ -597,6 +615,7 @@ async function saveUserRole(userId) {
         isFactoryAdministrative,
         isInstaller,
         isDetailing,
+        isBudgetEstimator,
         isThirdParty,
         receiveEmailCopy,
         matrixUserId,
@@ -623,6 +642,14 @@ async function saveUserRole(userId) {
         usersAdminInstallerColumnAvailable = false;
         alertAppDialog(
             'Não foi possível salvar a flag Montador: coluna isInstaller ausente. Execute supabase/feats/installer-login-email-and-app-user-flag.sql no Supabase SQL Editor.',
+            { variant: 'error', title: 'Erro' }
+        );
+        return;
+    }
+
+    if (error?.message?.includes('isBudgetEstimator')) {
+        alertAppDialog(
+            'Não foi possível salvar a flag Orçamentista: coluna isBudgetEstimator ausente. Execute supabase/feats/add-app-user-is-budget-estimator.sql no Supabase SQL Editor.',
             { variant: 'error', title: 'Erro' }
         );
         return;
@@ -677,6 +704,7 @@ async function saveUserRole(userId) {
             isFactoryAdministrative,
             isInstaller,
             isDetailing,
+            isBudgetEstimator,
             isThirdParty,
             receiveEmailCopy
         };
@@ -697,7 +725,7 @@ async function saveUserRole(userId) {
         }
     }
 
-    if (error?.message?.includes('isFactoryAdministrative') || error?.message?.includes('isFactoryManager') || error?.message?.includes('isPpcp') || error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader') || error?.message?.includes('isDetailing') || error?.message?.includes('isThirdParty')) {
+    if (error?.message?.includes('isFactoryAdministrative') || error?.message?.includes('isFactoryManager') || error?.message?.includes('isPpcp') || error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader') || error?.message?.includes('isDetailing') || error?.message?.includes('isBudgetEstimator') || error?.message?.includes('isThirdParty')) {
         payload = {
             name,
             role,
@@ -709,7 +737,8 @@ async function saveUserRole(userId) {
             isFactoryManager,
             isFactoryAdministrative,
             isInstaller,
-            isDetailing
+            isDetailing,
+            isBudgetEstimator
         };
         updateResult = await supabaseClient
             .from('appUsers')
@@ -737,6 +766,7 @@ async function saveUserRole(userId) {
             isFactoryAdministrative,
             isInstaller,
             isDetailing,
+            isBudgetEstimator,
             isThirdParty
         };
         updateResult = await supabaseClient
@@ -787,6 +817,7 @@ async function saveUserRole(userId) {
             isFactoryAdministrative,
             isInstaller,
             isDetailing,
+            isBudgetEstimator,
             isThirdParty,
             receiveEmailCopy,
             matrixUserId,
@@ -815,6 +846,7 @@ async function saveUserRole(userId) {
             isFactoryAdministrative,
             isInstaller,
             isDetailing,
+            isBudgetEstimator,
             isThirdParty,
             receiveEmailCopy,
             matrixUserId,

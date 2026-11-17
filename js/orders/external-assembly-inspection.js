@@ -36,6 +36,13 @@ const EAI_ACTIVITY_SELECT = `
     doneBy:appUsers!ExternalAssemblyInspectionActivity_doneById_fkey(id, name)
 `;
 
+const eaiPurchaseRequestModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('eai-purchase-request', {
+        closeButtonSelector: '#btn-eai-purchase-request-close',
+        disableFormSelector: '#eai-purchase-request-modal button, #eai-purchase-request-form-mount button, #eai-purchase-request-form-mount input, #eai-purchase-request-form-mount textarea, #eai-purchase-request-form-mount select'
+    })
+    : null;
+
 let eaiCreateState = null;
 let eaiDetailState = null;
 let eaiListState = null;
@@ -361,15 +368,348 @@ function canEditExternalAssemblyInspectionActivities(inspection, inspectionProje
 }
 
 function resolveOrderForExternalAssemblyInspection(orderId) {
-  const fromCache = typeof ordersCache !== 'undefined' && Array.isArray(ordersCache)
-        ? ordersCache.find(item => Number(item.id) === Number(orderId))
+    const orderKey = Number(orderId);
+    if (!orderKey) return null;
+
+    const fromOrdersCache = typeof ordersCache !== 'undefined' && Array.isArray(ordersCache)
+        ? ordersCache.find(item => Number(item.id) === orderKey)
         : null;
-    if (fromCache) return fromCache;
-    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === Number(orderId)
+    if (fromOrdersCache) return fromOrdersCache;
+
+    const fromGestaoOrdersCache = typeof gestaoOrdersCache !== 'undefined' && Array.isArray(gestaoOrdersCache)
+        ? gestaoOrdersCache.find(item => Number(item.id) === orderKey)
+        : null;
+    if (fromGestaoOrdersCache) return fromGestaoOrdersCache;
+
+    if (typeof activeOrderId !== 'undefined' && Number(activeOrderId) === orderKey
         && typeof ordersCache !== 'undefined') {
-        return ordersCache.find(item => Number(item.id) === Number(orderId)) || { id: orderId };
+        return ordersCache.find(item => Number(item.id) === orderKey) || { id: orderKey };
     }
-    return { id: orderId };
+    return { id: orderKey };
+}
+
+function resolveExternalAssemblyInspectionOpenContext(orderProjectId, options = {}) {
+    const projectKey = Number(orderProjectId);
+    let orderId = Number(options.orderId || 0);
+    let projectLabel = String(options.subtitle || options.projectLabel || '').trim();
+    let order = null;
+
+    const fromOrderProjectsCache = typeof orderProjectsCache !== 'undefined' && Array.isArray(orderProjectsCache)
+        ? orderProjectsCache.find(item => Number(item.id) === projectKey)
+        : null;
+
+    if (!orderId && fromOrderProjectsCache?.orderId) {
+        orderId = Number(fromOrderProjectsCache.orderId);
+    }
+    if (!projectLabel && fromOrderProjectsCache) {
+        projectLabel = getExternalAssemblyInspectionProjectName(fromOrderProjectsCache);
+    }
+
+    if (typeof gestaoOrdersCache !== 'undefined' && Array.isArray(gestaoOrdersCache)) {
+        for (const gestaoOrder of gestaoOrdersCache) {
+            const project = (gestaoOrder.projects || []).find(item => Number(item.id) === projectKey);
+            if (!project) continue;
+            if (!orderId) orderId = Number(gestaoOrder.id);
+            order = gestaoOrder;
+            if (!projectLabel) {
+                projectLabel = getExternalAssemblyInspectionProjectName(project);
+            }
+            break;
+        }
+    }
+
+    if (!orderId && typeof activeOrderId !== 'undefined') {
+        const activeKey = Number(activeOrderId);
+        const activeProjectMatches = fromOrderProjectsCache
+            && Number(fromOrderProjectsCache.orderId) === activeKey;
+        if (activeProjectMatches) {
+            orderId = activeKey;
+        }
+    }
+
+    if (orderId && !order) {
+        order = resolveOrderForExternalAssemblyInspection(orderId);
+    }
+
+    return {
+        orderProjectId: projectKey,
+        orderId: orderId || null,
+        projectLabel: projectLabel || 'Projeto',
+        order
+    };
+}
+
+function resolveExternalAssemblyInspectionPrimaryOrderProject(detail) {
+    const rows = detail?.projects || [];
+    const inspectionOrderId = Number(detail?.inspection?.orderId || 0);
+
+    for (const row of rows) {
+        const meta = row.orderProject || {};
+        const orderProjectId = Number(meta.id || row.orderProjectId);
+        if (!orderProjectId) continue;
+        if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(meta)) {
+            continue;
+        }
+        return {
+            orderProjectId,
+            orderId: Number(meta.orderId || row.orderId || inspectionOrderId) || null,
+            projectLabel: getExternalAssemblyInspectionProjectName(meta)
+        };
+    }
+
+    const first = rows[0];
+    if (!first) return null;
+    const meta = first.orderProject || {};
+    const orderProjectId = Number(meta.id || first.orderProjectId);
+    if (!orderProjectId) return null;
+
+    return {
+        orderProjectId,
+        orderId: Number(meta.orderId || first.orderId || inspectionOrderId) || null,
+        projectLabel: getExternalAssemblyInspectionProjectName(meta) || getExternalAssemblyInspectionProjectName({
+            id: orderProjectId,
+            name: meta.name
+        })
+    };
+}
+
+function formatExternalAssemblyInspectionPurchaseTypeLabel(purchaseType) {
+    const map = {
+        Material: 'Lista de Material',
+        Ferragem: 'Lista de Ferragem',
+        Tinta: 'Lista de Tinta',
+        Terceiro: 'Terceiro'
+    };
+    return map[String(purchaseType || '').trim()] || purchaseType || '—';
+}
+
+function closeExternalAssemblyInspectionPurchaseRequestsModal() {
+    toggleModal('eai-purchase-requests-modal', false);
+}
+
+async function openExternalAssemblyInspectionPurchaseRequestsModal() {
+    if (!eaiDetailState?.inspection?.id) return;
+
+    const inspectionId = Number(eaiDetailState.inspection.id);
+    const mount = document.getElementById('eai-purchase-requests-mount');
+    const subtitle = document.getElementById('eai-purchase-requests-subtitle');
+    if (subtitle) {
+        subtitle.textContent = `Vistoria #${inspectionId}`;
+    }
+    if (mount) {
+        mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando requisições...</p>';
+    }
+    toggleModal('eai-purchase-requests-modal', true);
+
+    if (typeof fetchPurchasesByExternalAssemblyInspectionId !== 'function') {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-red-600 text-center py-8">Módulo de compras indisponível.</p>';
+        }
+        return;
+    }
+
+    const { rows, missingColumn, error } = await fetchPurchasesByExternalAssemblyInspectionId(inspectionId);
+
+    if (missingColumn) {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-amber-700 text-center py-8">Execute <code>supabase/feats/add-purchase-external-assembly-inspection-id.sql</code> no Supabase SQL Editor.</p>';
+        }
+        return;
+    }
+    if (error) {
+        if (mount) {
+            mount.innerHTML = `<p class="text-xs text-red-600 text-center py-8">${escapeHtml(error.message)}</p>`;
+        }
+        return;
+    }
+
+    if (!rows.length) {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Nenhuma requisição de compra vinculada a esta vistoria.</p>';
+        }
+        return;
+    }
+
+    if (mount) {
+        mount.innerHTML = `
+            <table class="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                <thead class="bg-slate-50 text-slate-500 uppercase text-[10px]">
+                    <tr>
+                        <th class="text-left px-3 py-2">#</th>
+                        <th class="text-left px-3 py-2">Tipo</th>
+                        <th class="text-left px-3 py-2">Motivo</th>
+                        <th class="text-left px-3 py-2">Status</th>
+                        <th class="text-left px-3 py-2">Criada em</th>
+                        <th class="text-right px-3 py-2 w-24">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows.map(row => `
+                        <tr class="border-t border-slate-100">
+                            <td class="px-3 py-2 font-mono">${row.id}</td>
+                            <td class="px-3 py-2">${escapeHtml(formatExternalAssemblyInspectionPurchaseTypeLabel(row.purchaseType))}</td>
+                            <td class="px-3 py-2">${escapeHtml(row.purchaseReason?.name || 'Vistoria')}</td>
+                            <td class="px-3 py-2">${escapeHtml(row.status || '—')}</td>
+                            <td class="px-3 py-2">${typeof formatDisplayDate === 'function' ? formatDisplayDate(row.createdAt) : (row.createdAt || '—')}</td>
+                            <td class="px-3 py-2 text-right">
+                                <button type="button" class="eai-purchase-request-view text-xs font-medium text-indigo-700 hover:text-indigo-900"
+                                    data-purchase-id="${row.id}">Ver</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+}
+
+function closeExternalAssemblyInspectionPurchaseRequestFormModal() {
+    eaiPurchaseRequestModalOverlay?.setLoading(false);
+    toggleModal('eai-purchase-request-modal', false);
+}
+
+function handleExternalAssemblyInspectionPurchaseRequestViewClick(event) {
+    const button = event.target?.closest?.('.eai-purchase-request-view');
+    if (!button) return;
+    const purchaseId = Number(button.dataset.purchaseId);
+    if (!purchaseId) return;
+    if (typeof openPurchaseModal !== 'function') {
+        alertAppDialog('Módulo de compras indisponível.');
+        return;
+    }
+    void openPurchaseModal(purchaseId, { readOnly: true });
+}
+
+async function openExternalAssemblyInspectionPurchaseRequestFormModal(draftInput = {}) {
+    const inspectionId = Number(draftInput.externalAssemblyInspectionId || eaiDetailState?.inspection?.id);
+    if (!inspectionId) return;
+
+    let projectContext = resolveExternalAssemblyInspectionPrimaryOrderProject(eaiDetailState);
+    let orderId = Number(draftInput.orderId || eaiDetailState?.inspection?.orderId || projectContext?.orderId);
+    let orderProjectId = Number(draftInput.orderProjectId || projectContext?.orderProjectId);
+
+    if (!orderProjectId && eaiDetailState?.projects?.length) {
+        orderProjectId = Number(eaiDetailState.projects[0].orderProjectId);
+    }
+
+    const projectLabelHint = draftInput.projectLabel || projectContext?.projectLabel || '';
+    const needsProjectRow = orderProjectId && (
+        !orderId
+        || !projectLabelHint
+        || projectLabelHint === 'Projeto'
+    );
+
+    if (needsProjectRow) {
+        const { data: projectRow } = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, projectCode, orderId')
+            .eq('id', orderProjectId)
+            .maybeSingle();
+        if (projectRow) {
+            if (!orderId) orderId = Number(projectRow.orderId);
+            projectContext = {
+                orderProjectId: Number(projectRow.id),
+                orderId: Number(projectRow.orderId),
+                projectLabel: getExternalAssemblyInspectionProjectName(projectRow)
+            };
+        }
+    }
+
+    if (!orderId || !orderProjectId) {
+        alertAppDialog('Não foi possível identificar pedido e projeto desta vistoria.');
+        return;
+    }
+
+    let purchaseReasonId = Number(draftInput.purchaseReasonId) || null;
+    if (!purchaseReasonId && typeof resolveRequisicoesVistoriaPurchaseReasonId === 'function') {
+        try {
+            purchaseReasonId = await resolveRequisicoesVistoriaPurchaseReasonId();
+        } catch (error) {
+            console.warn('openExternalAssemblyInspectionPurchaseRequestFormModal:', error);
+        }
+    }
+
+    const draft = {
+        origin: 'externalAssemblyInspection',
+        externalAssemblyInspectionId: inspectionId,
+        orderId,
+        orderProjectId,
+        purchaseReasonId,
+        projectLabel: draftInput.projectLabel || projectContext?.projectLabel
+            || getExternalAssemblyInspectionProjectName({ id: orderProjectId })
+    };
+
+    const mount = document.getElementById('eai-purchase-request-form-mount');
+    toggleModal('eai-purchase-requests-modal', false);
+    toggleModal('eai-purchase-request-modal', true);
+    eaiPurchaseRequestModalOverlay?.setLoading(false);
+
+    if (typeof mountRequisicoesPurchaseForm !== 'function') {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-red-600">Formulário de compras indisponível.</p>';
+        }
+        return;
+    }
+
+    await mountRequisicoesPurchaseForm(mount, draft, {
+        keepDraft: true,
+        appOverlay: eaiPurchaseRequestModalOverlay,
+        onSuccess: async () => {
+            closeExternalAssemblyInspectionPurchaseRequestFormModal();
+            await openExternalAssemblyInspectionPurchaseRequestsModal();
+        }
+    });
+}
+
+async function handleExternalAssemblyInspectionCreatePurchaseRequest() {
+    if (!eaiDetailState?.inspection?.id) return;
+    if (typeof canAccessRequisicoes === 'function' && !canAccessRequisicoes()) {
+        alertAppDialog('Sem permissão para requisições de compra.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    await openExternalAssemblyInspectionPurchaseRequestFormModal({
+        externalAssemblyInspectionId: eaiDetailState.inspection.id
+    });
+}
+
+async function ensureExternalAssemblyInspectionListContext(orderProjectId, options = {}) {
+    const context = resolveExternalAssemblyInspectionOpenContext(orderProjectId, options);
+    const orderHasMeta = Boolean(context.order?.orderCode)
+        || Boolean(typeof getOrderClientName === 'function' && getOrderClientName(context.order));
+
+    if (context.orderId && orderHasMeta) {
+        return context;
+    }
+
+    if (!context.orderId) {
+        const { data, error } = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, projectCode, orderId, order:Order(id, orderCode, client:Client(name))')
+            .eq('id', orderProjectId)
+            .maybeSingle();
+
+        if (!error && data) {
+            context.orderId = Number(data.orderId) || context.orderId;
+            if (!context.projectLabel || context.projectLabel === 'Projeto') {
+                context.projectLabel = getExternalAssemblyInspectionProjectName(data);
+            }
+            if (data.order) {
+                context.order = data.order;
+            }
+        }
+        return context;
+    }
+
+    if (typeof fetchOrderDetailRecord === 'function' && context.orderId) {
+        try {
+            context.order = await fetchOrderDetailRecord(context.orderId);
+        } catch (error) {
+            console.warn('ensureExternalAssemblyInspectionListContext fetchOrder:', error);
+        }
+    }
+
+    return context;
 }
 
 function buildExternalAssemblyInspectionDriveFolderPath(orderCode, projectName, inspectionId) {
@@ -416,14 +756,16 @@ function syncExternalAssemblyInspectionOrderClientHeader(order, target = {}) {
     if (clientEl) clientEl.textContent = clientName || '—';
 }
 
-async function syncExternalAssemblyInspectionListModalHeader(orderId, projectLabel = '') {
+async function syncExternalAssemblyInspectionListModalHeader(orderId, projectLabel = '', preloadedOrder = null) {
     const projectEl = document.getElementById('eai-list-project-label');
     if (projectEl) {
         projectEl.textContent = String(projectLabel || '—').trim() || '—';
     }
 
-    let order = resolveOrderForExternalAssemblyInspection(orderId);
-    if (typeof fetchOrderDetailRecord === 'function' && orderId) {
+    let order = preloadedOrder || resolveOrderForExternalAssemblyInspection(orderId);
+    const needsFetch = orderId
+        && (!order?.orderCode || !(typeof getOrderClientName === 'function' && getOrderClientName(order)));
+    if (needsFetch && typeof fetchOrderDetailRecord === 'function') {
         try {
             order = await fetchOrderDetailRecord(Number(orderId));
         } catch (error) {
@@ -1391,13 +1733,12 @@ async function persistExternalAssemblyInspectionDetailDraftActivities(rows, now)
 async function openExternalAssemblyInspectionListModal(orderProjectId, subtitle = '', options = {}) {
     const mount = document.getElementById('eai-list-mount');
 
-    const projectFromCache = typeof orderProjectsCache !== 'undefined' && Array.isArray(orderProjectsCache)
-        ? orderProjectsCache.find(item => Number(item.id) === Number(orderProjectId))
-        : null;
-    const orderId = Number(options.orderId ?? projectFromCache?.orderId ?? activeOrderId);
-    const projectLabel = projectFromCache
-        ? getExternalAssemblyInspectionProjectName(projectFromCache)
-        : (subtitle || '');
+    const context = await ensureExternalAssemblyInspectionListContext(orderProjectId, {
+        ...options,
+        subtitle: subtitle || options.subtitle || options.projectLabel
+    });
+    const orderId = context.orderId;
+    const projectLabel = context.projectLabel || subtitle || '';
 
     eaiListState = {
         orderProjectId: Number(orderProjectId),
@@ -1410,7 +1751,7 @@ async function openExternalAssemblyInspectionListModal(orderProjectId, subtitle 
         mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando...</p>';
     }
     toggleModal('external-assembly-inspection-list-modal', true);
-    void syncExternalAssemblyInspectionListModalHeader(orderId, projectLabel);
+    void syncExternalAssemblyInspectionListModalHeader(orderId, projectLabel, context.order);
 
     try {
         const { rows, missingTable } = await fetchExternalAssemblyInspectionsForProject(orderProjectId);
@@ -1762,6 +2103,10 @@ function renderExternalAssemblyInspectionDetail(detail) {
         isExternalAssemblyInspectionCreator(inspection)
         || (typeof isAdmin === 'function' && isAdmin())
     ));
+
+    const purchaseRequestsBtn = document.getElementById('btn-eai-detail-purchase-requests');
+    const canPurchaseRequests = typeof canAccessRequisicoes !== 'function' || canAccessRequisicoes();
+    purchaseRequestsBtn?.classList.toggle('hidden', !canPurchaseRequests);
 
     const mount = document.getElementById('eai-detail-projects-mount');
     if (!mount) return;
@@ -2679,6 +3024,16 @@ function bindExternalAssemblyInspectionEvents() {
 
     document.getElementById('btn-eai-detail-close')?.addEventListener('click', closeExternalAssemblyInspectionDetailModal);
     document.getElementById('btn-eai-detail-close-footer')?.addEventListener('click', closeExternalAssemblyInspectionDetailModal);
+    document.getElementById('btn-eai-detail-purchase-requests')?.addEventListener('click', () => {
+        void openExternalAssemblyInspectionPurchaseRequestsModal();
+    });
+    document.getElementById('btn-eai-purchase-requests-close')?.addEventListener('click', closeExternalAssemblyInspectionPurchaseRequestsModal);
+    document.getElementById('btn-eai-purchase-requests-close-footer')?.addEventListener('click', closeExternalAssemblyInspectionPurchaseRequestsModal);
+    document.getElementById('btn-eai-purchase-requests-create')?.addEventListener('click', () => {
+        void handleExternalAssemblyInspectionCreatePurchaseRequest();
+    });
+    document.getElementById('eai-purchase-requests-mount')?.addEventListener('click', handleExternalAssemblyInspectionPurchaseRequestViewClick);
+    document.getElementById('btn-eai-purchase-request-close')?.addEventListener('click', closeExternalAssemblyInspectionPurchaseRequestFormModal);
     document.getElementById('btn-eai-detail-export-pdf')?.addEventListener('click', () => {
         void exportExternalAssemblyInspectionPdf();
     });
@@ -2742,7 +3097,10 @@ function bindExternalAssemblyInspectionEvents() {
         if (kanbanBtn) {
             const projectId = Number(kanbanBtn.dataset.orderProjectId);
             const label = kanbanBtn.dataset.projectLabel || '';
-            if (projectId) void openExternalAssemblyInspectionListModal(projectId, label);
+            const orderId = Number(kanbanBtn.dataset.orderId) || undefined;
+            if (projectId) {
+                void openExternalAssemblyInspectionListModal(projectId, label, { orderId });
+            }
         }
     });
 }
@@ -2773,3 +3131,5 @@ window.normalizeExternalAssemblyInspectionKanbanButtonTone = normalizeExternalAs
 window.fetchExternalAssemblyInspectionSummaryByOrderProjectIds = fetchExternalAssemblyInspectionSummaryByOrderProjectIds;
 window.exportExternalAssemblyInspectionPdf = exportExternalAssemblyInspectionPdf;
 window.getExternalAssemblyInspectionProjectName = getExternalAssemblyInspectionProjectName;
+window.openExternalAssemblyInspectionPurchaseRequestsModal = openExternalAssemblyInspectionPurchaseRequestsModal;
+window.openExternalAssemblyInspectionPurchaseRequestFormModal = openExternalAssemblyInspectionPurchaseRequestFormModal;

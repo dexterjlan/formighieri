@@ -281,9 +281,12 @@ async function openProjectViewModal(projectOrId) {
         implantacaoRecord = await fetchImplantacaoByOrderProjectId(project.id);
     }
 
-    let detalhamentoRecord = null;
-    if (typeof fetchDetalhamentoByOrderProjectId === 'function') {
-        detalhamentoRecord = await fetchDetalhamentoByOrderProjectId(project.id);
+    let detalhamentoRecords = [];
+    if (typeof fetchDetailingsByOrderProjectId === 'function') {
+        detalhamentoRecords = await fetchDetailingsByOrderProjectId(project.id);
+    } else if (typeof fetchDetalhamentoByOrderProjectId === 'function') {
+        const single = await fetchDetalhamentoByOrderProjectId(project.id);
+        if (single) detalhamentoRecords = [single];
     }
 
     const complementarChildren = isComplementaryOrderProject(project)
@@ -300,8 +303,13 @@ async function openProjectViewModal(projectOrId) {
     orderProjectViewImplantacaoContext = implantacaoRecord
         ? { projectId: project.id, projectName: project.name || 'Projeto' }
         : null;
-    orderProjectViewDetalhamentoContext = detalhamentoRecord
-        ? { projectId: project.id, projectName: project.name || 'Projeto' }
+    orderProjectViewDetalhamentoContext = detalhamentoRecords.length
+        ? {
+            projectId: project.id,
+            projectName: project.name || 'Projeto',
+            detailingId: detalhamentoRecords[0]?.id,
+            detailingType: detalhamentoRecords[0]?.detailingType
+        }
         : null;
     orderProjectViewRevisionsContext = typeof fetchOrderProjectRevisionsHistoryContext === 'function'
         ? await fetchOrderProjectRevisionsHistoryContext(project, project.orderId)
@@ -321,7 +329,7 @@ async function openProjectViewModal(projectOrId) {
         syncProjectViewExternalAssemblyInspectionButton(project, statusName);
     }
     if (typeof renderProjectViewDetailingSection === 'function') {
-        renderProjectViewDetailingSection(detalhamentoRecord);
+        renderProjectViewDetailingSection(detalhamentoRecords);
     } else {
         document.getElementById('project-view-detalhamento-wrap')?.classList.add('hidden');
     }
@@ -533,9 +541,9 @@ function bindGestaoProjectViewEvents() {
     });
     document.getElementById('project-view-detalhamento-open')?.addEventListener('click', async () => {
         if (!orderProjectViewDetalhamentoContext) return;
-        const { projectId, projectName } = orderProjectViewDetalhamentoContext;
+        const { projectId, projectName, detailingId, detailingType } = orderProjectViewDetalhamentoContext;
         if (typeof openDetalhamentoModal === 'function') {
-            await openDetalhamentoModal(projectId, projectName);
+            await openDetalhamentoModal(projectId, projectName, { detailingId, detailingType });
         }
     });
     document.getElementById('btn-project-view-revisions')?.addEventListener('click', async () => {

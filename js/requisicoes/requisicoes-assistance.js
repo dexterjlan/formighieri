@@ -198,9 +198,9 @@ function getRequisicoesAssistanceInteractiveColumns() {
         actionColumn({
             label: 'Ações',
             align: 'left',
-            thClass: 'min-w-[12rem]',
+            thClass: 'w-20',
             cellClass: 'p-3 text-left',
-            render: row => `<div class="flex flex-wrap gap-1.5">${renderAssistanceListActionButtons(row.record)}</div>`
+            render: row => renderAssistanceListActionButtons(row.record)
         }),
         {
             key: 'history',
@@ -365,7 +365,6 @@ function syncAssistanceFormReadOnlyState(record = assistanceEditingRecord) {
         'btn-assistance-order-picker',
         'btn-assistance-order-clear',
         'btn-assistance-addr-picker',
-        'btn-assistance-send-quote',
         'btn-assistance-send-awaiting-scheduling'
     ];
     ids.forEach(id => {
@@ -484,29 +483,7 @@ function syncAssistanceSchedulingSection(record = null) {
 }
 
 function renderAssistanceListActionButtons(record) {
-    const parts = [
-        `<button type="button" class="assistance-edit-btn text-[11px] font-medium text-indigo-700 hover:text-indigo-900" data-assistance-id="${record.id}">Abrir</button>`
-    ];
-    if (record.status === ASSISTANCE_STATUS_CANCELLED) {
-        return parts.join('');
-    }
-    if (record.status === ASSISTANCE_STATUS_OPEN) {
-        parts.push(`<button type="button" class="assistance-send-quote-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-amber-100 text-amber-800 hover:bg-amber-200" data-assistance-id="${record.id}">Enviar para Compras Orçar</button>`);
-        parts.push(`<button type="button" class="assistance-send-awaiting-scheduling-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200" data-assistance-id="${record.id}">Ir para Aguardando agendamento</button>`);
-    }
-    if (record.status === ASSISTANCE_STATUS_APPROVAL && canApproveAssistance()) {
-        parts.push(`<button type="button" class="assistance-approve-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200" data-assistance-id="${record.id}">Aprovar</button>`);
-    }
-    if (record.status === ASSISTANCE_STATUS_AWAITING_SCHEDULING && canEditAssistanceScheduling()) {
-        parts.push(`<button type="button" class="assistance-scheduled-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200" data-assistance-id="${record.id}">Agendado</button>`);
-    }
-    if (record.status === ASSISTANCE_STATUS_SCHEDULED && canEditAssistanceScheduling()) {
-        parts.push(`<button type="button" class="assistance-execution-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-violet-100 text-violet-800 hover:bg-violet-200" data-assistance-id="${record.id}">Execução</button>`);
-    }
-    if (record.status === ASSISTANCE_STATUS_EXECUTION && canEditAssistanceScheduling()) {
-        parts.push(`<button type="button" class="assistance-finished-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-emerald-100 text-emerald-800 hover:bg-emerald-200" data-assistance-id="${record.id}">Finalizado</button>`);
-    }
-    return parts.join('');
+    return `<button type="button" class="assistance-edit-btn text-[11px] font-medium text-indigo-700 hover:text-indigo-900" data-assistance-id="${record.id}">Abrir</button>`;
 }
 
 const ASSISTANCE_STATUS_HISTORY_CHANGED_BY_EMBED =
@@ -517,6 +494,192 @@ const assistanceModalOverlay = typeof createAppOverlayHelper === 'function'
         closeButtonSelector: '#btn-assistance-close'
     })
     : null;
+
+const assistancePurchaseRequestModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('assistance-purchase-request', {
+        closeButtonSelector: '#btn-assistance-purchase-request-close',
+        disableFormSelector: '#assistance-purchase-request-modal button, #assistance-purchase-request-form-mount button, #assistance-purchase-request-form-mount input, #assistance-purchase-request-form-mount textarea, #assistance-purchase-request-form-mount select'
+    })
+    : null;
+
+function formatAssistancePurchaseTypeLabel(purchaseType) {
+    const map = {
+        Material: 'Lista de Material',
+        Ferragem: 'Lista de Ferragem',
+        Tinta: 'Lista de Tinta',
+        Terceiro: 'Terceiro'
+    };
+    return map[String(purchaseType || '').trim()] || purchaseType || '—';
+}
+
+function syncAssistancePurchaseRequestsButton(record = assistanceEditingRecord) {
+    const button = document.getElementById('btn-assistance-purchase-requests');
+    if (!button) return;
+    const hasId = Boolean(Number(record?.id || assistanceEditingId));
+    button.classList.toggle('hidden', !hasId);
+}
+
+function closeAssistancePurchaseRequestsModal() {
+    toggleModal('assistance-purchase-requests-modal', false);
+}
+
+async function openAssistancePurchaseRequestsModal() {
+    const assistanceId = Number(assistanceEditingId || assistanceEditingRecord?.id);
+    if (!assistanceId) return;
+
+    const mount = document.getElementById('assistance-purchase-requests-mount');
+    const subtitle = document.getElementById('assistance-purchase-requests-subtitle');
+    if (subtitle) {
+        subtitle.textContent = `Assistência #${assistanceId}`;
+    }
+    if (mount) {
+        mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando requisições...</p>';
+    }
+    toggleModal('assistance-purchase-requests-modal', true);
+
+    if (typeof fetchPurchasesByAssistanceRequestId !== 'function') {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-red-600 text-center py-8">Módulo de compras indisponível.</p>';
+        }
+        return;
+    }
+
+    const { rows, missingColumn, error } = await fetchPurchasesByAssistanceRequestId(assistanceId);
+
+    if (missingColumn) {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-amber-700 text-center py-8">Execute <code>supabase/feats/add-purchase-assistance-request-id.sql</code> no Supabase SQL Editor.</p>';
+        }
+        return;
+    }
+    if (error) {
+        if (mount) {
+            mount.innerHTML = `<p class="text-xs text-red-600 text-center py-8">${escapeHtml(error.message)}</p>`;
+        }
+        return;
+    }
+
+    if (!rows.length) {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Nenhuma requisição de compra vinculada a esta assistência.</p>';
+        }
+        return;
+    }
+
+    if (mount) {
+        mount.innerHTML = `
+            <table class="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                <thead class="bg-slate-50 text-slate-500 uppercase text-[10px]">
+                    <tr>
+                        <th class="text-left px-3 py-2">#</th>
+                        <th class="text-left px-3 py-2">Tipo</th>
+                        <th class="text-left px-3 py-2">Motivo</th>
+                        <th class="text-left px-3 py-2">Status</th>
+                        <th class="text-left px-3 py-2">Criada em</th>
+                        <th class="text-right px-3 py-2 w-24">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows.map(row => `
+                        <tr class="border-t border-slate-100">
+                            <td class="px-3 py-2 font-mono">${row.id}</td>
+                            <td class="px-3 py-2">${escapeHtml(formatAssistancePurchaseTypeLabel(row.purchaseType))}</td>
+                            <td class="px-3 py-2">${escapeHtml(row.purchaseReason?.name || 'Assistência')}</td>
+                            <td class="px-3 py-2">${escapeHtml(row.status || '—')}</td>
+                            <td class="px-3 py-2">${typeof formatDisplayDate === 'function' ? formatDisplayDate(row.createdAt) : (row.createdAt || '—')}</td>
+                            <td class="px-3 py-2 text-right">
+                                <button type="button" class="assistance-purchase-request-view text-xs font-medium text-indigo-700 hover:text-indigo-900"
+                                    data-purchase-id="${row.id}">Ver</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+}
+
+function closeAssistancePurchaseRequestFormModal() {
+    assistancePurchaseRequestModalOverlay?.setLoading(false);
+    toggleModal('assistance-purchase-request-modal', false);
+}
+
+function handleAssistancePurchaseRequestViewClick(event) {
+    const button = event.target?.closest?.('.assistance-purchase-request-view');
+    if (!button) return;
+    const purchaseId = Number(button.dataset.purchaseId);
+    if (!purchaseId) return;
+    if (typeof openPurchaseModal !== 'function') {
+        alertAppDialog('Módulo de compras indisponível.');
+        return;
+    }
+    void openPurchaseModal(purchaseId, { readOnly: true });
+}
+
+async function openAssistancePurchaseRequestFormModal(draftInput = {}) {
+    const assistanceId = Number(draftInput.assistanceRequestId || assistanceEditingId || assistanceEditingRecord?.id);
+    if (!assistanceId) {
+        alertAppDialog('Salve a assistência antes de criar requisição de compra.');
+        return;
+    }
+
+    const record = assistanceEditingRecord
+        || assistanceRequestsCache.find(item => Number(item.id) === assistanceId)
+        || {};
+    const orderId = Number(draftInput.orderId || record.orderId || assistanceOrderId) || null;
+
+    let purchaseReasonId = Number(draftInput.purchaseReasonId) || null;
+    if (!purchaseReasonId && typeof resolveRequisicoesAssistenciaPurchaseReasonId === 'function') {
+        try {
+            purchaseReasonId = await resolveRequisicoesAssistenciaPurchaseReasonId();
+        } catch (error) {
+            console.warn('openAssistancePurchaseRequestFormModal:', error);
+        }
+    }
+
+    const draft = {
+        origin: 'assistance',
+        assistanceRequestId: assistanceId,
+        orderId: orderId || null,
+        orderCode: record.order?.orderCode || '',
+        clientName: record.client?.name || '',
+        purchaseReasonId
+    };
+
+    const mount = document.getElementById('assistance-purchase-request-form-mount');
+    toggleModal('assistance-purchase-requests-modal', false);
+    toggleModal('assistance-purchase-request-modal', true);
+    assistancePurchaseRequestModalOverlay?.setLoading(false);
+
+    if (typeof mountRequisicoesPurchaseForm !== 'function') {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-red-600">Formulário de compras indisponível.</p>';
+        }
+        return;
+    }
+
+    await mountRequisicoesPurchaseForm(mount, draft, {
+        keepDraft: true,
+        appOverlay: assistancePurchaseRequestModalOverlay,
+        onSuccess: async () => {
+            closeAssistancePurchaseRequestFormModal();
+            await openAssistancePurchaseRequestsModal();
+        }
+    });
+}
+
+async function handleAssistanceCreatePurchaseRequest() {
+    const assistanceId = Number(assistanceEditingId || assistanceEditingRecord?.id);
+    if (!assistanceId) {
+        alertAppDialog('Salve a assistência antes de criar requisição de compra.');
+        return;
+    }
+    if (typeof canAccessRequisicoes === 'function' && !canAccessRequisicoes()) {
+        alertAppDialog('Sem permissão para requisições de compra.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+    await openAssistancePurchaseRequestFormModal({ assistanceRequestId: assistanceId });
+}
 
 const ASSISTANCE_MODAL_LOCK_DATASET_KEY = 'assistanceModalLocked';
 
@@ -743,6 +906,7 @@ function resetAssistanceForm() {
     syncAssistanceCancelReasonSection(null);
     syncAssistanceCancelRequestButton(null);
     syncAssistanceFormReadOnlyState(null);
+    syncAssistancePurchaseRequestsButton(null);
 }
 
 function syncAssistanceOpenStatusActions(record = assistanceEditingRecord) {
@@ -1016,6 +1180,7 @@ async function openAssistanceForm(record = null, options = {}) {
     syncAssistanceCancelReasonSection(assistanceEditingRecord);
     syncAssistanceCancelRequestButton(assistanceEditingRecord);
     syncAssistanceFormReadOnlyState(assistanceEditingRecord);
+    syncAssistancePurchaseRequestsButton(assistanceEditingRecord);
     if (
         typeof primeGoogleDriveAppsScript === 'function'
         && assistanceShouldShowQuoteSection(assistanceEditingRecord, assistanceEditingStatus)
@@ -1695,11 +1860,6 @@ function bindAssistanceEvents() {
             if (record) openAssistanceForm(record);
             return;
         }
-        const quoteButton = event.target.closest('.assistance-send-quote-btn');
-        if (quoteButton) {
-            sendAssistanceToQuote(Number(quoteButton.dataset.assistanceId));
-            return;
-        }
         const awaitingButton = event.target.closest('.assistance-send-awaiting-scheduling-btn');
         if (awaitingButton) {
             sendAssistanceToAwaitingScheduling(Number(awaitingButton.dataset.assistanceId));
@@ -1765,12 +1925,19 @@ function bindAssistanceEvents() {
     document.getElementById('btn-assistance-quote-upload')?.addEventListener('click', uploadAssistanceQuoteFromForm);
     document.getElementById('btn-assistance-quote-view')?.addEventListener('click', openAssistanceQuotePdfInBrowser);
 
-    document.getElementById('btn-assistance-send-quote')?.addEventListener('click', () => {
-        void sendAssistanceToQuoteFromModal();
-    });
     document.getElementById('btn-assistance-send-awaiting-scheduling')?.addEventListener('click', () => {
         void sendAssistanceToAwaitingSchedulingFromModal();
     });
+    document.getElementById('btn-assistance-purchase-requests')?.addEventListener('click', () => {
+        void openAssistancePurchaseRequestsModal();
+    });
+    document.getElementById('btn-assistance-purchase-requests-close')?.addEventListener('click', closeAssistancePurchaseRequestsModal);
+    document.getElementById('btn-assistance-purchase-requests-close-footer')?.addEventListener('click', closeAssistancePurchaseRequestsModal);
+    document.getElementById('btn-assistance-purchase-requests-create')?.addEventListener('click', () => {
+        void handleAssistanceCreatePurchaseRequest();
+    });
+    document.getElementById('assistance-purchase-requests-mount')?.addEventListener('click', handleAssistancePurchaseRequestViewClick);
+    document.getElementById('btn-assistance-purchase-request-close')?.addEventListener('click', closeAssistancePurchaseRequestFormModal);
     document.getElementById('btn-assistance-close')?.addEventListener('click', () => {
         toggleModal('assistance-modal', false);
     });
@@ -1795,3 +1962,5 @@ window.markAssistanceExecution = markAssistanceExecution;
 window.markAssistanceFinished = markAssistanceFinished;
 window.cancelAssistanceRequest = cancelAssistanceRequest;
 window.bindAssistanceEvents = bindAssistanceEvents;
+window.openAssistancePurchaseRequestsModal = openAssistancePurchaseRequestsModal;
+window.openAssistancePurchaseRequestFormModal = openAssistancePurchaseRequestFormModal;
