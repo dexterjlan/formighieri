@@ -65,6 +65,13 @@
                         <nav id="requisicoes-sidebar-nav" aria-label="Seções de requisições"></nav>
                     </div>
                 </details>
+                <details id="btn-expedicao" class="app-nav-group hidden" data-nav-group="expedicao">
+                    <summary class="app-nav-item"><svg class="app-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M3 10h11v9H3z"/><path d="M14 10h5l2 3v6h-7z"/><circle cx="6.5" cy="19" r="1.5"/><circle cx="17.5" cy="19" r="1.5"/><path d="M8 10V6h8v4"/></svg><span>Expedição</span></summary>
+                    <div class="app-subnav">
+                        <p class="app-subnav__title">Expedição</p>
+                        <nav id="expedicao-sidebar-nav" aria-label="Seções da expedição"></nav>
+                    </div>
+                </details>
                 <button type="button" id="btn-project-scheduling" class="app-nav-item hidden"><svg class="app-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="M4 7h16v12H4z"/><path d="M4 11h16M9 7V4M15 7V4"/></svg><span>Programações (antiga)</span></button>
                 <div class="app-nav-divider" role="separator"></div>
 
@@ -626,6 +633,52 @@
                                     <input type="number" id="settings-request-overdue-days" min="1" step="1" value="5"
                                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
                                     <p class="text-[10px] text-slate-400 mt-1">Após esse prazo, requisições abertas ficam em vermelho.</p>
+                                </div>
+                            </div>
+                            <div class="border-t border-slate-100 pt-4 mt-2 space-y-3">
+                                <div>
+                                    <h3 class="text-xs font-bold text-slate-800">Endereço da fábrica (expedição)</h3>
+                                    <p class="text-[10px] text-slate-400 mt-1">Origem e retorno das rotas no Google Maps.</p>
+                                </div>
+                                <p class="text-[10px] text-slate-400">Informe o CEP para buscar logradouro, bairro, cidade e UF. Só CEP, número e complemento são editáveis.</p>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-500 mb-1">CEP</label>
+                                        <input type="text" id="settings-expedition-factory-postal-code" inputmode="numeric"
+                                            autocomplete="postal-code" maxlength="9"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"
+                                            placeholder="00000-000">
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-xs font-semibold text-slate-500 mb-1">Logradouro</label>
+                                        <input type="text" id="settings-expedition-factory-street" readonly tabindex="-1"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-600">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-500 mb-1">Número</label>
+                                        <input type="text" id="settings-expedition-factory-number"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-500 mb-1">Complemento</label>
+                                        <input type="text" id="settings-expedition-factory-complement"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-500 mb-1">Bairro</label>
+                                        <input type="text" id="settings-expedition-factory-neighborhood" readonly tabindex="-1"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-600">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-500 mb-1">Cidade</label>
+                                        <input type="text" id="settings-expedition-factory-city" readonly tabindex="-1"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-600">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-500 mb-1">UF</label>
+                                        <input type="text" id="settings-expedition-factory-state" maxlength="2" readonly tabindex="-1"
+                                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-600">
+                                    </div>
                                 </div>
                             </div>
                             <div class="pt-2">
@@ -3498,6 +3551,27 @@
                     </div>
                 </div>
                 <input type="file" id="view3d-upload-input" class="hidden" accept=".glb,.gltf,model/gltf-binary,model/gltf+json">
+            </div>
+        </main>
+
+        <!-- TELA: EXPEDIÇÃO -->
+        <main id="expedicao-view" class="hidden flex-1 w-full mx-auto p-4 md:p-6">
+            <nav id="expedicao-mobile-sections" class="expedicao-mobile-sections md:hidden" aria-label="Seções da expedição" hidden></nav>
+            <div class="flex flex-col gap-4 min-h-[calc(100vh-140px)]">
+                <div class="flex-1 min-w-0 relative">
+                    <div id="expedicao-action-loading"
+                        class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                        <div class="fm-app-overlay__card">
+                            <div id="expedicao-action-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                            <div id="expedicao-action-loading-success" class="fm-app-overlay__icon fm-app-overlay__icon--success hidden" aria-hidden="true">✓</div>
+                            <div id="expedicao-action-loading-error" class="fm-app-overlay__icon fm-app-overlay__icon--error hidden" aria-hidden="true">!</div>
+                            <p id="expedicao-action-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                        </div>
+                    </div>
+                    <div id="expedicao-content">
+                        <p class="text-xs text-slate-400 text-center py-10">Selecione um item no menu.</p>
+                    </div>
+                </div>
             </div>
         </main>
 

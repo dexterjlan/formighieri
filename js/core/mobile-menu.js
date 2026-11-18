@@ -107,6 +107,9 @@ const MOBILE_MENU_ICON_PATHS = {
     'pendencias:assistencias': '<path d="M12 22s7-4.5 7-11a7 7 0 1 0-14 0c0 6.5 7 11 7 11Z"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
     'programacoes:projects': '<path d="M4 7h16M4 12h10M4 17h6"/><circle cx="17" cy="7" r="1.5"/>',
     'programacoes:deliveries': '<path d="M3 10h12v8H3z"/><path d="M15 10h4l2 3v5h-6z"/>',
+    'expedicao:route': '<path d="M4 19V5"/><path d="M4 19h16"/><circle cx="7" cy="9" r="2"/><circle cx="17" cy="15" r="2"/><path d="M9 9h5l3 6"/>',
+    'expedicao:boarding': '<path d="M12 16V8"/><path d="m8 12 4-4 4 4"/><path d="M3 10h11v8H3z"/><path d="M14 10h5l2 3v5h-7z"/><circle cx="6.5" cy="18" r="1.25"/>',
+    'expedicao:unloading': '<path d="M12 8v8"/><path d="m8 12 4 4 4-4"/><path d="M3 10h11v8H3z"/><path d="M14 10h5l2 3v5h-7z"/><circle cx="6.5" cy="18" r="1.25"/>',
     'label:Cadastros': '<path d="M4 7h16M4 12h10M4 17h6"/><circle cx="17" cy="7" r="1.5"/>',
     'label:Comercial Financeiro': '<path d="M12 3v18"/><path d="M7 8h10M7 16h6"/>',
     'label:Resumo': '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -140,6 +143,11 @@ function resolveMobileMenuIconHtml(button, context = {}) {
     const programacoesSection = button?.dataset?.programacoesSection;
     if (programacoesSection && MOBILE_MENU_ICON_PATHS[`programacoes:${programacoesSection}`]) {
         return createMobileMenuIcon(MOBILE_MENU_ICON_PATHS[`programacoes:${programacoesSection}`]);
+    }
+
+    const expedicaoSection = button?.dataset?.expedicaoSection;
+    if (expedicaoSection && MOBILE_MENU_ICON_PATHS[`expedicao:${expedicaoSection}`]) {
+        return createMobileMenuIcon(MOBILE_MENU_ICON_PATHS[`expedicao:${expedicaoSection}`]);
     }
 
     const label = getMobileMenuButtonLabel(button);

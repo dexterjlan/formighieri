@@ -1,3 +1,19 @@
+function isLocalDevHostname(hostname) {
+    const host = String(hostname || '').toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+        return true;
+    }
+    // Celular / outro device na LAN apontando para o servidor local (port forward, IP da máquina).
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) return true;
+    const private172 = host.match(/^172\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+    if (private172) {
+        const secondOctet = Number(private172[1]);
+        if (secondOctet >= 16 && secondOctet <= 31) return true;
+    }
+    return host.endsWith('.local');
+}
+
 function resolveFormighieriAppEnv() {
     const params = new URLSearchParams(window.location.search);
     const forced = params.get('env') || localStorage.getItem('formighieri-env');
@@ -6,7 +22,7 @@ function resolveFormighieriAppEnv() {
     }
 
     const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
+    if (isLocalDevHostname(host)) {
         return 'dev';
     }
 
@@ -87,6 +103,7 @@ const APP_PUBLIC_URL = getAppPublicUrl();
 // Após republicar o Web App, copie a URL /exec atualizada. URL inválida → upload fica em "carregando" ou falha rápido.
 const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwP1IkfR8OfsYRQEq3IGB_VF_XSGnTQkN5WAjngfTCNGHohp4IcEd4fzaxb3a_o72A/exec';
 const NOTIFICATION_SCRIPT_SECRET = 'Hanna@2020';
+
 
 // Matrix — produção: token no Apps Script (MATRIX_ACCESS_TOKEN). DEV: opcional token na sessão (tela Matrix teste).
 const MATRIX_HOMESERVER_URL = 'https://matrix.org';

@@ -7218,3 +7218,443 @@ body.deal-won-celebration-open {
         animation: none;
     }
 }
+
+/* Expedição — Embarque */
+.expedicao-boarding-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+    .expedicao-boarding-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+        align-items: start;
+        gap: 1.25rem;
+    }
+
+    .expedicao-boarding-detail-side {
+        position: sticky;
+        top: 1rem;
+    }
+}
+
+.expedicao-boarding-volume {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.625rem;
+    border-radius: 0.5rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+}
+
+.expedicao-boarding-volume.is-boarded {
+    border-color: #86efac;
+    background: #f0fdf4;
+}
+
+.expedicao-boarding-volume-badge {
+    background: #f1f5f9;
+    color: #64748b;
+    flex-shrink: 0;
+}
+
+.expedicao-boarding-volume.is-boarded .expedicao-boarding-volume-badge {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.expedicao-boarding-scan-panel {
+    min-height: 100dvh;
+}
+
+.expedicao-boarding-scan-result {
+    backdrop-filter: blur(2px);
+    animation: expedition-boarding-scan-flash 0.35s ease-out;
+    z-index: 300;
+}
+
+#expedition-boarding-scan-result:not(.hidden),
+#expedition-unloading-scan-result:not(.hidden) {
+    z-index: 300;
+}
+
+.expedition-scan-modal--feedback .expedition-boarding-scan-panel {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.expedition-scan-modal--feedback #expedition-boarding-reader,
+.expedition-scan-modal--feedback #expedition-unloading-reader,
+.expedition-scan-modal--feedback #expedition-boarding-reader video,
+.expedition-scan-modal--feedback #expedition-unloading-reader video {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+.expedicao-boarding-scan-result__inner {
+    position: relative;
+    z-index: 2;
+}
+
+@keyframes expedition-boarding-scan-flash {
+    from {
+        opacity: 0.6;
+        transform: scale(1.02);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.expedicao-boarding-scan-result.is-success {
+    background: #059669;
+    box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.25);
+}
+
+.expedicao-boarding-scan-result.is-error {
+    background: #dc2626;
+    box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.2);
+}
+
+.expedicao-boarding-scan-result.is-pending {
+    background: #1e3a8a;
+    box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.15);
+}
+
+.expedicao-boarding-scan-result.is-all-boarded .expedition-boarding-scan-result__title {
+    font-size: 2rem;
+}
+
+.expedicao-boarding-scan-result.is-all-boarded .expedition-boarding-scan-result__msg {
+    font-size: 1.15rem;
+    line-height: 1.45;
+    max-width: 16rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.expedicao-boarding-scan-result.is-all-boarded .expedition-boarding-scan-result__icon {
+    width: 5.5rem;
+    height: 5.5rem;
+    font-size: 3rem;
+}
+
+.expedicao-boarding-scan-result__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 5.5rem;
+    height: 5.5rem;
+    margin: 0 auto 1rem;
+    border-radius: 9999px;
+    font-size: 2.75rem;
+    font-weight: 800;
+    line-height: 1;
+    color: #0f172a;
+    background: #ffffff;
+    border: 4px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.35);
+    position: relative;
+    z-index: 3;
+}
+
+.expedicao-boarding-scan-result__title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #fff;
+    margin: 0 0 0.5rem;
+    text-transform: uppercase;
+}
+
+.expedition-boarding-scan-result__msg {
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.96);
+    margin: 0;
+}
+
+.expedition-boarding-scan-result__actions {
+    max-width: 18rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.expedition-boarding-scan-result-btn {
+    min-height: 52px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: none;
+    cursor: pointer;
+}
+
+.expedition-boarding-scan-result-btn--primary {
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.expedition-boarding-scan-result-btn--secondary {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.55);
+}
+
+.expedition-boarding-scan-result.is-error .expedition-boarding-scan-result-btn--primary {
+    color: #991b1b;
+}
+
+.expedition-boarding-scan-result.is-success .expedition-boarding-scan-result-btn--primary {
+    color: #047857;
+}
+
+.safe-area-pb {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+.expedition-boarding-manual-feedback.is-success,
+#expedition-boarding-manual-feedback.is-success {
+    background: #059669;
+    color: #fff;
+    border: 2px solid #047857;
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.35);
+}
+
+.expedition-boarding-manual-feedback.is-error,
+#expedition-boarding-manual-feedback.is-error {
+    background: #dc2626;
+    color: #fff;
+    border: 2px solid #b91c1c;
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35);
+}
+
+.expedition-entity-pick-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.expedition-entity-pick-list .expedition-wizard-pick-entity + .expedition-wizard-pick-entity {
+    border-top: 1px solid #f1f5f9;
+}
+
+.expedition-entity-pick {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 0.75rem;
+    width: 100%;
+    align-items: start;
+}
+
+.expedition-entity-pick--header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0.45rem 0.75rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.expedition-entity-pick__label {
+    font-size: 0.5625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+    min-width: 0;
+}
+
+.expedition-entity-pick__value {
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #0f172a;
+    word-break: break-word;
+    min-width: 0;
+}
+
+@media (min-width: 768px) {
+    .expedition-entity-pick {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.expedicao-route-crew-mobile {
+    margin-top: 0.75rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.85rem;
+    border: 2px solid #0f172a;
+    background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.expedicao-route-crew-mobile__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.expedicao-route-crew-mobile__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+}
+
+.expedicao-route-crew-mobile__glyph {
+    width: 0.875rem;
+    height: 0.875rem;
+    flex-shrink: 0;
+    color: #64748b;
+}
+
+.expedicao-mobile-sections {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: -0.25rem 0 0.75rem;
+    padding: 0.35rem;
+    border-radius: 1rem;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+}
+
+.expedicao-mobile-sections__btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-height: 3.25rem;
+    padding: 0.45rem 0.35rem;
+    border: 0;
+    border-radius: 0.75rem;
+    background: transparent;
+    color: #475569;
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1.15;
+    touch-action: manipulation;
+}
+
+.expedicao-mobile-sections__btn.is-active {
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.expedicao-mobile-sections__icon {
+    width: 1.35rem;
+    height: 1.35rem;
+    color: #6366f1;
+}
+
+.expedicao-mobile-sections__btn.is-active .expedicao-mobile-sections__icon {
+    color: #4338ca;
+}
+
+.expedition-mobile-btn__inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+}
+
+.expedition-mobile-btn__icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+}
+
+.expedicao-boarding-scan-result__icon .expedition-scan-result-glyph {
+    width: 3rem;
+    height: 3rem;
+    stroke-width: 2.5;
+}
+
+.expedicao-boarding-scan-result__icon.is-success-glyph .expedition-scan-result-glyph {
+    color: #047857;
+    stroke: #047857;
+}
+
+.expedicao-boarding-scan-result__icon.is-error-glyph .expedition-scan-result-glyph {
+    color: #b91c1c;
+    stroke: #b91c1c;
+}
+
+.expedicao-boarding-scan-result__icon.is-pending-glyph .expedition-scan-result-glyph {
+    color: #1e3a8a;
+    stroke: #1e3a8a;
+}
+
+.expedicao-boarding-scan-result.is-all-boarded .expedicao-boarding-scan-result__icon .expedition-scan-result-glyph {
+    width: 3.35rem;
+    height: 3.35rem;
+}
+
+.expedicao-route-crew-mobile__value {
+    font-size: 1.05rem;
+    font-weight: 800;
+    line-height: 1.2;
+    color: #0f172a;
+    word-break: break-word;
+}
+
+.expedicao-route-crew-mobile__value--driver {
+    color: #1d4ed8;
+}
+
+@media (min-width: 768px) {
+    .expedicao-route-crew-mobile {
+        display: none;
+    }
+}
+
+.expedition-boarding-reader {
+    min-height: 220px;
+}
+
+#expedition-boarding-reader video {
+    width: 100% !important;
+    max-height: min(52vh, 400px);
+    object-fit: cover;
+    border-radius: 0.5rem;
+}
+
+#expedition-boarding-reader img,
+#expedition-unloading-reader img {
+    display: none !important;
+}
+
+#expedition-unloading-reader video {
+    width: 100% !important;
+    max-height: min(52vh, 400px);
+    object-fit: cover;
+    border-radius: 0.5rem;
+}
+
+@media (min-width: 768px) {
+    .expedition-boarding-scan-panel {
+        min-height: auto;
+        max-height: 100dvh;
+        margin-top: auto;
+        margin-bottom: auto;
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.45);
+    }
+}

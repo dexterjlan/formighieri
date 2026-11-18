@@ -85,7 +85,7 @@ function initAppEvents() {
     bindWelcomeEvents();
     if (typeof bindComercialEvents === 'function') bindComercialEvents();
     bindGestaoEvents();
-    bindSystemSettingsEvents();
+    if (typeof bindSystemSettingsEvents === 'function') bindSystemSettingsEvents();
     bindConversationsQueryEvents();
     bindCommercialApprovalQueryEvents();
     bindOrderEvents();
@@ -121,6 +121,10 @@ function initAppEvents() {
     bindPendenciasEvents();
     if (typeof bindProgramacoesEvents === 'function') bindProgramacoesEvents();
     if (typeof bindRequisicoesEvents === 'function') bindRequisicoesEvents();
+    if (typeof bindExpedicaoEvents === 'function') bindExpedicaoEvents();
+    if (typeof bindExpedicaoRouteWizardEvents === 'function') bindExpedicaoRouteWizardEvents();
+    if (typeof bindExpedicaoBoardingEvents === 'function') bindExpedicaoBoardingEvents();
+    if (typeof bindExpedicaoUnloadingEvents === 'function') bindExpedicaoUnloadingEvents();
     if (typeof bindGestaoPurchaseReasonEvents === 'function') bindGestaoPurchaseReasonEvents();
     if (typeof bindGestaoWpsItemTypeEvents === 'function') bindGestaoWpsItemTypeEvents();
     bindPesquisasEvents();

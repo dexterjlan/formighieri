@@ -3,7 +3,14 @@ const DEFAULT_SYSTEM_SETTINGS = {
     approvalCcEmails: '',
     requestCcEmails: '',
     approvalOverdueDays: SYSTEM_SETTINGS_DEFAULTS.approvalOverdueDays,
-    requestOverdueDays: SYSTEM_SETTINGS_DEFAULTS.requestOverdueDays
+    requestOverdueDays: SYSTEM_SETTINGS_DEFAULTS.requestOverdueDays,
+    expeditionFactoryStreet: '',
+    expeditionFactoryNumber: '',
+    expeditionFactoryComplement: '',
+    expeditionFactoryNeighborhood: '',
+    expeditionFactoryCity: '',
+    expeditionFactoryState: '',
+    expeditionFactoryPostalCode: ''
 };
 
 function normalizeSystemSettings(record) {
@@ -13,6 +20,13 @@ function normalizeSystemSettings(record) {
         requestCcEmails: record?.requestCcEmails || '',
         approvalOverdueDays: Number(record?.approvalOverdueDays) || SYSTEM_SETTINGS_DEFAULTS.approvalOverdueDays,
         requestOverdueDays: Number(record?.requestOverdueDays) || SYSTEM_SETTINGS_DEFAULTS.requestOverdueDays,
+        expeditionFactoryStreet: record?.expeditionFactoryStreet || '',
+        expeditionFactoryNumber: record?.expeditionFactoryNumber || '',
+        expeditionFactoryComplement: record?.expeditionFactoryComplement || '',
+        expeditionFactoryNeighborhood: record?.expeditionFactoryNeighborhood || '',
+        expeditionFactoryCity: record?.expeditionFactoryCity || '',
+        expeditionFactoryState: record?.expeditionFactoryState || '',
+        expeditionFactoryPostalCode: record?.expeditionFactoryPostalCode || '',
         updatedAt: record?.updatedAt || null
     };
 }
@@ -57,11 +71,24 @@ async function ensureSystemSettingsLoaded() {
 }
 
 async function loadSystemSettings() {
-    const { data, error } = await supabaseClient
+    const selectWithExpedition = 'settingsKey, approvalCcEmails, requestCcEmails, approvalOverdueDays, requestOverdueDays, expeditionFactoryStreet, expeditionFactoryNumber, expeditionFactoryComplement, expeditionFactoryNeighborhood, expeditionFactoryCity, expeditionFactoryState, expeditionFactoryPostalCode, updatedAt';
+    const selectLegacy = 'settingsKey, approvalCcEmails, requestCcEmails, approvalOverdueDays, requestOverdueDays, updatedAt';
+
+    let result = await supabaseClient
         .from('SystemSettings')
-        .select('settingsKey, approvalCcEmails, requestCcEmails, approvalOverdueDays, requestOverdueDays, updatedAt')
+        .select(selectWithExpedition)
         .eq('settingsKey', 'default')
         .maybeSingle();
+
+    if (result.error && /expeditionFactory|schema cache|does not exist/i.test(result.error.message || '')) {
+        result = await supabaseClient
+            .from('SystemSettings')
+            .select(selectLegacy)
+            .eq('settingsKey', 'default')
+            .maybeSingle();
+    }
+
+    const { data, error } = result;
 
     if (error) {
         if (error.message?.includes('SystemSettings')) {
@@ -83,6 +110,26 @@ function fillSystemSettingsForm(settings = systemSettingsCache) {
     document.getElementById('settings-request-cc-emails').value = data.requestCcEmails || '';
     document.getElementById('settings-approval-overdue-days').value = String(data.approvalOverdueDays);
     document.getElementById('settings-request-overdue-days').value = String(data.requestOverdueDays);
+    const expeditionFactoryFields = [
+        ['settings-expedition-factory-street', data.expeditionFactoryStreet],
+        ['settings-expedition-factory-number', data.expeditionFactoryNumber],
+        ['settings-expedition-factory-complement', data.expeditionFactoryComplement],
+        ['settings-expedition-factory-neighborhood', data.expeditionFactoryNeighborhood],
+        ['settings-expedition-factory-city', data.expeditionFactoryCity],
+        ['settings-expedition-factory-state', data.expeditionFactoryState]
+    ];
+    expeditionFactoryFields.forEach(([id, value]) => {
+        const input = document.getElementById(id);
+        if (input) input.value = value || '';
+    });
+    const postalInput = document.getElementById('settings-expedition-factory-postal-code');
+    if (postalInput) {
+        const formatted = typeof formatPostalCodeDisplay === 'function'
+            ? formatPostalCodeDisplay(data.expeditionFactoryPostalCode)
+            : (data.expeditionFactoryPostalCode || '');
+        postalInput.value = formatted;
+    }
+    bindExpeditionFactoryAddressFields();
 
     const updatedEl = document.getElementById('settings-updated-at');
     if (updatedEl) {
@@ -180,7 +227,41 @@ async function showSystemSettings(panelKey = 'geral') {
     }
 }
 
+const SETTINGS_EXPEDITION_FACTORY_ADDR_PREFIX = 'settings-expedition-factory';
+
+function bindExpeditionFactoryAddressFields() {
+    if (typeof bindAddrPostalCodeFields === 'function') {
+        bindAddrPostalCodeFields(SETTINGS_EXPEDITION_FACTORY_ADDR_PREFIX);
+    }
+}
+
+function validateExpeditionFactoryAddress(payload) {
+    const cep = String(payload.expeditionFactoryPostalCode || '').replace(/\D/g, '');
+    const hasAnyFactoryField = Boolean(
+        cep
+            || payload.expeditionFactoryStreet
+            || payload.expeditionFactoryNumber
+            || payload.expeditionFactoryCity
+    );
+    if (!hasAnyFactoryField) return true;
+
+    if (cep && cep.length !== 8) {
+        alertAppDialog('CEP da fábrica inválido. Informe 8 dígitos.');
+        return false;
+    }
+    if (cep && (!payload.expeditionFactoryStreet || !payload.expeditionFactoryCity || !payload.expeditionFactoryState)) {
+        alertAppDialog('Consulte o CEP para preencher o endereço da fábrica antes de salvar.');
+        return false;
+    }
+    if (cep && !payload.expeditionFactoryNumber) {
+        alertAppDialog('Informe o número do endereço da fábrica.');
+        return false;
+    }
+    return true;
+}
+
 function validateSystemSettingsInput(payload) {
+    if (!validateExpeditionFactoryAddress(payload)) return false;
     if (!Number.isInteger(payload.approvalOverdueDays) || payload.approvalOverdueDays < 1) {
         alertAppDialog('Informe ao menos 1 dia para aprovação em aberto considerada atrasada.');
         return false;
@@ -210,6 +291,15 @@ function collectSystemSettingsFromForm() {
         requestCcEmails: document.getElementById('settings-request-cc-emails').value.trim(),
         approvalOverdueDays: Number.parseInt(document.getElementById('settings-approval-overdue-days').value, 10),
         requestOverdueDays: Number.parseInt(document.getElementById('settings-request-overdue-days').value, 10),
+        expeditionFactoryStreet: document.getElementById('settings-expedition-factory-street')?.value?.trim() || '',
+        expeditionFactoryNumber: document.getElementById('settings-expedition-factory-number')?.value?.trim() || '',
+        expeditionFactoryComplement: document.getElementById('settings-expedition-factory-complement')?.value?.trim() || '',
+        expeditionFactoryNeighborhood: document.getElementById('settings-expedition-factory-neighborhood')?.value?.trim() || '',
+        expeditionFactoryCity: document.getElementById('settings-expedition-factory-city')?.value?.trim() || '',
+        expeditionFactoryState: document.getElementById('settings-expedition-factory-state')?.value?.trim() || '',
+        expeditionFactoryPostalCode: typeof digitsOnlyPostalCode === 'function'
+            ? digitsOnlyPostalCode(document.getElementById('settings-expedition-factory-postal-code')?.value)
+            : (document.getElementById('settings-expedition-factory-postal-code')?.value?.trim() || ''),
         updatedAt: new Date().toISOString(),
         updatedById: currentUser?.id || null
     };
@@ -252,6 +342,27 @@ async function saveSystemSettings() {
             ({ error } = await supabaseClient
                 .from('SystemSettings')
                 .insert([payload]));
+        }
+
+        if (error && /expeditionFactory|schema cache|does not exist/i.test(error.message || '')) {
+            const legacyPayload = { ...payload };
+            delete legacyPayload.expeditionFactoryStreet;
+            delete legacyPayload.expeditionFactoryNumber;
+            delete legacyPayload.expeditionFactoryComplement;
+            delete legacyPayload.expeditionFactoryNeighborhood;
+            delete legacyPayload.expeditionFactoryCity;
+            delete legacyPayload.expeditionFactoryState;
+            delete legacyPayload.expeditionFactoryPostalCode;
+            if (existing) {
+                ({ error } = await supabaseClient
+                    .from('SystemSettings')
+                    .update(legacyPayload)
+                    .eq('settingsKey', 'default'));
+            } else {
+                ({ error } = await supabaseClient
+                    .from('SystemSettings')
+                    .insert([legacyPayload]));
+            }
         }
 
         if (error) {
@@ -321,4 +432,5 @@ function bindSystemSettingsEvents() {
     if (typeof bindAddrLabelSettingsEvents === 'function') {
         bindAddrLabelSettingsEvents();
     }
+    bindExpeditionFactoryAddressFields();
 }

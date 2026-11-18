@@ -333,6 +333,17 @@ function canCreateAsAdminOrConferente() {
     return isAdmin() || isConferente();
 }
 
+/** Expedição: Admin, gestor de projetos, gestor fábrica, administrativo fábrica ou PPCP. */
+function canAccessExpedicao(user = currentUser) {
+    if (hasInstallerOnlyAccess(user)) return false;
+    if (!user?.id || isThirdParty(user)) return false;
+    return isAdmin(user)
+        || isGestorProjetos(user)
+        || isGestorFabrica(user)
+        || isFactoryAdministrative(user)
+        || isPpcp(user);
+}
+
 /** Requisições → Peça: Admin, gestor de projetos ou perfil Fábrica (incl. Marceneiro). */
 function canAccessRequisicoesPartRequest(user = currentUser) {
     if (!user?.id || isThirdParty(user)) return false;

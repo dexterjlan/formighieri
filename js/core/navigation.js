@@ -375,6 +375,12 @@ async function restoreAppNavState() {
                     return true;
                 }
                 return false;
+            case 'expedicao':
+                if (typeof restoreExpedicaoView === 'function') {
+                    await restoreExpedicaoView(state);
+                    return true;
+                }
+                return false;
             case 'programacoes':
                 if (typeof restoreProgramacoesView === 'function') {
                     await restoreProgramacoesView(state);
@@ -468,6 +474,7 @@ const INSTALLER_HIDDEN_MAIN_NAV_IDS = [
     'btn-kanban',
     'btn-programacoes',
     'btn-requisicoes',
+    'btn-expedicao',
     'btn-project-scheduling',
     'btn-programacao-montagem',
     'btn-pendencias',
@@ -512,6 +519,7 @@ function updateAdminNav() {
     document.getElementById("btn-kanban")?.classList.toggle("hidden", typeof canViewKanban === 'function' ? !canViewKanban() : true);
     document.getElementById("btn-programacoes")?.classList.toggle("hidden", typeof canAccessProgramacoes === 'function' ? !canAccessProgramacoes() : true);
     document.getElementById("btn-requisicoes")?.classList.toggle("hidden", typeof canAccessRequisicoes === 'function' ? !canAccessRequisicoes() : true);
+    document.getElementById("btn-expedicao")?.classList.toggle("hidden", typeof canAccessExpedicao === 'function' ? !canAccessExpedicao() : true);
     document.getElementById("btn-project-scheduling")?.classList.add("hidden");
     document.getElementById("btn-programacao-montagem")?.classList.toggle("hidden", !canViewProgramacaoMontagem());
     if (typeof updateGestaoCadastrosNavVisibility === 'function') updateGestaoCadastrosNavVisibility();
@@ -520,6 +528,7 @@ function updateAdminNav() {
     if (typeof updateView3dNav === 'function') updateView3dNav();
     if (typeof updateProgramacoesNav === 'function') updateProgramacoesNav();
     if (typeof updateRequisicoesNav === 'function') updateRequisicoesNav();
+    if (typeof updateExpedicaoNav === 'function') updateExpedicaoNav();
     if (typeof updateOrderDetailTabsVisibility === 'function') updateOrderDetailTabsVisibility();
     if (typeof updateCalendarGoogleSyncControls === 'function') updateCalendarGoogleSyncControls();
     if (typeof refreshMobileMenuIfOpen === 'function') refreshMobileMenuIfOpen();
@@ -535,6 +544,7 @@ const APP_MOBILE_TOPBAR_TITLES = {
     kanban: 'Kanban',
     programacoes: 'Programações',
     requisicoes: 'Requisições',
+    expedicao: 'Expedição',
     'project-scheduling': 'Programações',
     'programacao-montagem': 'Programação montagem',
     gestao: 'Gestão',
@@ -556,6 +566,7 @@ function updateMainNavActive(activeView) {
         kanban: document.getElementById('btn-kanban'),
         programacoes: document.getElementById('btn-programacoes'),
         requisicoes: document.getElementById('btn-requisicoes'),
+        expedicao: document.getElementById('btn-expedicao'),
         'project-scheduling': document.getElementById('btn-project-scheduling'),
         'programacao-montagem': document.getElementById('btn-programacao-montagem'),
         gestao: document.getElementById('btn-gestao'),
@@ -616,6 +627,9 @@ function clearInactiveSubnavSelection(activeView) {
     if (activeView !== 'settings') {
         document.querySelectorAll('#settings-sidebar-nav .is-active').forEach(el => el.classList.remove('is-active'));
     }
+    if (activeView !== 'expedicao') {
+        document.querySelectorAll('#expedicao-sidebar-nav .is-active').forEach(el => el.classList.remove('is-active'));
+    }
 }
 
 function hideSubViews() {
@@ -643,6 +657,7 @@ function hideSubViews() {
     document.getElementById("performance-view")?.classList.add("hidden");
     document.getElementById("programacoes-view")?.classList.add("hidden");
     document.getElementById("requisicoes-view")?.classList.add("hidden");
+    document.getElementById("expedicao-view")?.classList.add("hidden");
     document.getElementById("pendencias-view").classList.add("hidden");
     document.getElementById("pesquisas-view")?.classList.add("hidden");
     document.getElementById("view3d-view")?.classList.add("hidden");

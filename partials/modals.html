@@ -2592,18 +2592,15 @@
                     <p class="text-xs font-semibold text-rose-900">Motivo do cancelamento</p>
                     <p id="assistance-cancel-reason-text" class="text-sm text-slate-800 whitespace-pre-wrap">—</p>
                 </div>
-                <div id="assistance-open-status-actions" class="hidden flex flex-wrap gap-2 pt-1">
-                    <button type="button" id="btn-assistance-send-awaiting-scheduling"
-                        class="text-xs font-medium px-3 py-1.5 rounded-lg bg-indigo-100 text-indigo-800 hover:bg-indigo-200">Ir para Aguardando agendamento</button>
-                </div>
                 <div class="flex flex-wrap gap-2 pt-2 items-center">
                     <button type="button" id="btn-assistance-close"
                         class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
                     <button type="button" id="btn-assistance-purchase-requests"
                         class="hidden text-xs bg-white border border-slate-200 text-slate-800 px-4 py-2 rounded-lg font-medium hover:bg-slate-50">Req. Compra</button>
                     <button type="button" id="btn-assistance-cancel-request"
-                        class="hidden text-xs bg-white border border-rose-200 text-rose-800 px-4 py-2 rounded-lg font-medium hover:bg-rose-50">Cancelar</button>
+                        class="hidden text-xs bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700">Cancelar</button>
                     <div class="flex-1 min-w-[0.5rem]"></div>
+                    <div id="assistance-modal-status-actions" class="hidden flex flex-wrap gap-2 items-center justify-end"></div>
                     <button type="submit" id="btn-assistance-save"
                         class="text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-medium hover:bg-slate-800">Salvar</button>
                 </div>
@@ -3920,6 +3917,144 @@
                     class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
                 <button type="button" id="btn-eai-purchase-requests-create"
                     class="text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-medium">Criar Req. Compra</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EXPEDIÇÃO — NOVA ROTA -->
+    <div id="expedition-route-wizard-modal"
+        class="hidden fixed inset-0 bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4 z-[96]">
+        <div class="bg-white rounded-2xl w-full max-w-3xl shadow-xl border border-slate-200 max-h-[92vh] flex flex-col overflow-hidden relative">
+            <div id="expedition-route-wizard-loading"
+                class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
+                <div class="fm-app-overlay__card">
+                    <div id="expedition-route-wizard-loading-spinner" class="fm-app-overlay__spinner" aria-hidden="true"></div>
+                    <p id="expedition-route-wizard-loading-msg" class="fm-app-overlay__message">Processando...</p>
+                </div>
+            </div>
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                <h3 class="font-bold text-base text-slate-900">Nova rota de expedição</h3>
+                <button type="button" id="btn-expedition-route-wizard-close"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
+            </div>
+            <div id="expedition-route-wizard-mount" class="overflow-y-auto flex-1 min-h-0 p-4 md:p-5"></div>
+            <div id="expedition-route-wizard-footer"
+                class="p-4 border-t border-slate-100 flex flex-wrap gap-2 justify-end bg-white min-h-[3.25rem]"></div>
+            <div class="p-3 border-t border-slate-100 bg-slate-50 flex flex-wrap gap-2 justify-between items-center">
+                <p class="text-[10px] text-slate-400">Status Confirmado exige abrir a rota no Maps e informar km e tempo. Ajuste a ordem das paradas pelas setas.</p>
+                <button type="button" id="btn-expedition-route-wizard-cancel"
+                    class="text-xs bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EXPEDIÇÃO — DETALHE DA ROTA -->
+    <div id="expedition-route-detail-modal"
+        class="hidden fixed inset-0 bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4 z-[95]">
+        <div class="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-200 max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                <h3 class="font-bold text-base text-slate-900">Detalhe da rota</h3>
+                <button type="button" id="btn-expedition-route-detail-close"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
+            </div>
+            <div id="expedition-route-detail-mount" class="p-4 md:p-5 overflow-y-auto flex-1 min-h-0 space-y-2"></div>
+            <div class="p-4 border-t border-slate-100 flex flex-wrap gap-2 justify-end bg-white">
+                <button type="button" id="btn-expedition-route-detail-close-footer"
+                    class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
+                <button type="button" id="btn-expedition-route-detail-edit"
+                    class="hidden text-xs bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-semibold hover:bg-slate-50">Editar</button>
+                <button type="button" id="btn-expedition-route-detail-print"
+                    class="hidden text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-semibold hover:bg-slate-800">Imprimir etiquetas</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EXPEDIÇÃO — EMBARQUE (LEITURA DE VOLUME) -->
+    <div id="expedition-boarding-scan-modal"
+        class="hidden fixed inset-0 z-[100] bg-slate-950/90 flex flex-col">
+        <div class="expedition-boarding-scan-panel relative flex flex-col flex-1 min-h-0 w-full max-w-lg mx-auto md:max-w-2xl">
+            <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between gap-2 shrink-0">
+                <p class="text-sm font-bold">Embarcar volume</p>
+                <button type="button" id="btn-expedition-boarding-scan-close-top"
+                    class="text-white/80 text-xl leading-none px-1" aria-label="Fechar">×</button>
+            </div>
+            <div id="expedition-boarding-scan-camera-wrap"
+                class="flex-1 min-h-0 relative bg-black flex flex-col items-center justify-center p-2 gap-2">
+                <div id="expedition-boarding-reader" class="w-full max-w-md expedition-boarding-reader"></div>
+                <p id="expedition-boarding-scan-hint"
+                    class="hidden text-center text-[11px] text-white/90 px-3 py-1.5 rounded-lg bg-black/40 max-w-md">
+                    Centralize o <strong>CODE 128</strong> da etiqueta na faixa horizontal. Boa luz e afaste ~15–25&nbsp;cm.
+                </p>
+            </div>
+            <div id="expedition-boarding-scan-footer"
+                class="p-3 bg-white border-t border-slate-200 space-y-2 safe-area-pb">
+                <label class="block text-[10px] font-semibold text-slate-500" for="expedition-boarding-scan-manual">Ou digite o código</label>
+                <div class="flex gap-2">
+                    <input type="text" id="expedition-boarding-scan-manual" placeholder="VOL-..."
+                        class="flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-lg uppercase min-h-[44px]"
+                        autocomplete="off" autocapitalize="characters" enterkeyhint="done">
+                    <button type="button" id="expedition-boarding-scan-manual-btn"
+                        class="text-xs font-semibold px-4 py-2.5 rounded-lg bg-slate-900 text-white min-h-[44px]">OK</button>
+                </div>
+                <button type="button" id="btn-expedition-boarding-scan-close"
+                    class="w-full text-sm font-semibold text-slate-600 py-2.5 min-h-[44px]">Fechar leitura</button>
+            </div>
+        </div>
+        <div id="expedition-boarding-scan-result"
+            class="hidden expedition-boarding-scan-result fixed inset-0 z-[110] flex flex-col items-center justify-center p-5 text-center safe-area-pb"
+            role="alertdialog" aria-live="assertive" aria-modal="true">
+            <div class="expedition-boarding-scan-result__inner w-full max-w-sm">
+                <div id="expedition-boarding-scan-result-icon"
+                    class="expedition-boarding-scan-result__icon" aria-hidden="true">✓</div>
+                <p id="expedition-boarding-scan-result-title" class="expedition-boarding-scan-result__title">OK</p>
+                <p id="expedition-boarding-scan-result-msg" class="expedition-boarding-scan-result__msg"></p>
+                <div id="expedition-boarding-scan-result-actions"
+                    class="expedition-boarding-scan-result__actions flex flex-col gap-2 w-full mt-6"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EXPEDIÇÃO — DESEMBARQUE (LEITURA DE VOLUME) -->
+    <div id="expedition-unloading-scan-modal"
+        class="hidden fixed inset-0 z-[100] bg-slate-950/90 flex flex-col">
+        <div class="expedition-boarding-scan-panel relative flex flex-col flex-1 min-h-0 w-full max-w-lg mx-auto md:max-w-2xl">
+            <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between gap-2 shrink-0">
+                <p class="text-sm font-bold">Desembarcar volume</p>
+                <button type="button" id="btn-expedition-unloading-scan-close-top"
+                    class="text-white/80 text-xl leading-none px-1" aria-label="Fechar">×</button>
+            </div>
+            <div id="expedition-unloading-scan-camera-wrap"
+                class="flex-1 min-h-0 relative bg-black flex flex-col items-center justify-center p-2 gap-2">
+                <div id="expedition-unloading-reader" class="w-full max-w-md expedition-boarding-reader"></div>
+                <p id="expedition-unloading-scan-hint"
+                    class="hidden text-center text-[11px] text-white/90 px-3 py-1.5 rounded-lg bg-black/40 max-w-md">
+                    Centralize o código da etiqueta na faixa horizontal.
+                </p>
+            </div>
+            <div id="expedition-unloading-scan-footer"
+                class="p-3 bg-white border-t border-slate-200 space-y-2 safe-area-pb">
+                <label class="block text-[10px] font-semibold text-slate-500" for="expedition-unloading-scan-manual">Ou digite o código</label>
+                <div class="flex gap-2">
+                    <input type="text" id="expedition-unloading-scan-manual" placeholder="VOL-..."
+                        class="flex-1 px-3 py-2.5 text-sm border border-slate-200 rounded-lg uppercase min-h-[44px]"
+                        autocomplete="off" autocapitalize="characters" enterkeyhint="done">
+                    <button type="button" id="expedition-unloading-scan-manual-btn"
+                        class="text-xs font-semibold px-4 py-2.5 rounded-lg bg-slate-900 text-white min-h-[44px]">OK</button>
+                </div>
+                <button type="button" id="btn-expedition-unloading-scan-close"
+                    class="w-full text-sm font-semibold text-slate-600 py-2.5 min-h-[44px]">Fechar leitura</button>
+            </div>
+        </div>
+        <div id="expedition-unloading-scan-result"
+            class="hidden expedition-boarding-scan-result fixed inset-0 z-[110] flex flex-col items-center justify-center p-5 text-center safe-area-pb"
+            role="alertdialog" aria-live="assertive" aria-modal="true">
+            <div class="expedition-boarding-scan-result__inner w-full max-w-sm">
+                <div id="expedition-unloading-scan-result-icon"
+                    class="expedition-boarding-scan-result__icon" aria-hidden="true">✓</div>
+                <p id="expedition-unloading-scan-result-title" class="expedition-boarding-scan-result__title">OK</p>
+                <p id="expedition-unloading-scan-result-msg" class="expedition-boarding-scan-result__msg"></p>
+                <div id="expedition-unloading-scan-result-actions"
+                    class="expedition-boarding-scan-result__actions flex flex-col gap-2 w-full mt-6"></div>
             </div>
         </div>
     </div>

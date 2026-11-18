@@ -171,6 +171,9 @@ function syncMobileLayoutState() {
     if (typeof syncMobileTopbarContentActions === 'function') {
         syncMobileTopbarContentActions();
     }
+    if (typeof renderExpedicaoMobileSectionBar === 'function') {
+        renderExpedicaoMobileSectionBar();
+    }
 
     updateDesktopSidebarToggleState();
 }

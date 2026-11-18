@@ -76,6 +76,7 @@ O app escolhe o Supabase automaticamente:
 | Onde roda | Ambiente | Arquivo |
 |-----------|----------|---------|
 | `localhost` / `127.0.0.1` | **dev** | `js/core/config.dev.js` |
+| IP da rede local (`192.168.x.x`, `10.x.x.x`, etc.) — ex. celular no Wi‑Fi | **dev** | `js/core/config.dev.js` |
 | GitHub Pages e demais hosts | **prod** | `js/core/config.prod.js` |
 
 1. Preencha `js/core/config.prod.js` com a **URL** e a **publishable key** do projeto Supabase de produção.
