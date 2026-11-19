@@ -1181,7 +1181,13 @@ async function deleteDriveFileRecord(file) {
         }
     }
 
-    const viewerPath = String(file.viewerStoragePath || '').trim();
+    let viewerPath = String(file.viewerStoragePath || '').trim();
+    if (!viewerPath && file.folderKind === DRIVE_FILE_FOLDER_KIND.MODEL_3D) {
+        viewerPath = resolveModel3dViewerStoragePath({
+            ...file,
+            orderProjectId: file.entityId
+        });
+    }
     if (viewerPath) {
         try {
             await supabaseClient.storage

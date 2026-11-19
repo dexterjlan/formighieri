@@ -1,4 +1,5 @@
 let view3dSearchRows = [];
+let view3dResultsOnlyWithModel = false;
 let view3dOrdersCache = [];
 let view3dSelectedOrderId = null;
 let view3dOrderHighlight = -1;
@@ -369,6 +370,19 @@ async function fetchView3dOrdersForSearch(resolved) {
     return { error: null, orders: filtered };
 }
 
+function filterView3dEligibleProjects(projects) {
+    return (projects || []).filter(project => {
+        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
+            return false;
+        }
+        if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) return false;
+        if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
+            return false;
+        }
+        return true;
+    });
+}
+
 async function fetchView3dProjectsForOrders(orders) {
     const orderIds = [...new Set((orders || []).map(order => Number(order.id)).filter(Boolean))];
     if (!orderIds.length) return [];
@@ -389,16 +403,82 @@ async function fetchView3dProjectsForOrders(orders) {
 
     if (result.error) throw result.error;
 
-    return (result.data || []).filter(project => {
-        if (typeof isOrderProjectGroupedChild === 'function' && isOrderProjectGroupedChild(project)) {
-            return false;
+    return filterView3dEligibleProjects(result.data);
+}
+
+async function fetchView3dOrderProjectsByIds(projectIds) {
+    const ids = [...new Set((projectIds || []).map(Number).filter(Boolean))];
+    if (!ids.length) return [];
+
+    const chunkSize = 80;
+    const merged = [];
+
+    for (let offset = 0; offset < ids.length; offset += chunkSize) {
+        const chunk = ids.slice(offset, offset + chunkSize);
+        let result = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, projectCode, orderId, parentProjectId, isComplementary, isReplaced, aggregatorOrderProjectId, order:salesOrders(id, orderCode, client:Client(name))')
+            .in('id', chunk)
+            .order('name', { ascending: true });
+
+        if (result.error?.message?.includes('aggregatorOrderProjectId')) {
+            result = await supabaseClient
+                .from('OrderProject')
+                .select('id, name, projectCode, orderId, parentProjectId, isComplementary, isReplaced, order:salesOrders(id, orderCode, client:Client(name))')
+                .in('id', chunk)
+                .order('name', { ascending: true });
         }
-        if (typeof isReplacedOrderProject === 'function' && isReplacedOrderProject(project)) return false;
-        if (typeof isComplementaryOrderProject === 'function' && isComplementaryOrderProject(project)) {
-            return false;
+
+        if (result.error) throw result.error;
+        merged.push(...(result.data || []));
+    }
+
+    return filterView3dEligibleProjects(merged);
+}
+
+async function fetchView3dAllModelDriveFilesByProjectId() {
+    const { data, error } = await supabaseClient
+        .from('DriveFile')
+        .select(DRIVE_FILE_SELECT)
+        .eq('entityType', DRIVE_FILE_ENTITY_TYPE.ORDER_PROJECT)
+        .eq('folderKind', DRIVE_FILE_FOLDER_KIND.MODEL_3D)
+        .not('driveFileId', 'is', null)
+        .order('id', { ascending: true })
+        .limit(3000);
+
+    if (error) {
+        if (typeof driveFileMissingSetupMessage === 'function') {
+            throw new Error(driveFileMissingSetupMessage(error));
         }
-        return true;
+        throw error;
+    }
+
+    const byProjectId = {};
+    (data || []).forEach(file => {
+        const key = String(file.entityId);
+        if (!key || key === 'null') return;
+        byProjectId[key] = file;
     });
+    return byProjectId;
+}
+
+function mapView3dSearchRows(projects, driveByProjectId = {}, orderById = null) {
+    return sortView3dSearchRows((projects || []).map(project => {
+        const order = orderById
+            ? (orderById[Number(project.orderId)] || project.order || {})
+            : (project.order || {});
+        const driveFile = driveByProjectId[String(project.id)] || null;
+        return {
+            project,
+            order,
+            orderCode: order.orderCode || '—',
+            clientName: typeof getOrderClientName === 'function'
+                ? (getOrderClientName(order) || '—')
+                : (order.client?.name || '—'),
+            projectLabel: project.name || project.projectCode || 'Projeto',
+            driveFile
+        };
+    }));
 }
 
 function view3dRowHasModelFile(row) {
@@ -428,6 +508,7 @@ function sortView3dSearchRows(rows) {
 }
 
 async function searchView3dProjects() {
+    view3dResultsOnlyWithModel = false;
     const resolved = resolveView3dSearch();
     if (resolved.error) {
         alertAppDialog(resolved.error.message, { variant: 'warning', title: 'Aviso' });
@@ -466,23 +547,37 @@ async function searchView3dProjects() {
         const mobileSearch = document.getElementById('view3d-mobile-search');
         if (mobileSearch) mobileSearch.value = '';
 
-        view3dSearchRows = sortView3dSearchRows(projects.map(project => {
-            const order = orderById[Number(project.orderId)] || {};
-            const driveFile = driveByProjectId[String(project.id)] || null;
-            return {
-                project,
-                order,
-                orderCode: order.orderCode || '—',
-                clientName: typeof getOrderClientName === 'function'
-                    ? (getOrderClientName(order) || '—')
-                    : (order.client?.name || '—'),
-                projectLabel: project.name || project.projectCode || 'Projeto',
-                driveFile
-            };
-        }));
+        view3dSearchRows = mapView3dSearchRows(projects, driveByProjectId, orderById);
         renderView3dResults();
     } catch (searchError) {
         console.error('searchView3dProjects:', searchError);
+        alertAppDialog('Erro ao buscar: ' + searchError.message);
+    } finally {
+        setView3dLoading(false);
+    }
+}
+
+async function searchView3dAllProjectsWithModel() {
+    view3dResultsOnlyWithModel = true;
+    setView3dLoading(true, 'Buscando todos os projetos com modelo 3D...');
+    try {
+        const driveByProjectId = await fetchView3dAllModelDriveFilesByProjectId();
+        const projectIds = Object.keys(driveByProjectId).map(Number).filter(Boolean);
+
+        const mobileSearch = document.getElementById('view3d-mobile-search');
+        if (mobileSearch) mobileSearch.value = '';
+
+        if (!projectIds.length) {
+            view3dSearchRows = [];
+            renderView3dResults();
+            return;
+        }
+
+        const projects = await fetchView3dOrderProjectsByIds(projectIds);
+        view3dSearchRows = mapView3dSearchRows(projects, driveByProjectId).filter(view3dRowHasModelFile);
+        renderView3dResults();
+    } catch (searchError) {
+        console.error('searchView3dAllProjectsWithModel:', searchError);
         alertAppDialog('Erro ao buscar: ' + searchError.message);
     } finally {
         setView3dLoading(false);
@@ -518,11 +613,18 @@ function renderView3dRowActionsHtml(row, options = {}) {
         </button>`
         : '';
 
+    const deleteBtn = showAdminUpload && hasModel
+        ? `<button type="button" class="view3d-delete-btn text-xs bg-white border border-red-200 text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-lg font-medium"
+            data-order-project-id="${projectId}">
+            Excluir
+        </button>`
+        : '';
+
     const wrapClass = alignEnd
         ? 'flex flex-wrap justify-end gap-1'
         : 'view3d-mobile__actions flex flex-wrap gap-1.5';
 
-    return `<div class="${wrapClass}">${openBtn}${uploadBtn}</div>`;
+    return `<div class="${wrapClass}">${openBtn}${uploadBtn}${deleteBtn}</div>`;
 }
 
 function renderView3dMobileCard(row, options = {}) {
@@ -549,6 +651,71 @@ function bindView3dMobileSearchInput() {
     if (!input) return;
     view3dMobileSearchBound = true;
     input.addEventListener('input', () => renderView3dMobileResultsList());
+}
+
+function getView3dResultsTableColumns(showAdminUpload) {
+    return [
+        {
+            key: 'orderCode',
+            label: 'Pedido',
+            sortable: true,
+            filterable: true,
+            cellClass: 'p-3 text-xs font-mono text-slate-800'
+        },
+        {
+            key: 'clientName',
+            label: 'Cliente',
+            sortable: true,
+            filterable: true,
+            cellClass: 'p-3 text-xs text-slate-700'
+        },
+        {
+            key: 'projectLabel',
+            label: 'Projeto',
+            sortable: true,
+            filterable: true,
+            cellClass: 'p-3 text-xs text-slate-800 font-medium'
+        },
+        {
+            key: 'actions',
+            label: 'Ações',
+            type: 'action',
+            align: 'right',
+            sortable: false,
+            filterable: false,
+            thClass: 'min-w-[11rem]',
+            cellClass: 'p-3 text-right',
+            render: row => renderView3dRowActionsHtml(row, { showAdminUpload, alignEnd: true })
+        }
+    ];
+}
+
+function renderView3dDesktopResultsTable(showAdminUpload) {
+    const mount = document.getElementById('view3d-results-table-mount');
+    if (!mount) return;
+
+    if (!view3dSearchRows.length) {
+        mount.innerHTML = '';
+        return;
+    }
+
+    if (typeof mountInteractiveTable !== 'function') {
+        mount.innerHTML = '<p class="text-xs text-red-500 text-center py-8">Tabela interativa indisponível.</p>';
+        return;
+    }
+
+    mountInteractiveTable(mount, {
+        tableId: 'view3d-results',
+        rows: view3dSearchRows,
+        columns: getView3dResultsTableColumns(showAdminUpload),
+        minWidth: '640px',
+        emptyMessage: 'Nenhum projeto na lista.',
+        filteredEmptyMessage: 'Nenhum projeto encontrado com os filtros aplicados.',
+        defaultSort: [
+            { key: 'clientName', direction: 'asc' },
+            { key: 'orderCode', direction: 'asc' }
+        ]
+    });
 }
 
 function renderView3dMobileResultsList() {
@@ -578,18 +745,18 @@ function renderView3dMobileResultsList() {
 }
 
 function renderView3dResults() {
-    const tbody = document.getElementById('view3d-results-body');
     const emptyEl = document.getElementById('view3d-results-empty');
     const tableWrap = document.getElementById('view3d-results-table-wrap');
+    const tableMount = document.getElementById('view3d-results-table-mount');
     const mobileShell = document.getElementById('view3d-results-mobile-shell');
     const mobile = typeof isMobileViewport === 'function' && isMobileViewport();
-    if (!tbody) return;
+    if (!emptyEl && !tableMount) return;
 
     const showAdminUpload = isAdmin();
     document.getElementById('view3d-upload-hint')?.classList.toggle('hidden', !showAdminUpload);
 
     if (!view3dSearchRows.length) {
-        tbody.innerHTML = '';
+        if (tableMount) tableMount.innerHTML = '';
         emptyEl?.classList.remove('hidden');
         tableWrap?.classList.add('hidden');
         mobileShell?.classList.add('hidden');
@@ -608,17 +775,7 @@ function renderView3dResults() {
 
     mobileShell?.classList.add('hidden');
     tableWrap?.classList.remove('hidden');
-
-    tbody.innerHTML = view3dSearchRows.map(row => `
-            <tr class="border-b border-slate-100 last:border-0">
-                <td class="p-3 text-xs font-mono text-slate-800">${escapeHtml(row.orderCode)}</td>
-                <td class="p-3 text-xs text-slate-700">${escapeHtml(row.clientName)}</td>
-                <td class="p-3 text-xs text-slate-800 font-medium">${escapeHtml(row.projectLabel)}</td>
-                <td class="p-3 text-right">
-                    ${renderView3dRowActionsHtml(row, { showAdminUpload, alignEnd: true })}
-                </td>
-            </tr>
-        `).join('');
+    renderView3dDesktopResultsTable(showAdminUpload);
 }
 
 function findView3dRowByProjectId(orderProjectId) {
@@ -704,6 +861,73 @@ async function handleView3dOpenClick(orderProjectId) {
         return;
     }
     openView3dViewerModal(row.driveFile, `${row.projectLabel} — ${row.orderCode}`);
+}
+
+async function handleView3dDeleteClick(orderProjectId) {
+    if (!isAdmin()) {
+        alertAppDialog('Somente administradores podem excluir modelos 3D.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const row = findView3dRowByProjectId(orderProjectId);
+    if (!row?.driveFile?.id) {
+        alertAppDialog('Este projeto não possui modelo 3D cadastrado.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    if (typeof deleteDriveFileRecord !== 'function') {
+        alertAppDialog('Exclusão de arquivos indisponível neste ambiente.');
+        return;
+    }
+
+    const fileName = row.driveFile.fileName || 'modelo 3D';
+    const confirmed = await confirmAppDialog(
+        `Excluir o modelo "${fileName}" do projeto ${row.projectLabel} (${row.orderCode})?\n\nO arquivo será removido do Google Drive, do Supabase Storage e do cadastro.`,
+        { title: 'Excluir modelo 3D', confirmLabel: 'Excluir' }
+    );
+    if (!confirmed) return;
+
+    try {
+        setView3dLoading(true, 'Excluindo modelo (Drive, Storage e banco)...');
+        const file = {
+            ...row.driveFile,
+            folderKind: row.driveFile.folderKind || DRIVE_FILE_FOLDER_KIND.MODEL_3D,
+            entityType: row.driveFile.entityType || DRIVE_FILE_ENTITY_TYPE.ORDER_PROJECT,
+            entityId: row.driveFile.entityId || orderProjectId
+        };
+        await deleteDriveFileRecord(file);
+
+        if (view3dResultsOnlyWithModel) {
+            view3dSearchRows = view3dSearchRows.filter(
+                item => Number(item.project.id) !== Number(orderProjectId)
+            );
+        } else {
+            const index = view3dSearchRows.findIndex(item => Number(item.project.id) === Number(orderProjectId));
+            if (index >= 0) {
+                view3dSearchRows[index] = { ...view3dSearchRows[index], driveFile: null };
+            }
+        }
+
+        renderView3dResults();
+        setView3dLoading(true, 'Modelo excluído.', 'success');
+        const waitMs = typeof APP_OVERLAY_SUCCESS_MS === 'number' ? APP_OVERLAY_SUCCESS_MS : 800;
+        if (typeof waitAppOverlay === 'function') {
+            await waitAppOverlay(waitMs);
+        } else {
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+    } catch (error) {
+        console.error('handleView3dDeleteClick:', error);
+        setView3dLoading(true, error.message || 'Não foi possível excluir o modelo.', 'error');
+        const waitMs = typeof APP_OVERLAY_ERROR_MS === 'number' ? APP_OVERLAY_ERROR_MS : 2000;
+        if (typeof waitAppOverlay === 'function') {
+            await waitAppOverlay(waitMs);
+        } else {
+            await new Promise(resolve => setTimeout(resolve, waitMs));
+        }
+    } finally {
+        setView3dLoading(false);
+    }
 }
 
 async function handleView3dUploadClick(orderProjectId) {
@@ -802,6 +1026,7 @@ function bindView3dEvents() {
     });
     document.getElementById('btn-view3d')?.addEventListener('click', showView3d);
     document.getElementById('btn-view3d-search')?.addEventListener('click', searchView3dProjects);
+    document.getElementById('btn-view3d-all-with-model')?.addEventListener('click', searchView3dAllProjectsWithModel);
     document.getElementById('view3d-filter-form')?.addEventListener('submit', event => {
         event.preventDefault();
         searchView3dProjects();
@@ -903,6 +1128,11 @@ function bindView3dEvents() {
         const uploadBtn = event.target.closest('.view3d-upload-btn');
         if (uploadBtn) {
             handleView3dUploadClick(Number(uploadBtn.dataset.orderProjectId));
+            return;
+        }
+        const deleteBtn = event.target.closest('.view3d-delete-btn');
+        if (deleteBtn) {
+            handleView3dDeleteClick(Number(deleteBtn.dataset.orderProjectId));
         }
     });
     document.getElementById('btn-view3d-viewer-close')?.addEventListener('click', closeView3dViewerModal);

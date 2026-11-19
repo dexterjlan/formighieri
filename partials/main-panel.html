@@ -3504,7 +3504,7 @@
                 </div>
                     <div class="p-4 border-b border-slate-100 bg-slate-50/50">
                         <h2 class="font-bold text-sm text-slate-900">Visualização 3D</h2>
-                        <p class="text-xs text-slate-400 mt-0.5">Busque pelo cliente (vários pedidos) ou selecione um pedido específico e abra o modelo GLB/GLTF de cada projeto.</p>
+                        <p class="text-xs text-slate-400 mt-0.5">Busque pelo cliente ou pedido, ou clique em Todos com arquivo para listar projetos que já têm modelo GLB/GLTF.</p>
                     </div>
                     <form id="view3d-filter-form" class="p-4 border-b border-slate-100 flex flex-wrap gap-3 items-end">
                         <div class="relative z-30 flex-1 min-w-[200px] max-w-xl" id="view3d-order-wrap">
@@ -3527,25 +3527,20 @@
                             class="text-sm bg-indigo-700 text-white hover:bg-indigo-800 px-4 py-2 rounded-lg font-medium">
                             Buscar
                         </button>
+                        <button type="button" id="btn-view3d-all-with-model"
+                            class="text-sm bg-white border border-indigo-200 text-indigo-800 hover:bg-indigo-50 px-4 py-2 rounded-lg font-medium whitespace-nowrap"
+                            title="Lista todos os projetos que já possuem arquivo GLB/GLTF no Drive">
+                            Todos com arquivo
+                        </button>
                     </form>
                     <p id="view3d-upload-hint" class="hidden text-xs text-slate-500 px-4 pt-3">
-                        Como administrador, você pode enviar ou substituir o arquivo .glb ou .gltf de cada projeto (armazenado no Drive).
+                        Como administrador, você pode enviar, substituir ou excluir o arquivo .glb ou .gltf (Drive, Storage e cadastro).
                     </p>
                     <p id="view3d-results-empty" class="text-xs text-slate-400 text-center py-12 px-4">
                         Informe o cliente e/ou selecione um pedido e clique em Buscar.
                     </p>
-                    <div id="view3d-results-table-wrap" class="hidden overflow-x-auto">
-                        <table class="w-full text-sm min-w-[480px]">
-                            <thead class="bg-slate-50 text-[10px] uppercase text-slate-500">
-                                <tr>
-                                    <th class="text-left p-3 font-semibold w-28">Pedido</th>
-                                    <th class="text-left p-3 font-semibold">Cliente</th>
-                                    <th class="text-left p-3 font-semibold">Projeto</th>
-                                    <th class="text-right p-3 font-semibold w-44">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="view3d-results-body" class="divide-y divide-slate-100"></tbody>
-                        </table>
+                    <div id="view3d-results-table-wrap" class="hidden p-4 pt-0">
+                        <div id="view3d-results-table-mount"></div>
                     </div>
                     <div id="view3d-results-mobile-shell" class="hidden border-t border-slate-100">
                         <div class="p-3 flex flex-col gap-2 bg-slate-50/40">
