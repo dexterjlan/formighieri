@@ -18,6 +18,47 @@ const EXPEDITION_ROUTE_WIZARD_STATUS_OPTIONS = [
     { value: 'Confirmed', label: 'Confirmado' }
 ];
 
+const EXPEDITION_DEFAULT_ROUTE_TIME = '08:00';
+
+function getExpeditionRouteTimeDefault() {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function toExpeditionRouteDateInputValue(routeDate) {
+    if (!routeDate) return '';
+    const raw = String(routeDate).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    if (typeof toInputDate === 'function') return toInputDate(raw);
+    return raw.slice(0, 10);
+}
+
+function toExpeditionRouteTimeInputValue(routeDate) {
+    if (!routeDate) return EXPEDITION_DEFAULT_ROUTE_TIME;
+    const raw = String(routeDate).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return EXPEDITION_DEFAULT_ROUTE_TIME;
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return EXPEDITION_DEFAULT_ROUTE_TIME;
+    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+}
+
+function buildExpeditionRouteDateTimeIso(dateValue, timeValue) {
+    const date = String(dateValue || '').trim();
+    const time = String(timeValue || EXPEDITION_DEFAULT_ROUTE_TIME).trim() || EXPEDITION_DEFAULT_ROUTE_TIME;
+    if (!date) return null;
+    const [year, month, day] = date.split('-').map(Number);
+    const [hours, minutes] = time.split(':').map(part => Number(part) || 0);
+    if (!year || !month || !day) return null;
+    const local = new Date(year, month - 1, day, hours, minutes, 0, 0);
+    return local.toISOString();
+}
+
+function formatExpeditionRouteDateTimeLabel(routeDate) {
+    if (!routeDate) return '—';
+    if (typeof formatDate === 'function') return formatDate(routeDate);
+    return String(routeDate);
+}
+
 /** Itens ficam vinculados a rotas fora de rascunho (não podem ir para outra rota confirmada). */
 const EXPEDITION_ROUTE_LOCKED_ITEM_STATUSES = [
     'Confirmed',
@@ -287,7 +328,8 @@ async function buildWizardStateFromRoute(routeId) {
     return {
         ...empty,
         editingRouteId: key,
-        routeDate: route.routeDate || empty.routeDate,
+        routeDate: toExpeditionRouteDateInputValue(route.routeDate) || empty.routeDate,
+        routeTime: toExpeditionRouteTimeInputValue(route.routeDate) || empty.routeTime,
         vehicleLabel: route.vehicleLabel || '',
         driverName: route.driverName || '',
         routeStatus: 'Draft',
@@ -356,6 +398,328 @@ async function insertExpeditionRouteStopItem({ routeId, stopId, item }) {
     return result.data;
 }
 
+function closeExpedicaoRouteHistoryModal() {
+    document.getElementById('expedition-route-history-modal')?.classList.add('hidden');
+}
+
+function setExpeditionRouteHistoryHeader(route) {
+    const crewMount = document.getElementById('expedition-route-history-crew');
+    const routeIdEl = document.getElementById('expedition-route-history-route-id');
+    if (!crewMount) return;
+
+    if (!route?.id) {
+        if (routeIdEl) routeIdEl.textContent = '—';
+        crewMount.innerHTML = '<p class="text-sm text-slate-400 text-center py-2">Carregando...</p>';
+        return;
+    }
+
+    if (routeIdEl) routeIdEl.textContent = `#${Number(route.id)}`;
+
+    const dateLabel = typeof formatExpeditionRouteDateTimeLabel === 'function'
+        ? formatExpeditionRouteDateTimeLabel(route.routeDate)
+        : (typeof formatDate === 'function' ? formatDate(route.routeDate) : '—');
+    const vehicle = String(route.vehicleLabel || '').trim() || '—';
+    const driver = String(route.driverName || '').trim() || '—';
+    const carIcon = typeof renderExpeditionIcon === 'function'
+        ? renderExpeditionIcon('car', 'expedition-route-history-crew__icon')
+        : '';
+    const driverIcon = typeof renderExpeditionIcon === 'function'
+        ? renderExpeditionIcon('driver', 'expedition-route-history-crew__icon')
+        : '';
+
+    crewMount.innerHTML = `
+        <div class="expedition-route-history-crew__item expedition-route-history-crew__item--date">
+            <span class="expedition-route-history-crew__label">Data e horário</span>
+            <p class="expedition-route-history-crew__value expedition-route-history-crew__value--date">${escapeHtml(dateLabel)}</p>
+        </div>
+        <div class="expedition-route-history-crew__item expedition-route-history-crew__item--vehicle">
+            <span class="expedition-route-history-crew__label">Carro</span>
+            <p class="expedition-route-history-crew__value">
+                ${carIcon}
+                <span>${escapeHtml(vehicle)}</span>
+            </p>
+        </div>
+        <div class="expedition-route-history-crew__item expedition-route-history-crew__item--driver">
+            <span class="expedition-route-history-crew__label">Motorista</span>
+            <p class="expedition-route-history-crew__value expedition-route-history-crew__value--driver">
+                ${driverIcon}
+                <span>${escapeHtml(driver)}</span>
+            </p>
+        </div>
+    `;
+}
+
+function formatExpeditionVolumeHistoryUser(user) {
+    return String(user?.name || '').trim() || '—';
+}
+
+function formatExpeditionVolumeHistoryMoment(value) {
+    if (!value) return '—';
+    if (typeof formatDate === 'function') return formatDate(value);
+    return String(value);
+}
+
+function expeditionVolumeHistoryStopNumber(vol) {
+    const sortOrder = Number(vol?.stopItem?.stop?.sortOrder);
+    return Number.isFinite(sortOrder) && sortOrder >= 0 ? sortOrder + 1 : null;
+}
+
+function expeditionVolumeHistoryStopAddress(vol) {
+    return typeof formatExpeditionAddressOneLine === 'function'
+        ? formatExpeditionAddressOneLine(vol?.stopItem?.stop?.addrSnapshot)
+        : '';
+}
+
+function expeditionVolumeHistoryStatusMeta(vol) {
+    if (vol?.unloadedAt) return { label: 'Desembarcado', tone: 'done' };
+    if (vol?.boardedAt) return { label: 'Embarcado', tone: 'boarded' };
+    return { label: 'Pendente', tone: 'pending' };
+}
+
+function expeditionVolumeHistoryTypeLabel(entityType) {
+    if (typeof getExpeditionEntityTypeLabel === 'function') {
+        return getExpeditionEntityTypeLabel(entityType);
+    }
+    return entityType || '—';
+}
+
+function groupExpeditionVolumesForHistory(volumes = []) {
+    const sorted = typeof sortExpeditionVolumesForPrint === 'function'
+        ? sortExpeditionVolumesForPrint(volumes)
+        : volumes || [];
+
+    const byKey = new Map();
+    sorted.forEach(vol => {
+        const stopItem = vol?.stopItem;
+        const stopItemId = Number(stopItem?.id);
+        const key = stopItemId
+            ? `item:${stopItemId}`
+            : `vol:${Number(vol.id) || Math.random()}`;
+
+        if (!byKey.has(key)) {
+            byKey.set(key, {
+                sortOrder: Number(stopItem?.stop?.sortOrder),
+                parada: expeditionVolumeHistoryStopNumber(vol),
+                addr: expeditionVolumeHistoryStopAddress(vol),
+                entityType: stopItem?.entityType,
+                entityId: stopItem?.entityId,
+                entityLabel: String(stopItem?.entityLabel || '').trim() || '—',
+                volumes: []
+            });
+        }
+        byKey.get(key).volumes.push(vol);
+    });
+
+    return [...byKey.values()].sort((a, b) => {
+        const orderA = Number.isFinite(a.sortOrder) ? a.sortOrder : 9999;
+        const orderB = Number.isFinite(b.sortOrder) ? b.sortOrder : 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        const typeA = String(a.entityType || '');
+        const typeB = String(b.entityType || '');
+        if (typeA !== typeB) return typeA.localeCompare(typeB);
+        return Number(a.entityId) - Number(b.entityId);
+    });
+}
+
+function renderExpeditionVolumeHistoryTimelineCell(label, at, user, tone) {
+    const pending = !at;
+    return `
+        <div class="expedition-route-history-vol__cell expedition-route-history-vol__cell--${tone}${pending ? ' is-pending' : ''}">
+            <span class="expedition-route-history-vol__cell-label">${escapeHtml(label)}</span>
+            <span class="expedition-route-history-vol__cell-when">${escapeHtml(formatExpeditionVolumeHistoryMoment(at))}</span>
+            <span class="expedition-route-history-vol__cell-who">${escapeHtml(formatExpeditionVolumeHistoryUser(user))}</span>
+        </div>
+    `;
+}
+
+function renderExpeditionVolumeHistoryRow(vol) {
+    const volCode = vol.volumeCode
+        ? String(vol.volumeCode)
+        : `#${Number(vol.volumeIndex) || '—'}`;
+    const volIndex = Number(vol.volumeIndex) || '—';
+    const status = expeditionVolumeHistoryStatusMeta(vol);
+
+    return `
+        <li class="expedition-route-history-vol expedition-route-history-vol--${status.tone}">
+            <div class="expedition-route-history-vol__head">
+                <div>
+                    <p class="expedition-route-history-vol__code">${escapeHtml(volCode)}</p>
+                    <p class="expedition-route-history-vol__index">Vol. ${escapeHtml(String(volIndex))}</p>
+                </div>
+                <span class="expedition-route-history-vol__status">${escapeHtml(status.label)}</span>
+            </div>
+            <div class="expedition-route-history-vol__timeline">
+                ${renderExpeditionVolumeHistoryTimelineCell('Embarque', vol.boardedAt, vol.boardedBy, 'boarding')}
+                ${renderExpeditionVolumeHistoryTimelineCell('Desembarque', vol.unloadedAt, vol.unloadedBy, 'unloading')}
+            </div>
+        </li>
+    `;
+}
+
+async function prepareExpeditionRouteVolumeHistoryGroups(volumes) {
+    const groups = groupExpeditionVolumesForHistory(volumes || []);
+    const build = typeof buildExpeditionHistoryItemSummary === 'function'
+        ? buildExpeditionHistoryItemSummary
+        : null;
+
+    await Promise.all(groups.map(async group => {
+        if (build && group.entityType && group.entityId) {
+            group.itemSummary = await build(group.entityType, group.entityId);
+        } else {
+            group.itemSummary = String(group.entityLabel || '—').trim() || '—';
+        }
+    }));
+
+    return groups;
+}
+
+function renderExpeditionRouteVolumeHistoryList(groups) {
+    if (!groups?.length) {
+        return '<p class="text-sm text-slate-500 text-center py-8">Nenhum volume nesta rota.</p>';
+    }
+
+    const sections = groups.map(group => {
+        const typeLabel = expeditionVolumeHistoryTypeLabel(group.entityType);
+        const paradaLabel = group.parada != null ? `Parada ${group.parada}` : 'Parada';
+        const volCount = group.volumes.length;
+
+        return `
+            <li class="expedition-route-history-group">
+                <div class="expedition-route-history-group__head">
+                    <div class="expedition-route-history-group__titles">
+                        <p class="expedition-route-history-group__parada">${escapeHtml(paradaLabel)}</p>
+                        <span class="expedition-route-history-group__type">${escapeHtml(typeLabel)}</span>
+                    </div>
+                    <span class="expedition-route-history-group__count">${volCount} vol.</span>
+                </div>
+                ${group.addr ? `<p class="expedition-route-history-group__addr">${escapeHtml(group.addr)}</p>` : ''}
+                <p class="expedition-route-history-group__item">
+                    <span class="expedition-route-history-group__item-label">Item</span>
+                    ${escapeHtml(group.itemSummary || group.entityLabel || '—')}
+                </p>
+                <ul class="expedition-route-history-vol-list">
+                    ${group.volumes.map(renderExpeditionVolumeHistoryRow).join('')}
+                </ul>
+            </li>
+        `;
+    }).join('');
+
+    return `<ul class="expedition-route-history-list">${sections}</ul>`;
+}
+
+async function fetchExpeditionRouteVolumesForHistory(routeId) {
+    const key = Number(routeId);
+    if (!key) return { volumes: [], missingColumn: false, error: null };
+
+    const selects = [
+        `id, volumeIndex, volumeCode, routeId, boardedAt, boardedById, unloadedAt, unloadedById,
+            boardedBy:appUsers!boardedById(id, name),
+            unloadedBy:appUsers!unloadedById(id, name),
+            stopItem:ExpeditionRouteStopItem(
+                id, entityType, entityId, entityLabel,
+                stop:ExpeditionRouteStop(id, sortOrder, addrSnapshot)
+            )`,
+        `id, volumeIndex, volumeCode, routeId, boardedAt, boardedById, unloadedAt, unloadedById,
+            stopItem:ExpeditionRouteStopItem(
+                id, entityType, entityId, entityLabel,
+                stop:ExpeditionRouteStop(id, sortOrder, addrSnapshot)
+            )`
+    ];
+
+    let lastError = null;
+    for (const select of selects) {
+        const result = await supabaseClient
+            .from('ExpeditionVolume')
+            .select(select)
+            .eq('routeId', key)
+            .order('id', { ascending: true });
+
+        if (!result.error) {
+            return { volumes: result.data || [], missingColumn: false, error: null };
+        }
+        lastError = result.error;
+        if (!/boardedAt|boardedBy|unloadedAt|unloadedBy|relationship|embed|schema cache/i.test(result.error.message || '')) {
+            break;
+        }
+    }
+
+    const missingColumn = /boardedAt|unloadedAt/i.test(lastError?.message || '');
+    return { volumes: [], missingColumn, error: lastError };
+}
+
+async function openExpedicaoRouteBoardingHistoryModal(routeId) {
+    const key = Number(routeId);
+    if (!key) return;
+
+    const modal = document.getElementById('expedition-route-history-modal');
+    const mount = document.getElementById('expedition-route-history-mount');
+    if (!modal || !mount) return;
+
+    modal.classList.remove('hidden');
+    mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando histórico...</p>';
+    setExpeditionRouteHistoryHeader({ id: key });
+
+    try {
+        const { data: route, error: routeError } = await supabaseClient
+            .from('ExpeditionRoute')
+            .select('id, routeDate, vehicleLabel, driverName, status')
+            .eq('id', key)
+            .maybeSingle();
+
+        if (routeError) throw routeError;
+        if (!route) {
+            mount.innerHTML = '<p class="text-xs text-red-600 text-center py-6">Rota não encontrada.</p>';
+            return;
+        }
+
+        setExpeditionRouteHistoryHeader(route);
+
+        const { volumes, missingColumn, error } = await fetchExpeditionRouteVolumesForHistory(key);
+        if (error) throw error;
+
+        if (missingColumn) {
+            mount.innerHTML = `
+                <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Colunas de embarque/desembarque não encontradas. ${escapeHtml(expeditionSqlHint())}
+                </p>
+            `;
+            return;
+        }
+
+        const total = volumes.length;
+        const boarded = volumes.filter(vol => vol.boardedAt).length;
+        const unloaded = volumes.filter(vol => vol.unloadedAt).length;
+
+        const pendingBoard = Math.max(total - boarded, 0);
+        const pendingUnload = Math.max(boarded - unloaded, 0);
+
+        const historyGroups = await prepareExpeditionRouteVolumeHistoryGroups(volumes);
+
+        mount.innerHTML = `
+            <div class="expedition-route-history-summary">
+                <div class="expedition-route-history-summary__item">
+                    <span class="expedition-route-history-summary__value">${total}</span>
+                    <span class="expedition-route-history-summary__label">Volumes</span>
+                </div>
+                <div class="expedition-route-history-summary__item expedition-route-history-summary__item--boarding">
+                    <span class="expedition-route-history-summary__value">${boarded}</span>
+                    <span class="expedition-route-history-summary__label">Embarcados</span>
+                    ${pendingBoard ? `<span class="expedition-route-history-summary__hint">${pendingBoard} pendente${pendingBoard === 1 ? '' : 's'}</span>` : ''}
+                </div>
+                <div class="expedition-route-history-summary__item expedition-route-history-summary__item--unloading">
+                    <span class="expedition-route-history-summary__value">${unloaded}</span>
+                    <span class="expedition-route-history-summary__label">Desembarcados</span>
+                    ${pendingUnload ? `<span class="expedition-route-history-summary__hint">${pendingUnload} aguardando</span>` : ''}
+                </div>
+            </div>
+            ${renderExpeditionRouteVolumeHistoryList(historyGroups)}
+        `;
+    } catch (err) {
+        console.error('openExpedicaoRouteBoardingHistoryModal:', err);
+        mount.innerHTML = `<p class="text-xs text-red-600 text-center py-6">${escapeHtml(err.message || 'Erro ao carregar histórico.')}</p>`;
+    }
+}
+
 async function loadExpedicaoRouteList() {
     const mount = document.getElementById('expedicao-content');
     if (!mount) return;
@@ -408,6 +772,9 @@ function renderExpedicaoRouteList(mount, rows) {
                         <button type="button"
                             class="expedicao-route-open-btn text-xs bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-50"
                             data-route-id="${row.id}">Abrir</button>
+                        <button type="button"
+                            class="expedicao-route-history-btn text-xs bg-white border border-blue-200 text-blue-800 px-2.5 py-1 rounded-lg font-medium hover:bg-blue-50"
+                            data-route-id="${row.id}">Histórico</button>
                         ${canEditExpeditionRoute(row.status)
         ? `<button type="button"
                             class="expedicao-route-edit-btn text-xs bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-50"
@@ -462,6 +829,12 @@ function renderExpedicaoRouteList(mount, rows) {
         btn.addEventListener('click', () => {
             const routeId = Number(btn.dataset.routeId);
             if (typeof openExpedicaoRouteDetail === 'function') openExpedicaoRouteDetail(routeId);
+        });
+    });
+    mount.querySelectorAll('.expedicao-route-history-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const routeId = Number(btn.dataset.routeId);
+            void openExpedicaoRouteBoardingHistoryModal(routeId);
         });
     });
     mount.querySelectorAll('.expedicao-route-edit-btn').forEach(btn => {
@@ -602,6 +975,10 @@ async function openExpedicaoRouteDetail(routeId) {
                     }
                 };
             }
+            const historyBtn = document.getElementById('btn-expedition-route-detail-history');
+            if (historyBtn) {
+                historyBtn.onclick = () => void openExpedicaoRouteBoardingHistoryModal(route.id);
+            }
         }
     } catch (error) {
         console.error('openExpedicaoRouteDetail:', error);
@@ -677,7 +1054,7 @@ async function persistExpeditionRoute(wizardState) {
     }
 
     const routePayload = {
-        routeDate: wizardState.routeDate,
+        routeDate: buildExpeditionRouteDateTimeIso(wizardState.routeDate, wizardState.routeTime),
         vehicleLabel: wizardState.vehicleLabel,
         driverName: wizardState.driverName,
         status,
@@ -776,6 +1153,8 @@ async function persistExpeditionRoute(wizardState) {
 }
 
 window.loadExpedicaoRouteList = loadExpedicaoRouteList;
+window.openExpedicaoRouteBoardingHistoryModal = openExpedicaoRouteBoardingHistoryModal;
+window.closeExpedicaoRouteHistoryModal = closeExpedicaoRouteHistoryModal;
 window.persistExpeditionRoute = persistExpeditionRoute;
 window.persistExpeditionRouteDraft = persistExpeditionRoute;
 window.EXPEDITION_ROUTE_STATUS_OPTIONS = EXPEDITION_ROUTE_STATUS_OPTIONS;
@@ -790,3 +1169,7 @@ window.buildWizardStateFromRoute = buildWizardStateFromRoute;
 window.openExpedicaoRouteDetail = openExpedicaoRouteDetail;
 window.printExpedicaoRouteLabelsById = printExpedicaoRouteLabelsById;
 window.fetchExpeditionEntityIdsAlreadyRouted = fetchExpeditionEntityIdsAlreadyRouted;
+window.EXPEDITION_DEFAULT_ROUTE_TIME = EXPEDITION_DEFAULT_ROUTE_TIME;
+window.getExpeditionRouteTimeDefault = getExpeditionRouteTimeDefault;
+window.buildExpeditionRouteDateTimeIso = buildExpeditionRouteDateTimeIso;
+window.formatExpeditionRouteDateTimeLabel = formatExpeditionRouteDateTimeLabel;

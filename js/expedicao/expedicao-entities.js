@@ -261,6 +261,7 @@ function getExpeditionEntitySearchRowFields(row, entityType) {
     if (entityType === 'ExternalAssemblyInspection') {
         const projectLabel = row?.expeditionProjectLabel || getExpeditionOrderProjectLabel(row);
         return [
+            { label: 'Req. compra', value: row?.purchaseId || row?.id },
             { label: 'Cliente', value: row?.order?.client?.name },
             { label: 'Pedido', value: row?.order?.orderCode },
             { label: 'Projeto', value: projectLabel },
@@ -278,8 +279,8 @@ function getExpeditionEntitySearchRowFields(row, entityType) {
     if (entityType === 'Purchase') {
         return [
             { label: 'ID', value: row?.id },
-            { label: 'Cliente', value: row?.client?.name },
-            { label: 'Pedido', value: row?.order?.orderCode },
+            { label: 'Cliente', value: getExpeditionPurchaseClientName(row) },
+            { label: 'Pedido', value: row?.order?.orderCode || row?.orderProject?.order?.orderCode },
             { label: 'Projeto', value: getExpeditionOrderProjectLabel(row) }
         ];
     }
@@ -331,6 +332,204 @@ function isExpeditionPurchaseSearchExcluded(row) {
         return true;
     }
     return false;
+}
+
+const EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED =
+    'orderProject:OrderProject(id, name, projectCode, orderId, order:salesOrders(id, orderCode, addrId, clientId, client:Client(name)))';
+
+const EXPEDITION_PURCHASE_SELECTS = [
+    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name, isSystem)`,
+    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name)`,
+    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, note, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name)`
+];
+
+function getExpeditionPurchaseOrderId(row) {
+    return Number(row?.orderId)
+        || Number(row?.order?.id)
+        || Number(row?.orderProject?.orderId)
+        || Number(row?.orderProject?.order?.id)
+        || null;
+}
+
+function getExpeditionPurchaseClientName(row) {
+    return String(
+        row?.orderProject?.order?.client?.name
+            || row?.order?.client?.name
+            || row?.client?.name
+            || ''
+    ).trim();
+}
+
+function getExpeditionPurchaseClientId(row) {
+    return Number(row?.orderProject?.order?.clientId)
+        || Number(row?.order?.clientId)
+        || Number(row?.clientId)
+        || null;
+}
+
+function normalizeExpeditionPurchaseRow(row) {
+    if (!row) return row;
+    const order = row.order || row.orderProject?.order || null;
+    return { ...row, order, orderId: getExpeditionPurchaseOrderId({ ...row, order }) };
+}
+
+function isExpeditionPurchaseEmbedRetryError(message = '') {
+    return /isSystem|relationship|embed|schema cache|requestObservation|description/i.test(message);
+}
+
+async function fetchExpeditionPurchaseRowById(id) {
+    const key = Number(id);
+    if (!key) return { row: null, error: null };
+    let lastError = null;
+    for (const select of EXPEDITION_PURCHASE_SELECTS) {
+        const result = await supabaseClient
+            .from('Purchase')
+            .select(select)
+            .eq('id', key)
+            .maybeSingle();
+        if (!result.error) {
+            return { row: normalizeExpeditionPurchaseRow(result.data), error: null };
+        }
+        lastError = result.error;
+        if (!isExpeditionPurchaseEmbedRetryError(result.error.message || '')) break;
+    }
+    return { row: null, error: lastError };
+}
+
+function applyExpeditionPurchaseSearchFilter(query, q) {
+    if (!q) return query;
+    if (/^\d+$/.test(q)) return query.eq('id', Number(q));
+    const pattern = `%${escapeExpeditionIlikePattern(q)}%`;
+    return query.or(`requestObservation.ilike.${pattern},note.ilike.${pattern},purchaseType.ilike.${pattern}`);
+}
+
+async function searchExpeditionPurchaseEntities(q, max) {
+    let data = [];
+    let lastError = null;
+    for (const select of EXPEDITION_PURCHASE_SELECTS) {
+        let req = supabaseClient
+            .from('Purchase')
+            .select(select)
+            .order('id', { ascending: false })
+            .limit(max * 2);
+        req = applyExpeditionPurchaseSearchFilter(req, q);
+        const result = await req;
+        if (!result.error) {
+            data = (result.data || []).map(normalizeExpeditionPurchaseRow);
+            break;
+        }
+        lastError = result.error;
+        if (!isExpeditionPurchaseEmbedRetryError(result.error.message || '')) {
+            throw result.error;
+        }
+    }
+    if (lastError && !data.length) throw lastError;
+    return data
+        .filter(row => !isExpeditionPurchaseSearchExcluded(row))
+        .slice(0, max);
+}
+
+function expeditionVistoriaPurchaseRowMatchesQuery(row, queryText) {
+    const q = String(queryText || '').trim();
+    if (!q) return true;
+    if (/^\d+$/.test(q)) {
+        const num = Number(q);
+        return num === Number(row?.id)
+            || num === Number(row?.purchaseId)
+            || num === Number(row?.externalAssemblyInspectionId);
+    }
+    const haystack = [
+        row?.order?.client?.name,
+        row?.order?.orderCode,
+        row?.expeditionProjectLabel,
+        getExpeditionOrderProjectLabel(row),
+        row?.requestObservation,
+        row?.note,
+        row?.purchaseType,
+        row?.purchaseStatus,
+        row?.status
+    ].join(' ').toLowerCase();
+    return haystack.includes(q.toLowerCase());
+}
+
+async function enrichExpeditionVistoriaPurchaseRows(purchases = []) {
+    const normalized = (purchases || []).map(normalizeExpeditionPurchaseRow);
+    const inspectionIds = [...new Set(
+        normalized.map(row => Number(row.externalAssemblyInspectionId)).filter(Boolean)
+    )];
+    if (!inspectionIds.length) return [];
+
+    const { data: inspections, error } = await supabaseClient
+        .from('ExternalAssemblyInspection')
+        .select('id, status, orderId, observation')
+        .in('id', inspectionIds);
+
+    if (error) throw error;
+
+    const enrichedInspections = await enrichExternalAssemblyInspectionRowsForExpedition(inspections || []);
+    const inspectionById = new Map(enrichedInspections.map(row => [Number(row.id), row]));
+
+    return normalized
+        .filter(purchase => inspectionById.has(Number(purchase.externalAssemblyInspectionId)))
+        .map(purchase => {
+            const inspection = inspectionById.get(Number(purchase.externalAssemblyInspectionId));
+            return {
+                ...inspection,
+                order: inspection?.order || purchase.order,
+                orderProject: purchase.orderProject || inspection?.orderProject,
+                id: Number(purchase.id),
+                purchaseId: Number(purchase.id),
+                externalAssemblyInspectionId: Number(purchase.externalAssemblyInspectionId),
+                purchaseStatus: purchase.status,
+                purchaseType: purchase.purchaseType,
+                requestObservation: purchase.requestObservation,
+                note: purchase.note,
+                purchaseReason: purchase.purchaseReason
+            };
+        });
+}
+
+async function searchExpeditionVistoriaPurchaseEntities(queryText, limit = 25) {
+    const q = String(queryText || '').trim();
+    const max = Math.min(Math.max(limit, 5), 50);
+    const fetchLimit = max * 4;
+    let purchases = [];
+    let lastError = null;
+
+    for (const select of EXPEDITION_PURCHASE_SELECTS) {
+        let req = supabaseClient
+            .from('Purchase')
+            .select(select)
+            .not('externalAssemblyInspectionId', 'is', null)
+            .order('id', { ascending: false })
+            .limit(fetchLimit);
+
+        if (q && /^\d+$/.test(q)) {
+            const num = Number(q);
+            req = req.or(`id.eq.${num},externalAssemblyInspectionId.eq.${num}`);
+        } else if (q) {
+            req = applyExpeditionPurchaseSearchFilter(req, q);
+        }
+
+        const result = await req;
+        if (!result.error) {
+            purchases = result.data || [];
+            break;
+        }
+        lastError = result.error;
+        if (!isExpeditionPurchaseEmbedRetryError(result.error.message || '')) {
+            throw result.error;
+        }
+    }
+
+    if (lastError && !purchases.length) throw lastError;
+
+    let rows = await enrichExpeditionVistoriaPurchaseRows(purchases);
+    if (q && !/^\d+$/.test(q)) {
+        rows = rows.filter(row => expeditionVistoriaPurchaseRowMatchesQuery(row, q));
+    }
+
+    return rows.slice(0, max);
 }
 
 async function enrichExternalAssemblyInspectionRowsWithProjects(rows = []) {
@@ -568,27 +767,10 @@ async function resolveExpeditionEntityContext(entityType, entityId) {
     }
 
     if (entityType === 'Purchase') {
-        const purchaseSelects = [
-            'id, description, status, clientId, orderId, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, client:Client(name), order:salesOrders(id, orderCode, addrId), orderProject:OrderProject(name, projectCode), purchaseReason:PurchaseReason(name, isSystem)',
-            'id, description, status, clientId, orderId, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, client:Client(name), order:salesOrders(id, orderCode, addrId), orderProject:OrderProject(name, projectCode), purchaseReason:PurchaseReason(name)'
-        ];
-        let row = null;
-        let lastError = null;
-        for (const select of purchaseSelects) {
-            const result = await supabaseClient
-                .from('Purchase')
-                .select(select)
-                .eq('id', key)
-                .maybeSingle();
-            if (!result.error) {
-                row = result.data;
-                break;
-            }
-            lastError = result.error;
-            if (!/isSystem|relationship|embed|schema cache/i.test(result.error.message || '')) break;
-        }
-        if (!row && lastError) return { ok: false, message: lastError.message };
-        if (!row) return { ok: false, message: 'Requisição de compra não encontrada.' };
+        const { row: purchaseRow, error: purchaseError } = await fetchExpeditionPurchaseRowById(key);
+        if (!purchaseRow && purchaseError) return { ok: false, message: purchaseError.message };
+        if (!purchaseRow) return { ok: false, message: 'Requisição de compra não encontrada.' };
+        const row = purchaseRow;
 
         let addr = null;
         if (row.assistanceRequestId) {
@@ -599,19 +781,27 @@ async function resolveExpeditionEntityContext(entityType, entityId) {
             const eaiCtx = await resolveExpeditionEntityContext('ExternalAssemblyInspection', row.externalAssemblyInspectionId);
             if (eaiCtx.ok) addr = eaiCtx.addr;
         }
-        if (!addr && row.orderId) {
-            const orderCtx = await resolveSalesOrderAddress(row.orderId);
+        const orderId = getExpeditionPurchaseOrderId(row);
+        if (!addr && orderId) {
+            const orderCtx = await resolveSalesOrderAddress(orderId);
             addr = orderCtx.addr;
         }
-        if (!addr && row.clientId) {
-            addr = await resolveClientPrimaryAddress(row.clientId);
+        const clientId = getExpeditionPurchaseClientId(row);
+        if (!addr && clientId) {
+            addr = await resolveClientPrimaryAddress(clientId);
         }
         if (!addr) return { ok: false, message: 'Compra sem endereço associado.' };
 
         if (isExpeditionPurchaseSearchExcluded(row)) {
             return { ok: false, message: 'Requisição de compra de sistema não pode ser usada na expedição.' };
         }
-        const label = formatExpeditionEntitySearchRowLabel(row, 'Purchase');
+        let label = formatExpeditionEntitySearchRowLabel(row, 'Purchase');
+        if (Number(row.externalAssemblyInspectionId)) {
+            const [vistoriaRow] = await enrichExpeditionVistoriaPurchaseRows([row]);
+            if (vistoriaRow) {
+                label = formatExpeditionEntitySearchRowLabel(vistoriaRow, 'ExternalAssemblyInspection');
+            }
+        }
 
         return {
             ok: true,
@@ -693,111 +883,7 @@ async function searchExpeditionEntities(entityType, queryText, limit = 25) {
     }
 
     if (entityType === 'ExternalAssemblyInspection') {
-        const inspectionSelect = 'id, status, orderId, observation';
-        let rows = [];
-
-        if (q && /^\d+$/.test(q)) {
-            const num = Number(q);
-            const { data, error } = await supabaseClient
-                .from('ExternalAssemblyInspection')
-                .select(inspectionSelect)
-                .or(`id.eq.${num},orderId.eq.${num}`)
-                .order('id', { ascending: false })
-                .limit(max * 2);
-
-            if (error) throw error;
-            rows = data || [];
-        } else if (q) {
-            const pattern = escapeExpeditionIlikePattern(q);
-            const orderIds = new Set();
-
-            const orderResult = await supabaseClient
-                .from('salesOrders')
-                .select('id')
-                .ilike('orderCode', `%${pattern}%`)
-                .limit(40);
-            if (orderResult.error) throw orderResult.error;
-            (orderResult.data || []).forEach(item => orderIds.add(Number(item.id)));
-
-            const clientResult = await supabaseClient
-                .from('Client')
-                .select('id')
-                .ilike('name', `%${pattern}%`)
-                .limit(20);
-            if (clientResult.error) throw clientResult.error;
-            const clientIds = (clientResult.data || []).map(item => Number(item.id)).filter(Boolean);
-            if (clientIds.length) {
-                const clientOrdersResult = await supabaseClient
-                    .from('salesOrders')
-                    .select('id')
-                    .in('clientId', clientIds)
-                    .limit(40);
-                if (clientOrdersResult.error) throw clientOrdersResult.error;
-                (clientOrdersResult.data || []).forEach(item => orderIds.add(Number(item.id)));
-            }
-
-            if (orderIds.size) {
-                const byOrder = await supabaseClient
-                    .from('ExternalAssemblyInspection')
-                    .select(inspectionSelect)
-                    .in('orderId', [...orderIds])
-                    .order('id', { ascending: false })
-                    .limit(max * 2);
-                if (byOrder.error) throw byOrder.error;
-                rows = byOrder.data || [];
-            }
-
-            const byObservation = await supabaseClient
-                .from('ExternalAssemblyInspection')
-                .select(inspectionSelect)
-                .ilike('observation', `%${pattern}%`)
-                .order('id', { ascending: false })
-                .limit(max * 2);
-            if (byObservation.error) throw byObservation.error;
-
-            const merged = new Map();
-            [...rows, ...(byObservation.data || [])].forEach(item => {
-                if (item?.id) merged.set(Number(item.id), item);
-            });
-            rows = [...merged.values()];
-        } else {
-            const { data, error } = await supabaseClient
-                .from('ExternalAssemblyInspection')
-                .select(inspectionSelect)
-                .order('id', { ascending: false })
-                .limit(max * 3);
-
-            if (error) throw error;
-            rows = data || [];
-        }
-
-        if (!rows.length) {
-            const { data: links, error: linkError } = await supabaseClient
-                .from('ExternalAssemblyInspectionProject')
-                .select(`
-                    inspectionId,
-                    inspection:ExternalAssemblyInspection(id, status, orderId, observation),
-                    orderProject:OrderProject(orderId)
-                `)
-                .order('inspectionId', { ascending: false })
-                .limit(max * 3);
-
-            if (!linkError) {
-                const byId = new Map();
-                (links || []).forEach(link => {
-                    const inspection = link?.inspection;
-                    if (!inspection?.id) return;
-                    const orderId = Number(inspection.orderId) || Number(link.orderProject?.orderId) || null;
-                    byId.set(Number(inspection.id), { ...inspection, orderId });
-                });
-                rows = [...byId.values()];
-            } else {
-                console.warn('searchExpeditionEntities ExternalAssemblyInspection fallback:', linkError);
-            }
-        }
-
-        const enriched = await enrichExternalAssemblyInspectionRowsForExpedition(rows);
-        return enriched.slice(0, max);
+        return searchExpeditionVistoriaPurchaseEntities(q, max);
     }
 
     if (entityType === 'PartRequest') {
@@ -816,39 +902,87 @@ async function searchExpeditionEntities(entityType, queryText, limit = 25) {
     }
 
     if (entityType === 'Purchase') {
-        const purchaseSelects = [
-            'id, description, status, clientId, orderId, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, client:Client(name), order:salesOrders(orderCode), orderProject:OrderProject(name, projectCode), purchaseReason:PurchaseReason(name, isSystem)',
-            'id, description, status, clientId, orderId, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, client:Client(name), order:salesOrders(orderCode), orderProject:OrderProject(name, projectCode), purchaseReason:PurchaseReason(name)'
-        ];
-        let data = [];
-        let lastError = null;
-        for (const select of purchaseSelects) {
-            let req = supabaseClient
-                .from('Purchase')
-                .select(select)
-                .order('id', { ascending: false })
-                .limit(max * 2);
-            if (q) {
-                if (/^\d+$/.test(q)) req = req.eq('id', Number(q));
-                else req = req.ilike('description', `%${escapeExpeditionIlikePattern(q)}%`);
-            }
-            const result = await req;
-            if (!result.error) {
-                data = result.data || [];
-                break;
-            }
-            lastError = result.error;
-            if (!/isSystem|relationship|embed|schema cache/i.test(result.error.message || '')) {
-                throw result.error;
-            }
-        }
-        if (lastError && !data.length) throw lastError;
-        return data
-            .filter(row => !isExpeditionPurchaseSearchExcluded(row))
-            .slice(0, max);
+        return searchExpeditionPurchaseEntities(q, max);
     }
 
     return [];
+}
+
+function expeditionHistoryOrderCode(row) {
+    return String(row?.order?.orderCode || row?.orderProject?.order?.orderCode || '').trim();
+}
+
+function expeditionHistoryClientName(row) {
+    return String(
+        row?.order?.client?.name
+        || row?.client?.name
+        || getExpeditionPurchaseClientName(row)
+        || ''
+    ).trim();
+}
+
+function expeditionHistoryProjectLabel(row) {
+    if (row?.expeditionProjectLabel) {
+        return String(row.expeditionProjectLabel).trim();
+    }
+    const op = row?.orderProject;
+    return String(op?.name || op?.projectCode || '').trim();
+}
+
+async function buildExpeditionHistoryItemSummary(entityType, entityId) {
+    const type = String(entityType || '').trim();
+    const id = Number(entityId);
+    if (!type || !id) return '—';
+
+    let meta = null;
+    try {
+        const ctx = await resolveExpeditionEntityContext(type, id);
+        if (!ctx.ok) return '—';
+        meta = { ...(ctx.meta || {}) };
+
+        if (type === 'Purchase' && Number(meta.externalAssemblyInspectionId)) {
+            const enrichedRows = await enrichExpeditionVistoriaPurchaseRows([meta]);
+            if (enrichedRows[0]) meta = enrichedRows[0];
+        } else if (type === 'ExternalAssemblyInspection') {
+            const orderId = Number(meta.orderId)
+                || await resolveExternalAssemblyInspectionOrderId(id, meta);
+            const enrichedRows = await enrichExternalAssemblyInspectionRowsForExpedition([
+                { ...meta, orderId }
+            ]);
+            if (enrichedRows[0]) meta = enrichedRows[0];
+        }
+    } catch (error) {
+        console.warn('buildExpeditionHistoryItemSummary:', error);
+        return '—';
+    }
+
+    const parts = [];
+    const orderCode = expeditionHistoryOrderCode(meta);
+    const client = expeditionHistoryClientName(meta);
+    const project = expeditionHistoryProjectLabel(meta);
+
+    if (orderCode) parts.push(orderCode);
+    if (client) parts.push(client);
+    if (project) parts.push(project);
+
+    const isVistoriaLine = type === 'ExternalAssemblyInspection'
+        || (type === 'Purchase' && Number(meta.externalAssemblyInspectionId));
+
+    if (isVistoriaLine) {
+        const seq = formatExpeditionInspectionSequenceLabel(meta);
+        if (seq) parts.push(`Nº vistoria ${seq}`);
+        else if (Number(meta.externalAssemblyInspectionId)) {
+            parts.push(`Vistoria #${Number(meta.externalAssemblyInspectionId)}`);
+        } else {
+            parts.push(`#${id}`);
+        }
+    } else if (type === 'Purchase') {
+        parts.push(`Req. #${id}`);
+    } else {
+        parts.push(`#${id}`);
+    }
+
+    return parts.length ? parts.join(' · ') : '—';
 }
 
 window.EXPEDITION_ENTITY_TYPES = EXPEDITION_ENTITY_TYPES;
@@ -862,3 +996,4 @@ window.formatExpeditionEntitySearchRowLabel = formatExpeditionEntitySearchRowLab
 window.renderExpeditionEntitySearchRowHtml = renderExpeditionEntitySearchRowHtml;
 window.renderExpeditionEntitySearchHeaderHtml = renderExpeditionEntitySearchHeaderHtml;
 window.buildAddrSnapshotFromRecord = buildAddrSnapshotFromRecord;
+window.buildExpeditionHistoryItemSummary = buildExpeditionHistoryItemSummary;

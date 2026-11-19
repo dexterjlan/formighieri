@@ -169,12 +169,16 @@ async function loadGestaoMarceneirosList() {
     const tbody = document.getElementById('gestao-marceneiros-list');
     if (!tbody) return;
 
+    if (typeof loadGestaoMontadores === 'function') {
+        await loadGestaoMontadores(false);
+    }
+
     const marceneiros = await loadGestaoMarceneiros(false);
 
     if (!marceneiros.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="4" class="p-6 text-center text-xs text-amber-700">
+                <td colspan="5" class="p-6 text-center text-xs text-amber-700">
                     Nenhum marceneiro cadastrado. Execute <code>supabase/create-marceneiro.sql</code> no Supabase.
                 </td>
             </tr>
@@ -184,6 +188,9 @@ async function loadGestaoMarceneirosList() {
 
     tbody.innerHTML = '';
     marceneiros.forEach(marceneiro => {
+        const colorFieldKey = typeof getGestaoCabinetMakerCalendarColorFieldKey === 'function'
+            ? getGestaoCabinetMakerCalendarColorFieldKey(marceneiro.id)
+            : `cabinetMaker-${marceneiro.id}`;
         const tr = document.createElement('tr');
         tr.dataset.cabinetMakerId = String(marceneiro.id);
         tr.innerHTML = `
@@ -194,6 +201,11 @@ async function loadGestaoMarceneirosList() {
             <td class="p-3">
                 <input type="text" class="gestao-marceneiro-name w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg"
                     value="${escapeHtml(marceneiro.name)}" required>
+            </td>
+            <td class="p-3 min-w-[11rem]">
+                ${typeof renderGestaoPersonCalendarColorPicker === 'function'
+                    ? renderGestaoPersonCalendarColorPicker(marceneiro, colorFieldKey)
+                    : ''}
             </td>
             <td class="p-3 text-center">
                 <input type="checkbox" class="gestao-marceneiro-active h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
@@ -212,6 +224,10 @@ async function loadGestaoMarceneirosList() {
         `;
         tbody.appendChild(tr);
     });
+
+    if (typeof bindGestaoPersonCalendarColorPickers === 'function') {
+        bindGestaoPersonCalendarColorPickers(tbody);
+    }
 
     tbody.querySelectorAll('.gestao-save-marceneiro').forEach(button => {
         button.addEventListener('click', () => saveGestaoMarceneiroRow(button.closest('tr')));
@@ -234,16 +250,64 @@ async function saveGestaoMarceneiroRow(row) {
         return;
     }
 
+    const colorFieldKey = typeof getGestaoCabinetMakerCalendarColorFieldKey === 'function'
+        ? getGestaoCabinetMakerCalendarColorFieldKey(cabinetMakerId)
+        : `cabinetMaker-${cabinetMakerId}`;
+    let calendarColor = typeof readGestaoPersonCalendarColorFromRow === 'function'
+        ? readGestaoPersonCalendarColorFromRow(colorFieldKey, row)
+        : null;
+    if (!isActive && typeof INACTIVE_USER_CALENDAR_COLOR !== 'undefined') {
+        calendarColor = INACTIVE_USER_CALENDAR_COLOR.hex;
+    }
+    if (typeof cabinetMakerCalendarColorColumnAvailable !== 'undefined'
+        && cabinetMakerCalendarColorColumnAvailable
+        && isActive
+        && typeof validateGestaoPersonCalendarColor === 'function'
+        && !validateGestaoPersonCalendarColor(colorFieldKey, calendarColor)) {
+        return;
+    }
+
     await withGestaoCadastroSaveOverlay(row, async () => {
         const now = new Date().toISOString();
-        const { error } = await supabaseClient
+        const payload = { name, sortOrder, isActive, updatedAt: now };
+        if (typeof cabinetMakerCalendarColorColumnAvailable !== 'undefined' && cabinetMakerCalendarColorColumnAvailable) {
+            payload.calendarColor = calendarColor;
+        }
+
+        let calendarColorUnsupported = false;
+        let { error } = await supabaseClient
             .from('CabinetMaker')
-            .update({ name, sortOrder, isActive, updatedAt: now })
+            .update(payload)
             .eq('id', cabinetMakerId);
+
+        if (error?.message?.includes('calendarColor')) {
+            calendarColorUnsupported = true;
+            if (typeof cabinetMakerCalendarColorColumnAvailable !== 'undefined') {
+                cabinetMakerCalendarColorColumnAvailable = false;
+            }
+            delete payload.calendarColor;
+            ({ error } = await supabaseClient
+                .from('CabinetMaker')
+                .update(payload)
+                .eq('id', cabinetMakerId));
+        }
 
         if (error) {
             alertAppDialog('Erro ao salvar marceneiro: ' + error.message);
             return;
+        }
+
+        const cachedMarceneiro = (gestaoMarceneirosCache || []).find(item => Number(item.id) === cabinetMakerId);
+        if (cachedMarceneiro && typeof cabinetMakerCalendarColorColumnAvailable !== 'undefined'
+            && cabinetMakerCalendarColorColumnAvailable) {
+            cachedMarceneiro.calendarColor = calendarColor;
+        }
+
+        if (calendarColorUnsupported) {
+            alertAppDialog(
+                'Nome salvo, mas o campo Cor ainda não existe no banco. Execute supabase/feats/installer-cabinet-maker-calendar-color.sql no Supabase.',
+                { variant: 'warning', title: 'Aviso' }
+            );
         }
 
         if (typeof loadGestaoFactoryRoles === 'function') {

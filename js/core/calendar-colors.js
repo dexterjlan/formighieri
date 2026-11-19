@@ -143,7 +143,38 @@ function getGoogleCalendarEventColorId(event) {
     return getCalendarResponsiblePaletteColor(event).googleEventColor;
 }
 
+/** Gradiente para barras (ex.: programação de montagem) a partir do hex da paleta. */
+function calendarHexToBarGradient(hex) {
+    const normalized = normalizeGoogleCalendarColorHex(hex);
+    if (!normalized) return null;
+
+    const rgb = parseCssHex(normalized);
+    if (!rgb) return null;
+
+    const lighten = channel => Math.min(255, Math.round(channel + (255 - channel) * 0.22));
+    const toChannel = value => value.toString(16).padStart(2, '0');
+    const to = `#${toChannel(lighten(rgb.r))}${toChannel(lighten(rgb.g))}${toChannel(lighten(rgb.b))}`;
+
+    return { from: normalized, to };
+}
+
+/** Dupla (ou mais): gradiente direto entre as cores das pessoas. */
+function combineCalendarBarGradient(hexA, hexB) {
+    const a = normalizeGoogleCalendarColorHex(hexA);
+    const b = normalizeGoogleCalendarColorHex(hexB);
+    if (a && b) {
+        if (a === b) {
+            return calendarHexToBarGradient(a);
+        }
+        return { from: a, to: b };
+    }
+    if (a) return calendarHexToBarGradient(a);
+    if (b) return calendarHexToBarGradient(b);
+    return null;
+}
+
 function renderUserCalendarColorPickerHtml(user, options = {}) {
+    const fieldKey = options.fieldKey != null ? String(options.fieldKey) : String(user.id);
     const disabled = Boolean(options.disabled);
     const allowNone = Boolean(options.allowNone);
     const assigned = getAssignedCalendarPaletteColor(user);
@@ -185,12 +216,12 @@ function renderUserCalendarColorPickerHtml(user, options = {}) {
     const caption = options.caption || 'Cor do calendário';
 
     return `
-        <div class="user-calendar-color-field" data-user-id="${user.id}">
+        <div class="user-calendar-color-field" data-user-id="${escapeHtml(fieldKey)}">
             <p class="text-[9px] font-semibold uppercase text-slate-400 mb-1">${escapeHtml(caption)}</p>
             <div class="user-calendar-color-picker" role="radiogroup" aria-label="${escapeHtml(caption)}">
                 ${noneSwatch}${swatches}
             </div>
-            <input type="hidden" data-calendar-color-input="${user.id}" value="${escapeHtml(selectedHex)}">
+            <input type="hidden" data-calendar-color-input="${escapeHtml(fieldKey)}" value="${escapeHtml(selectedHex)}">
         </div>
     `;
 }

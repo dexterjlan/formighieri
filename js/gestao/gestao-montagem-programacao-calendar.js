@@ -40,6 +40,30 @@ function getMontagemProgCrewColorIndex(crewKey) {
 }
 
 function getMontagemProgCrewColors(crewKey) {
+    const members = typeof parseMontagemProgCrewKey === 'function'
+        ? parseMontagemProgCrewKey(crewKey)
+        : [];
+
+    const hexes = members
+        .map(member => (typeof getMontagemProgWorkerCalendarBarHex === 'function'
+            ? getMontagemProgWorkerCalendarBarHex(member.type, member.id)
+            : null))
+        .filter(Boolean);
+
+    if (hexes.length >= 2 && typeof combineCalendarBarGradient === 'function') {
+        let combined = combineCalendarBarGradient(hexes[0], hexes[1]);
+        for (let index = 2; index < hexes.length; index += 1) {
+            const next = combineCalendarBarGradient(combined?.to || hexes[index - 1], hexes[index]);
+            if (next) combined = next;
+        }
+        if (combined) return combined;
+    }
+
+    if (hexes.length === 1 && typeof calendarHexToBarGradient === 'function') {
+        const gradient = calendarHexToBarGradient(hexes[0]);
+        if (gradient) return gradient;
+    }
+
     return MONTAGEM_PROG_CREW_PALETTE[getMontagemProgCrewColorIndex(crewKey)];
 }
 
@@ -332,31 +356,30 @@ function renderMontagemProgConflicts(conflictMap) {
     const details = buildMontagemProgConflictDetails(montagemProgCache);
     const visibleDetails = details.slice(0, 4);
     const remaining = details.length - visibleDetails.length;
+    const collapseByDefault = typeof isMontagemProgTouchLayout === 'function' && isMontagemProgTouchLayout();
 
     banner.classList.remove('hidden');
     banner.innerHTML = `
-        <p class="font-semibold">Atenção: ${conflictMap.size} montagem(ns) com possível conflito de agenda.</p>
-        <ul class="montagem-prog-conflicts-list">
-            ${visibleDetails.map(line => `<li>${escapeHtml(line)}</li>`).join('')}
-            ${remaining > 0 ? `<li>+ ${remaining} outro(s) conflito(s)</li>` : ''}
-        </ul>
+        <details class="montagem-prog-conflicts-details"${collapseByDefault ? '' : ' open'}>
+            <summary class="montagem-prog-conflicts-summary">
+                Atenção: ${conflictMap.size} montagem(ns) com possível conflito de agenda.
+            </summary>
+            <ul class="montagem-prog-conflicts-list">
+                ${visibleDetails.map(line => `<li>${escapeHtml(line)}</li>`).join('')}
+                ${remaining > 0 ? `<li>+ ${remaining} outro(s) conflito(s)</li>` : ''}
+            </ul>
+        </details>
     `;
 }
 
-function renderMontagemProgWeekGrid() {
-    hideMontagemProgFloatingTooltip();
+function trimMontagemProgTouchLanes(lanes) {
+    const occupied = (lanes || []).filter(lane => lane.length > 0);
+    if (!occupied.length) return [[]];
+    return [...occupied, []];
+}
 
-    const grid = document.getElementById('montagem-prog-week-grid');
-    if (!grid) return;
-
-    const weekStartKey = getMontagemProgWeekStartKey();
-    const weekDateKeys = getMontagemProgWeekDateKeys();
-    const visibleProgramacoes = getMontagemProgVisibleProgramacoes();
-    const conflictMap = buildMontagemProgConflictMap(montagemProgCache);
-    const lanes = assignMontagemProgLanes(visibleProgramacoes, weekStartKey);
-
-    renderMontagemProgConflicts(conflictMap);
-
+function buildMontagemProgWeekGridMarkup(weekDateKeys, lanes, conflictMap, options = {}) {
+    const compact = Boolean(options.compact);
     const monthGroups = buildMontagemProgMonthGroups(weekDateKeys);
     const monthHeadersHtml = monthGroups.map(group => `
         <div class="montagem-prog-month-header montagem-prog-month-header--grouped ${group.isWeekendGroup ? 'montagem-prog-month-header--weekend' : ''}"
@@ -389,28 +412,43 @@ function renderMontagemProgWeekGrid() {
         const barsHtml = laneItems.map(({ prog, placement }) => {
             const crewKey = getMontagemProgCrewKey(prog);
             const hasConflict = conflictMap.has(prog.id);
+            const crewLabel = getMontagemProgPrimaryCrewLabel(prog);
+            const clientLabel = getMontagemProgBarClientLabel(prog);
             const barClass = [
                 'montagem-prog-bar',
                 'montagem-prog-bar--crew',
+                compact ? 'montagem-prog-bar--touch' : '',
                 hasConflict ? 'montagem-prog-bar--conflict' : ''
             ].filter(Boolean).join(' ');
+
+            const resizeStart = compact
+                ? ''
+                : `<button type="button" class="montagem-prog-bar-resize montagem-prog-bar-resize--start"
+                        data-programacao-id="${prog.id}"
+                        data-edge="start"
+                        aria-label="Ajustar início"></button>`;
+            const resizeEnd = compact
+                ? ''
+                : `<button type="button" class="montagem-prog-bar-resize montagem-prog-bar-resize--end"
+                        data-programacao-id="${prog.id}"
+                        data-edge="end"
+                        aria-label="Ajustar fim"></button>`;
+
+            const metaHtml = compact
+                ? ''
+                : `<span class="montagem-prog-bar-meta">${escapeHtml(clientLabel)}</span>`;
 
             return `
                 <div class="${barClass}"
                     data-programacao-id="${prog.id}"
                     style="${getMontagemProgCrewBarStyle(crewKey)} grid-row: 1; grid-column: ${placement.startCol} / span ${placement.span};">
-                    <button type="button" class="montagem-prog-bar-resize montagem-prog-bar-resize--start"
-                        data-programacao-id="${prog.id}"
-                        data-edge="start"
-                        aria-label="Ajustar início"></button>
-                    <button type="button" class="montagem-prog-bar-body" data-programacao-id="${prog.id}">
-                        <span class="montagem-prog-bar-montadores">${escapeHtml(getMontagemProgPrimaryCrewLabel(prog))}</span>
-                        <span class="montagem-prog-bar-meta">${escapeHtml(getMontagemProgBarClientLabel(prog))}</span>
+                    ${resizeStart}
+                    <button type="button" class="montagem-prog-bar-body" data-programacao-id="${prog.id}"
+                        title="${escapeHtml([crewLabel, clientLabel].filter(Boolean).join(' · '))}">
+                        <span class="montagem-prog-bar-montadores">${escapeHtml(crewLabel)}</span>
+                        ${metaHtml}
                     </button>
-                    <button type="button" class="montagem-prog-bar-resize montagem-prog-bar-resize--end"
-                        data-programacao-id="${prog.id}"
-                        data-edge="end"
-                        aria-label="Ajustar fim"></button>
+                    ${resizeEnd}
                 </div>
             `;
         }).join('');
@@ -423,13 +461,53 @@ function renderMontagemProgWeekGrid() {
         `;
     }).join('');
 
-    grid.innerHTML = `
+    return `
         <div class="montagem-prog-month-headers">${monthHeadersHtml}</div>
         <div class="montagem-prog-day-headers">${headersHtml}</div>
         <div class="montagem-prog-lanes">${lanesHtml}</div>
     `;
+}
+
+function renderMontagemProgWeekGrid() {
+    hideMontagemProgFloatingTooltip();
+
+    const grid = document.getElementById('montagem-prog-week-grid');
+    if (!grid) return;
+
+    const weekStartKey = getMontagemProgWeekStartKey();
+    const weekDateKeys = getMontagemProgWeekDateKeys();
+    const visibleProgramacoes = getMontagemProgVisibleProgramacoes();
+    const conflictMap = buildMontagemProgConflictMap(montagemProgCache);
+
+    renderMontagemProgConflicts(conflictMap);
 
     const emptyState = document.getElementById('montagem-prog-empty-filter');
+    const touchLayout = isMontagemProgTouchLayout();
+    let lanes = assignMontagemProgLanes(visibleProgramacoes, weekStartKey);
+    if (touchLayout) {
+        lanes = trimMontagemProgTouchLanes(lanes);
+    }
+    const gridMarkup = buildMontagemProgWeekGridMarkup(
+        weekDateKeys,
+        lanes,
+        conflictMap,
+        { compact: touchLayout }
+    );
+
+    if (touchLayout) {
+        grid.classList.remove('montagem-prog-week-grid--desktop');
+        grid.classList.add('montagem-prog-week-grid--mobile');
+        grid.innerHTML = `
+            <div class="montagem-prog-week-mobile-scroll">
+                <div class="montagem-prog-week-grid-inner">${gridMarkup}</div>
+            </div>
+        `;
+    } else {
+        grid.classList.remove('montagem-prog-week-grid--mobile');
+        grid.classList.add('montagem-prog-week-grid--desktop');
+        grid.innerHTML = gridMarkup;
+    }
+
     if (montagemProgWorkerFilter && !visibleProgramacoes.length) {
         if (!emptyState) {
             const message = document.createElement('p');
@@ -519,10 +597,31 @@ function bindMontagemProgWeekInteractions(grid) {
     if (grid.dataset.interactionsBound === '1') return;
     grid.dataset.interactionsBound = '1';
 
+    const touchLayout = isMontagemProgTouchLayout();
+
     const allowDrop = event => {
         event.preventDefault();
         if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
     };
+
+    if (touchLayout) {
+        grid.addEventListener('click', event => {
+            const barBody = event.target.closest('.montagem-prog-bar-body');
+            if (barBody?.dataset.programacaoId) {
+                const prog = montagemProgCache.find(item => Number(item.id) === Number(barBody.dataset.programacaoId));
+                if (prog) openMontagemProgModal(prog);
+                return;
+            }
+
+            if (isMontagemProgramacaoReadOnly()) return;
+
+            const slot = event.target.closest('.montagem-prog-day-slot');
+            if (slot?.dataset.date) {
+                openMontagemProgModal(null, slot.dataset.date);
+            }
+        });
+        return;
+    }
 
     grid.addEventListener('dragover', event => {
         if (!montagemProgDragWorker && !event.dataTransfer?.types?.length) return;
@@ -551,7 +650,7 @@ function bindMontagemProgWeekInteractions(grid) {
     });
 
     grid.addEventListener('pointerdown', event => {
-        if (isMontagemProgramacaoReadOnly()) return;
+        if (isMontagemProgramacaoReadOnly() || isMontagemProgTouchLayout()) return;
 
         const handle = event.target.closest('.montagem-prog-bar-resize');
         if (handle) {

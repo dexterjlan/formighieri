@@ -2,7 +2,7 @@ function toggleModal(id, show) {
     const el = document.getElementById(id);
     if (!el) return;
     el.classList.toggle('hidden', !show);
-    if (!show && el.classList.contains('eai-modal')) {
+    if (!show && (el.classList.contains('eai-modal') || el.classList.contains('montagem-prog-modal'))) {
         const active = document.activeElement;
         if (active instanceof HTMLElement && el.contains(active)) {
             active.blur();

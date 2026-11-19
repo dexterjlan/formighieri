@@ -14,12 +14,28 @@ async function loadMontagemProgramacaoView() {
     }
 
     await loadMontagemProgramacoesForWeek();
+    applyMontagemProgramacaoLayoutMode();
     renderMontagemProgWorkerFilter();
-    if (!readOnly) {
+    if (!readOnly && !isMontagemProgTouchLayout()) {
         renderMontagemProgPalette();
     }
     renderMontagemProgWeekGrid();
     applyMontagemProgramacaoReadOnlyUi();
+}
+
+function applyMontagemProgramacaoLayoutMode() {
+    const panel = document.getElementById('gestao-montagem-programacao-panel');
+    const touch = isMontagemProgTouchLayout();
+    const mobile = typeof isMobileViewport === 'function' && isMobileViewport();
+    panel?.classList.toggle('montagem-prog--touch', touch);
+    panel?.classList.toggle('montagem-prog--mobile', mobile);
+
+    const grid = document.getElementById('montagem-prog-week-grid');
+    const nextLayout = touch ? 'touch' : 'desktop';
+    if (grid && grid.dataset.montagemProgLayout !== nextLayout) {
+        grid.dataset.montagemProgLayout = nextLayout;
+        grid.dataset.interactionsBound = '0';
+    }
 }
 
 function isMontagemProgramacaoReadOnly() {
@@ -35,10 +51,15 @@ function applyMontagemProgramacaoReadOnlyUi() {
     document.getElementById('montagem-prog-readonly-notice')?.classList.toggle('hidden', !readOnly);
     document.getElementById('btn-montagem-prog-copy-prev-week')?.classList.toggle('hidden', readOnly);
     const subtitle = document.getElementById('montagem-prog-panel-subtitle');
+    const touch = isMontagemProgTouchLayout();
     if (subtitle) {
-        subtitle.textContent = readOnly
-            ? 'Visualização da escala semanal de montadores e marceneiros.'
-            : 'Arraste montadores ou marceneiros para a semana. Solte sobre outra barra para formar dupla (somente do mesmo tipo).';
+        if (readOnly) {
+            subtitle.textContent = 'Visualização da escala semanal de montadores e marceneiros.';
+        } else if (touch) {
+            subtitle.textContent = 'Toque em um dia para agendar ou em uma montagem para editar. Use o filtro por responsável acima.';
+        } else {
+            subtitle.textContent = 'Arraste montadores ou marceneiros para a semana. Solte sobre outra barra para formar dupla (somente do mesmo tipo).';
+        }
     }
 }
 
@@ -51,6 +72,7 @@ function showGestaoMontagemProgramacaoPanel() {
     hideAllGestaoPanels();
     document.getElementById('gestao-montagem-programacao-panel')?.classList.remove('hidden');
     setGestaoNavActive('montagem-programacao');
+    applyMontagemProgramacaoLayoutMode();
     applyMontagemProgramacaoReadOnlyUi();
     loadMontagemProgramacaoView();
 }
@@ -94,9 +116,28 @@ function bindMontagemProgramacaoEvents() {
     document.getElementById('montagem-prog-montador-filter')?.addEventListener('change', event => {
         const value = event.target.value;
         montagemProgWorkerFilter = parseMontagemProgWorkerFilterKey(value);
-        renderMontagemProgPalette();
+        if (!isMontagemProgTouchLayout()) {
+            renderMontagemProgPalette();
+        }
         renderMontagemProgWeekGrid();
     });
+
+    let montagemProgLayoutResizeTimer = null;
+    const onMontagemProgLayoutResize = () => {
+        const panel = document.getElementById('gestao-montagem-programacao-panel');
+        if (!panel || panel.classList.contains('hidden')) return;
+        window.clearTimeout(montagemProgLayoutResizeTimer);
+        montagemProgLayoutResizeTimer = window.setTimeout(() => {
+            loadMontagemProgramacaoView();
+        }, 200);
+    };
+    window.addEventListener('resize', onMontagemProgLayoutResize);
+    if (typeof MOBILE_LAYOUT_MEDIA !== 'undefined') {
+        MOBILE_LAYOUT_MEDIA.addEventListener?.('change', onMontagemProgLayoutResize);
+    }
+    if (typeof TABLET_TOUCH_LAYOUT_MEDIA !== 'undefined') {
+        TABLET_TOUCH_LAYOUT_MEDIA.addEventListener?.('change', onMontagemProgLayoutResize);
+    }
     document.getElementById('montagem-prog-form')?.addEventListener('submit', saveMontagemProg);
     document.getElementById('btn-montagem-prog-delete')?.addEventListener('click', deleteMontagemProg);
 

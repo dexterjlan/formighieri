@@ -1,5 +1,84 @@
 let gestaoMontadorIsActiveColumnAvailable = true;
 let gestaoMontadorLoginEmailColumnAvailable = true;
+let gestaoMontadorCalendarColorColumnAvailable = true;
+
+const GESTAO_INSTALLER_CALENDAR_COLOR_FIELD_PREFIX = 'installer';
+
+function getGestaoInstallerCalendarColorFieldKey(installerId) {
+    return `${GESTAO_INSTALLER_CALENDAR_COLOR_FIELD_PREFIX}-${installerId}`;
+}
+
+const GESTAO_CABINET_MAKER_CALENDAR_COLOR_FIELD_PREFIX = 'cabinetMaker';
+
+function getGestaoCabinetMakerCalendarColorFieldKey(cabinetMakerId) {
+    return `${GESTAO_CABINET_MAKER_CALENDAR_COLOR_FIELD_PREFIX}-${cabinetMakerId}`;
+}
+
+function getTakenGestaoPeopleCalendarColorHexes(exceptFieldKey) {
+    const taken = new Map();
+    const addRecord = (record, fieldKey) => {
+        if (fieldKey === exceptFieldKey) return;
+        if (record?.isActive === false) return;
+        if (typeof getAssignedCalendarPaletteColor !== 'function') return;
+
+        const color = getAssignedCalendarPaletteColor(record);
+        if (!color?.hex || taken.has(color.hex)) return;
+        taken.set(color.hex, record.name || 'Outra pessoa');
+    };
+
+    (gestaoMontadoresCache || []).forEach(row => {
+        addRecord(row, getGestaoInstallerCalendarColorFieldKey(row.id));
+    });
+
+    const marceneiros = typeof gestaoMarceneirosCache !== 'undefined'
+        ? gestaoMarceneirosCache
+        : (typeof cabinetMakersCache !== 'undefined' ? cabinetMakersCache : []);
+    marceneiros.forEach(row => {
+        addRecord(row, getGestaoCabinetMakerCalendarColorFieldKey(row.id));
+    });
+
+    return taken;
+}
+
+function readGestaoPersonCalendarColorFromRow(fieldKey, root) {
+    const raw = typeof getCalendarColorInput === 'function'
+        ? getCalendarColorInput(fieldKey, root)?.value
+        : '';
+    if (typeof normalizeGoogleCalendarColorHex === 'function') {
+        return normalizeGoogleCalendarColorHex(raw) || null;
+    }
+    return String(raw || '').trim() || null;
+}
+
+function validateGestaoPersonCalendarColor(fieldKey, calendarColor) {
+    if (!calendarColor) return true;
+    const taken = getTakenGestaoPeopleCalendarColorHexes(fieldKey);
+    if (taken.has(calendarColor)) {
+        alertAppDialog(`Essa cor já está em uso por ${taken.get(calendarColor)}. Escolha outra.`);
+        return false;
+    }
+    return true;
+}
+
+function renderGestaoPersonCalendarColorPicker(record, fieldKey) {
+    if (typeof renderUserCalendarColorPickerHtml !== 'function') return '';
+    const isActive = record.isActive !== false;
+    return `<div class="gestao-person-calendar-color">${renderUserCalendarColorPickerHtml(record, {
+        fieldKey,
+        disabled: !isActive,
+        allowNone: true,
+        caption: 'Cor',
+        takenHexes: getTakenGestaoPeopleCalendarColorHexes(fieldKey)
+    })}</div>`;
+}
+
+function bindGestaoPersonCalendarColorPickers(root) {
+    if (typeof bindUserCalendarColorPicker !== 'function') return;
+    root.querySelectorAll('.gestao-person-calendar-color .user-calendar-color-field[data-user-id]').forEach(field => {
+        const fieldKey = field.getAttribute('data-user-id');
+        if (fieldKey) bindUserCalendarColorPicker(fieldKey, root);
+    });
+}
 
 function normalizeGestaoMontadorLoginEmail(value) {
     const email = String(value || '').trim().toLowerCase();
@@ -9,7 +88,7 @@ function normalizeGestaoMontadorLoginEmail(value) {
 async function loadGestaoMontadores(activeOnly = false) {
     let query = supabaseClient
         .from('Installer')
-        .select('id, name, isActive, loginEmail')
+        .select('id, name, isActive, loginEmail, calendarColor')
         .order('name', { ascending: true });
 
     if (activeOnly) {
@@ -18,11 +97,18 @@ async function loadGestaoMontadores(activeOnly = false) {
 
     let { data, error } = await query;
 
-    if (error?.message?.includes('loginEmail')) {
-        gestaoMontadorLoginEmailColumnAvailable = false;
+    if (error?.message?.includes('loginEmail') || error?.message?.includes('calendarColor')) {
+        if (error?.message?.includes('loginEmail')) {
+            gestaoMontadorLoginEmailColumnAvailable = false;
+        }
+        if (error?.message?.includes('calendarColor')) {
+            gestaoMontadorCalendarColorColumnAvailable = false;
+        }
+        const loginEmailCol = gestaoMontadorLoginEmailColumnAvailable ? ', loginEmail' : '';
+        const calendarColorCol = gestaoMontadorCalendarColorColumnAvailable ? ', calendarColor' : '';
         const fallback = await supabaseClient
             .from('Installer')
-            .select('id, name, isActive')
+            .select(`id, name, isActive${loginEmailCol}${calendarColorCol}`)
             .order('name', { ascending: true });
         data = fallback.data;
         error = fallback.error;
@@ -30,9 +116,11 @@ async function loadGestaoMontadores(activeOnly = false) {
 
     if (error?.message?.includes('isActive')) {
         gestaoMontadorIsActiveColumnAvailable = false;
+        const loginEmailCol = gestaoMontadorLoginEmailColumnAvailable ? ', loginEmail' : '';
+        const calendarColorCol = gestaoMontadorCalendarColorColumnAvailable ? ', calendarColor' : '';
         const fallback = await supabaseClient
             .from('Installer')
-            .select(gestaoMontadorLoginEmailColumnAvailable ? 'id, name, loginEmail' : 'id, name')
+            .select(`id, name${loginEmailCol}${calendarColorCol}`)
             .order('name', { ascending: true });
 
         data = (fallback.data || []).map(row => ({ ...row, isActive: true }));
@@ -66,12 +154,16 @@ async function loadGestaoMontadoresList() {
     const tbody = document.getElementById('gestao-montadores-list');
     if (!tbody) return;
 
+    if (typeof loadGestaoMarceneiros === 'function') {
+        await loadGestaoMarceneiros(false);
+    }
+
     const montadores = await loadGestaoMontadores(false);
 
     if (!montadores.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" class="p-6 text-center text-xs text-amber-700">
+                <td colspan="6" class="p-6 text-center text-xs text-amber-700">
                     Nenhum montador cadastrado. Consulte <code>PENDING-PROD-SQL.md</code> ou <code>supabase/schema/</code>.
                 </td>
             </tr>
@@ -81,6 +173,7 @@ async function loadGestaoMontadoresList() {
 
     tbody.innerHTML = '';
     montadores.forEach(montador => {
+        const colorFieldKey = getGestaoInstallerCalendarColorFieldKey(montador.id);
         const tr = document.createElement('tr');
         tr.dataset.montadorId = String(montador.id);
         tr.innerHTML = `
@@ -94,6 +187,9 @@ async function loadGestaoMontadoresList() {
                     value="${escapeHtml(montador.loginEmail || '')}"
                     placeholder="login@formighierimadeiras.com.br"
                     autocomplete="off">
+            </td>
+            <td class="p-3 min-w-[11rem]">
+                ${renderGestaoPersonCalendarColorPicker(montador, colorFieldKey)}
             </td>
             <td class="p-3 text-center">
                 <input type="checkbox" class="gestao-montador-active h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
@@ -112,6 +208,8 @@ async function loadGestaoMontadoresList() {
         `;
         tbody.appendChild(tr);
     });
+
+    bindGestaoPersonCalendarColorPickers(tbody);
 }
 
 function setGestaoMontadorSaveButtonState(button, state = 'idle') {
@@ -137,7 +235,7 @@ function setGestaoMontadorSaveButtonState(button, state = 'idle') {
     button.textContent = button.dataset.originalLabel || 'Salvar';
 }
 
-async function persistGestaoMontadorRow(montadorId, name, isActive, loginEmail) {
+async function persistGestaoMontadorRow(montadorId, name, isActive, loginEmail, calendarColor) {
     const payload = {};
     payload.name = name;
     if (gestaoMontadorIsActiveColumnAvailable) {
@@ -146,6 +244,9 @@ async function persistGestaoMontadorRow(montadorId, name, isActive, loginEmail) 
     if (gestaoMontadorLoginEmailColumnAvailable) {
         payload.loginEmail = loginEmail;
     }
+    if (gestaoMontadorCalendarColorColumnAvailable) {
+        payload.calendarColor = calendarColor;
+    }
 
     let { data, error } = await supabaseClient
         .from('Installer')
@@ -153,6 +254,17 @@ async function persistGestaoMontadorRow(montadorId, name, isActive, loginEmail) 
         .eq('id', montadorId)
         .select('id')
         .maybeSingle();
+
+    if (error?.message?.includes('calendarColor')) {
+        gestaoMontadorCalendarColorColumnAvailable = false;
+        delete payload.calendarColor;
+        ({ data, error } = await supabaseClient
+            .from('Installer')
+            .update(payload)
+            .eq('id', montadorId)
+            .select('id')
+            .maybeSingle());
+    }
 
     if (error?.message?.includes('loginEmail')) {
         gestaoMontadorLoginEmailColumnAvailable = false;
@@ -180,7 +292,8 @@ async function persistGestaoMontadorRow(montadorId, name, isActive, loginEmail) 
         data,
         error,
         isActiveUnsupported: !gestaoMontadorIsActiveColumnAvailable,
-        loginEmailUnsupported: !gestaoMontadorLoginEmailColumnAvailable
+        loginEmailUnsupported: !gestaoMontadorLoginEmailColumnAvailable,
+        calendarColorUnsupported: !gestaoMontadorCalendarColorColumnAvailable
     };
 }
 
@@ -201,6 +314,11 @@ async function saveGestaoMontadorRow(row, button = null) {
         row.querySelector('.gestao-montador-login-email')?.value
     );
     const isActive = Boolean(row.querySelector('.gestao-montador-active')?.checked);
+    const colorFieldKey = getGestaoInstallerCalendarColorFieldKey(montadorId);
+    let calendarColor = readGestaoPersonCalendarColorFromRow(colorFieldKey, row);
+    if (!isActive && typeof INACTIVE_USER_CALENDAR_COLOR !== 'undefined') {
+        calendarColor = INACTIVE_USER_CALENDAR_COLOR.hex;
+    }
 
     if (!montadorId) {
         alertAppDialog('Montador inválido. Recarregue a lista e tente novamente.');
@@ -212,15 +330,21 @@ async function saveGestaoMontadorRow(row, button = null) {
         return;
     }
 
+    if (gestaoMontadorCalendarColorColumnAvailable && isActive
+        && !validateGestaoPersonCalendarColor(colorFieldKey, calendarColor)) {
+        return;
+    }
+
     setGestaoMontadorSaveButtonState(button, 'saving');
 
     await withGestaoCadastroSaveOverlay(row, async () => {
     try {
-        const { data, error, isActiveUnsupported, loginEmailUnsupported } = await persistGestaoMontadorRow(
+        const { data, error, isActiveUnsupported, loginEmailUnsupported, calendarColorUnsupported } = await persistGestaoMontadorRow(
             montadorId,
             name,
             isActive,
-            loginEmail
+            loginEmail,
+            calendarColor
         );
 
         if (error) {
@@ -240,11 +364,19 @@ async function saveGestaoMontadorRow(row, button = null) {
             cachedMontador.name = name;
             cachedMontador.isActive = isActive;
             cachedMontador.loginEmail = loginEmail;
+            if (gestaoMontadorCalendarColorColumnAvailable) {
+                cachedMontador.calendarColor = calendarColor;
+            }
         }
 
         setGestaoMontadorSaveButtonState(button, 'saved');
 
-        if (loginEmailUnsupported) {
+        if (calendarColorUnsupported) {
+            alertAppDialog(
+                'Nome salvo, mas o campo Cor ainda não existe no banco. Execute supabase/feats/installer-cabinet-maker-calendar-color.sql no Supabase.',
+                { variant: 'warning', title: 'Aviso' }
+            );
+        } else if (loginEmailUnsupported) {
             alertAppDialog(
                 'Nome salvo, mas o campo e-mail de login ainda não existe no banco. Execute supabase/feats/installer-login-email-and-app-user-flag.sql no Supabase.',
                 { variant: 'warning', title: 'Aviso' }

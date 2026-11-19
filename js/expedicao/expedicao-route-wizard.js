@@ -41,7 +41,12 @@ const expedicaoRouteWizardOverlay = typeof createAppOverlayHelper === 'function'
 function createEmptyExpedicaoWizardState() {
     return {
         step: 'meta',
-        routeDate: new Date().toISOString().slice(0, 10),
+        routeDate: typeof getTodayInputDate === 'function'
+            ? getTodayInputDate()
+            : new Date().toISOString().slice(0, 10),
+        routeTime: typeof getExpeditionRouteTimeDefault === 'function'
+            ? getExpeditionRouteTimeDefault()
+            : '08:00',
         vehicleLabel: '',
         driverName: '',
         routeStatus: 'Draft',
@@ -90,6 +95,7 @@ function syncExpeditionWizardMetaFromDom() {
     if (!expedicaoWizardState) return false;
 
     const routeDate = document.getElementById('expedition-wizard-route-date')?.value;
+    const routeTime = document.getElementById('expedition-wizard-route-time')?.value;
     const vehicle = document.getElementById('expedition-wizard-vehicle')?.value?.trim() || '';
     const driver = document.getElementById('expedition-wizard-driver')?.value?.trim() || '';
     const statusEl = document.getElementById('expedition-wizard-route-status');
@@ -99,10 +105,17 @@ function syncExpeditionWizardMetaFromDom() {
 
     if (routeDate !== undefined && routeDate !== null && routeDate !== '') {
         if (!routeDate) {
-            alertAppDialog('Informe o dia da rota.');
+            alertAppDialog('Informe a data da rota.');
             return false;
         }
         expedicaoWizardState.routeDate = routeDate;
+    }
+    if (routeTime !== undefined && routeTime !== null && routeTime !== '') {
+        if (!routeTime) {
+            alertAppDialog('Informe o horário da rota.');
+            return false;
+        }
+        expedicaoWizardState.routeTime = routeTime;
     }
     if (document.getElementById('expedition-wizard-vehicle')) {
         if (!vehicle) {
@@ -120,7 +133,11 @@ function syncExpeditionWizardMetaFromDom() {
     }
 
     if (!expedicaoWizardState.routeDate) {
-        alertAppDialog('Informe o dia da rota.');
+        alertAppDialog('Informe a data da rota.');
+        return false;
+    }
+    if (!expedicaoWizardState.routeTime) {
+        alertAppDialog('Informe o horário da rota.');
         return false;
     }
     if (!expedicaoWizardState.vehicleLabel) {
@@ -244,11 +261,13 @@ function captureExpeditionWizardDraftFieldsFromDom() {
     if (!expedicaoWizardState) return;
 
     const routeDate = document.getElementById('expedition-wizard-route-date')?.value;
+    const routeTime = document.getElementById('expedition-wizard-route-time')?.value;
     const vehicle = document.getElementById('expedition-wizard-vehicle')?.value?.trim();
     const driver = document.getElementById('expedition-wizard-driver')?.value?.trim();
     const statusEl = document.getElementById('expedition-wizard-route-status');
 
     if (routeDate) expedicaoWizardState.routeDate = routeDate;
+    if (routeTime) expedicaoWizardState.routeTime = routeTime;
     if (vehicle !== undefined && vehicle !== null) expedicaoWizardState.vehicleLabel = vehicle;
     if (driver !== undefined && driver !== null) expedicaoWizardState.driverName = driver;
     if (statusEl) {
@@ -444,9 +463,14 @@ async function renderExpedicaoRouteWizard() {
                 <p class="text-xs text-slate-500">Informe os dados da rota e comece a incluir paradas.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-500 mb-1">Dia da rota</label>
-                        <input type="date" id="expedition-wizard-route-date" value="${escapeHtml(expedicaoWizardState.routeDate)}"
-                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Data e horário da rota</label>
+                        <div class="flex gap-2">
+                            <input type="date" id="expedition-wizard-route-date" value="${escapeHtml(expedicaoWizardState.routeDate)}"
+                                class="flex-1 min-w-0 px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                            <input type="time" id="expedition-wizard-route-time"
+                                value="${escapeHtml(expedicaoWizardState.routeTime || (typeof EXPEDITION_DEFAULT_ROUTE_TIME !== 'undefined' ? EXPEDITION_DEFAULT_ROUTE_TIME : '08:00'))}"
+                                class="w-[7.25rem] shrink-0 px-2 py-2 text-sm border border-slate-200 rounded-lg">
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 mb-1">Carro</label>
@@ -608,15 +632,17 @@ function bindExpedicaoWizardEntitySearch() {
         try {
             const rawRows = await searchExpeditionEntities(entityType, query, 30);
             const excludeRouteId = expedicaoWizardState?.editingRouteId ?? null;
+            const routedEntityType = entityType === 'ExternalAssemblyInspection' ? 'Purchase' : entityType;
             const routedIds = typeof fetchExpeditionEntityIdsAlreadyRouted === 'function'
-                ? await fetchExpeditionEntityIdsAlreadyRouted(entityType, excludeRouteId)
+                ? await fetchExpeditionEntityIdsAlreadyRouted(routedEntityType, excludeRouteId)
                 : [];
             const routedSet = new Set(routedIds.map(id => Number(id)));
             const rows = (rawRows || []).filter(row => {
                 const id = Number(row.id);
                 if (!id) return false;
                 if (routedSet.has(id)) return false;
-                return !expeditionWizardEntityAlreadyInRoute(entityType, id);
+                const routeEntityType = entityType === 'ExternalAssemblyInspection' ? 'Purchase' : entityType;
+                return !expeditionWizardEntityAlreadyInRoute(routeEntityType, id);
             }).slice(0, 20);
 
             if (!rawRows?.length) {
@@ -653,14 +679,18 @@ function bindExpedicaoWizardEntitySearch() {
                 btn.addEventListener('click', async () => {
                     const entityTypeValue = typeSelect.value;
                     const entityId = Number(btn.dataset.entityId);
+                    const resolveEntityType = entityTypeValue === 'ExternalAssemblyInspection'
+                        ? 'Purchase'
+                        : entityTypeValue;
+                    const routeEntityType = resolveEntityType;
                     expedicaoRouteWizardOverlay?.setLoading(true, 'Carregando endereço...');
                     try {
-                        const ctx = await resolveExpeditionEntityContext(entityTypeValue, entityId);
+                        const ctx = await resolveExpeditionEntityContext(resolveEntityType, entityId);
                         if (!ctx.ok) {
                             alertAppDialog(ctx.message || 'Item sem endereço.');
                             return;
                         }
-                        if (expeditionWizardEntityAlreadyInRoute(entityTypeValue, entityId)) {
+                        if (expeditionWizardEntityAlreadyInRoute(routeEntityType, entityId)) {
                             alertAppDialog('Este item já foi incluído nesta rota.');
                             return;
                         }
@@ -867,6 +897,8 @@ function bindExpedicaoRouteWizardEvents() {
     document.getElementById('btn-expedition-route-wizard-cancel')?.addEventListener('click', closeExpedicaoRouteWizard);
     document.getElementById('btn-expedition-route-detail-close')?.addEventListener('click', closeExpedicaoRouteDetailModal);
     document.getElementById('btn-expedition-route-detail-close-footer')?.addEventListener('click', closeExpedicaoRouteDetailModal);
+    document.getElementById('btn-expedition-route-history-close')?.addEventListener('click', closeExpedicaoRouteHistoryModal);
+    document.getElementById('btn-expedition-route-history-close-top')?.addEventListener('click', closeExpedicaoRouteHistoryModal);
 }
 
 window.openExpedicaoRouteWizard = openExpedicaoRouteWizard;

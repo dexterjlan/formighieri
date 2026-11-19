@@ -80,6 +80,18 @@ function getMontagemProgWeekDateKeys() {
     return keys;
 }
 
+function isMontagemProgTouchLayout() {
+    const mobile = typeof isMobileViewport === 'function' && isMobileViewport();
+    const tablet = typeof isTabletTouchViewport === 'function' && isTabletTouchViewport();
+    return Boolean(mobile || tablet);
+}
+
+function montagemProgIncludesDate(prog, dateKey) {
+    if (!prog?.startDate || !prog?.endDate || !dateKey) return false;
+    const day = String(dateKey);
+    return day >= String(prog.startDate) && day <= String(prog.endDate);
+}
+
 function getMontagemProgMontadores(prog) {
     return (prog?.installers || [])
         .map(row => row.installer || { id: row.installerId, name: 'Montador' })
@@ -117,6 +129,54 @@ function getMontagemProgMarceneiros(prog) {
 
 function getMontagemProgMarceneiroIds(prog) {
     return getMontagemProgMarceneiros(prog).map(marceneiro => Number(marceneiro.id));
+}
+
+function parseMontagemProgCrewKey(crewKey) {
+    if (!crewKey || crewKey === 'none') return [];
+    return crewKey.split('+').map(part => {
+        const [type, idPart] = String(part).split(':');
+        const id = Number(idPart);
+        if ((type !== 'montador' && type !== 'marceneiro') || !id) return null;
+        return { type, id };
+    }).filter(Boolean);
+}
+
+function getMontagemProgWorkerCalendarColor(workerType, workerId) {
+    if (workerType === 'montador') {
+        const row = (gestaoMontadoresCache || []).find(item => Number(item.id) === Number(workerId));
+        return row?.calendarColor || null;
+    }
+    if (workerType === 'marceneiro') {
+        const cache = typeof gestaoMarceneirosCache !== 'undefined'
+            ? gestaoMarceneirosCache
+            : (typeof cabinetMakersCache !== 'undefined' ? cabinetMakersCache : []);
+        const row = cache.find(item => Number(item.id) === Number(workerId));
+        return row?.calendarColor || null;
+    }
+    return null;
+}
+
+function getMontagemProgWorkerCalendarBarHex(workerType, workerId) {
+    const assigned = getMontagemProgWorkerCalendarColor(workerType, workerId);
+    const normalized = typeof normalizeGoogleCalendarColorHex === 'function'
+        ? normalizeGoogleCalendarColorHex(assigned)
+        : '';
+    if (normalized) return normalized;
+
+    if (typeof resolveUserCalendarPaletteColor === 'function') {
+        const record = workerType === 'montador'
+            ? (gestaoMontadoresCache || []).find(item => Number(item.id) === Number(workerId))
+            : (typeof gestaoMarceneirosCache !== 'undefined' ? gestaoMarceneirosCache : cabinetMakersCache || [])
+                .find(item => Number(item.id) === Number(workerId));
+
+        return resolveUserCalendarPaletteColor({
+            id: workerId,
+            calendarColor: record?.calendarColor,
+            isActive: record?.isActive !== false
+        }).hex;
+    }
+
+    return null;
 }
 
 function getMontagemProgMarceneiroName(cabinetMakerId) {

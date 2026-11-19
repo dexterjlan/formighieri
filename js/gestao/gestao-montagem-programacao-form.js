@@ -561,7 +561,9 @@ function printMontagemProgWeek() {
         if (previousFilter) {
             montagemProgWorkerFilter = previousFilter;
             if (filterSelect) filterSelect.value = getMontagemProgWorkerFilterKey(previousFilter);
-            renderMontagemProgPalette();
+            if (!isMontagemProgTouchLayout()) {
+                renderMontagemProgPalette();
+            }
             renderMontagemProgWeekGrid();
         }
     }, { once: true });

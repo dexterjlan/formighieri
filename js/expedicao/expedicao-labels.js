@@ -118,7 +118,7 @@ function renderExpeditionDriverSummaryHtml(route, summary) {
         ? formatExpeditionRouteDistanceSummary(route?.routeSummaryJson)
         : '';
     const metaRows = [
-        `<tr><th>Dia</th><td>${escapeHtml(routeDate || '—')}</td></tr>`,
+        `<tr><th>Data / horário</th><td>${escapeHtml(routeDate || '—')}</td></tr>`,
         `<tr><th>Carro</th><td>${vehicle}</td></tr>`,
         `<tr><th>Motorista</th><td>${driver}</td></tr>`,
         `<tr><th>Paradas</th><td>${summary.totalStops}</td></tr>`,

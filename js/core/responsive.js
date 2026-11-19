@@ -288,12 +288,35 @@ function isEaiModalTextEntryField(element) {
     return false;
 }
 
-function getOpenEaiModalWithKeyboard() {
-    return document.querySelector('.eai-modal.eai-modal--keyboard-open:not(.hidden)');
+function getOpenFmModalWithKeyboard() {
+    return document.querySelector('.eai-modal.eai-modal--keyboard-open:not(.hidden)')
+        || document.querySelector('.montagem-prog-modal.montagem-prog-modal--keyboard-open:not(.hidden)');
 }
 
-function syncEaiModalVisualViewport() {
-    const openModal = getOpenEaiModalWithKeyboard();
+function getFmModalForTextField(field) {
+    if (!field || !(field instanceof HTMLElement)) return null;
+    return field.closest('.eai-modal:not(.hidden)') || field.closest('.montagem-prog-modal:not(.hidden)');
+}
+
+function setFmModalKeyboardOpenClass(modal, open) {
+    if (!modal) return;
+    if (modal.classList.contains('eai-modal')) {
+        modal.classList.toggle('eai-modal--keyboard-open', open);
+    }
+    if (modal.classList.contains('montagem-prog-modal')) {
+        modal.classList.toggle('montagem-prog-modal--keyboard-open', open);
+    }
+}
+
+function isFmVisualViewportKeyboardLikelyOpen() {
+    if (!window.visualViewport) return false;
+    const layoutHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    if (!layoutHeight) return false;
+    return layoutHeight - window.visualViewport.height > 80;
+}
+
+function syncFmModalVisualViewport() {
+    const openModal = getOpenFmModalWithKeyboard();
     if (!openModal || !window.visualViewport) {
         document.documentElement.style.removeProperty('--eai-visual-vh');
         document.documentElement.style.removeProperty('--eai-visual-offset-top');
@@ -305,19 +328,51 @@ function syncEaiModalVisualViewport() {
     document.documentElement.style.setProperty('--eai-visual-offset-top', `${Math.round(viewport.offsetTop)}px`);
 }
 
+function reconcileFmModalKeyboardLayoutFromViewport() {
+    if (!isMobileViewport() && !isTabletTouchViewport()) return;
+
+    const bodyKb = document.body.classList.contains('eai-modal-keyboard-open');
+    const keyboardLikelyOpen = isFmVisualViewportKeyboardLikelyOpen();
+    const active = document.activeElement;
+    const modalFromFocus = active && isEaiModalTextEntryField(active)
+        ? getFmModalForTextField(active)
+        : null;
+
+    if (bodyKb && !keyboardLikelyOpen) {
+        clearEaiModalKeyboardLayout();
+        return;
+    }
+
+    if (keyboardLikelyOpen && modalFromFocus) {
+        if (!bodyKb) {
+            document.body.classList.add('eai-modal-keyboard-open');
+            document.querySelectorAll('.eai-modal--keyboard-open, .montagem-prog-modal--keyboard-open').forEach(node => {
+                if (node !== modalFromFocus) setFmModalKeyboardOpenClass(node, false);
+            });
+            setFmModalKeyboardOpenClass(modalFromFocus, true);
+        }
+        syncFmModalVisualViewport();
+    }
+}
+
 function clearEaiModalKeyboardLayout() {
     document.body.classList.remove('eai-modal-keyboard-open');
     document.querySelectorAll('.eai-modal--keyboard-open').forEach(modal => {
         modal.classList.remove('eai-modal--keyboard-open');
     });
+    document.querySelectorAll('.montagem-prog-modal--keyboard-open').forEach(modal => {
+        modal.classList.remove('montagem-prog-modal--keyboard-open');
+    });
     document.documentElement.style.removeProperty('--eai-visual-vh');
     document.documentElement.style.removeProperty('--eai-visual-offset-top');
 }
 
-function scrollEaiModalFieldIntoView(field) {
+function scrollFmModalFieldIntoView(field) {
     if (!field) return;
     const scrollHost = field.closest('.eai-modal__body')
-        || field.closest('.eai-modal__form');
+        || field.closest('.eai-modal__form')
+        || field.closest('.montagem-prog-modal__scroll')
+        || field.closest('.montagem-prog-modal__form');
     if (!scrollHost) {
         field.scrollIntoView({ block: 'center', inline: 'nearest' });
         return;
@@ -325,7 +380,10 @@ function scrollEaiModalFieldIntoView(field) {
     const hostRect = scrollHost.getBoundingClientRect();
     const fieldRect = field.getBoundingClientRect();
     const padding = 16;
-    const delta = fieldRect.top - hostRect.top - padding;
+    const visibleHeight = scrollHost.clientHeight;
+    const targetCenter = hostRect.top + visibleHeight / 2;
+    const fieldCenter = fieldRect.top + fieldRect.height / 2;
+    const delta = fieldCenter - targetCenter;
     scrollHost.scrollTop += delta;
 }
 
@@ -336,8 +394,10 @@ function bindEaiModalMobileKeyboardLayout() {
     let blurClearTimer = null;
 
     const onVisualViewportChange = () => {
-        if (!getOpenEaiModalWithKeyboard()) return;
-        syncEaiModalVisualViewport();
+        reconcileFmModalKeyboardLayoutFromViewport();
+        if (getOpenFmModalWithKeyboard()) {
+            syncFmModalVisualViewport();
+        }
     };
 
     if (window.visualViewport) {
@@ -345,11 +405,13 @@ function bindEaiModalMobileKeyboardLayout() {
         window.visualViewport.addEventListener('scroll', onVisualViewportChange);
     }
 
+    const isFmMobileKeyboardLayout = () => isMobileViewport() || isTabletTouchViewport();
+
     document.addEventListener('focusin', event => {
-        if (!isMobileViewport()) return;
+        if (!isFmMobileKeyboardLayout()) return;
         const field = event.target;
         if (!isEaiModalTextEntryField(field)) return;
-        const modal = field.closest('.eai-modal:not(.hidden)');
+        const modal = getFmModalForTextField(field);
         if (!modal) return;
 
         if (blurClearTimer) {
@@ -358,15 +420,17 @@ function bindEaiModalMobileKeyboardLayout() {
         }
 
         document.body.classList.add('eai-modal-keyboard-open');
-        document.querySelectorAll('.eai-modal--keyboard-open').forEach(node => {
-            if (node !== modal) node.classList.remove('eai-modal--keyboard-open');
+        document.querySelectorAll('.eai-modal--keyboard-open, .montagem-prog-modal--keyboard-open').forEach(node => {
+            if (node !== modal) {
+                setFmModalKeyboardOpenClass(node, false);
+            }
         });
-        modal.classList.add('eai-modal--keyboard-open');
-        syncEaiModalVisualViewport();
+        setFmModalKeyboardOpenClass(modal, true);
+        syncFmModalVisualViewport();
 
         window.requestAnimationFrame(() => {
             window.requestAnimationFrame(() => {
-                scrollEaiModalFieldIntoView(field);
+                scrollFmModalFieldIntoView(field);
             });
         });
     });
@@ -374,13 +438,37 @@ function bindEaiModalMobileKeyboardLayout() {
     document.addEventListener('focusout', () => {
         if (!document.body.classList.contains('eai-modal-keyboard-open')) return;
         blurClearTimer = window.setTimeout(() => {
+            reconcileFmModalKeyboardLayoutFromViewport();
+            if (!document.body.classList.contains('eai-modal-keyboard-open')) return;
+            if (isFmVisualViewportKeyboardLikelyOpen()) return;
             const active = document.activeElement;
-            if (active && isEaiModalTextEntryField(active) && active.closest('.eai-modal:not(.hidden)')) {
+            if (active && isEaiModalTextEntryField(active) && getFmModalForTextField(active)) {
+                clearEaiModalKeyboardLayout();
                 return;
             }
             clearEaiModalKeyboardLayout();
-        }, 120);
+        }, 280);
     });
+
+    document.addEventListener(
+        'pointerdown',
+        event => {
+            if (!isFmMobileKeyboardLayout()) return;
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) return;
+            if (isEaiModalTextEntryField(target)) return;
+
+            const scrollHit = target.closest('.montagem-prog-modal__scroll, .eai-modal__body, .eai-modal__form');
+            if (!scrollHit) return;
+
+            const active = document.activeElement;
+            if (!(active instanceof HTMLElement) || !isEaiModalTextEntryField(active)) return;
+            if (!getFmModalForTextField(active)) return;
+
+            active.blur();
+        },
+        true
+    );
 }
 
 window.bindEaiModalMobileKeyboardLayout = bindEaiModalMobileKeyboardLayout;

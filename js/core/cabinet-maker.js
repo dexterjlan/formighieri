@@ -1,9 +1,10 @@
 let cabinetMakersCache = [];
+let cabinetMakerCalendarColorColumnAvailable = true;
 
 async function loadCabinetMakers(activeOnly = true) {
     let query = supabaseClient
         .from('CabinetMaker')
-        .select('id, name, sortOrder, isActive')
+        .select('id, name, sortOrder, isActive, calendarColor')
         .order('sortOrder', { ascending: true })
         .order('name', { ascending: true });
 
@@ -11,7 +12,20 @@ async function loadCabinetMakers(activeOnly = true) {
         query = query.eq('isActive', true);
     }
 
-    const { data, error } = await query;
+    let { data, error } = await query;
+
+    if (error?.message?.includes('calendarColor')) {
+        cabinetMakerCalendarColorColumnAvailable = false;
+        let fallbackQuery = supabaseClient
+            .from('CabinetMaker')
+            .select('id, name, sortOrder, isActive')
+            .order('sortOrder', { ascending: true })
+            .order('name', { ascending: true });
+        if (activeOnly) {
+            fallbackQuery = fallbackQuery.eq('isActive', true);
+        }
+        ({ data, error } = await fallbackQuery);
+    }
 
     if (error) {
         console.error('loadCabinetMakers:', error);
