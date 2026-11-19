@@ -91,20 +91,40 @@ async function fetchApprovalNotificationContext(approval) {
         projectName: getCommercialApprovalProjectName(approval) || context.projectName
     };
 }
+function isActiveAppUserBuyer(user) {
+    if (!user || user.isActive === false) return false;
+    if (user.role === 'Compras') return true;
+    return (user.role === 'Fábrica' || user.role === 'Marceneiro') && Boolean(user.isBuyer);
+}
+
+function isActiveAppUserProjectCoordination(user) {
+    if (!user || user.isActive === false) return false;
+    if ((user.role === 'Admin' || user.role === 'Projetista') && user.isProjectsManager) return true;
+    return (user.role === 'Fábrica' || user.role === 'Marceneiro') && Boolean(user.isCoordination);
+}
+
 async function fetchActiveComprasRecipientEmails() {
     if (NOTIFICATION_TEST_MODE) {
         return [NOTIFICATION_TEST_EMAIL];
     }
 
-    const { data, error } = await supabaseClient
+    let { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email')
-        .eq('role', 'Compras')
+        .select('email, role, isBuyer, isActive')
         .eq('isActive', true);
+
+    if (error?.message?.includes('isBuyer')) {
+        ({ data, error } = await supabaseClient
+            .from('appUsers')
+            .select('email, role, isActive')
+            .eq('role', 'Compras')
+            .eq('isActive', true));
+    }
 
     if (error) throw error;
 
     const emails = (data || [])
+        .filter(user => isActiveAppUserBuyer(user))
         .map(user => user.email?.trim())
         .filter(Boolean);
 
@@ -194,15 +214,22 @@ async function fetchActiveGestoresRecipientEmails() {
 
     const { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, role, isCommercialManager, isProjectsManager, isFactoryManager, isFactoryAdministrative')
+        .select('email, role, isCommercialManager, isProjectsManager, isCoordination, isFactoryManager, isFactoryAdministrative')
         .eq('isActive', true);
+
+    if (error?.message?.includes('isCoordination')) {
+        ({ data, error } = await supabaseClient
+            .from('appUsers')
+            .select('email, role, isCommercialManager, isProjectsManager, isFactoryManager, isFactoryAdministrative')
+            .eq('isActive', true));
+    }
 
     if (error) throw error;
 
     const emails = (data || [])
         .filter(user => (
             ((user.role === 'Admin' || user.role === 'Consultor') && user.isCommercialManager)
-            || ((user.role === 'Admin' || user.role === 'Projetista') && user.isProjectsManager)
+            || isActiveAppUserProjectCoordination(user)
             || ((user.role === 'Fábrica' || user.role === 'Marceneiro') && (user.isFactoryManager || user.isFactoryAdministrative))
         ))
         .map(user => user.email);
@@ -282,17 +309,17 @@ async function fetchActiveGestorFabricaRecipientEmails() {
 async function fetchActiveGestorProjetosUser() {
     let { data, error } = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isProjectsManager')
+        .select('id, name, email, role, isProjectsManager, isCoordination')
         .eq('isActive', true);
 
-    if (error?.message?.includes('isProjectsManager')) {
+    if (error?.message?.includes('isProjectsManager') || error?.message?.includes('isCoordination')) {
         return null;
     }
 
     if (error) throw error;
 
     const users = (data || [])
-        .filter(user => (user.role === 'Admin' || user.role === 'Projetista') && user.isProjectsManager);
+        .filter(user => isActiveAppUserProjectCoordination(user));
 
     return users[0] || null;
 }
@@ -304,17 +331,17 @@ async function fetchActiveGestorProjetosRecipientEmails() {
 
     let { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, role, isProjectsManager')
+        .select('email, role, isProjectsManager, isCoordination')
         .eq('isActive', true);
 
-    if (error?.message?.includes('isProjectsManager')) {
+    if (error?.message?.includes('isProjectsManager') || error?.message?.includes('isCoordination')) {
         return [];
     }
 
     if (error) throw error;
 
     const emails = (data || [])
-        .filter(user => (user.role === 'Admin' || user.role === 'Projetista') && user.isProjectsManager)
+        .filter(user => isActiveAppUserProjectCoordination(user))
         .map(user => user.email);
 
     return uniqueEmails(emails);
@@ -602,8 +629,7 @@ async function fetchActiveComprasMatrixMentionTargets() {
 
     let { data, error } = await supabaseClient
         .from('appUsers')
-        .select('id, name, matrixUserId')
-        .eq('role', 'Compras')
+        .select('id, name, matrixUserId, role, isBuyer, isActive')
         .eq('isActive', true);
 
     if (error?.message?.includes('matrixUserId')) {
@@ -616,6 +642,7 @@ async function fetchActiveComprasMatrixMentionTargets() {
     }
 
     const userTargets = (data || [])
+        .filter(user => isActiveAppUserBuyer(user))
         .map(user => ({
             appUserId: user.id,
             name: user.name,

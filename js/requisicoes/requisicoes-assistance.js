@@ -1630,7 +1630,7 @@ async function sendAssistanceToAwaitingSchedulingFromModal() {
 async function sendAssistanceToApprovalFromModal() {
     if (assistanceEditingStatus !== ASSISTANCE_STATUS_QUOTE) return;
     if (!canEditAssistanceQuote()) {
-        alertAppDialog('Somente o perfil Compras pode enviar para aprovação.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente usuários com permissão de Comprador podem enviar para aprovação.', { variant: 'warning', title: 'Aviso' });
         return;
     }
     const pendingFile = document.getElementById('assistance-quote-file')?.files?.[0];
@@ -1662,7 +1662,7 @@ async function approveAssistanceFromModal() {
 async function markAssistanceSeparatedFromModal() {
     if (assistanceEditingStatus !== ASSISTANCE_STATUS_SEPARATION) return;
     if (!canEditAssistanceQuote()) {
-        alertAppDialog('Somente o perfil Compras pode marcar como separado.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente usuários com permissão de Comprador podem marcar como separado.', { variant: 'warning', title: 'Aviso' });
         return;
     }
     if (!(await confirmAppDialog('Marcar esta assistência como separada e enviar para aguardando agendamento?'))) return;
@@ -1829,7 +1829,7 @@ async function markAssistanceSeparated(id) {
         || null;
     if (record && record.status !== ASSISTANCE_STATUS_SEPARATION) return;
     if (!canEditAssistanceQuote()) {
-        alertAppDialog('Somente o perfil Compras pode marcar como separado.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente usuários com permissão de Comprador podem marcar como separado.', { variant: 'warning', title: 'Aviso' });
         return;
     }
     if (!(await confirmAppDialog('Marcar esta assistência como separada e enviar para aguardando agendamento?'))) return;
@@ -1845,7 +1845,7 @@ async function markAssistanceSeparated(id) {
 async function sendAssistanceToApproval(record) {
     if (!record?.id || record.status !== ASSISTANCE_STATUS_QUOTE) return;
     if (!canEditAssistanceQuote()) {
-        alertAppDialog('Somente o perfil Compras pode enviar para aprovação.', { variant: 'warning', title: 'Aviso' });
+        alertAppDialog('Somente usuários com permissão de Comprador podem enviar para aprovação.', { variant: 'warning', title: 'Aviso' });
         return;
     }
     if (!assistanceQuoteIsReady(record)) {

@@ -42,6 +42,18 @@ const USER_FLAG_CONFIG = [
         appliesTo: role => role === 'Projetista'
     },
     {
+        id: 'coordenacao',
+        label: 'Coordenação',
+        hint: 'Mesmo escopo do Gestor de projetos; vê e atua nas pendências Fábrica e Compras',
+        appliesTo: role => role === 'Fábrica' || role === 'Marceneiro'
+    },
+    {
+        id: 'comprador',
+        label: 'Comprador',
+        hint: 'Compras do pedido, pendências e ações da equipe de compras',
+        appliesTo: role => role === 'Fábrica' || role === 'Marceneiro'
+    },
+    {
         id: 'gestor-fabrica',
         label: 'Gestor de Fábrica',
         hint: 'Aba Fábrica do pedido, Gestão e programação de montagem',
@@ -58,6 +70,12 @@ const USER_FLAG_CONFIG = [
         label: 'Montador',
         hint: 'Acesso somente ao menu 3D (crie o login no Supabase com o e-mail do cadastro de montadores)',
         appliesTo: role => role === 'Fábrica' || role === 'Marceneiro'
+    },
+    {
+        id: 'picker',
+        label: 'Separador',
+        hint: 'Pode ser responsável por embarque e desembarque na expedição',
+        appliesTo: role => role === 'Admin' || role === 'Fábrica' || role === 'Marceneiro'
     },
     {
         id: 'terceiro',
@@ -99,11 +117,6 @@ const USER_ROLE_CARD_STYLES = {
         bg: 'bg-orange-50/70',
         ring: 'ring-orange-100'
     },
-    Compras: {
-        accent: 'border-l-amber-500',
-        bg: 'bg-amber-50/70',
-        ring: 'ring-amber-100'
-    },
     '': {
         accent: 'border-l-slate-300',
         bg: 'bg-white',
@@ -136,12 +149,17 @@ function buildUserRoleBadges(u) {
     if ((isAdminUser || isConsultorUser) && u.isCommercialManager) badges.push('<span class="text-[10px] bg-blue-50 text-blue-800 px-2 py-0.5 rounded border border-blue-100">Gestor comercial</span>');
     if (canHaveGestorProjetos && u.isProjectsManager) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">Gestor de projetos</span>');
     if (isProjetistaUser && u.isPpcp) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">PPCP</span>');
-    if (isProjetistaUser && u.isReviewer) badges.push('<span class="text-[10px] bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-teal-100">Revisor</span>');
+    if (isProjetistaUser && (u.isReviewer || u.isProjectLeader)) {
+        badges.push('<span class="text-[10px] bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-teal-100">Revisor</span>');
+    }
     if (isProjetistaUser && u.isDetailing) badges.push('<span class="text-[10px] bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded border border-indigo-100">Detalhamento</span>');
     if (isProjetistaUser && u.isBudgetEstimator) badges.push('<span class="text-[10px] bg-rose-50 text-rose-800 px-2 py-0.5 rounded border border-rose-100">Orçamentista</span>');
+    if (isFabricaUser && u.isCoordination) badges.push('<span class="text-[10px] bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-100">Coordenação</span>');
+    if (isFabricaUser && u.isBuyer) badges.push('<span class="text-[10px] bg-amber-50 text-amber-900 px-2 py-0.5 rounded border border-amber-100">Comprador</span>');
     if (isFabricaUser && u.isFactoryManager) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Gestor de Fábrica</span>');
     if (isFabricaUser && u.isFactoryAdministrative) badges.push('<span class="text-[10px] bg-orange-50 text-orange-800 px-2 py-0.5 rounded border border-orange-100">Administrativo</span>');
     if (isFabricaUser && u.isInstaller) badges.push('<span class="text-[10px] bg-cyan-50 text-cyan-900 px-2 py-0.5 rounded border border-cyan-100">Montador (3D)</span>');
+    if (u.isPicker) badges.push('<span class="text-[10px] bg-violet-50 text-violet-900 px-2 py-0.5 rounded border border-violet-100">Separador</span>');
     if (u.isThirdParty) badges.push('<span class="text-[10px] bg-stone-100 text-stone-700 px-2 py-0.5 rounded border border-stone-200">Terceiro</span>');
     if (u.receiveEmailCopy) badges.push('<span class="text-[10px] bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded border border-emerald-100">Cópia e-mail</span>');
 
@@ -160,9 +178,12 @@ function buildUserFlagCheckbox(u, flag) {
         'gestor-projetos': Boolean(u.isProjectsManager),
         ppcp: Boolean(u.isPpcp),
         revisor: Boolean(u.isReviewer ?? u.isProjectLeader),
+        coordenacao: Boolean(u.isCoordination),
+        comprador: Boolean(u.isBuyer),
         'gestor-fabrica': Boolean(u.isFactoryManager),
         administrativo: Boolean(u.isFactoryAdministrative),
         montador: Boolean(u.isInstaller),
+        picker: Boolean(u.isPicker),
         detalhamento: Boolean(u.isDetailing),
         orcamentista: Boolean(u.isBudgetEstimator),
         terceiro: Boolean(u.isThirdParty),
@@ -211,9 +232,12 @@ function mergeUserFlagChecks(u, checks) {
         isProjectsManager: checks['gestor-projetos'] ?? u.isProjectsManager,
         isPpcp: checks.ppcp ?? u.isPpcp,
         isReviewer: checks.revisor ?? u.isReviewer ?? u.isProjectLeader,
+        isCoordination: checks.coordenacao ?? u.isCoordination,
+        isBuyer: checks.comprador ?? u.isBuyer,
         isFactoryManager: checks['gestor-fabrica'] ?? u.isFactoryManager,
         isFactoryAdministrative: checks.administrativo ?? u.isFactoryAdministrative,
         isInstaller: checks.montador ?? u.isInstaller,
+        isPicker: checks.picker ?? u.isPicker,
         isDetailing: checks.detalhamento ?? u.isDetailing,
         isBudgetEstimator: checks.orcamentista ?? u.isBudgetEstimator,
         isThirdParty: checks.terceiro ?? u.isThirdParty,
@@ -230,6 +254,8 @@ function renderUserFlagsGrid(flagsGrid, u, isActive, role) {
 
 let usersAdminCache = [];
 let usersAdminInstallerColumnAvailable = true;
+let usersAdminPickerColumnAvailable = true;
+let usersAdminCoordinationBuyerColumnsAvailable = true;
 
 function isAppUsersInstallerColumnError(error) {
     const message = String(error?.message || '');
@@ -264,7 +290,9 @@ function userMatchesAdminFilters(u, filters) {
         if (filters.role === '__none__') {
             if (u.role) return false;
         } else if (filters.role === 'Fábrica') {
-            if (u.role !== 'Fábrica' && u.role !== 'Marceneiro') return false;
+            if (u.role !== 'Fábrica' && u.role !== 'Marceneiro' && u.role !== 'Compras') return false;
+        } else if (filters.role === 'Comprador') {
+            if (!u.isBuyer && u.role !== 'Compras') return false;
         } else if ((u.role || '') !== filters.role) {
             return false;
         }
@@ -351,8 +379,7 @@ function renderUsersAdminCards(users) {
                             <option value="Admin" ${u.role === 'Admin' ? 'selected' : ''}>Admin</option>
                             <option value="Projetista" ${u.role === 'Projetista' ? 'selected' : ''}>Projetista</option>
                             <option value="Consultor" ${u.role === 'Consultor' ? 'selected' : ''}>Consultor</option>
-                            <option value="Fábrica" ${u.role === 'Fábrica' || u.role === 'Marceneiro' ? 'selected' : ''}>Fábrica</option>
-                            <option value="Compras" ${u.role === 'Compras' ? 'selected' : ''}>Compras</option>
+                            <option value="Fábrica" ${u.role === 'Fábrica' || u.role === 'Marceneiro' || u.role === 'Compras' ? 'selected' : ''}>Fábrica</option>
                         </select>
                     </div>
 
@@ -429,7 +456,7 @@ function applyUsersAdminFilters() {
 async function loadUsersAdminList() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isPicker, isCoordination, isBuyer, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
         .order('name', { ascending: true });
 
     if (result.error?.message?.includes('matrixUserId')) {
@@ -474,6 +501,26 @@ async function loadUsersAdminList() {
             .from('appUsers')
             .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
             .order('name', { ascending: true });
+    }
+
+    if (result.error?.message?.includes('isPicker')) {
+        usersAdminPickerColumnAvailable = false;
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
+            .order('name', { ascending: true });
+    } else if (!result.error) {
+        usersAdminPickerColumnAvailable = true;
+    }
+
+    if (result.error?.message?.includes('isCoordination') || result.error?.message?.includes('isBuyer')) {
+        usersAdminCoordinationBuyerColumnsAvailable = false;
+        result = await supabaseClient
+            .from('appUsers')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isPicker, isThirdParty, receiveEmailCopy, matrixUserId, calendarColor')
+            .order('name', { ascending: true });
+    } else if (!result.error) {
+        usersAdminCoordinationBuyerColumnsAvailable = true;
     }
 
     if (result.error?.message?.includes('isFactoryManager') || result.error?.message?.includes('isPpcp') || result.error?.message?.includes('isReviewer') || result.error?.message?.includes('isProjectLeader') || result.error?.message?.includes('isDetailing') || result.error?.message?.includes('isBudgetEstimator') || result.error?.message?.includes('isThirdParty')) {
@@ -544,9 +591,12 @@ async function saveUserRole(userId) {
     const revisorCheck = document.getElementById(`revisor-check-${userId}`);
     const detalhamentoCheck = document.getElementById(`detalhamento-check-${userId}`);
     const orcamentistaCheck = document.getElementById(`orcamentista-check-${userId}`);
+    const coordenacaoCheck = document.getElementById(`coordenacao-check-${userId}`);
+    const compradorCheck = document.getElementById(`comprador-check-${userId}`);
     const gestorFabricaCheck = document.getElementById(`gestor-fabrica-check-${userId}`);
     const administrativoCheck = document.getElementById(`administrativo-check-${userId}`);
     const montadorCheck = document.getElementById(`montador-check-${userId}`);
+    const pickerCheck = document.getElementById(`picker-check-${userId}`);
     const terceiroCheck = document.getElementById(`terceiro-check-${userId}`);
     const receiveEmailCopyCheck = document.getElementById(`receive-email-copy-check-${userId}`);
     const rawCalendarColor = getCalendarColorInput(userId)?.value;
@@ -563,9 +613,12 @@ async function saveUserRole(userId) {
     const isDetailing = role === 'Projetista' && Boolean(detalhamentoCheck?.checked);
     const isBudgetEstimator = role === 'Projetista' && Boolean(orcamentistaCheck?.checked);
     const isFactoryRole = role === 'Fábrica' || role === 'Marceneiro';
+    const isCoordination = isFactoryRole && Boolean(coordenacaoCheck?.checked);
+    const isBuyer = isFactoryRole && Boolean(compradorCheck?.checked);
     const isFactoryManager = isFactoryRole && Boolean(gestorFabricaCheck?.checked);
     const isFactoryAdministrative = isFactoryRole && Boolean(administrativoCheck?.checked);
     const isInstaller = isFactoryRole && Boolean(montadorCheck?.checked);
+    const isPicker = (role === 'Admin' || isFactoryRole) && Boolean(pickerCheck?.checked);
     const isThirdParty = role !== 'Admin' && Boolean(terceiroCheck?.checked);
     const receiveEmailCopy = Boolean(receiveEmailCopyCheck?.checked);
     const matrixUserId = normalizeAppUserMatrixUserIdInput(
@@ -579,7 +632,7 @@ async function saveUserRole(userId) {
     }
 
     if (!role) {
-        alertAppDialog("Selecione Admin, Projetista, Consultor, Fábrica ou Compras.");
+        alertAppDialog('Selecione Admin, Projetista, Consultor ou Fábrica.');
         return;
     }
 
@@ -611,9 +664,12 @@ async function saveUserRole(userId) {
         isProjectsManager,
         isPpcp,
         isReviewer,
+        isCoordination,
+        isBuyer,
         isFactoryManager,
         isFactoryAdministrative,
         isInstaller,
+        isPicker,
         isDetailing,
         isBudgetEstimator,
         isThirdParty,
@@ -621,6 +677,20 @@ async function saveUserRole(userId) {
         matrixUserId,
         calendarColor
     };
+    if (isPicker && !usersAdminPickerColumnAvailable) {
+        alertAppDialog(
+            'A coluna Separador (isPicker) ainda não existe no banco. Execute supabase/feats/expedition-route-responsible-picker.sql no Supabase SQL Editor e tente novamente.',
+            { variant: 'warning', title: 'Aviso' }
+        );
+        return;
+    }
+    if ((isCoordination || isBuyer) && !usersAdminCoordinationBuyerColumnsAvailable) {
+        alertAppDialog(
+            'As colunas Coordenação (isCoordination) e Comprador (isBuyer) ainda não existem no banco. Execute supabase/feats/factory-coordination-and-buyer-flags.sql no Supabase SQL Editor e tente novamente.',
+            { variant: 'warning', title: 'Aviso' }
+        );
+        return;
+    }
     if (isInstaller && !usersAdminInstallerColumnAvailable) {
         alertAppDialog(
             'A coluna Montador (isInstaller) ainda não existe no banco. Execute supabase/feats/installer-login-email-and-app-user-flag.sql no Supabase SQL Editor e tente novamente.',
@@ -700,9 +770,12 @@ async function saveUserRole(userId) {
             isProjectsManager,
             isPpcp,
             isReviewer,
+            isCoordination,
+            isBuyer,
             isFactoryManager,
             isFactoryAdministrative,
             isInstaller,
+            isPicker,
             isDetailing,
             isBudgetEstimator,
             isThirdParty,
@@ -734,9 +807,12 @@ async function saveUserRole(userId) {
             isProjectsManager,
             isPpcp,
             isReviewer,
+            isCoordination,
+            isBuyer,
             isFactoryManager,
             isFactoryAdministrative,
             isInstaller,
+            isPicker,
             isDetailing,
             isBudgetEstimator
         };
@@ -813,9 +889,12 @@ async function saveUserRole(userId) {
             isProjectsManager,
             isPpcp,
             isReviewer,
+            isCoordination,
+            isBuyer,
             isFactoryManager,
             isFactoryAdministrative,
             isInstaller,
+            isPicker,
             isDetailing,
             isBudgetEstimator,
             isThirdParty,
@@ -842,9 +921,12 @@ async function saveUserRole(userId) {
             isProjectsManager,
             isPpcp,
             isReviewer,
+            isCoordination,
+            isBuyer,
             isFactoryManager,
             isFactoryAdministrative,
             isInstaller,
+            isPicker,
             isDetailing,
             isBudgetEstimator,
             isThirdParty,

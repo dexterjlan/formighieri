@@ -360,6 +360,7 @@ function getPendenciasSidebarSections() {
                 { id: 'carga-por-projetista', label: 'Carga por projetista' },
                 { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
                 { id: 'terceiros-sem-projetistas', label: 'Terceiros Sem Projetistas' },
+                { id: 'revisao-tecnica-revisor-gestor', label: 'Revisão Técnica sem Revisor' },
                 { id: 'aguardando-detalhamento', label: 'Detalhamento sem projetista' },
                 { id: 'expedicao', label: 'Expedição' },
                 { id: 'montagem-externa', label: 'Montagem Externa' }
@@ -822,14 +823,24 @@ async function countPendenciasProjects(filters = {}) {
 }
 
 async function queryPendenciasProjects(filters = {}) {
-    const { statusId, statusIds, designerId, unassignedOnly = false, assignedOnly = false } = filters;
+    const {
+        statusId,
+        statusIds,
+        designerId,
+        reviewerId,
+        unassignedOnly = false,
+        assignedOnly = false,
+        unassignedReviewerOnly = false
+    } = filters;
 
     const buildQuery = (selectColumns, filterMode = 'full') => {
         let query = supabaseClient.from('OrderProject').select(selectColumns);
         if (statusId) query = query.eq('statusId', statusId);
         if (statusIds?.length) query = query.in('statusId', statusIds);
         if (designerId) query = query.eq('designerId', designerId);
+        if (reviewerId) query = query.eq('reviewerId', reviewerId);
         if (unassignedOnly) query = query.is('designerId', null);
+        if (unassignedReviewerOnly) query = query.is('reviewerId', null);
         if (assignedOnly) query = query.not('designerId', 'is', null);
         if (filterMode === 'full' && typeof applyPendenciasExcludedOrderProjectQueryFilters === 'function') {
             query = applyPendenciasExcludedOrderProjectQueryFilters(query);
@@ -874,6 +885,22 @@ async function queryPendenciasProjects(filters = {}) {
 
     if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('isReplaced')) {
         result = await buildQuery(PENDENCIAS_PROJECT_SELECT, 'none');
+    }
+
+    if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('designer')
+        || result.error?.message?.includes('reviewerId') || result.error?.message?.includes('reviewer')) {
+        result = await buildQuery(
+            getPendenciasProjectSelect({
+                includeStatus: true,
+                includeDesigner: true,
+                includeReviewer: false
+            }),
+            'none'
+        );
+    }
+
+    if (result.error?.message?.includes('technicalReviewerReviewStartedAt')) {
+        result = await buildQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK, 'none');
     }
 
     if (result.error?.message?.includes('projectStatus') || result.error?.message?.includes('designer')) {
@@ -1060,6 +1087,13 @@ function loadPendenciasContent() {
     if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'terceiros-sem-projetistas') {
         if (typeof loadPendenciasThirdPartySemProjetista === 'function') {
             loadPendenciasThirdPartySemProjetista();
+        }
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'revisao-tecnica-revisor-gestor') {
+        if (typeof loadPendenciasGestorRevisaoTecnicaRevisor === 'function') {
+            loadPendenciasGestorRevisaoTecnicaRevisor();
         }
         return;
     }

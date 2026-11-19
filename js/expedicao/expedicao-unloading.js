@@ -98,6 +98,9 @@ function stopUnloadingPending(stop) {
 }
 
 function findNextUnloadingStop(stops = []) {
+    if (typeof findNextExpeditionUnloadingStop === 'function') {
+        return findNextExpeditionUnloadingStop(stops);
+    }
     return (stops || []).find(stop => stopUnloadingPending(stop).length > 0) || null;
 }
 
@@ -108,6 +111,13 @@ function getExpeditionUnloadingCurrentStop() {
 }
 
 async function fetchExpeditionUnloadingRoutes() {
+    if (typeof fetchExpeditionRoutesForUi === 'function') {
+        return fetchExpeditionRoutesForUi({
+            limit: 80,
+            extraQuery: query => query.in('status', EXPEDITION_UNLOADING_LIST_STATUSES)
+        });
+    }
+
     const { data, error } = await supabaseClient
         .from('ExpeditionRoute')
         .select('id, routeDate, vehicleLabel, driverName, status, mapsUrl, updatedAt')
@@ -124,13 +134,9 @@ async function fetchExpeditionUnloadingRouteDetail(routeId, options = {}) {
     const key = Number(routeId);
     if (!key) throw new Error('Rota inválida.');
 
-    const { data: route, error: routeError } = await supabaseClient
-        .from('ExpeditionRoute')
-        .select('id, routeDate, vehicleLabel, driverName, status, mapsUrl')
-        .eq('id', key)
-        .maybeSingle();
-
-    if (routeError) throw routeError;
+    const route = typeof fetchExpeditionRouteById === 'function'
+        ? await fetchExpeditionRouteById(key, 'mapsUrl')
+        : null;
     if (!route) throw new Error('Rota não encontrada.');
 
     const inActiveSession = Number(key) === Number(expedicaoUnloadingRouteId);
@@ -143,20 +149,32 @@ async function fetchExpeditionUnloadingRouteDetail(routeId, options = {}) {
     }
 
     const volumes = await fetchExpeditionRouteVolumes(key);
-    if (!volumes.length) throw new Error('Rota sem volumes.');
+    const pickupItems = typeof fetchExpeditionRoutePickupStopItems === 'function'
+        ? await fetchExpeditionRoutePickupStopItems(key)
+        : [];
 
-    const boarded = countBoardedVolumes(volumes);
-    if (boarded < volumes.length) {
-        throw new Error('Conclua o embarque de todos os volumes antes do desembarque.');
+    if (!volumes.length && !pickupItems.length) throw new Error('Rota sem paradas.');
+
+    if (volumes.length) {
+        const boarded = countBoardedVolumes(volumes);
+        if (boarded < volumes.length) {
+            throw new Error('Conclua o embarque de todos os volumes antes do desembarque.');
+        }
     }
 
-    const stops = groupExpeditionUnloadingStops(volumes);
-  return {
+    const stops = typeof groupExpeditionUnloadingStopsFromVolumesAndPickups === 'function'
+        ? groupExpeditionUnloadingStopsFromVolumesAndPickups(volumes, pickupItems)
+        : groupExpeditionUnloadingStops(volumes);
+
+    const pickupDone = pickupItems.filter(item => item.pickupUnloadedAt).length;
+
+    return {
         route,
         volumes,
+        pickupItems,
         stops,
-        unloadedCount: countExpeditionUnloadedVolumes(volumes),
-        totalCount: volumes.length
+        unloadedCount: countExpeditionUnloadedVolumes(volumes) + pickupDone,
+        totalCount: volumes.length + pickupItems.length
     };
 }
 
@@ -178,9 +196,13 @@ async function promoteExpeditionRouteUnloadingStarted(routeId) {
 }
 
 async function tryCompleteExpeditionRouteUnloading(routeId, volumes) {
+    const pickups = expedicaoUnloadingDetail?.pickupItems || [];
+    const pickupPending = pickups.filter(item => !item.pickupUnloadedAt).length;
     const total = volumes?.length || 0;
     const unloaded = countExpeditionUnloadedVolumes(volumes);
-    if (!total || unloaded < total) return false;
+    if (pickupPending > 0) return false;
+    if (total && unloaded < total) return false;
+    if (!total && !pickups.length) return false;
 
     const now = new Date().toISOString();
     const { error } = await supabaseClient
@@ -298,6 +320,9 @@ function renderExpeditionUnloadingList(mount, rows) {
                 <td class="p-3 text-xs whitespace-nowrap">${escapeHtml(dateLabel)}</td>
                 <td class="p-3 text-xs">${escapeHtml(row.vehicleLabel || '—')}</td>
                 <td class="p-3 text-xs">${escapeHtml(row.driverName || '—')}</td>
+                <td class="p-3 text-xs">${typeof getExpeditionResponsibleLabel === 'function'
+        ? escapeHtml(getExpeditionResponsibleLabel(row))
+        : '—'}</td>
                 <td class="p-3 text-xs">${escapeHtml(statusLabel)}</td>
                 <td class="p-3 text-xs">${renderActions(row, false)}</td>
             </tr>
@@ -318,12 +343,13 @@ function renderExpeditionUnloadingList(mount, rows) {
                             <th class="p-3 font-semibold">Dia</th>
                             <th class="p-3 font-semibold">Carro</th>
                             <th class="p-3 font-semibold">Motorista</th>
+                            <th class="p-3 font-semibold">Responsável</th>
                             <th class="p-3 font-semibold">Status</th>
                             <th class="p-3 font-semibold">Ações</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        ${tableRows || '<tr><td colspan="5" class="p-8 text-center text-xs text-slate-400">Nenhuma rota disponível.</td></tr>'}
+                        ${tableRows || '<tr><td colspan="6" class="p-8 text-center text-xs text-slate-400">Nenhuma rota disponível.</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -360,8 +386,11 @@ function renderExpeditionUnloadingStopView(mount, detail) {
     }
 
     const pending = stopUnloadingPending(current);
+    const pickupItems = current.pickupItems || [];
+    const pendingPickups = pickupItems.filter(item => !item.pickupUnloadedAt);
     const doneAtStop = (current.volumes || []).length - pending.length;
     const totalAtStop = (current.volumes || []).length;
+    const pickupDoneAtStop = pickupItems.length - pendingPickups.length;
     const addr = typeof formatExpeditionAddressOneLine === 'function'
         ? formatExpeditionAddressOneLine(current.addr)
         : '';
@@ -382,6 +411,24 @@ function renderExpeditionUnloadingStopView(mount, detail) {
         `;
     }).join('');
 
+    const pickupHtml = pickupItems.map(item => {
+        const meta = item.metadataJson || {};
+        const category = typeof formatExpeditionPickupCategoryLabel === 'function'
+            ? formatExpeditionPickupCategoryLabel(meta.pickupCategory)
+            : meta.pickupCategory;
+        const done = Boolean(item.pickupUnloadedAt);
+        return `
+            <li class="text-[11px] py-2 border-b border-slate-100 last:border-0">
+                <p class="font-semibold text-indigo-900">Coleta · ${escapeHtml(category || '—')}</p>
+                <p class="text-slate-600 mt-0.5">Pedido ${escapeHtml(meta.orderCode || '—')} — ${escapeHtml(meta.description || '')}</p>
+                <p class="font-semibold mt-1 ${done ? 'text-emerald-700' : 'text-amber-700'}">${done ? 'Foto registrada' : 'Aguardando foto no desembarque'}</p>
+            </li>
+        `;
+    }).join('');
+
+    const showVolumeScanner = pending.length > 0;
+    const showPickupCapture = pendingPickups.length > 0;
+
     mount.innerHTML = `
         <div class="space-y-3 max-w-lg mx-auto w-full">
             <button type="button" id="expedicao-unloading-back"
@@ -399,12 +446,36 @@ function renderExpeditionUnloadingStopView(mount, detail) {
                 Parada ${stopIndex} de ${totalStops}
             </p>
             <motion/>
-            <p class="text-xs font-semibold text-slate-700">${doneAtStop} de ${totalAtStop} volumes desembarcados nesta parada</p>
-            <ul class="bg-white border border-slate-200 rounded-xl p-2 max-h-40 overflow-y-auto">${volsHtml}</ul>
-            <button type="button" id="expedicao-unloading-scan-btn"
-                class="w-full text-sm bg-slate-900 text-white px-4 py-3.5 rounded-xl font-bold min-h-[48px] touch-manipulation">
-                ${typeof renderExpeditionMobileBtnLabel === 'function' ? renderExpeditionMobileBtnLabel('barcode', 'Ler volume') : 'Ler volume'}
-            </button>
+            ${totalAtStop ? `<p class="text-xs font-semibold text-slate-700">${doneAtStop} de ${totalAtStop} volumes desembarcados nesta parada</p>` : ''}
+            ${totalAtStop ? `<ul class="bg-white border border-slate-200 rounded-xl p-2 max-h-40 overflow-y-auto">${volsHtml}</ul>` : ''}
+            ${pickupItems.length ? `
+                <div class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3">
+                    <p class="text-xs font-bold text-indigo-900 mb-1">Coleta nesta parada (${pickupDoneAtStop}/${pickupItems.length})</p>
+                    <ul>${pickupHtml}</ul>
+                </div>
+            ` : ''}
+            ${showPickupCapture ? `
+                <div class="rounded-xl border border-indigo-300 bg-white p-3 space-y-2">
+                    <p class="text-xs font-semibold text-indigo-900">Registre uma foto da coleta (obrigatório)</p>
+                    <input type="file" id="expedition-unloading-pickup-photo" accept="image/*" capture="environment"
+                        class="hidden">
+                    <button type="button" id="expedition-unloading-pickup-take-photo"
+                        class="w-full text-sm bg-white border border-indigo-300 text-indigo-900 px-4 py-3 rounded-xl font-bold min-h-[48px] touch-manipulation">
+                        Tirar foto
+                    </button>
+                    <p id="expedition-unloading-pickup-photo-label" class="text-[10px] text-slate-500 text-center hidden"></p>
+                    <button type="button" id="expedition-unloading-pickup-submit"
+                        class="w-full text-sm bg-indigo-700 text-white px-4 py-3 rounded-xl font-bold min-h-[48px] touch-manipulation">
+                        Enviar foto e concluir coleta
+                    </button>
+                </div>
+            ` : ''}
+            ${showVolumeScanner ? `
+                <button type="button" id="expedicao-unloading-scan-btn"
+                    class="w-full text-sm bg-slate-900 text-white px-4 py-3.5 rounded-xl font-bold min-h-[48px] touch-manipulation">
+                    ${typeof renderExpeditionMobileBtnLabel === 'function' ? renderExpeditionMobileBtnLabel('barcode', 'Ler volume') : 'Ler volume'}
+                </button>
+            ` : ''}
         </div>
     `.replace('<motion/>', `
         <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -425,6 +496,93 @@ function bindExpeditionUnloadingStopEvents(mount) {
     mount.querySelector('#expedicao-unloading-scan-btn')?.addEventListener('click', () => {
         void openExpedicaoUnloadingScanModal();
     });
+    mount.querySelector('#expedition-unloading-pickup-take-photo')?.addEventListener('click', () => {
+        document.getElementById('expedition-unloading-pickup-photo')?.click();
+    });
+    mount.querySelector('#expedition-unloading-pickup-photo')?.addEventListener('change', event => {
+        const file = event.target.files?.[0];
+        const label = document.getElementById('expedition-unloading-pickup-photo-label');
+        if (!label) return;
+        if (!file) {
+            label.textContent = '';
+            label.classList.add('hidden');
+            return;
+        }
+        label.textContent = file.name ? `Foto selecionada: ${file.name}` : 'Foto selecionada';
+        label.classList.remove('hidden');
+    });
+    mount.querySelector('#expedition-unloading-pickup-submit')?.addEventListener('click', () => {
+        void submitExpeditionUnloadingPickupPhoto();
+    });
+}
+
+async function submitExpeditionUnloadingPickupPhoto() {
+    const current = getExpeditionUnloadingCurrentStop();
+    const pendingPickups = (current?.pickupItems || []).filter(item => !item.pickupUnloadedAt);
+    if (!pendingPickups.length) {
+        alertAppDialog('Não há coleta pendente nesta parada.');
+        return;
+    }
+
+    const fileInput = document.getElementById('expedition-unloading-pickup-photo');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+        alertAppDialog('Selecione ou tire uma foto.');
+        return;
+    }
+
+    const pickup = pendingPickups[0];
+    const meta = pickup.metadataJson || {};
+    const routeId = Number(expedicaoUnloadingRouteId);
+    const stopId = Number(current?.stopId);
+
+    setExpedicaoActionLoading(true, 'Enviando foto...');
+    try {
+        if (typeof primeGoogleDriveAppsScript === 'function') primeGoogleDriveAppsScript();
+        if (typeof ensureGoogleDriveAppsScriptReady === 'function') {
+            await ensureGoogleDriveAppsScriptReady();
+        }
+        await uploadExpeditionPickupPhoto(file, {
+            stopItemId: pickup.id,
+            orderId: meta.orderId,
+            orderCode: meta.orderCode,
+            routeId,
+            stopId
+        });
+        await markExpeditionPickupUnloaded(pickup.id);
+        pickup.pickupUnloadedAt = new Date().toISOString();
+
+        await reloadExpeditionUnloadingDetail(false);
+        const allDone = !(expedicaoUnloadingDetail?.stops || []).some(stop =>
+            typeof expeditionStopHasUnloadingPending === 'function'
+                ? expeditionStopHasUnloadingPending(stop)
+                : stopUnloadingPending(stop).length > 0
+        );
+
+        if (allDone) {
+            await finishExpeditionUnloadingRouteFeedback(expedicaoUnloadingDetail?.volumes || [], {});
+            await refreshExpeditionUnloadingStopView(false);
+            return;
+        }
+
+        const pendingAtStop = typeof expeditionStopHasUnloadingPending === 'function'
+            ? expeditionStopHasUnloadingPending(getExpeditionUnloadingCurrentStop())
+            : stopUnloadingPending(getExpeditionUnloadingCurrentStop()).length > 0;
+
+        if (!pendingAtStop) {
+            await refreshExpeditionUnloadingStopView(true);
+            alertAppDialog('Coleta registrada. Avance para a próxima parada.', { variant: 'success' });
+            return;
+        }
+
+        await refreshExpeditionUnloadingStopView(false);
+        alertAppDialog('Foto da coleta enviada.', { variant: 'success' });
+    } catch (error) {
+        console.error('submitExpeditionUnloadingPickupPhoto:', error);
+        alertAppDialog(error.message || 'Erro ao enviar foto da coleta.');
+    } finally {
+        setExpedicaoActionLoading(false);
+    }
 }
 
 function applyLocalUnloadedVolume(volumeId) {
@@ -829,18 +987,23 @@ async function processExpedicaoUnloadingScanCode(rawCode, options = {}) {
         }
 
         const current = getExpeditionUnloadingCurrentStop();
-        const pendingAtStop = current ? stopUnloadingPending(current).length : 0;
+        const pendingAtStop = current && typeof expeditionStopHasUnloadingPending === 'function'
+            ? expeditionStopHasUnloadingPending(current)
+            : (current ? stopUnloadingPending(current).length > 0 : false);
         const routeVolumes = expedicaoUnloadingDetail?.volumes || [];
-        const allUnloaded = routeVolumes.length > 0
-            && countExpeditionUnloadedVolumes(routeVolumes) >= routeVolumes.length;
+        const routeDone = !(expedicaoUnloadingDetail?.stops || []).some(stop =>
+            typeof expeditionStopHasUnloadingPending === 'function'
+                ? expeditionStopHasUnloadingPending(stop)
+                : stopUnloadingPending(stop).length > 0
+        );
         const nextStop = findNextUnloadingStop(expedicaoUnloadingDetail?.stops || []);
 
-        if (allUnloaded || (pendingAtStop === 0 && !nextStop)) {
+        if (routeDone) {
             await finishExpeditionUnloadingRouteFeedback(routeVolumes, options);
             return;
         }
 
-        if (pendingAtStop === 0) {
+        if (!pendingAtStop) {
             const stopMsg = stopIndexBefore > 0
                 ? `Todos os volumes da parada ${stopIndexBefore} foram desembarcados.`
                 : buildExpeditionUnloadingStopCompleteMessage();

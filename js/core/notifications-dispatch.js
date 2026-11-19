@@ -722,6 +722,86 @@ async function notifyDesignerAssignedToProjectEmail(options = {}) {
 
 window.notifyDesignerAssignedToProjectEmail = notifyDesignerAssignedToProjectEmail;
 
+async function notifyTechnicalReviewerAssignedToDesignerEmail(options = {}) {
+    const {
+        orderId,
+        orderProjectIds = [],
+        designerId = null,
+        reviewerId = null,
+        reviewerName = null
+    } = options;
+    if (!NOTIFICATIONS_ENABLED || !orderId || !orderProjectIds.length) return;
+
+    if (typeof notifyMatrixTechnicalReviewerAssignedToProject === 'function') {
+        try {
+            await notifyMatrixTechnicalReviewerAssignedToProject({
+                orderId,
+                orderProjectIds,
+                designerId,
+                reviewerId,
+                reviewerName
+            });
+        } catch (matrixErr) {
+            console.warn('notifyTechnicalReviewerAssignedToDesignerEmail (Matrix):', matrixErr);
+        }
+    }
+
+    if (!designerId) {
+        console.warn('notifyTechnicalReviewerAssignedToDesignerEmail: projeto sem projetista associado');
+        return;
+    }
+
+    if (!isGoogleAppsScriptConfigured()) {
+        console.info('notifyTechnicalReviewerAssignedToDesignerEmail: Google Apps Script não configurado em js/core/config.js');
+        return;
+    }
+
+    try {
+        const recipientEmail = await fetchDesignerEmailById(designerId);
+        if (!recipientEmail) return;
+
+        const resolvedReviewerName = reviewerName
+            || (reviewerId && typeof fetchAppUserDisplayNameById === 'function'
+                ? await fetchAppUserDisplayNameById(reviewerId)
+                : null)
+            || '—';
+
+        const payload = await buildProcessNotificationPayload('technical_reviewer_assigned', {
+            orderId,
+            orderProjectIds,
+            designerId,
+            includeProjetista: true,
+            showProjectDetails: false,
+            projectSectionTitle: 'Projeto',
+            accentColor: '#0d9488',
+            extraFields: [
+                { label: 'Revisor técnico', value: resolvedReviewerName }
+            ]
+        });
+
+        const subject = buildProcessEmailSubject(
+            'technical_reviewer_assigned',
+            payload.orderCode,
+            payload.clientName
+        );
+        const body = buildProcessEmailBody(payload);
+        const html = buildProcessEmailHtml(payload);
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: recipientEmail,
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject,
+            message_body: body,
+            message_html: html
+        });
+    } catch (err) {
+        console.warn('notifyTechnicalReviewerAssignedToDesignerEmail:', err);
+    }
+}
+
+window.notifyTechnicalReviewerAssignedToDesignerEmail = notifyTechnicalReviewerAssignedToDesignerEmail;
+
 async function notifyTechnicalReviewerRevisionStartedEmail(options = {}) {
     const { orderId, orderProjectIds = [], designerId = null, activities = null } = options;
     if (!NOTIFICATIONS_ENABLED || !orderId || !orderProjectIds.length) return;

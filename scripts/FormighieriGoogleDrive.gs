@@ -14,7 +14,7 @@
  * Pasta prod: FGP / {pedido} / {projeto} / {detalhamento|revisao|requisicao}
  * Descritivo:  FGP / {pedido} / descritivo (por pedido, sem pasta de projeto)
  * Pasta dev:  FGP-DEV / ...
- * Detalhamento: PDF/ZIP/RAR. Descritivo: só PDF. Requisição, revisão e vistoria ME: imagem por atividade.
+ * Detalhamento: PDF/ZIP/RAR. Descritivo: só PDF. Requisição, revisão, vistoria ME e coleta expedição: imagem.
  */
 
 var FGP_DRIVE_ROOT_FOLDER_NAME = 'FGP';
@@ -33,7 +33,8 @@ var FGP_DRIVE_FOLDER_KIND = {
   implementationlist: 'Listas',
   assistancequote: 'orcamento',
   externalassemblyinspection: 'vistoria',
-  externalassemblyinspectionresponse: 'vistoria'
+  externalassemblyinspectionresponse: 'vistoria',
+  expeditionpickup: 'coleta'
 };
 
 function handleDrivePostRequest_(body) {
@@ -97,14 +98,20 @@ function isImageDriveFolderKind_(folderKind) {
   return folderKind === 'request'
     || folderKind === 'revision'
     || folderKind === 'externalassemblyinspection'
-    || folderKind === 'externalassemblyinspectionresponse';
+    || folderKind === 'externalassemblyinspectionresponse'
+    || folderKind === 'expeditionpickup';
+}
+
+function isExpeditionPickupFolderKind_(folderKind) {
+  return normalizeDriveFolderKind_(folderKind) === 'expeditionpickup';
 }
 
 function maxDriveUploadBytesForFolderKind_(folderKind) {
   if (folderKind === 'request') return 10 * 1024 * 1024;
   if (folderKind === 'revision'
     || folderKind === 'externalassemblyinspection'
-    || folderKind === 'externalassemblyinspectionresponse') {
+    || folderKind === 'externalassemblyinspectionresponse'
+    || folderKind === 'expeditionpickup') {
     return 2 * 1024 * 1024;
   }
   return FGP_DRIVE_MAX_FILE_BYTES;
@@ -193,6 +200,11 @@ function getDriveFolder_(folderKind, orderCode, projectName, environment) {
   if (isOrderLevelDriveFolderKind_(kind)) {
     return getOrCreateChildFolder_(orderFolder, folderKindToFolderName_(kind));
   }
+  if (isExpeditionPickupFolderKind_(kind)) {
+    var coletaFolder = getOrCreateChildFolder_(orderFolder, 'coleta');
+    var stopKey = sanitizeDriveFolderName_(projectName || 'parada');
+    return getOrCreateChildFolder_(coletaFolder, stopKey);
+  }
   var projectFolder = getOrCreateChildFolder_(orderFolder, projectName);
   return getOrCreateChildFolder_(projectFolder, folderKindToFolderName_(kind));
 }
@@ -203,6 +215,11 @@ function buildDrivePath_(folderKind, orderCode, projectName, environment) {
     getDriveRootFolderName_(environment),
     sanitizeDriveFolderName_(orderCode)
   ];
+  if (isExpeditionPickupFolderKind_(kind)) {
+    parts.push('coleta');
+    parts.push(sanitizeDriveFolderName_(projectName || 'parada'));
+    return parts.join(' / ');
+  }
   if (!isOrderLevelDriveFolderKind_(kind)) {
     parts.push(sanitizeDriveFolderName_(projectName));
   }
@@ -430,6 +447,7 @@ function resolveDriveUploadContext_(body) {
       : (folderKind === 'revision'
         || folderKind === 'externalassemblyinspection'
         || folderKind === 'externalassemblyinspectionresponse'
+        || folderKind === 'expeditionpickup'
         ? 'A imagem deve ter no máximo 2 MB'
         : 'Arquivo passa de 100 MB ou está vazio'));
   }

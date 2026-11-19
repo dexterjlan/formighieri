@@ -85,6 +85,13 @@ function groupExpeditionBoardingStops(volumes = []) {
 }
 
 async function fetchExpeditionBoardingRoutes() {
+    if (typeof fetchExpeditionRoutesForUi === 'function') {
+        return fetchExpeditionRoutesForUi({
+            limit: 80,
+            extraQuery: query => query.in('status', EXPEDITION_BOARDING_LIST_STATUSES)
+        });
+    }
+
     const { data, error } = await supabaseClient
         .from('ExpeditionRoute')
         .select('id, routeDate, vehicleLabel, driverName, status, updatedAt')
@@ -101,13 +108,9 @@ async function fetchExpeditionBoardingRouteDetail(routeId, options = {}) {
     const key = Number(routeId);
     if (!key) throw new Error('Rota inválida.');
 
-    const { data: route, error: routeError } = await supabaseClient
-        .from('ExpeditionRoute')
-        .select('id, routeDate, vehicleLabel, driverName, status')
-        .eq('id', key)
-        .maybeSingle();
-
-    if (routeError) throw routeError;
+    const route = typeof fetchExpeditionRouteById === 'function'
+        ? await fetchExpeditionRouteById(key)
+        : null;
     if (!route) throw new Error('Rota não encontrada.');
 
     const inActiveSession = Number(key) === Number(expedicaoBoardingRouteId);
@@ -120,16 +123,22 @@ async function fetchExpeditionBoardingRouteDetail(routeId, options = {}) {
     }
 
     const volumes = await fetchExpeditionRouteVolumes(key);
-    if (!volumes.length) {
-        throw new Error('Rota sem volumes cadastrados.');
+    const pickupItems = typeof fetchExpeditionRoutePickupStopItems === 'function'
+        ? await fetchExpeditionRoutePickupStopItems(key)
+        : [];
+
+    if (!volumes.length && !pickupItems.length) {
+        throw new Error('Rota sem itens de embarque.');
     }
 
     return {
         route,
         volumes,
+        pickupItems,
         stops: groupExpeditionBoardingStops(volumes),
         boardedCount: countExpeditionBoardedVolumes(volumes),
-        totalCount: volumes.length
+        totalCount: volumes.length,
+        pickupOnly: !volumes.length && pickupItems.length > 0
     };
 }
 
@@ -153,7 +162,14 @@ async function promoteExpeditionRouteBoardingStarted(routeId) {
 async function tryCompleteExpeditionRouteBoarding(routeId, volumes) {
     const total = volumes?.length || 0;
     const boarded = countExpeditionBoardedVolumes(volumes);
-    if (!total || boarded < total) return false;
+    if (!total) {
+        const pickupItems = typeof fetchExpeditionRoutePickupStopItems === 'function'
+            ? await fetchExpeditionRoutePickupStopItems(routeId)
+            : [];
+        if (!pickupItems.length) return false;
+    } else if (boarded < total) {
+        return false;
+    }
 
     const now = new Date().toISOString();
     const { error } = await supabaseClient
@@ -243,6 +259,9 @@ function renderExpedicaoBoardingList(mount, rows) {
                 <td class="p-3 text-xs whitespace-nowrap">${escapeHtml(dateLabel)}</td>
                 <td class="p-3 text-xs">${escapeHtml(row.vehicleLabel || '—')}</td>
                 <td class="p-3 text-xs">${escapeHtml(row.driverName || '—')}</td>
+                <td class="p-3 text-xs">${typeof getExpeditionResponsibleLabel === 'function'
+        ? escapeHtml(getExpeditionResponsibleLabel(row))
+        : '—'}</td>
                 <td class="p-3 text-xs">${escapeHtml(statusLabel)}</td>
                 <td class="p-3 text-xs">
                     <button type="button"
@@ -268,12 +287,13 @@ function renderExpedicaoBoardingList(mount, rows) {
                             <th class="p-3 font-semibold">Dia</th>
                             <th class="p-3 font-semibold">Carro</th>
                             <th class="p-3 font-semibold">Motorista</th>
+                            <th class="p-3 font-semibold">Responsável</th>
                             <th class="p-3 font-semibold">Status</th>
                             <th class="p-3 font-semibold">Ação</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        ${tableRows || '<tr><td colspan="5" class="p-8 text-center text-xs text-slate-400">Nenhuma rota disponível.</td></tr>'}
+                        ${tableRows || '<tr><td colspan="6" class="p-8 text-center text-xs text-slate-400">Nenhuma rota disponível.</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -311,8 +331,8 @@ function renderExpedicaoBoardingVolumeRow(vol) {
 }
 
 function renderExpedicaoBoardingDetail(mount, detail) {
-    const { route, stops, boardedCount, totalCount } = detail;
-    const allBoarded = boardedCount >= totalCount && totalCount > 0;
+    const { route, stops, boardedCount, totalCount, pickupOnly } = detail;
+    const allBoarded = pickupOnly || (boardedCount >= totalCount && totalCount > 0);
     const dateLabel = route.routeDate && typeof formatDate === 'function'
         ? formatDate(route.routeDate)
         : '—';
@@ -350,7 +370,9 @@ function renderExpedicaoBoardingDetail(mount, detail) {
                     ${typeof renderExpeditionRouteCrewDesktopLine === 'function' ? renderExpeditionRouteCrewDesktopLine(route) : ''}
                     <div class="mt-3">
                         <motion-progress></motion-progress>
-                        <p class="text-[11px] text-slate-500 mt-1">${boardedCount} de ${totalCount} volumes embarcados</p>
+                        <p class="text-[11px] text-slate-500 mt-1">${pickupOnly
+        ? 'Paradas de coleta não entram no embarque de volumes.'
+        : `${boardedCount} de ${totalCount} volumes embarcados`}</p>
                     </div>
                 </div>
                 <div class="space-y-2 max-h-[50vh] lg:max-h-none overflow-y-auto">${stopsHtml}</div>
@@ -370,12 +392,18 @@ function renderExpedicaoBoardingDetail(mount, detail) {
         .replace('<motion-action>', allBoarded
             ? `<button type="button" id="expedicao-boarding-close-detail"
                     class="w-full text-sm bg-slate-100 text-slate-700 px-4 py-3 rounded-xl font-semibold">Fechar</button>`
-            : `<button type="button" id="expedicao-boarding-scan-btn"
+            : (pickupOnly
+                ? `<button type="button" id="expedicao-boarding-confirm-pickup-only"
+                        class="w-full text-sm bg-emerald-700 text-white px-4 py-3.5 rounded-xl font-bold min-h-[48px] touch-manipulation">
+                        Confirmar embarque da rota
+                    </button>
+                    <p class="text-[10px] text-slate-400 text-center mt-2">Somente coletas — confirme para liberar o desembarque.</p>`
+                : `<button type="button" id="expedicao-boarding-scan-btn"
                     class="w-full text-sm bg-slate-900 text-white px-4 py-3.5 rounded-xl font-bold shadow-sm hover:bg-slate-800 min-h-[48px] touch-manipulation">
                     ${typeof renderExpeditionMobileBtnLabel === 'function' ? renderExpeditionMobileBtnLabel('barcode', 'Embarcar volume') : 'Embarcar volume'}
                 </button>
                 <p class="text-[10px] text-slate-400 text-center mt-2">Aponte a câmera para o código de barras da etiqueta.</p>
-                <motion-manual></motion-manual>`)
+                <motion-manual></motion-manual>`))
         .replace('<motion-manual>', `
                 <div class="hidden lg:block mt-4 pt-4 border-t border-slate-200">
                     <label class="block text-[10px] font-semibold text-slate-500 mb-1" for="expedicao-boarding-manual-code">Código manual (desktop)</label>
@@ -443,6 +471,10 @@ function bindExpedicaoBoardingDetailEvents(mount) {
 
     mount.querySelector('#expedicao-boarding-scan-btn')?.addEventListener('click', () => {
         void openExpedicaoBoardingScanModal();
+    });
+
+    mount.querySelector('#expedicao-boarding-confirm-pickup-only')?.addEventListener('click', () => {
+        void finishExpeditionBoardingRouteFeedback(expedicaoBoardingDetail?.volumes || [], {});
     });
 
     const manualSubmit = () => {

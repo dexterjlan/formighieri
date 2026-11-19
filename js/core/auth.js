@@ -1,3 +1,17 @@
+function normalizeSelfRegisterRole(role) {
+    if (role === 'Compras') return 'Fábrica';
+    return role;
+}
+
+function buildSelfRegisterAppUserPayload(name, email, role, extra = {}) {
+    const normalizedRole = normalizeSelfRegisterRole(role);
+    const payload = { name, email, role: normalizedRole, ...extra };
+    if (role === 'Compras') {
+        payload.isBuyer = true;
+    }
+    return payload;
+}
+
 async function persistAppUserUpdate(payload, column, value, email, role) {
     const flagged = typeof withProdThirdPartyFlag === 'function'
         ? withProdThirdPartyFlag(payload, email, role)
@@ -102,8 +116,10 @@ async function ensureAppUserOnRegister(user, name, email, role, session = null) 
         return { error: readByAuthError };
     }
 
+    const profilePayload = buildSelfRegisterAppUserPayload(name, email, role);
+
     if (byAuth) {
-        return persistAppUserUpdate({ name, email, role }, 'id', byAuth.id, email, role);
+        return persistAppUserUpdate(profilePayload, 'id', byAuth.id, email, profilePayload.role);
     }
 
     const { data: byEmail, error: readByEmailError } = await supabaseClient
@@ -117,19 +133,23 @@ async function ensureAppUserOnRegister(user, name, email, role, session = null) 
     }
 
     if (byEmail) {
-        return persistAppUserUpdate({ authId: user.id, name, role }, 'id', byEmail.id, email, role);
+        return persistAppUserUpdate(
+            { authId: user.id, ...profilePayload },
+            'id',
+            byEmail.id,
+            email,
+            profilePayload.role
+        );
     }
 
     const insertResult = await persistAppUserInsert({
         authId: user.id,
-        email,
-        name,
-        role,
+        ...profilePayload,
         isActive: true
-    }, email, role);
+    }, email, profilePayload.role);
 
     if (insertResult.error?.code === '23505') {
-        return persistAppUserUpdate({ name, email, role }, 'authId', user.id, email, role);
+        return persistAppUserUpdate(profilePayload, 'authId', user.id, email, profilePayload.role);
     }
 
     return insertResult;
@@ -146,12 +166,13 @@ async function syncRegisteredUserProfile(user, name, email, role, session = null
         .maybeSingle();
 
     if (existing) {
+        const profilePayload = buildSelfRegisterAppUserPayload(name, email, role);
         const { error: updateError } = await persistAppUserUpdate(
-            { name, email, role },
+            profilePayload,
             'id',
             existing.id,
             email,
-            role
+            profilePayload.role
         );
         return updateError;
     }
@@ -170,7 +191,7 @@ async function applyMissingRoleFromMetadata(profile, user) {
         .from('appUsers')
         .update({ role: metadataRole })
         .eq('id', normalized.id)
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isPicker, isCoordination, isBuyer, isThirdParty, receiveEmailCopy, matrixUserId')
         .single();
 
     if (error) {
@@ -184,7 +205,7 @@ async function applyMissingRoleFromMetadata(profile, user) {
 async function queryAppUserByAuthId(authUserId) {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId')
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isPicker, isCoordination, isBuyer, isThirdParty, receiveEmailCopy, matrixUserId')
         .eq('authId', authUserId)
         .maybeSingle();
 
@@ -215,7 +236,7 @@ async function queryAppUserByAuthId(authUserId) {
     if (result.error?.message?.includes('isBudgetEstimator')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId')
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isPicker, isCoordination, isBuyer, isThirdParty, receiveEmailCopy, matrixUserId')
             .eq('authId', authUserId)
             .maybeSingle();
     }
@@ -240,7 +261,7 @@ async function refreshCurrentUserProfile() {
 
     let query = supabaseClient
         .from('appUsers')
-        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId');
+        .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isBudgetEstimator, isInstaller, isPicker, isCoordination, isBuyer, isThirdParty, receiveEmailCopy, matrixUserId');
 
     if (authId) {
         query = query.eq('authId', authId);
@@ -283,7 +304,7 @@ async function refreshCurrentUserProfile() {
     if (error?.message?.includes('isBudgetEstimator')) {
         let fallbackQuery = supabaseClient
             .from('appUsers')
-            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isThirdParty, receiveEmailCopy, matrixUserId');
+            .select('id, name, email, role, isActive, authId, isConferenceReviewer, isCommercialManager, isProjectsManager, isPpcp, isReviewer, isFactoryManager, isFactoryAdministrative, isDetailing, isInstaller, isPicker, isCoordination, isBuyer, isThirdParty, receiveEmailCopy, matrixUserId');
         fallbackQuery = authId
             ? fallbackQuery.eq('authId', authId)
             : fallbackQuery.eq('id', userId);
@@ -466,7 +487,8 @@ function bindAuthEvents() {
         const email = document.getElementById("reg-email").value.trim().toLowerCase();
         const password = document.getElementById("reg-password").value;
         const passwordConfirm = document.getElementById("reg-password-confirm").value;
-        const role = document.getElementById("reg-role").value;
+        let role = document.getElementById("reg-role").value;
+        const authRole = normalizeSelfRegisterRole(role);
         const btn = document.getElementById("btn-register-submit");
         const statusEl = document.getElementById("register-status");
         const originalText = btn?.textContent || 'Criar Usuário';
@@ -477,7 +499,7 @@ function bindAuthEvents() {
         }
 
         if (!role) {
-            alertAppDialog("Selecione o perfil (Consultor, Projetista, Fábrica ou Comprador).");
+            alertAppDialog('Selecione o perfil (Consultor, Projetista ou Fábrica).');
             document.getElementById("reg-role").focus();
             return;
         }
@@ -500,7 +522,7 @@ function bindAuthEvents() {
                 email,
                 password,
                 options: {
-                    data: { name, role },
+                    data: { name, role: authRole },
                     emailRedirectTo
                 }
             });
@@ -519,7 +541,7 @@ function bindAuthEvents() {
 
             if (data.session) {
                 await supabaseClient.auth.updateUser({
-                    data: { name, role }
+                    data: { name, role: authRole }
                 });
             }
 

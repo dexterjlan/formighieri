@@ -60,6 +60,25 @@ function filterOrdersByClientTerm(orders, term) {
     });
 }
 
+function filterOrdersByClientOrCodeTerm(orders, term) {
+    const normalized = String(term || '').trim().toLowerCase();
+    if (!normalized) return orders || [];
+
+    return (orders || []).filter(order => {
+        const clientName = (typeof getOrderClientName === 'function' ? getOrderClientName(order) : '')
+            .toLowerCase();
+        const orderCode = String(order.orderCode || '').toLowerCase();
+        return clientName.includes(normalized) || orderCode.includes(normalized);
+    });
+}
+
+function getOrderCodePickerLocalFilterFn() {
+    if (orderCodePickerTarget?.filterByOrderCodeOrClient) {
+        return filterOrdersByClientOrCodeTerm;
+    }
+    return filterOrdersByClientTerm;
+}
+
 function renderOrderCodePickerResults(orders, options = {}) {
     const listEl = document.getElementById('order-code-picker-results');
     const statusEl = document.getElementById('order-code-picker-status');
@@ -118,7 +137,8 @@ function renderOrderCodePickerResults(orders, options = {}) {
 
 function applyOrderCodePickerLocalFilter() {
     const term = document.getElementById('order-code-picker-search')?.value.trim() || '';
-    const filtered = filterOrdersByClientTerm(orderCodePickerSourceOrders, term);
+    const filterFn = getOrderCodePickerLocalFilterFn();
+    const filtered = filterFn(orderCodePickerSourceOrders, term);
 
     if (!orderCodePickerSourceOrders.length) {
         renderOrderCodePickerResults([], {
@@ -137,9 +157,12 @@ function applyOrderCodePickerLocalFilter() {
         return;
     }
 
+    const filterHint = orderCodePickerTarget?.filterByOrderCodeOrClient
+        ? 'Filtre pelo pedido ou cliente.'
+        : 'Filtre pelo cliente se quiser.';
     const statusMessage = term
         ? `${filtered.length} de ${orderCodePickerSourceOrders.length} pedido(s). Clique para selecionar.`
-        : `${filtered.length} pedido(s) elegíveis. Filtre pelo cliente se quiser.`;
+        : `${filtered.length} pedido(s) elegíveis. ${filterHint}`;
 
     renderOrderCodePickerResults(filtered, { statusMessage });
 }

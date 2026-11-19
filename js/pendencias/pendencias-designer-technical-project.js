@@ -378,10 +378,10 @@ const PENDENCIAS_CARGA_PROJETISTA_FILTER_STORAGE_KEY = 'pendencias-carga-projeti
 function getDefaultPendenciasCargaProjetistaDisplayFilters() {
     return {
         projetista: true,
-        detalhamento: true,
-        orcamentista: true,
-        conferente: true,
-        gestor: true
+        detalhamento: false,
+        orcamentista: false,
+        conferente: false,
+        gestor: false
     };
 }
 
@@ -545,6 +545,9 @@ function getPendenciasWorkloadAssigneeId(project, implementationDesignerByProjec
     const statusName = normalizePendenciasWorkloadStatusName(
         getPendenciasProjectStatusName(project)
     );
+    if (statusName === ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR) {
+        return Number(project.reviewerId) || null;
+    }
     if (statusName === PENDENCIAS_STATUS_IMPLANTACAO) {
         return Number(implementationDesignerByProjectId[Number(project.id)]?.designerId) || null;
     }
@@ -700,9 +703,17 @@ function buildPendenciasProjetistaWorkloadRows(projetistas, projects, implementa
         if (bucketId == null) return;
 
         if (!workloadByDesigner[bucketId]) {
+            const rowName = bucketId === PENDENCIAS_WORKLOAD_OUTROS_DESIGNER_ID
+                ? 'Outros'
+                : (
+                    projetistas.find(item => Number(item.id) === Number(bucketId))?.name
+                    || project.reviewer?.name
+                    || project.designer?.name
+                    || 'Outros'
+                );
             workloadByDesigner[bucketId] = {
                 designerId: bucketId,
-                name: 'Outros',
+                name: rowName,
                 projects: []
             };
         }
@@ -894,6 +905,21 @@ function collectPendenciasWorkloadProjectIdsByStatus(workload, statusName) {
 function isPendenciasWorkloadRevisionProjStatus(statusName) {
     return statusName === PENDENCIAS_STATUS_EM_REVISAO_TECNICA
         || statusName === ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ;
+}
+
+function isPendenciasWorkloadRevisionRevisorStatus(statusName) {
+    return statusName === ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR;
+}
+
+function isPendenciasWorkloadProjectRevisionInProgress(project, statusName, revisionInProgressIds = new Set()) {
+    if (isPendenciasWorkloadRevisionRevisorStatus(statusName)) {
+        return typeof isTechnicalReviewerReviewStartedOnProject === 'function'
+            && isTechnicalReviewerReviewStartedOnProject(project);
+    }
+    if (isPendenciasWorkloadRevisionProjStatus(statusName)) {
+        return revisionInProgressIds.has(Number(project.id));
+    }
+    return false;
 }
 
 async function fetchPendenciasWorkloadDetalhamentoByDesigner() {
@@ -1204,8 +1230,15 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
     return PENDENCIAS_GESTOR_WORKLOAD_COLUMNS.map(statusName => {
         const statusProjects = grouped[statusName] || [];
         const statusClass = getPendenciasProjectStatusBadgeClass(statusName);
-        const revisionInProgressCount = isPendenciasWorkloadRevisionProjStatus(statusName)
-            ? statusProjects.filter(project => revisionInProgressIds.has(Number(project.id))).length
+        const revisionInProgressCount = (
+            isPendenciasWorkloadRevisionProjStatus(statusName)
+            || isPendenciasWorkloadRevisionRevisorStatus(statusName)
+        )
+            ? statusProjects.filter(project => isPendenciasWorkloadProjectRevisionInProgress(
+                project,
+                statusName,
+                revisionInProgressIds
+            )).length
             : 0;
         const awaitingRequestCount = statusProjects.filter(project =>
             typeof isOrderProjectAwaitingRequest === 'function' && isOrderProjectAwaitingRequest(project)
@@ -1216,7 +1249,11 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                 const projectName = project.name || 'Projeto';
                 const itemTitle = `${clientName} · ${projectName}`;
                 const assigneeId = Number(project.workloadAssigneeId || project.designerId) || '';
-                const isRevisionInProgress = revisionInProgressIds.has(Number(project.id));
+                const isRevisionInProgress = isPendenciasWorkloadProjectRevisionInProgress(
+                    project,
+                    statusName,
+                    revisionInProgressIds
+                );
 
                 return `
                     <li class="collapsible-list-card border-b border-slate-100 last:border-0" data-project-id="${project.id}">

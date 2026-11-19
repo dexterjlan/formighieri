@@ -63,6 +63,9 @@ function normalizeAppUserProfile(profile) {
         isReviewer: Boolean(profile.isReviewer ?? profile.isProjectLeader),
         isThirdParty: Boolean(profile.isThirdParty),
         isInstaller: Boolean(profile.isInstaller),
+        isPicker: Boolean(profile.isPicker),
+        isCoordination: Boolean(profile.isCoordination),
+        isBuyer: Boolean(profile.isBuyer),
         receiveEmailCopy: Boolean(profile.receiveEmailCopy),
         matrixUserId: profile.matrixUserId ? String(profile.matrixUserId).trim() : null
     };
@@ -78,8 +81,15 @@ function isGestorComercial(user = currentUser) {
     return (user?.role === 'Admin' || user?.role === 'Consultor') && Boolean(user?.isCommercialManager);
 }
 
+function isFactoryCoordination(user = currentUser) {
+    return isFabricaRole(user) && Boolean(user?.isCoordination);
+}
+
 function isGestorProjetos(user = currentUser) {
-    return (user?.role === 'Admin' || user?.role === 'Projetista') && Boolean(user?.isProjectsManager);
+    if ((user?.role === 'Admin' || user?.role === 'Projetista') && Boolean(user?.isProjectsManager)) {
+        return true;
+    }
+    return isFactoryCoordination(user);
 }
 
 function isPpcp(user = currentUser) {
@@ -111,13 +121,15 @@ function isFactoryAdministrative(user = currentUser) {
 function canSeePendenciasFabricaMenu(user = currentUser) {
     return canSeeAllPendenciasMenus()
         || isGestorFabrica(user)
-        || isFactoryAdministrative(user);
+        || isFactoryAdministrative(user)
+        || isFactoryCoordination(user);
 }
 
 function canActPendenciasFabrica(user = currentUser) {
     return canSeeAllPendenciasMenus()
         || isGestorFabrica(user)
-        || isFactoryAdministrative(user);
+        || isFactoryAdministrative(user)
+        || isFactoryCoordination(user);
 }
 
 function canSeeRequestProfileField(user = currentUser) {
@@ -146,12 +158,18 @@ function hasInstallerOnlyAccess(user = currentUser) {
     return isInstallerProfile(user);
 }
 
+function isBuyer(user = currentUser) {
+    if (!user) return false;
+    if (user.role === 'Compras') return true;
+    return isFabricaRole(user) && Boolean(user.isBuyer);
+}
+
 function isCompras(user = currentUser) {
-    return user?.role === 'Compras';
+    return isBuyer(user);
 }
 
 function canSeePendenciasComprasMenu(user = currentUser) {
-    return isAdmin() || isCompras(user);
+    return isAdmin() || isCompras(user) || isFactoryCoordination(user);
 }
 
 function canActPendenciasCompras(user = currentUser) {
@@ -178,7 +196,9 @@ function canSeeQueryNav(user = currentUser) {
     if (hasInstallerOnlyAccess(user)) return false;
     if (isThirdParty(user)) return false;
     if (typeof QUERY_NAV_ENABLED !== 'undefined' && !QUERY_NAV_ENABLED) return false;
-    return !isMarceneiro(user) && !isCompras(user);
+    if (typeof isBuyer === 'function' && isBuyer(user)) return true;
+    if (isFabricaRole(user)) return false;
+    return Boolean(user);
 }
 
 function canAccessGestao(user = currentUser) {
@@ -200,7 +220,12 @@ function canAccessMontagemProgramacao(user = currentUser) {
 
 function canViewKanban(user = currentUser) {
     if (hasInstallerOnlyAccess(user)) return false;
-    return Boolean(user) && !isThirdParty(user);
+    if (!user || isThirdParty(user)) return false;
+    return isAdmin(user)
+        || isGestorComercial(user)
+        || isGestorProjetos(user)
+        || isGestorFabrica(user)
+        || isFactoryAdministrative(user);
 }
 
 function canViewProjectScheduling(user = currentUser) {
@@ -296,7 +321,7 @@ const ORDER_DETAIL_TAB_RESPONSIBLE_LABELS = {
     anteprojeto: 'Conferente ou Admin',
     medicao: 'Conferente ou Admin',
     fabrica: 'Fábrica (Administrativo/Gestor) ou Admin',
-    compras: 'Equipe de Compras'
+    compras: 'Comprador (Fábrica) ou Admin'
 };
 
 function getOrderDetailTabResponsibleLabel(tabKey) {

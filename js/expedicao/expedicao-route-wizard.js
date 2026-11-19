@@ -49,6 +49,8 @@ function createEmptyExpedicaoWizardState() {
             : '08:00',
         vehicleLabel: '',
         driverName: '',
+        responsibleUserId: null,
+        pickerUsers: null,
         routeStatus: 'Draft',
         editingRouteId: null,
         stops: [],
@@ -98,6 +100,7 @@ function syncExpeditionWizardMetaFromDom() {
     const routeTime = document.getElementById('expedition-wizard-route-time')?.value;
     const vehicle = document.getElementById('expedition-wizard-vehicle')?.value?.trim() || '';
     const driver = document.getElementById('expedition-wizard-driver')?.value?.trim() || '';
+    const responsibleRaw = document.getElementById('expedition-wizard-responsible')?.value;
     const statusEl = document.getElementById('expedition-wizard-route-status');
     if (statusEl) {
         expedicaoWizardState.routeStatus = readExpeditionWizardRouteStatusFromDom();
@@ -131,6 +134,14 @@ function syncExpeditionWizardMetaFromDom() {
         }
         expedicaoWizardState.driverName = driver;
     }
+    if (document.getElementById('expedition-wizard-responsible')) {
+        const responsibleUserId = Number(responsibleRaw);
+        if (!responsibleUserId) {
+            alertAppDialog('Selecione o responsável pelo embarque e desembarque.');
+            return false;
+        }
+        expedicaoWizardState.responsibleUserId = responsibleUserId;
+    }
 
     if (!expedicaoWizardState.routeDate) {
         alertAppDialog('Informe a data da rota.');
@@ -146,6 +157,10 @@ function syncExpeditionWizardMetaFromDom() {
     }
     if (!expedicaoWizardState.driverName) {
         alertAppDialog('Informe o motorista.');
+        return false;
+    }
+    if (!expedicaoWizardState.responsibleUserId) {
+        alertAppDialog('Selecione o responsável pelo embarque e desembarque.');
         return false;
     }
     return true;
@@ -208,13 +223,85 @@ async function openExpedicaoRouteWizard(routeId) {
         if (titleEl) titleEl.textContent = 'Nova rota de expedição';
     }
 
+    if (typeof fetchExpeditionPickerUsers === 'function') {
+        try {
+            const pickers = await fetchExpeditionPickerUsers();
+            if (expedicaoWizardState) expedicaoWizardState.pickerUsers = pickers;
+        } catch (pickerError) {
+            console.warn('openExpedicaoRouteWizard: pickers', pickerError);
+            if (expedicaoWizardState) expedicaoWizardState.pickerUsers = [];
+        }
+    }
+
     document.getElementById('expedition-route-wizard-modal')?.classList.remove('hidden');
+    syncExpedicaoWizardModalAuxChrome(true);
     renderExpedicaoRouteWizard();
 }
 
 function closeExpedicaoRouteWizard() {
     document.getElementById('expedition-route-wizard-modal')?.classList.add('hidden');
+    syncExpedicaoWizardModalAuxChrome(true);
     expedicaoWizardState = null;
+}
+
+function isExpedicaoWizardPickupEntityType(entityType) {
+    return String(entityType || '') === 'Pickup';
+}
+
+function syncExpedicaoWizardModalAuxChrome(show = false) {
+    const auxBar = document.getElementById('expedition-route-wizard-aux-bar');
+    if (!auxBar) return;
+    auxBar.classList.toggle('hidden', !show);
+}
+
+function renderExpedicaoWizardPickupFormHtml() {
+    const categories = typeof EXPEDITION_PICKUP_CATEGORIES !== 'undefined'
+        ? EXPEDITION_PICKUP_CATEGORIES
+        : [];
+    const draft = expedicaoWizardState?.pickupDraft || {};
+    return `
+        <div id="expedition-wizard-pickup-form" class="space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/40 p-3">
+            <p class="text-xs font-semibold text-indigo-900">Dados da coleta</p>
+            <div class="grid grid-cols-1 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="expedition-wizard-pickup-category">Tipo de coleta</label>
+                    <select id="expedition-wizard-pickup-category" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white">
+                        <option value="">Selecione...</option>
+                        ${categories.map(opt => `
+                            <option value="${opt.value}"${opt.value === draft.pickupCategory ? ' selected' : ''}>${escapeHtml(opt.label)}</option>
+                        `).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="expedition-wizard-pickup-order-code">Código do pedido</label>
+                    <div class="order-code-field">
+                        <input type="text" id="expedition-wizard-pickup-order-code" inputmode="numeric" pattern="[0-9]*"
+                            value="${escapeHtml(draft.orderCode || '')}"
+                            class="order-code-field__input w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600"
+                            placeholder="Pedido da retirada">
+                        <button type="button" id="btn-expedition-wizard-pickup-order-picker"
+                            class="order-code-field__picker-btn order-code-field__picker-btn--indigo"
+                            aria-label="Buscar pedido por código ou cliente">…</button>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-500 mb-1" for="expedition-wizard-pickup-description">Descrição</label>
+                <textarea id="expedition-wizard-pickup-description" rows="2"
+                    class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg resize-y min-h-[3rem]"
+                    placeholder="O que será coletado">${escapeHtml(draft.description || '')}</textarea>
+            </div>
+            <p class="text-[10px] text-slate-500 leading-snug">Coleta não gera volume no embarque. No desembarque será necessário registrar uma foto.</p>
+        </div>
+    `;
+}
+
+function readExpedicaoWizardPickupDraftFromDom() {
+    return {
+        pickupCategory: document.getElementById('expedition-wizard-pickup-category')?.value || '',
+        orderCode: document.getElementById('expedition-wizard-pickup-order-code')?.value?.trim() || '',
+        description: document.getElementById('expedition-wizard-pickup-description')?.value?.trim() || ''
+    };
 }
 
 function getWizardCurrentStop() {
@@ -340,12 +427,21 @@ function bindExpedicaoWizardMetaStepInteractions(mount) {
 
     mount.querySelectorAll('.expedition-wizard-stop-delete').forEach(btn => {
         btn.addEventListener('click', () => {
-            const localId = btn.dataset.stopLocalId;
-            if (!localId || !canRemoveExpeditionWizardStops()) return;
-            if (!window.confirm('Excluir esta parada e todos os itens/volumes dela?')) return;
-            captureExpeditionWizardDraftFieldsFromDom();
-            removeExpeditionWizardStop(localId);
-            renderExpedicaoRouteWizard();
+            void (async () => {
+                const localId = btn.dataset.stopLocalId;
+                if (!localId || !canRemoveExpeditionWizardStops()) return;
+                const stopIndex = (expedicaoWizardState?.stops || []).findIndex(
+                    stop => stop.localId === localId
+                );
+                const stopLabel = stopIndex >= 0 ? `parada ${stopIndex + 1}` : 'esta parada';
+                const confirmed = typeof confirmAppDialog === 'function'
+                    ? await confirmAppDialog(`Excluir ${stopLabel} e todos os itens/volumes dela?`)
+                    : window.confirm(`Excluir ${stopLabel} e todos os itens/volumes dela?`);
+                if (!confirmed) return;
+                captureExpeditionWizardDraftFieldsFromDom();
+                removeExpeditionWizardStop(localId);
+                renderExpedicaoRouteWizard();
+            })();
         });
     });
 }
@@ -430,7 +526,7 @@ function renderExpedicaoWizardStopsSummary(options = {}) {
                             <p class="text-slate-600 whitespace-pre-wrap">${escapeHtml(formatExpeditionAddressOneLine(stop.addr))}</p>
                             <ul class="mt-1 list-disc pl-4 text-slate-500">
                                 ${(stop.items || []).map(item => `
-                                    <li>${escapeHtml(item.label)} — ${item.volumeCount} vol.</li>
+                                    <li>${escapeHtml(item.label)} — ${item.entityType === 'Pickup' ? 'Coleta' : `${item.volumeCount} vol.`}</li>
                                 `).join('')}
                             </ul>
                         </div>
@@ -462,14 +558,14 @@ async function renderExpedicaoRouteWizard() {
             <div class="space-y-4">
                 <p class="text-xs text-slate-500">Informe os dados da rota e comece a incluir paradas.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div>
+                    <div class="md:col-span-2 lg:col-span-4">
                         <label class="block text-xs font-semibold text-slate-500 mb-1">Data e horário da rota</label>
-                        <div class="flex gap-2">
+                        <div class="expedition-route-wizard-datetime flex gap-2 flex-wrap items-stretch">
                             <input type="date" id="expedition-wizard-route-date" value="${escapeHtml(expedicaoWizardState.routeDate)}"
-                                class="flex-1 min-w-0 px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                                class="expedition-route-wizard-datetime__date px-3 py-2 text-sm border border-slate-200 rounded-lg">
                             <input type="time" id="expedition-wizard-route-time"
                                 value="${escapeHtml(expedicaoWizardState.routeTime || (typeof EXPEDITION_DEFAULT_ROUTE_TIME !== 'undefined' ? EXPEDITION_DEFAULT_ROUTE_TIME : '08:00'))}"
-                                class="w-[7.25rem] shrink-0 px-2 py-2 text-sm border border-slate-200 rounded-lg">
+                                class="expedition-route-wizard-datetime__time px-2 py-2 text-sm border border-slate-200 rounded-lg">
                         </div>
                     </div>
                     <div>
@@ -482,6 +578,12 @@ async function renderExpedicaoRouteWizard() {
                         <input type="text" id="expedition-wizard-driver" value="${escapeHtml(expedicaoWizardState.driverName)}"
                             class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg" placeholder="Nome do motorista">
                     </div>
+                    ${typeof renderExpeditionWizardResponsibleSelect === 'function'
+        ? renderExpeditionWizardResponsibleSelect(
+            expedicaoWizardState.pickerUsers || [],
+            expedicaoWizardState.responsibleUserId
+        )
+        : ''}
                     ${renderExpeditionWizardStatusSelect(expedicaoWizardState.routeStatus)}
                 </div>
                 <div>
@@ -501,11 +603,15 @@ async function renderExpedicaoRouteWizard() {
         }
         metaFooter.push({ id: 'expedition-wizard-start-stop', label: 'Adicionar parada', primary: !expedicaoWizardState.stops?.length });
         syncExpedicaoWizardFooter(metaFooter);
+        syncExpedicaoWizardModalAuxChrome(true);
         bindExpedicaoWizardMetaStepInteractions(mount);
         return;
     }
 
     if (step === 'pick-item') {
+        const pickupSelected = isExpedicaoWizardPickupEntityType(
+            expedicaoWizardState?.pickEntityType || EXPEDITION_ENTITY_TYPES[0]?.value
+        );
         mount.innerHTML = `
             <div class="space-y-4">
                 <p class="text-xs text-slate-500">Escolha o tipo e o item. Cada parada tem um endereço; itens no mesmo endereço podem ficar na mesma parada. Endereço diferente vira nova parada automaticamente.</p>
@@ -514,18 +620,23 @@ async function renderExpedicaoRouteWizard() {
                         <label class="block text-xs font-semibold text-slate-500 mb-1">Tipo</label>
                         <select id="expedition-wizard-entity-type" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
                             ${EXPEDITION_ENTITY_TYPES.map(opt => `
-                                <option value="${opt.value}">${escapeHtml(opt.label)}</option>
+                                <option value="${opt.value}"${opt.value === (expedicaoWizardState.pickEntityType || '') ? ' selected' : ''}>${escapeHtml(opt.label)}</option>
                             `).join('')}
                         </select>
                     </div>
-                    <div>
+                    <div id="expedition-wizard-search-field-wrap">
                         <label class="block text-xs font-semibold text-slate-500 mb-1">Busca (código, nome)</label>
                         <input type="text" id="expedition-wizard-entity-query"
                             class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg" placeholder="Digite para buscar">
                     </div>
                 </div>
-                <div id="expedition-wizard-search-results" class="border border-slate-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
-                    <p class="text-xs text-slate-400 p-3 text-center">Digite para buscar.</p>
+                <div id="expedition-wizard-pickup-panel" class="${pickupSelected ? '' : 'hidden'}">
+                    ${renderExpedicaoWizardPickupFormHtml()}
+                </div>
+                <div id="expedition-wizard-search-panel" class="${pickupSelected ? 'hidden' : ''}">
+                    <div id="expedition-wizard-search-results" class="border border-slate-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
+                        <p class="text-xs text-slate-400 p-3 text-center">Digite para buscar.</p>
+                    </div>
                 </div>
                 <div>
                     <p class="text-xs font-semibold text-slate-600 mb-1">Paradas da rota</p>
@@ -533,11 +644,18 @@ async function renderExpedicaoRouteWizard() {
                 </div>
             </div>
         `;
+        if (!expedicaoWizardState.pickEntityType) {
+            expedicaoWizardState.pickEntityType = document.getElementById('expedition-wizard-entity-type')?.value
+                || EXPEDITION_ENTITY_TYPES[0]?.value
+                || '';
+        }
         bindExpedicaoWizardEntitySearch();
-        syncExpedicaoWizardFooter([
-            { id: 'expedition-wizard-back-meta', label: 'Voltar' },
-            { id: 'expedition-wizard-cancel-stop', label: 'Cancelar parada' }
-        ]);
+        syncExpedicaoWizardModalAuxChrome(false);
+        const footerButtons = [{ id: 'expedition-wizard-back-meta', label: 'Voltar' }];
+        if (pickupSelected) {
+            footerButtons.push({ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true });
+        }
+        syncExpedicaoWizardFooter(footerButtons);
         return;
     }
 
@@ -564,6 +682,7 @@ async function renderExpedicaoRouteWizard() {
             { id: 'expedition-wizard-back-pick', label: 'Voltar' },
             { id: 'expedition-wizard-confirm-item', label: 'Confirmar item', primary: true }
         ]);
+        syncExpedicaoWizardModalAuxChrome(true);
         return;
     }
 
@@ -593,6 +712,7 @@ async function renderExpedicaoRouteWizard() {
             { id: 'expedition-wizard-add-item-same-stop', label: 'Sim, outro item', primary: true },
             { id: 'expedition-wizard-finish-stop', label: 'Concluir parada' }
         ]);
+        syncExpedicaoWizardModalAuxChrome(true);
         return;
     }
 
@@ -620,10 +740,36 @@ function syncExpedicaoWizardFooter(buttons) {
 function bindExpedicaoWizardEntitySearch() {
     const queryInput = document.getElementById('expedition-wizard-entity-query');
     const typeSelect = document.getElementById('expedition-wizard-entity-type');
+    const wizardMount = document.getElementById('expedition-route-wizard-mount');
     let timer = null;
+
+    const syncPickupLayout = () => {
+        const entityType = typeSelect?.value || '';
+        expedicaoWizardState.pickEntityType = entityType;
+        const pickup = isExpedicaoWizardPickupEntityType(entityType);
+        document.getElementById('expedition-wizard-pickup-panel')?.classList.toggle('hidden', !pickup);
+        document.getElementById('expedition-wizard-search-panel')?.classList.toggle('hidden', pickup);
+        document.getElementById('expedition-wizard-search-field-wrap')?.classList.toggle('hidden', pickup);
+        const footerButtons = [{ id: 'expedition-wizard-back-meta', label: 'Voltar' }];
+        if (pickup) {
+            footerButtons.push({ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true });
+        }
+        syncExpedicaoWizardFooter(footerButtons);
+        if (wizardMount && !wizardMount.dataset.expeditionPickupPickerBound) {
+            wizardMount.dataset.expeditionPickupPickerBound = '1';
+            wizardMount.addEventListener('click', event => {
+                if (!event.target.closest('#btn-expedition-wizard-pickup-order-picker')) return;
+                if (typeof openExpedicaoPickupOrderPicker === 'function') {
+                    openExpedicaoPickupOrderPicker();
+                }
+            });
+        }
+        if (!pickup) runSearch();
+    };
 
     const runSearch = async () => {
         const entityType = typeSelect?.value;
+        if (isExpedicaoWizardPickupEntityType(entityType)) return;
         const query = queryInput?.value || '';
         const mount = document.getElementById('expedition-wizard-search-results');
         if (!mount || !entityType) return;
@@ -717,8 +863,8 @@ function bindExpedicaoWizardEntitySearch() {
         clearTimeout(timer);
         timer = setTimeout(runSearch, 300);
     });
-    typeSelect?.addEventListener('change', runSearch);
-    runSearch();
+    typeSelect?.addEventListener('change', syncPickupLayout);
+    syncPickupLayout();
 }
 
 function ensureWizardCurrentStopFromPendingItem(pendingItem) {
@@ -772,16 +918,35 @@ async function handleExpedicaoWizardAction(actionId) {
         return;
     }
 
-    if (actionId === 'expedition-wizard-cancel-stop') {
-        if (expedicaoWizardState.currentStop) {
-            expedicaoWizardState.stops = expedicaoWizardState.stops.filter(
-                stop => stop.localId !== expedicaoWizardState.currentStop.localId
-            );
+    if (actionId === 'expedition-wizard-add-pickup-stop') {
+        const draft = readExpedicaoWizardPickupDraftFromDom();
+        expedicaoWizardState.pickupDraft = draft;
+        expedicaoRouteWizardOverlay?.setLoading(true, 'Validando coleta...');
+        try {
+            const ctx = typeof resolveExpeditionPickupContext === 'function'
+                ? await resolveExpeditionPickupContext(draft)
+                : { ok: false, message: 'Módulo de coleta indisponível.' };
+            if (!ctx.ok) {
+                alertAppDialog(ctx.message || 'Não foi possível incluir a coleta.');
+                return;
+            }
+            ensureWizardCurrentStopFromPendingItem(ctx);
+            const currentStop = getWizardCurrentStop();
+            currentStop.items.push({
+                entityType: ctx.entityType,
+                entityId: ctx.entityId,
+                label: ctx.label,
+                volumeCount: 0,
+                volumes: [],
+                metadata: ctx.metadata || {}
+            });
             expedicaoWizardState.currentStop = null;
+            expedicaoWizardState.pickupDraft = null;
+            expedicaoWizardState.step = 'meta';
+            renderExpedicaoRouteWizard();
+        } finally {
+            expedicaoRouteWizardOverlay?.setLoading(false);
         }
-        expedicaoWizardState.pendingItem = null;
-        expedicaoWizardState.step = 'meta';
-        renderExpedicaoRouteWizard();
         return;
     }
 
@@ -812,7 +977,8 @@ async function handleExpedicaoWizardAction(actionId) {
             entityId: pending.entityId,
             label: pending.label,
             volumeCount,
-            volumes
+            volumes,
+            metadata: pending.metadata || {}
         });
 
         expedicaoWizardState.pendingItem = null;

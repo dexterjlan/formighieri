@@ -31,6 +31,7 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'carga-por-projetista': 'Carga atual de cada projetista: Aguardando Projeto Técnico até Detalhamento, mais projetos de terceiros. Projetista inativo aparece em Outros. Implantação conta para quem iniciou.',
         'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.',
         'terceiros-sem-projetistas': 'Projetos de terceiros sem projetista responsável.',
+        'revisao-tecnica-revisor-gestor': 'Projetos em revisão técnica do revisor ainda sem revisor associado.',
         'aguardando-detalhamento': 'Detalhamentos sem projetista associado — associe na lista dedicada.',
         expedicao: 'Projetos em expedição aguardando início da montagem externa.',
         'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
@@ -186,6 +187,11 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 if (!statusId) return null;
                 const result = await countPendenciasProjects({ statusId, unassignedOnly: true });
                 return result.error ? null : result.count;
+            }
+            case 'gestor-projetos:revisao-tecnica-revisor-gestor': {
+                if (typeof fetchPendenciasGestorRevisaoTecnicaRevisorProjects !== 'function') return null;
+                const { error, projects } = await fetchPendenciasGestorRevisaoTecnicaRevisorProjects();
+                return error ? null : projects.length;
             }
             case 'gestor-projetos:terceiros-sem-projetistas': {
                 const { count, error } = await supabaseClient

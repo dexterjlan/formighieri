@@ -11,7 +11,8 @@ const DRIVE_FILE_FOLDER_KIND = {
     IMPLEMENTATION_LIST: 'implementationList',
     ASSISTANCE_QUOTE: 'assistanceQuote',
     EXTERNAL_ASSEMBLY_INSPECTION: 'externalAssemblyInspection',
-    EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE: 'externalAssemblyInspectionResponse'
+    EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE: 'externalAssemblyInspectionResponse',
+    EXPEDITION_PICKUP: 'expeditionPickup'
 };
 
 const DRIVE_FILE_ENTITY_TYPE = {
@@ -24,7 +25,8 @@ const DRIVE_FILE_ENTITY_TYPE = {
     ORDER_PROJECT: 'OrderProject',
     IMPLEMENTATION_PURCHASE_ITEM: 'ImplementationPurchaseItem',
     ASSISTANCE_REQUEST: 'AssistanceRequest',
-    EXTERNAL_ASSEMBLY_INSPECTION_ACTIVITY: 'ExternalAssemblyInspectionActivity'
+    EXTERNAL_ASSEMBLY_INSPECTION_ACTIVITY: 'ExternalAssemblyInspectionActivity',
+    EXPEDITION_ROUTE_STOP_ITEM: 'ExpeditionRouteStopItem'
 };
 
 const DRIVE_FILE_FOLDER_NAMES = {
@@ -37,7 +39,8 @@ const DRIVE_FILE_FOLDER_NAMES = {
     [DRIVE_FILE_FOLDER_KIND.IMPLEMENTATION_LIST]: 'Listas',
     [DRIVE_FILE_FOLDER_KIND.ASSISTANCE_QUOTE]: 'orcamento',
     [DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION]: 'vistoria',
-    [DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE]: 'vistoria'
+    [DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE]: 'vistoria',
+    [DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP]: 'coleta'
 };
 
 const DRIVE_FILE_IMPLEMENTATION_LIST_EXTENSIONS = ['pdf'];
@@ -97,7 +100,8 @@ function isImageDriveFolderKind(folderKind) {
     return folderKind === DRIVE_FILE_FOLDER_KIND.REQUEST
         || folderKind === DRIVE_FILE_FOLDER_KIND.REVISION
         || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
-        || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE;
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP;
 }
 
 function allowedDriveExtensionsForFolderKind(folderKind) {
@@ -123,7 +127,8 @@ function maxDriveUploadBytesForFolderKind(folderKind) {
         return DRIVE_FILE_REVISION_IMAGE_MAX_BYTES;
     }
     if (folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
-        || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE) {
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP) {
         return DRIVE_FILE_REVISION_IMAGE_MAX_BYTES;
     }
     return DRIVE_FILE_MAX_BYTES;

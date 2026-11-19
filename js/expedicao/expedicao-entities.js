@@ -1,9 +1,16 @@
 const EXPEDITION_ENTITY_TYPES = [
+    { value: 'OrderProject', label: 'Projeto' },
+    { value: 'Pickup', label: 'Coleta' },
     { value: 'Assistance', label: 'Assistência' },
     { value: 'ExternalAssemblyInspection', label: 'Vistoria' },
     { value: 'PartRequest', label: 'Requisição de peça' },
     { value: 'Purchase', label: 'Requisição de compra' }
 ];
+
+const EXPEDITION_ORDER_PROJECT_SELECT = `
+    id, projectCode, name, orderId, statusId,
+    order:salesOrders(id, orderCode, addrId, clientId, client:Client(name))
+`;
 
 function getExpeditionEntityTypeLabel(entityType) {
     return EXPEDITION_ENTITY_TYPES.find(item => item.value === entityType)?.label || entityType || '—';
@@ -250,6 +257,13 @@ function formatExpeditionInspectionSequenceLabel(row) {
 }
 
 function getExpeditionEntitySearchRowFields(row, entityType) {
+    if (entityType === 'OrderProject') {
+        return [
+            { label: 'Pedido', value: row?.order?.orderCode },
+            { label: 'Cliente', value: row?.order?.client?.name },
+            { label: 'Projeto', value: row?.name || row?.projectCode }
+        ];
+    }
     if (entityType === 'Assistance') {
         return [
             { label: 'ID', value: row?.id },
@@ -655,10 +669,173 @@ async function enrichExternalAssemblyInspectionRowsForExpedition(rows = []) {
     return enrichExternalAssemblyInspectionRowsWithSequence(withProjects);
 }
 
+async function searchExpeditionOrderProjectEntities(queryText, limit = 25) {
+    const q = String(queryText || '').trim();
+    const max = Math.min(Math.max(limit, 5), 50);
+    const statusName = typeof PENDENCIAS_STATUS_EXPEDICAO !== 'undefined'
+        ? PENDENCIAS_STATUS_EXPEDICAO
+        : 'Expedição';
+
+    const statusId = typeof getPendenciasStatusIdByName === 'function'
+        ? await getPendenciasStatusIdByName(statusName)
+        : null;
+
+    if (!statusId) {
+        throw new Error(`Status "${statusName}" não encontrado.`);
+    }
+
+    const buildQuery = (filterMode = 'full') => {
+        let query = supabaseClient
+            .from('OrderProject')
+            .select(EXPEDITION_ORDER_PROJECT_SELECT)
+            .eq('statusId', statusId)
+            .order('id', { ascending: false })
+            .limit(max * 3);
+
+        if (filterMode === 'full' && typeof applyPendenciasExcludedOrderProjectQueryFilters === 'function') {
+            query = applyPendenciasExcludedOrderProjectQueryFilters(query);
+        } else if (filterMode === 'legacy') {
+            query = query.eq('isComplementary', false).eq('isReplaced', false);
+        }
+
+        if (q) {
+            if (/^\d+$/.test(q)) {
+                query = query.or(`id.eq.${Number(q)},projectCode.ilike.%${escapeExpeditionIlikePattern(q)}%`);
+            } else {
+                const pattern = `%${escapeExpeditionIlikePattern(q)}%`;
+                query = query.or(`name.ilike.${pattern},projectCode.ilike.${pattern}`);
+            }
+        }
+
+        return query;
+    };
+
+    let result = await buildQuery('full');
+    if (result.error?.message?.includes('isComplementary') || result.error?.message?.includes('aggregatorOrderProjectId')) {
+        result = await buildQuery('legacy');
+    }
+    if (result.error) throw result.error;
+
+    let rows = (result.data || []).slice();
+
+    if (q && !/^\d+$/.test(q)) {
+        const needle = q.toLowerCase();
+        rows = rows.filter(row => {
+            const haystack = [
+                row?.order?.orderCode,
+                row?.order?.client?.name,
+                row?.name,
+                row?.projectCode
+            ].join(' ').toLowerCase();
+            return haystack.includes(needle);
+        });
+    }
+
+    const filtered = [];
+    for (const row of rows) {
+        const orderId = Number(row?.orderId || row?.order?.id);
+        if (!orderId) continue;
+        const orderCtx = await resolveSalesOrderAddress(orderId);
+        if (!orderCtx.addr) continue;
+        filtered.push({ ...row, order: orderCtx.order || row.order });
+        if (filtered.length >= max) break;
+    }
+
+    return filtered;
+}
+
+async function resolveExpeditionPickupContext({ orderCode, pickupCategory, description }) {
+    const code = String(orderCode || '').trim();
+    const category = String(pickupCategory || '').trim();
+    const details = String(description || '').trim();
+
+    if (!code) return { ok: false, message: 'Informe o código do pedido.' };
+    if (!category) return { ok: false, message: 'Selecione o tipo de coleta.' };
+    if (!details) return { ok: false, message: 'Informe a descrição da coleta.' };
+
+    const allowed = (typeof EXPEDITION_PICKUP_CATEGORIES !== 'undefined' ? EXPEDITION_PICKUP_CATEGORIES : [])
+        .map(item => item.value);
+    if (allowed.length && !allowed.includes(category)) {
+        return { ok: false, message: 'Tipo de coleta inválido.' };
+    }
+
+    const orderResult = await supabaseClient
+        .from('salesOrders')
+        .select('id, orderCode, addrId, clientId, client:Client(name)')
+        .eq('orderCode', code)
+        .maybeSingle();
+
+    if (orderResult.error) return { ok: false, message: orderResult.error.message };
+    const order = orderResult.data;
+    if (!order) return { ok: false, message: 'Pedido não encontrado.' };
+
+    const orderCtx = await resolveSalesOrderAddress(Number(order.id));
+    if (!orderCtx.addr) {
+        return { ok: false, message: orderCtx.error || 'Pedido sem endereço cadastrado.' };
+    }
+
+    const entityId = typeof allocateExpeditionPickupEntityId === 'function'
+        ? allocateExpeditionPickupEntityId()
+        : Date.now();
+
+    const metadata = {
+        pickupCategory: category,
+        description: details,
+        orderId: Number(order.id),
+        orderCode: String(order.orderCode || code)
+    };
+
+    const label = typeof buildExpeditionPickupItemLabel === 'function'
+        ? buildExpeditionPickupItemLabel(metadata)
+        : `Coleta · ${code}`;
+
+    return {
+        ok: true,
+        entityType: 'Pickup',
+        entityId,
+        label,
+        addr: orderCtx.addr,
+        volumeCount: 0,
+        metadata,
+        meta: { order, metadata }
+    };
+}
+
 async function resolveExpeditionEntityContext(entityType, entityId) {
     const key = Number(entityId);
     if (!entityType || !key) {
         return { ok: false, message: 'Selecione um item válido.' };
+    }
+
+    if (entityType === 'OrderProject') {
+        const { data: row, error } = await supabaseClient
+            .from('OrderProject')
+            .select(EXPEDITION_ORDER_PROJECT_SELECT)
+            .eq('id', key)
+            .maybeSingle();
+
+        if (error) return { ok: false, message: error.message };
+        if (!row) return { ok: false, message: 'Projeto não encontrado.' };
+
+        const orderId = Number(row.orderId || row.order?.id);
+        const orderCtx = await resolveSalesOrderAddress(orderId);
+        if (!orderCtx.addr) {
+            return { ok: false, message: orderCtx.error || 'Pedido sem endereço cadastrado.' };
+        }
+
+        const label = formatExpeditionEntitySearchRowLabel(
+            { ...row, order: orderCtx.order || row.order },
+            'OrderProject'
+        );
+
+        return {
+            ok: true,
+            entityType: 'OrderProject',
+            entityId: key,
+            label,
+            addr: orderCtx.addr,
+            meta: { ...row, order: orderCtx.order || row.order }
+        };
     }
 
     if (entityType === 'Assistance') {
@@ -901,6 +1078,10 @@ async function searchExpeditionEntities(entityType, queryText, limit = 25) {
         return data || [];
     }
 
+    if (entityType === 'OrderProject') {
+        return searchExpeditionOrderProjectEntities(q, max);
+    }
+
     if (entityType === 'Purchase') {
         return searchExpeditionPurchaseEntities(q, max);
     }
@@ -997,3 +1178,5 @@ window.renderExpeditionEntitySearchRowHtml = renderExpeditionEntitySearchRowHtml
 window.renderExpeditionEntitySearchHeaderHtml = renderExpeditionEntitySearchHeaderHtml;
 window.buildAddrSnapshotFromRecord = buildAddrSnapshotFromRecord;
 window.buildExpeditionHistoryItemSummary = buildExpeditionHistoryItemSummary;
+window.resolveExpeditionPickupContext = resolveExpeditionPickupContext;
+window.searchExpeditionOrderProjectEntities = searchExpeditionOrderProjectEntities;

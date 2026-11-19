@@ -100,5 +100,54 @@ async function notifyMatrixDesignerAssignedToProject(options = {}) {
     }
 }
 
+function buildMatrixTechnicalReviewerAssignmentMessageLines(options = {}, context = {}) {
+    const actorName = currentUser?.name || 'Sistema';
+    const reviewerLabel = options.reviewerName || context.reviewerName || '—';
+
+    const projectLabel = context.projectNames?.length > 1
+        ? `Projetos: ${context.projectNames.join(', ')}`
+        : `Projeto: ${context.projectNames?.[0] || '—'}`;
+
+    return [
+        '📋 Revisor técnico associado',
+        `Pedido ${context.orderCode} · ${context.clientName}`,
+        projectLabel,
+        `Revisor: ${reviewerLabel}`,
+        `Por: ${actorName}`
+    ];
+}
+
+async function notifyMatrixTechnicalReviewerAssignedToProject(options = {}) {
+    const { orderId, orderProjectIds = [], designerId = null, reviewerId = null } = options;
+    if (!NOTIFICATIONS_ENABLED || !orderId || !orderProjectIds.length) {
+        return null;
+    }
+
+    try {
+        const mentionIds = [designerId, reviewerId].map(id => Number(id)).filter(Boolean);
+        const mentionTargets = typeof fetchAppUsersMatrixMentionTargets === 'function'
+            ? await fetchAppUsersMatrixMentionTargets(mentionIds)
+            : [];
+
+        const context = await buildMatrixDesignerAssignmentContext(options);
+        context.reviewerName = options.reviewerName
+            || (reviewerId ? await fetchAppUserDisplayNameById(reviewerId) : null);
+
+        const lines = buildMatrixTechnicalReviewerAssignmentMessageLines(options, context);
+        return await projectsMatrixRoomNotifier.send(lines, { mentionTargets });
+    } catch (error) {
+        console.warn('notifyMatrixTechnicalReviewerAssignedToProject:', error);
+        if (typeof isMatrixInactiveTokenError === 'function' && isMatrixInactiveTokenError(error)) {
+            console.warn(
+                'Notificação Element (projetos) não enviada: token do bot inválido. '
+                + 'Atualize MATRIX_ACCESS_TOKEN no Apps Script (Notificações).'
+            );
+        }
+        return null;
+    }
+}
+
+window.fetchAppUserDisplayNameById = fetchAppUserDisplayNameById;
 window.projectsMatrixRoomNotifier = projectsMatrixRoomNotifier;
 window.notifyMatrixDesignerAssignedToProject = notifyMatrixDesignerAssignedToProject;
+window.notifyMatrixTechnicalReviewerAssignedToProject = notifyMatrixTechnicalReviewerAssignedToProject;

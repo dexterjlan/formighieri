@@ -117,7 +117,82 @@ function isProjectInTechnicalReviewerProjStatus(project) {
 }
 
 function canReviewerActOnProject(project) {
-    return canActProjectReviewer() && isProjectInTechnicalReviewerReviewStatus(project);
+    if (!project || !isProjectInTechnicalReviewerReviewStatus(project)) return false;
+    if (isAdmin()) return true;
+    if (!canActProjectReviewer()) return false;
+    return Number(project.reviewerId) === Number(currentUser?.id);
+}
+
+function isTechnicalReviewerReviewStartedOnProject(project) {
+    return Boolean(project?.technicalReviewerReviewStartedAt);
+}
+
+function canReviewerStartTechnicalReviewOnProject(project) {
+    return canReviewerActOnProject(project) && !isTechnicalReviewerReviewStartedOnProject(project);
+}
+
+async function startTechnicalReviewerReviewOnProject(orderProjectId) {
+    const projectId = Number(orderProjectId);
+    if (!projectId) {
+        return { ok: false, error: new Error('Projeto inválido.') };
+    }
+
+    const now = new Date().toISOString();
+    let { error } = await supabaseClient
+        .from('OrderProject')
+        .update({
+            technicalReviewerReviewStartedAt: now,
+            updatedById: currentUser?.id || null,
+            updatedAt: now
+        })
+        .eq('id', projectId)
+        .is('technicalReviewerReviewStartedAt', null);
+
+    if (error?.message?.includes('technicalReviewerReviewStartedAt')) {
+        return {
+            ok: false,
+            error: new Error('Execute supabase/feats/order-project-technical-reviewer-assignment.sql no Supabase SQL Editor.')
+        };
+    }
+
+    if (error) return { ok: false, error };
+
+    return { ok: true, startedAt: now };
+}
+
+async function assignOrderProjectTechnicalReviewer(orderProjectId, reviewerId, options = {}) {
+    const projectId = Number(orderProjectId);
+    const nextReviewerId = reviewerId ? Number(reviewerId) : null;
+    const resetStarted = options.resetStarted !== false;
+    if (!projectId) {
+        return { ok: false, error: new Error('Projeto inválido.') };
+    }
+
+    const now = new Date().toISOString();
+    const payload = {
+        reviewerId: nextReviewerId,
+        updatedById: currentUser?.id || null,
+        updatedAt: now
+    };
+    if (resetStarted) {
+        payload.technicalReviewerReviewStartedAt = null;
+    }
+
+    const { error } = await supabaseClient
+        .from('OrderProject')
+        .update(payload)
+        .eq('id', projectId);
+
+    if (error?.message?.includes('reviewerId')) {
+        return {
+            ok: false,
+            error: new Error('Execute supabase/feats/order-project-technical-reviewer-assignment.sql no Supabase SQL Editor.')
+        };
+    }
+
+    if (error) return { ok: false, error };
+
+    return { ok: true };
 }
 
 function canDesignerActOnTechnicalReviewerProject(project) {
@@ -128,6 +203,10 @@ function canDesignerActOnTechnicalReviewerProject(project) {
 }
 
 window.canReviewerActOnProject = canReviewerActOnProject;
+window.isTechnicalReviewerReviewStartedOnProject = isTechnicalReviewerReviewStartedOnProject;
+window.canReviewerStartTechnicalReviewOnProject = canReviewerStartTechnicalReviewOnProject;
+window.startTechnicalReviewerReviewOnProject = startTechnicalReviewerReviewOnProject;
+window.assignOrderProjectTechnicalReviewer = assignOrderProjectTechnicalReviewer;
 window.canDesignerActOnTechnicalReviewerProject = canDesignerActOnTechnicalReviewerProject;
 window.getOrderProjectStatusNameFromProject = getOrderProjectStatusNameFromProject;
 window.isProjectInTechnicalReviewerReviewStatus = isProjectInTechnicalReviewerReviewStatus;

@@ -5,6 +5,7 @@ const SALES_ORDER_EMBED_MINIMAL = 'id, orderCode, clientId, consultantUserId, cl
 
 const ORDER_PROJECT_STATUS_EMBED = 'projectStatus:OrderProjectStatus(id, name)';
 const ORDER_PROJECT_DESIGNER_EMBED = 'designer:appUsers!OrderProject_designerId_fkey(id, name)';
+const ORDER_PROJECT_REVIEWER_EMBED = 'reviewer:appUsers!OrderProject_reviewerId_fkey(id, name)';
 const ORDER_PROJECT_CABINET_MAKER_EMBED = 'cabinetMaker:CabinetMaker(id, name)';
 const ORDER_PROJECT_MINIMAL_EMBED = 'orderProject:OrderProject(id, name, projectCode)';
 
@@ -26,6 +27,7 @@ function getPendenciasProjectSelect(options = {}) {
     const {
         includeStatus = true,
         includeDesigner = true,
+        includeReviewer = true,
         includeAwaitingConstructionNote = true,
         orderExtraFields = 'clientDeliveryDate'
     } = options;
@@ -36,6 +38,8 @@ function getPendenciasProjectSelect(options = {}) {
         'projectCode',
         'name',
         'designerId',
+        'reviewerId',
+        'technicalReviewerReviewStartedAt',
         'statusId',
         'deliveryDate',
         'deliveryPhaseId',
@@ -51,6 +55,7 @@ function getPendenciasProjectSelect(options = {}) {
 
     const embeds = [getOrderSalesOrderEmbed(orderExtraFields)];
     if (includeDesigner) embeds.push(ORDER_PROJECT_DESIGNER_EMBED);
+    if (includeReviewer) embeds.push(ORDER_PROJECT_REVIEWER_EMBED);
     if (includeStatus) embeds.push(ORDER_PROJECT_STATUS_EMBED);
 
     return `${fields.join(', ')},\n    ${embeds.join(',\n    ')}`;

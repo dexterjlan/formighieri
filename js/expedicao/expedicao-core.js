@@ -113,8 +113,11 @@ function isExpeditionTablesMissingError(error) {
 function renderExpeditionRouteCrewMobile(route) {
     const vehicle = escapeHtml(route?.vehicleLabel || '—');
     const driver = escapeHtml(route?.driverName || '—');
+    const responsible = typeof getExpeditionResponsibleLabel === 'function'
+        ? escapeHtml(getExpeditionResponsibleLabel(route))
+        : '—';
     return `
-        <div class="expedicao-route-crew-mobile" role="group" aria-label="Carro e motorista">
+        <div class="expedicao-route-crew-mobile" role="group" aria-label="Carro, motorista e responsável">
             <div class="expedicao-route-crew-mobile__item">
                 <span class="expedicao-route-crew-mobile__label">${renderExpeditionIcon('car', 'expedicao-route-crew-mobile__glyph')}<span>Carro</span></span>
                 <span class="expedicao-route-crew-mobile__value">${vehicle}</span>
@@ -123,6 +126,10 @@ function renderExpeditionRouteCrewMobile(route) {
                 <span class="expedicao-route-crew-mobile__label">${renderExpeditionIcon('driver', 'expedicao-route-crew-mobile__glyph')}<span>Motorista</span></span>
                 <span class="expedicao-route-crew-mobile__value expedicao-route-crew-mobile__value--driver">${driver}</span>
             </div>
+            <div class="expedicao-route-crew-mobile__item expedicao-route-crew-mobile__item--responsible">
+                <span class="expedicao-route-crew-mobile__label">${renderExpeditionIcon('driver', 'expedicao-route-crew-mobile__glyph')}<span>Responsável</span></span>
+                <span class="expedicao-route-crew-mobile__value expedicao-route-crew-mobile__value--responsible">${responsible}</span>
+            </div>
         </div>
     `;
 }
@@ -130,7 +137,10 @@ function renderExpeditionRouteCrewMobile(route) {
 function renderExpeditionRouteCrewDesktopLine(route) {
     const vehicle = escapeHtml(route?.vehicleLabel || '—');
     const driver = escapeHtml(route?.driverName || '—');
-    return `<p class="hidden md:block text-xs text-slate-600 mt-1">${vehicle} · ${driver}</p>`;
+    const responsible = typeof getExpeditionResponsibleLabel === 'function'
+        ? escapeHtml(getExpeditionResponsibleLabel(route))
+        : '—';
+    return `<p class="hidden md:block text-xs text-slate-600 mt-1">${vehicle} · ${driver} · Resp.: ${responsible}</p>`;
 }
 
 function renderExpedicaoMobileSectionBar() {
