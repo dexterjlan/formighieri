@@ -132,6 +132,10 @@ function canActPendenciasFabrica(user = currentUser) {
         || isFactoryCoordination(user);
 }
 
+function canSeePendenciasFabricaRotaMenu(user = currentUser) {
+    return canSeeAllPendenciasMenus() || isFactoryCoordination(user);
+}
+
 function canSeeRequestProfileField(user = currentUser) {
     return user?.role === 'Admin'
         || isGestorComercial(user)

@@ -1,6 +1,7 @@
 let orderCodePickerTarget = null;
 let orderCodePickerLastResults = [];
 let orderCodePickerSourceOrders = [];
+let orderCodePickerMobileSearchTimer = null;
 
 const ORDER_CODE_PICKER_DEFAULT_UI = {
     title: 'Buscar pedido',
@@ -86,35 +87,36 @@ function renderOrderCodePickerResults(orders, options = {}) {
 
     if (options.loading) {
         statusEl.textContent = options.loadingMessage || 'Buscando pedidos...';
-        listEl.innerHTML = '';
+        renderOrderCodePickerStatusRow('Buscando pedidos...');
         orderCodePickerLastResults = [];
         return;
     }
 
     if (options.error) {
         statusEl.textContent = `Erro ao buscar: ${options.error}`;
-        listEl.innerHTML = '';
+        renderOrderCodePickerStatusRow(`Erro ao buscar: ${options.error}`);
         orderCodePickerLastResults = [];
         return;
     }
 
     if (options.hint) {
         statusEl.textContent = options.hint;
-        listEl.innerHTML = '';
+        renderOrderCodePickerStatusRow(options.hint);
         orderCodePickerLastResults = [];
         return;
     }
 
     if (options.tooShort) {
         statusEl.textContent = 'Informe ao menos 2 caracteres do nome do cliente.';
-        listEl.innerHTML = '';
+        renderOrderCodePickerStatusRow('Informe ao menos 2 caracteres do nome do cliente.');
         orderCodePickerLastResults = [];
         return;
     }
 
     if (!orders.length) {
-        statusEl.textContent = options.emptyMessage || 'Nenhum pedido encontrado para este cliente.';
-        listEl.innerHTML = '';
+        const emptyMessage = options.emptyMessage || 'Nenhum pedido encontrado para este cliente.';
+        statusEl.textContent = emptyMessage;
+        renderOrderCodePickerStatusRow(emptyMessage);
         orderCodePickerLastResults = [];
         return;
     }
@@ -123,16 +125,30 @@ function renderOrderCodePickerResults(orders, options = {}) {
         || `${orders.length} pedido(s) encontrado(s). Clique para selecionar.`;
     orderCodePickerLastResults = orders;
     listEl.innerHTML = orders.map(order => `
-        <button type="button"
-            class="order-code-picker-result"
-            data-order-id="${order.id}">
-            <span class="order-code-picker-result__code">${escapeHtml(order.orderCode || '—')}</span>
-            <span class="order-code-picker-result__client">${escapeHtml(getOrderClientName(order) || '—')}</span>
-            ${getOrderConsultantNameFromRecord(order)
-                ? `<span class="order-code-picker-result__consultant">${escapeHtml(getOrderConsultantNameFromRecord(order))}</span>`
-                : ''}
-        </button>
+        <tr class="order-code-picker-row hover:bg-slate-50" data-order-id="${order.id}" role="button" tabindex="0">
+            <td class="p-2.5 font-mono font-semibold text-slate-900">${escapeHtml(order.orderCode || '—')}</td>
+            <td class="p-2.5 text-slate-700">
+                <span class="block truncate max-w-[12rem] sm:max-w-none">${escapeHtml(getOrderClientName(order) || '—')}</span>
+                ${getOrderConsultantNameFromRecord(order)
+                    ? `<span class="block text-[10px] text-slate-400 mt-0.5 truncate">${escapeHtml(getOrderConsultantNameFromRecord(order))}</span>`
+                    : ''}
+            </td>
+            <td class="p-2.5 text-center">
+                <span class="text-[10px] font-bold text-indigo-700 uppercase">Sel.</span>
+            </td>
+        </tr>
     `).join('');
+}
+
+function renderOrderCodePickerStatusRow(message) {
+    const listEl = document.getElementById('order-code-picker-results');
+    if (!listEl) return;
+    const safe = typeof escapeHtml === 'function' ? escapeHtml(message) : message;
+    listEl.innerHTML = `
+        <tr>
+            <td colspan="3" class="p-4 text-center text-slate-400">${safe}</td>
+        </tr>
+    `;
 }
 
 function applyOrderCodePickerLocalFilter() {
@@ -217,6 +233,16 @@ function applyOrderCodePickerSelection(order) {
         }
     }
 
+    if (orderCodePickerTarget.clientIdInputId) {
+        const clientIdInput = document.getElementById(orderCodePickerTarget.clientIdInputId);
+        if (clientIdInput && order?.clientId) {
+            clientIdInput.value = String(order.clientId);
+        }
+    } else if (orderCodePickerTarget.clientInputId === 'montagem-prog-client-name' && order?.clientId) {
+        const clientIdInput = document.getElementById('montagem-prog-client-id');
+        if (clientIdInput) clientIdInput.value = String(order.clientId);
+    }
+
     closeOrderCodePickerModal();
 
     if (typeof onSelect === 'function') {
@@ -297,13 +323,13 @@ async function openOrderCodePicker(config) {
     }
 
     renderOrderCodePickerResults([], {
-        hint: 'Informe o nome do cliente e clique em Buscar.'
+        hint: 'Informe ao menos 2 caracteres do nome do cliente.'
     });
 
     if (presetTerm.length >= 2) {
         await runOrderCodePickerSearch();
-    } else {
-        searchInput?.focus();
+    } else if (searchInput && !(typeof isMobileViewport === 'function' && isMobileViewport())) {
+        searchInput.focus();
     }
 }
 
@@ -313,21 +339,45 @@ function bindOrderCodePickerEvents() {
         await runOrderCodePickerSearch();
     });
 
-    document.getElementById('order-code-picker-search')?.addEventListener('input', () => {
-        if (!isOrderCodePickerLocalFilter()) return;
-        applyOrderCodePickerLocalFilter();
-    });
-
     document.getElementById('btn-order-code-picker-close')?.addEventListener('click', closeOrderCodePickerModal);
+    document.getElementById('btn-order-code-picker-close-x')?.addEventListener('click', closeOrderCodePickerModal);
+
+    const selectOrderFromPickerRow = row => {
+        if (!row?.dataset?.orderId) return;
+        const order = orderCodePickerLastResults.find(item => Number(item.id) === Number(row.dataset.orderId));
+        if (!order) return;
+        applyOrderCodePickerSelection(order);
+    };
 
     document.getElementById('order-code-picker-results')?.addEventListener('click', event => {
-        const button = event.target.closest('.order-code-picker-result');
-        if (!button) return;
+        const row = event.target.closest('[data-order-id]');
+        if (!row) return;
+        selectOrderFromPickerRow(row);
+    });
 
-        const order = orderCodePickerLastResults.find(item => Number(item.id) === Number(button.dataset.orderId));
-        if (!order) return;
+    document.getElementById('order-code-picker-results')?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        const row = event.target.closest('[data-order-id]');
+        if (!row) return;
+        event.preventDefault();
+        selectOrderFromPickerRow(row);
+    });
 
-        applyOrderCodePickerSelection(order);
+    document.getElementById('order-code-picker-search')?.addEventListener('input', () => {
+        if (isOrderCodePickerLocalFilter()) {
+            applyOrderCodePickerLocalFilter();
+            return;
+        }
+        if (typeof isMobileViewport !== 'function' || !isMobileViewport()) return;
+        window.clearTimeout(orderCodePickerMobileSearchTimer);
+        orderCodePickerMobileSearchTimer = window.setTimeout(() => {
+            const term = document.getElementById('order-code-picker-search')?.value.trim() || '';
+            if (term.length >= 2) {
+                runOrderCodePickerSearch();
+            } else {
+                renderOrderCodePickerResults([], { tooShort: true });
+            }
+        }, 350);
     });
 
     document.getElementById('btn-cal-event-order-picker')?.addEventListener('click', () => {
@@ -346,6 +396,9 @@ function bindOrderCodePickerEvents() {
         openOrderCodePicker({
             orderInputId: 'montagem-prog-order-code',
             clientInputId: 'montagem-prog-client-name',
+            clientIdInputId: 'montagem-prog-client-id',
+            hideSearchButton: true,
+            searchPlaceholder: 'Filtrar por nome do cliente...',
             onApply: () => {
                 if (typeof syncMontagemProgClientRequired === 'function') {
                     syncMontagemProgClientRequired();

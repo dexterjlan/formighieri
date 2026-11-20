@@ -361,9 +361,7 @@ function getPendenciasSidebarSections() {
                 { id: 'projetos-sem-projetistas', label: 'Projetos Sem Projetistas' },
                 { id: 'terceiros-sem-projetistas', label: 'Terceiros Sem Projetistas' },
                 { id: 'revisao-tecnica-revisor-gestor', label: 'Revisão Técnica sem Revisor' },
-                { id: 'aguardando-detalhamento', label: 'Detalhamento sem projetista' },
-                { id: 'expedicao', label: 'Expedição' },
-                { id: 'montagem-externa', label: 'Montagem Externa' }
+                { id: 'aguardando-detalhamento', label: 'Detalhamento sem projetista' }
             ]
         },
         {
@@ -374,7 +372,10 @@ function getPendenciasSidebarSections() {
                 { id: 'aguardando-montagem-interna', label: 'Aguar. Mont. Int.' },
                 { id: 'em-montagem', label: 'Em Montagem' },
                 { id: 'expedicao', label: 'Expedição' },
-                { id: 'montagem-externa', label: 'Montagem Externa' }
+                { id: 'montagem-externa', label: 'Montagem Externa' },
+                ...(typeof canSeePendenciasFabricaRotaMenu === 'function' && canSeePendenciasFabricaRotaMenu()
+                    ? [{ id: 'rota', label: 'Rota' }]
+                    : [])
             ]
         },
         {
@@ -706,7 +707,7 @@ async function getPendenciasStatusIdsByNames(names) {
 }
 
 function canSeePendenciasExpedicaoMontagemExternaItems() {
-    return canSeePendenciasGestorProjetosMenu() || canSeePendenciasGestorFabricaMenu();
+    return canSeePendenciasGestorFabricaMenu();
 }
 
 function canActPendenciasGestorProjetosMontagemExterna() {
@@ -1103,16 +1104,6 @@ function loadPendenciasContent() {
         return;
     }
 
-    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'expedicao') {
-        loadPendenciasExpedicao();
-        return;
-    }
-
-    if (pendenciasActiveSection === 'gestor-projetos' && pendenciasActiveItem === 'montagem-externa') {
-        loadPendenciasMontagemExterna();
-        return;
-    }
-
     if (pendenciasActiveSection === 'gestor-comercial' && pendenciasActiveItem === 'pendencia-por-consultor') {
         loadPendenciasConsultantPending();
         return;
@@ -1150,6 +1141,13 @@ function loadPendenciasContent() {
 
     if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'montagem-externa') {
         loadPendenciasMontagemExterna();
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'rota') {
+        if (typeof loadPendenciasFabricaRota === 'function') {
+            loadPendenciasFabricaRota();
+        }
         return;
     }
 

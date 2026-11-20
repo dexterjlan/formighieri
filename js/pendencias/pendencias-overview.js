@@ -32,15 +32,14 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'projetos-sem-projetistas': 'Projetos aguardando projeto técnico sem responsável.',
         'terceiros-sem-projetistas': 'Projetos de terceiros sem projetista responsável.',
         'revisao-tecnica-revisor-gestor': 'Projetos em revisão técnica do revisor ainda sem revisor associado.',
-        'aguardando-detalhamento': 'Detalhamentos sem projetista associado — associe na lista dedicada.',
-        expedicao: 'Projetos em expedição aguardando início da montagem externa.',
-        'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
+        'aguardando-detalhamento': 'Detalhamentos sem projetista associado — associe na lista dedicada.'
     },
     'gestor-fabrica': {
         'aguardando-montagem-interna': 'Projetos em produção aguardando início da montagem interna.',
         'em-montagem': 'Projetos em montagem interna aguardando finalização.',
         expedicao: 'Projetos em expedição aguardando início da montagem externa.',
-        'montagem-externa': 'Projetos em montagem externa aguardando finalização.'
+        'montagem-externa': 'Projetos em montagem externa aguardando finalização.',
+        rota: 'Itens elegíveis para paradas de rota (todos os tipos somados), como na busca ao adicionar parada na expedição.'
     },
     compras: {
         'enviados-compras': 'Solicitações de compra em aberto geradas pela implantação.',
@@ -208,14 +207,6 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 const { error, records } = await fetchPendenciasDetalhamentosSemProjetista();
                 return error ? null : records.length;
             }
-            case 'gestor-projetos:expedicao': {
-                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EXPEDICAO);
-                return error ? null : count;
-            }
-            case 'gestor-projetos:montagem-externa': {
-                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);
-                return error ? null : count;
-            }
             case 'gestor-fabrica:aguardando-montagem-interna': {
                 const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EM_PRODUCAO);
                 return error ? null : count;
@@ -231,6 +222,12 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
             case 'gestor-fabrica:montagem-externa': {
                 const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);
                 return error ? null : count;
+            }
+            case 'gestor-fabrica:rota': {
+                if (typeof fetchExpeditionEntitiesForFabricaRotaPreview !== 'function') return null;
+                const { items, errors } = await fetchExpeditionEntitiesForFabricaRotaPreview();
+                if (errors.length && !items.length) return null;
+                return items.length;
             }
             case 'compras:enviados-compras': {
                 const { error, items } = await fetchPendenciasEnviadosCompras();

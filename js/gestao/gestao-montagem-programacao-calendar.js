@@ -608,6 +608,8 @@ function bindMontagemProgWeekInteractions(grid) {
         grid.addEventListener('click', event => {
             const barBody = event.target.closest('.montagem-prog-bar-body');
             if (barBody?.dataset.programacaoId) {
+                event.preventDefault();
+                event.stopPropagation();
                 const prog = montagemProgCache.find(item => Number(item.id) === Number(barBody.dataset.programacaoId));
                 if (prog) openMontagemProgModal(prog);
                 return;
@@ -617,6 +619,7 @@ function bindMontagemProgWeekInteractions(grid) {
 
             const slot = event.target.closest('.montagem-prog-day-slot');
             if (slot?.dataset.date) {
+                event.stopPropagation();
                 openMontagemProgModal(null, slot.dataset.date);
             }
         });

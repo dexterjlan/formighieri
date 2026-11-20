@@ -140,6 +140,9 @@ function bindMontagemProgramacaoEvents() {
     }
     document.getElementById('montagem-prog-form')?.addEventListener('submit', saveMontagemProg);
     document.getElementById('btn-montagem-prog-delete')?.addEventListener('click', deleteMontagemProg);
+    document.getElementById('btn-montagem-prog-close')?.addEventListener('click', () => {
+        toggleModal('montagem-prog-modal', false);
+    });
 
     ['montagem-prog-montador-1', 'montagem-prog-montador-2', 'montagem-prog-marceneiro-1', 'montagem-prog-marceneiro-2'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', syncMontagemProgCrewExclusivity);

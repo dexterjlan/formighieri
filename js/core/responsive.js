@@ -280,9 +280,12 @@ function isEaiModalTextEntryField(element) {
     if (!element || !(element instanceof HTMLElement)) return false;
     const tag = element.tagName;
     if (tag === 'TEXTAREA') return true;
-    if (tag === 'SELECT') return true;
+    if (tag === 'SELECT') return false;
     if (tag === 'INPUT') {
         const type = String(element.type || 'text').toLowerCase();
+        if (['date', 'time', 'datetime-local', 'month', 'week'].includes(type)) {
+            return false;
+        }
         return !['checkbox', 'radio', 'file', 'hidden', 'button', 'submit', 'reset'].includes(type);
     }
     return false;

@@ -4688,9 +4688,11 @@ body.installer-only-nav #btn-logout {
         font-size: 0.6875rem;
     }
 
-    .montagem-prog-modal__footer {
-        flex-direction: column;
-        align-items: stretch;
+    .montagem-prog-modal__footer--compact {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 0.35rem;
         padding-top: 0.45rem;
         padding-bottom: calc(0.45rem + env(safe-area-inset-bottom, 0px));
         padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
@@ -4698,7 +4700,7 @@ body.installer-only-nav #btn-logout {
         box-shadow: 0 -4px 16px rgb(15 23 42 / 0.08);
     }
 
-    .montagem-prog-modal__footer-spacer {
+    .montagem-prog-modal__footer--compact .montagem-prog-modal__footer-spacer {
         display: none !important;
     }
 
@@ -4706,22 +4708,22 @@ body.installer-only-nav #btn-logout {
         margin-top: 0.45rem;
     }
 
-    .montagem-prog-modal__action-btn {
-        width: 100%;
-        min-height: 2.15rem;
+    .montagem-prog-modal__footer--compact .montagem-prog-modal__action-btn {
+        width: auto;
+        flex: 1 1 0;
+        min-width: 0;
+        min-height: 2.25rem;
+        margin-top: 0;
         justify-content: center;
-        padding-top: 0.4rem;
-        padding-bottom: 0.4rem;
-        font-size: 0.8125rem;
+        padding: 0.4rem 0.35rem;
+        font-size: 0.6875rem;
+        line-height: 1.2;
     }
 
-    .montagem-prog-modal__action-btn--primary {
+    .montagem-prog-modal__footer--compact .montagem-prog-modal__action-btn--danger {
+        flex: 0 0 auto;
+        max-width: 4.25rem;
         order: -1;
-    }
-
-    .montagem-prog-modal__action-btn--danger {
-        order: 1;
-        margin-top: 0.2rem;
     }
 
     .montagem-prog-modal__picker-btn,
@@ -4780,11 +4782,11 @@ body.eai-modal-keyboard-open .montagem-prog-modal.montagem-prog-modal--keyboard-
     }
 
     body.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.hidden) .montagem-prog-modal__footer {
-        display: none !important;
+        display: flex !important;
     }
 
     body.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.hidden) .montagem-prog-modal__head {
-        display: none !important;
+        display: flex !important;
     }
 }
 
@@ -4809,7 +4811,7 @@ body.eai-modal-keyboard-open .montagem-prog-modal.montagem-prog-modal--keyboard-
 
     body.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.hidden) .montagem-prog-modal__footer,
     body.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.hidden) .montagem-prog-modal__head {
-        display: none !important;
+        display: flex !important;
     }
 }
 
@@ -4833,7 +4835,169 @@ body.is-mobile.eai-modal-keyboard-open .montagem-prog-modal.montagem-prog-modal-
 
 body.is-mobile.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.hidden) .montagem-prog-modal__footer,
 body.is-mobile.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.hidden) .montagem-prog-modal__head {
+    display: flex !important;
+}
+
+body.is-mobile.eai-modal-keyboard-open .montagem-prog-modal.montagem-prog-modal--keyboard-open:not(.hidden) .montagem-prog-modal__footer--compact {
+    padding-top: 0.3rem;
+    padding-bottom: calc(0.3rem + env(safe-area-inset-bottom, 0px));
+}
+
+body.is-mobile.eai-modal-keyboard-open .montagem-prog-modal.montagem-prog-modal--keyboard-open:not(.hidden) .montagem-prog-modal__footer--compact .montagem-prog-modal__action-btn {
+    min-height: 2rem;
+    font-size: 0.625rem;
+}
+
+.montagem-prog-modal__close {
+    display: none;
+}
+
+/* Nova/editar montagem — tela cheia no celular (mesmo padrão da vistoria externa) */
+body.is-mobile .montagem-prog-modal:not(.hidden) {
+    z-index: 89;
+    padding: 0 !important;
+    align-items: stretch;
+    justify-content: stretch;
+    background: rgb(255 255 255);
+}
+
+body.is-mobile .montagem-prog-modal:not(.hidden) .montagem-prog-modal__panel {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+body.is-mobile.montagem-prog-sheet-open .app-mobile-topbar {
     display: none !important;
+}
+
+body.is-mobile .montagem-prog-modal__close {
+    display: block;
+}
+
+body.is-mobile .montagem-prog-modal__head {
+    padding-top: calc(0.65rem + env(safe-area-inset-top, 0px));
+    padding-bottom: 0.55rem;
+    padding-left: calc(0.85rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(0.85rem + env(safe-area-inset-right, 0px));
+}
+
+body.is-mobile .montagem-prog-modal__head h3 {
+    font-size: 0.9375rem;
+    line-height: 1.25;
+}
+
+body.is-mobile .montagem-prog-modal__scroll {
+    padding-top: 0.4rem;
+    padding-bottom: 0.5rem;
+    padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(0.75rem + env(safe-area-inset-right, 0px));
+}
+
+body.is-mobile .montagem-prog-modal__scroll .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.5rem;
+}
+
+body.is-mobile .montagem-prog-modal__scroll label {
+    font-size: 0.625rem;
+    margin-bottom: 0.1rem;
+}
+
+body.is-mobile .montagem-prog-modal__scroll textarea.montagem-prog-modal__field {
+    min-height: 3rem;
+}
+
+body.is-mobile .montagem-prog-modal__footer--compact {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.35rem;
+    padding-top: 0.45rem;
+    padding-bottom: calc(0.45rem + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(0.75rem + env(safe-area-inset-right, 0px));
+    box-shadow: 0 -4px 16px rgb(15 23 42 / 0.08);
+}
+
+body.is-mobile .montagem-prog-modal__footer--compact .montagem-prog-modal__footer-spacer {
+    display: none !important;
+}
+
+body.is-mobile .montagem-prog-modal__footer--compact .montagem-prog-modal__action-btn {
+    width: auto;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 2.25rem;
+    margin-top: 0;
+    padding: 0.4rem 0.35rem;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    justify-content: center;
+}
+
+body.is-mobile .montagem-prog-modal__footer--compact .montagem-prog-modal__action-btn--danger {
+    flex: 0 0 auto;
+    max-width: 4.25rem;
+    order: -1;
+}
+
+body.is-mobile .montagem-prog-modal__footer--compact .montagem-prog-modal__action-btn--primary {
+    font-weight: 700;
+}
+
+body.is-mobile .montagem-prog-modal__form {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+body.is-mobile .montagem-prog-modal:not(.hidden) .montagem-prog-modal__panel {
+    overflow: hidden;
+}
+
+body.is-mobile .montagem-prog-modal__footer--compact {
+    display: flex !important;
+    flex: 0 0 auto;
+    margin-top: auto;
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    background: rgb(255 255 255);
+}
+
+body.is-mobile.montagem-prog-sheet-open .fm-entity-picker-modal:not(.hidden) {
+    z-index: 100;
+    padding: 0 !important;
+    align-items: stretch;
+    justify-content: stretch;
+    background: rgb(255 255 255);
+}
+
+body.is-mobile.montagem-prog-sheet-open .fm-entity-picker-modal:not(.hidden) .fm-entity-picker-modal__panel {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    padding-top: calc(0.85rem + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(0.85rem + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(0.85rem + env(safe-area-inset-left, 0px));
+    padding-right: calc(0.85rem + env(safe-area-inset-right, 0px));
+}
+
+body.is-mobile .order-code-picker-row {
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+/* iOS: font-size < 16px no input dispara zoom ao focar */
+body.is-mobile #order-code-picker-search.order-code-picker-search,
+body.is-mobile #order-code-picker-modal .order-code-picker-search {
+    font-size: 16px;
+    line-height: 1.35;
 }
 
 .montagem-prog-layout {
@@ -4903,9 +5067,21 @@ body.is-mobile.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.
     padding: 0 0.25rem 0.25rem;
 }
 
+#gestao-montagem-programacao-panel.montagem-prog--mobile .montagem-prog-week-mobile-scroll {
+    overflow-x: hidden;
+    margin-inline: 0;
+    padding-inline: 0;
+    max-width: 100%;
+}
+
 .montagem-prog-week-grid-inner {
     width: 100%;
-    min-width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
+#gestao-montagem-programacao-panel.montagem-prog--mobile .montagem-prog-week-grid-inner {
+    min-width: 0;
 }
 
 .montagem-prog-week-grid--mobile .montagem-prog-month-headers,
@@ -5060,7 +5236,57 @@ body.is-mobile.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.
 
 #gestao-montagem-programacao-panel.montagem-prog--mobile .montagem-prog-header-actions {
     width: 100%;
+    max-width: 100%;
     justify-content: center;
+    overflow-x: hidden;
+}
+
+body.is-mobile #gestao-view:has(#gestao-montagem-programacao-panel:not(.hidden)) {
+    overflow-x: hidden;
+    max-width: 100%;
+}
+
+body.is-mobile #gestao-montagem-programacao-panel:not(.hidden) {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+body.is-mobile #gestao-montagem-programacao-panel:not(.hidden) .montagem-prog-layout,
+body.is-mobile #gestao-montagem-programacao-panel:not(.hidden) .montagem-prog-calendar {
+    max-width: 100%;
+    overflow-x: hidden;
+    min-width: 0;
+}
+
+body.is-mobile #gestao-montagem-programacao-panel:not(.hidden) .montagem-prog-header {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+body.is-mobile .montagem-prog-week-grid,
+body.is-mobile .montagem-prog-week-grid.montagem-prog-week-grid--mobile {
+    min-width: 0 !important;
+    max-width: 100%;
+}
+
+body.is-mobile.montagem-prog-sheet-open {
+    overflow-x: hidden;
+}
+
+body.is-mobile .montagem-prog-modal__panel,
+body.is-mobile .montagem-prog-modal__scroll {
+    overflow-x: hidden;
+    max-width: 100%;
+}
+
+body.is-mobile .montagem-prog-modal__scroll .grid > * {
+    min-width: 0;
+}
+
+body.is-mobile .montagem-prog-modal__scroll .order-code-field,
+body.is-mobile .montagem-prog-modal__scroll .flex.gap-2 {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .montagem-prog-conflicts-details {
@@ -5131,6 +5357,12 @@ body.is-mobile.eai-modal-keyboard-open .montagem-prog-modal--keyboard-open:not(.
 
 .montagem-prog-week-grid {
     min-width: 44rem;
+}
+
+.montagem-prog-week-grid.montagem-prog-week-grid--mobile {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
 }
 
 .montagem-prog-month-headers,
@@ -8034,7 +8266,7 @@ body.deal-won-celebration-open {
 
 .expedition-entity-pick {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--expedition-entity-pick-cols, 2), minmax(0, 1fr));
     gap: 0.35rem 0.75rem;
     width: 100%;
     align-items: start;
@@ -8069,7 +8301,17 @@ body.deal-won-celebration-open {
 
 @media (min-width: 768px) {
     .expedition-entity-pick {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(var(--expedition-entity-pick-cols, 4), minmax(0, 1fr));
+    }
+}
+
+.expedition-entity-pick__value--status {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    .expedition-entity-pick__value--status {
+        display: block;
     }
 }
 

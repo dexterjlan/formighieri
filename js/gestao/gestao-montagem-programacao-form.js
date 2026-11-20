@@ -1,3 +1,79 @@
+const montagemProgModalOverlay = typeof createAppOverlayHelper === 'function'
+    ? createAppOverlayHelper('montagem-prog-modal', {
+        scope: 'contained',
+        closeButtonSelector: '#btn-montagem-prog-close',
+        disableFormSelector: '#montagem-prog-form button, #montagem-prog-form input, #montagem-prog-form textarea, #montagem-prog-form select'
+    })
+    : null;
+
+function getMontagemProgSaveErrorMessage(error) {
+    const sqlHint = error?.message?.includes('AssemblyScheduleCabinetMaker')
+        ? '\n\nConsulte PENDING-PROD-SQL.md ou supabase/schema/.'
+        : (error?.message?.includes('AssemblySchedule')
+            ? '\n\nConsulte PENDING-PROD-SQL.md ou supabase/schema/.'
+            : '');
+    return `Erro ao salvar montagem: ${error?.message || error}${sqlHint}`;
+}
+
+async function persistMontagemProgFormData({
+    basePayload,
+    dateRanges,
+    montadorIds,
+    cabinetMakerIds,
+    addrId,
+    startDate,
+    endDate
+}) {
+    const persistOneMontagemProg = async (rangeStart, rangeEnd) => {
+        const { data: created, error } = await supabaseClient
+            .from('AssemblySchedule')
+            .insert({
+                ...basePayload,
+                startDate: rangeStart,
+                endDate: rangeEnd,
+                createdById: currentUser.id
+            })
+            .select('id')
+            .single();
+        if (error) throw error;
+
+        await persistMontagemProgCrew(created.id, montadorIds, cabinetMakerIds);
+        try {
+            await persistMontagemProgAddrId(created.id, addrId);
+        } catch (addrError) {
+            console.warn('persistMontagemProgAddrId:', addrError);
+            alertAppDialog(addrError.message || 'Montagem salva, mas o endereço não pôde ser gravado.');
+        }
+        return created.id;
+    };
+
+    if (editingMontagemProgId) {
+        const { error } = await supabaseClient
+            .from('AssemblySchedule')
+            .update({
+                ...basePayload,
+                startDate,
+                endDate
+            })
+            .eq('id', editingMontagemProgId);
+        if (error) throw error;
+
+        await persistMontagemProgCrew(editingMontagemProgId, montadorIds, cabinetMakerIds);
+        try {
+            await persistMontagemProgAddrId(editingMontagemProgId, addrId);
+        } catch (addrError) {
+            console.warn('persistMontagemProgAddrId:', addrError);
+            alertAppDialog(addrError.message || 'Montagem salva, mas o endereço não pôde ser gravado.');
+        }
+        return { createdCount: 0 };
+    }
+
+    for (const range of dateRanges) {
+        await persistOneMontagemProg(range.startDate, range.endDate);
+    }
+    return { createdCount: dateRanges.length };
+}
+
 function populateMontagemProgCrewSelects(options = {}) {
     const {
         montadorIds = [],
@@ -175,6 +251,17 @@ async function applyMontagemProgAddressFromContext(prog) {
     setMontagemProgSelectedAddr(record);
 }
 
+function syncMontagemProgModalMobileChrome(open) {
+    const modal = document.getElementById('montagem-prog-modal');
+    const mobile = typeof isMobileViewport === 'function' && isMobileViewport();
+    document.body.classList.toggle('montagem-prog-sheet-open', Boolean(open && mobile));
+    if (open && modal) {
+        requestAnimationFrame(() => {
+            modal.querySelector('.montagem-prog-modal__scroll')?.scrollTo({ top: 0, left: 0 });
+        });
+    }
+}
+
 function syncMontagemProgCrewExclusivity() {
     const m1 = document.getElementById('montagem-prog-montador-1');
     const m2 = document.getElementById('montagem-prog-montador-2');
@@ -269,6 +356,14 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetWorke
     skipWeekendsWrap?.classList.toggle('hidden', Boolean(editingMontagemProgId));
     if (skipWeekendsCheckbox) skipWeekendsCheckbox.checked = false;
 
+    window.clearEaiModalKeyboardLayout?.();
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.blur) {
+        active.blur();
+    }
+
+    montagemProgModalOverlay?.setLoading(false);
+    syncMontagemProgModalMobileChrome(true);
     toggleModal('montagem-prog-modal', true);
 }
 
@@ -378,66 +473,47 @@ async function saveMontagemProg(event) {
         }
     }
 
-    try {
-        const persistOneMontagemProg = async (rangeStart, rangeEnd) => {
-            const { data: created, error } = await supabaseClient
-                .from('AssemblySchedule')
-                .insert({
-                    ...basePayload,
-                    startDate: rangeStart,
-                    endDate: rangeEnd,
-                    createdById: currentUser.id
-                })
-                .select('id')
-                .single();
-            if (error) throw error;
+    const isEdit = Boolean(editingMontagemProgId);
+    const persistPayload = {
+        basePayload,
+        dateRanges,
+        montadorIds,
+        cabinetMakerIds,
+        addrId,
+        startDate,
+        endDate
+    };
 
-            await persistMontagemProgCrew(created.id, montadorIds, cabinetMakerIds);
-            try {
-                await persistMontagemProgAddrId(created.id, addrId);
-            } catch (addrError) {
-                console.warn('persistMontagemProgAddrId:', addrError);
-                alertAppDialog(addrError.message || 'Montagem salva, mas o endereço não pôde ser gravado.');
-            }
-            return created.id;
-        };
-
-        if (editingMontagemProgId) {
-            const { error } = await supabaseClient
-                .from('AssemblySchedule')
-                .update({
-                    ...basePayload,
-                    startDate,
-                    endDate
-                })
-                .eq('id', editingMontagemProgId);
-            if (error) throw error;
-
-            await persistMontagemProgCrew(editingMontagemProgId, montadorIds, cabinetMakerIds);
-            try {
-                await persistMontagemProgAddrId(editingMontagemProgId, addrId);
-            } catch (addrError) {
-                console.warn('persistMontagemProgAddrId:', addrError);
-                alertAppDialog(addrError.message || 'Montagem salva, mas o endereço não pôde ser gravado.');
-            }
-        } else {
-            for (const range of dateRanges) {
-                await persistOneMontagemProg(range.startDate, range.endDate);
-            }
-        }
-
+    const finishMontagemProgSave = async () => {
         editingMontagemProgId = null;
         toggleModal('montagem-prog-modal', false);
         await loadMontagemProgramacaoView();
         warnMontagemProgConflictsIfNeeded();
+    };
+
+    if (montagemProgModalOverlay) {
+        const successMessage = isEdit
+            ? 'Montagem atualizada!'
+            : (dateRanges.length > 1
+                ? `${dateRanges.length} montagens criadas!`
+                : 'Montagem criada!');
+
+        await montagemProgModalOverlay.runAction({
+            loadingMessage: 'Salvando montagem...',
+            successMessage,
+            formatError: getMontagemProgSaveErrorMessage,
+            task: () => persistMontagemProgFormData(persistPayload),
+            onSuccess: finishMontagemProgSave
+        });
+        return;
+    }
+
+    try {
+        await persistMontagemProgFormData(persistPayload);
+        await finishMontagemProgSave();
     } catch (error) {
         console.error('saveMontagemProg:', error);
-        const sqlHint = error.message?.includes('AssemblyScheduleCabinetMaker')
-            ? '\n\nConsulte PENDING-PROD-SQL.md ou supabase/schema/.'
-            : (error.message?.includes('AssemblySchedule')
-                ? '\n\nConsulte PENDING-PROD-SQL.md ou supabase/schema/.'
-                : '');
-        alertAppDialog('Erro ao salvar montagem: ' + error.message + sqlHint);
+        alertAppDialog(getMontagemProgSaveErrorMessage(error));
     }
 }
 

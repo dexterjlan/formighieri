@@ -7,6 +7,9 @@ function toggleModal(id, show) {
         if (active instanceof HTMLElement && el.contains(active)) {
             active.blur();
         }
+        if (el.classList.contains('montagem-prog-modal')) {
+            document.body.classList.remove('montagem-prog-sheet-open');
+        }
         window.clearEaiModalKeyboardLayout?.();
     }
 }

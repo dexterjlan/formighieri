@@ -159,6 +159,7 @@ const SCRIPTS = [
     'js/requisicoes/requisicoes-assistance.js',
     'js/expedicao/expedicao-core.js',
     'js/expedicao/expedicao-entities.js',
+    'js/pendencias/pendencias-fabrica-rota.js',
     'js/expedicao/expedicao-pickup.js',
     'js/expedicao/expedicao-pickers.js',
     'js/expedicao/expedicao-directions.js',
