@@ -1,4 +1,7 @@
-supabase/
+# Supabase: só snapshot DDL em git (senha, feats e archive ficam fora)
+supabase/*
+!supabase/schema/
+!supabase/schema/**
 google-apps-script/
 PENDING-PROD-SQL.md
 .cursor/rules/push-prod-sql-reminder.mdc
