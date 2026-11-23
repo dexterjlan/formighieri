@@ -380,7 +380,10 @@ async function bootstrap() {
             const mayContinue = typeof enforceAppSessionPolicyOnBootstrap === 'function'
                 ? await enforceAppSessionPolicyOnBootstrap(session)
                 : true;
-            if (!mayContinue) return;
+            if (!mayContinue) {
+                if (typeof showLoginScreen === 'function') showLoginScreen();
+                return;
+            }
 
             // Sessão ativa: pré-carrega o app em paralelo com o fluxo de auth (enterApp reutiliza a mesma promise).
             ensureAppScriptsLoaded().catch(error => {

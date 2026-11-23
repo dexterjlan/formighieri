@@ -54,6 +54,9 @@ async function enterApp(authUserId, authUser = null, options = {}) {
     }
 
     enterAppInProgress = (async () => {
+        if (options.freshLogin && typeof recordAppSessionGrant === 'function') {
+            recordAppSessionGrant();
+        }
         if (typeof assertAppSessionPolicyForEnterApp === 'function') {
             await assertAppSessionPolicyForEnterApp(options);
         }
@@ -759,8 +762,12 @@ function bindAuthEvents() {
                 }
             }
             if (appShellReady) return;
-            await showAppSessionLoading('Carregando...', 'Restaurando sua sessão');
-            await enterApp(session.user.id, session.user);
+            const freshLogin = event === 'SIGNED_IN';
+            await showAppSessionLoading(
+                'Carregando...',
+                freshLogin ? 'Entrando no sistema' : 'Restaurando sua sessão'
+            );
+            await enterApp(session.user.id, session.user, { freshLogin });
         }
     });
 

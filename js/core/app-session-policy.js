@@ -130,7 +130,7 @@ async function assertAppSessionPolicyForEnterApp(options = {}) {
         throw new Error('Sessão expirada. Faça login novamente.');
     }
 
-    if (await isRunningStaleAppBundle()) {
+    if (await shouldForceStaleBundleRefresh()) {
         await forceAppSessionRefresh('version');
         throw new Error('Nova versão disponível. Atualizando...');
     }
@@ -149,12 +149,18 @@ async function enforceAppSessionPolicyOnBootstrap(session) {
         return false;
     }
 
-    if (await isRunningStaleAppBundle()) {
+    if (await shouldForceStaleBundleRefresh()) {
         await forceAppSessionRefresh('version');
         return false;
     }
 
     return true;
+}
+
+/** Evita reload em loop: só força atualização de versão quando já existe grant válido (< 12h). */
+async function shouldForceStaleBundleRefresh() {
+    if (isAppSessionGrantExpired()) return false;
+    return isRunningStaleAppBundle();
 }
 
 async function runAppSessionPolicyPeriodicCheck() {
@@ -173,7 +179,7 @@ async function runAppSessionPolicyPeriodicCheck() {
         return;
     }
 
-    if (await isRunningStaleAppBundle()) {
+    if (await shouldForceStaleBundleRefresh()) {
         await forceAppSessionRefresh('version');
     }
 }
