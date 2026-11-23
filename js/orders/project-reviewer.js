@@ -1,31 +1,12 @@
 const TECHNICAL_REVIEWER_REVIEW_REVISOR_STATUS = ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_REVISOR;
 const TECHNICAL_REVIEWER_REVIEW_PROJ_STATUS = ORDER_PROJECT_STATUS_EM_REVISAO_TECNICA_PROJ;
 
-async function getOrderProjectStatusIdByNameReviewer(statusName) {
-    const { data, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .eq('isActive', true)
-        .maybeSingle();
-
-    if (!error && data?.id) return data.id;
-
-    const { data: fallback } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .maybeSingle();
-
-    return fallback?.id || null;
-}
-
 async function getTechnicalReviewerReviewRevisorStatusId() {
-    return getOrderProjectStatusIdByNameReviewer(TECHNICAL_REVIEWER_REVIEW_REVISOR_STATUS);
+    return getOrderProjectStatusIdByName(TECHNICAL_REVIEWER_REVIEW_REVISOR_STATUS);
 }
 
 async function getTechnicalReviewerReviewProjStatusId() {
-    return getOrderProjectStatusIdByNameReviewer(TECHNICAL_REVIEWER_REVIEW_PROJ_STATUS);
+    return getOrderProjectStatusIdByName(TECHNICAL_REVIEWER_REVIEW_PROJ_STATUS);
 }
 
 function canActProjectReviewer(user = currentUser) {
@@ -36,7 +17,7 @@ async function applyOrderProjectStatusByName(orderProjectIds, statusName, option
     const uniqueIds = [...new Set(orderProjectIds.map(id => Number(id)).filter(Boolean))];
     if (!uniqueIds.length) return;
 
-    const statusId = await getOrderProjectStatusIdByNameReviewer(statusName);
+    const statusId = await getOrderProjectStatusIdByName(statusName);
     if (!statusId) {
         throw new Error(`Status "${statusName}" não encontrado.`);
     }

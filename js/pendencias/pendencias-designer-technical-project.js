@@ -825,6 +825,25 @@ function getPendenciasWorkloadProjetistaOptionsHtml(currentDesignerId = null) {
         .join('');
 }
 
+function getPendenciasWorkloadRevisorOptionsHtml(currentReviewerId = null) {
+    const source = typeof pendenciasRevisoresCache !== 'undefined' ? pendenciasRevisoresCache : [];
+    return source
+        .filter(reviewer => Number(reviewer.id) !== Number(currentReviewerId))
+        .map(reviewer => `<option value="${reviewer.id}">${escapeHtml(reviewer.name)}</option>`)
+        .join('');
+}
+
+function getPendenciasWorkloadAssigneeOptionsHtml(statusName, currentAssigneeId = null) {
+    if (isPendenciasWorkloadRevisionRevisorStatus(statusName)) {
+        return getPendenciasWorkloadRevisorOptionsHtml(currentAssigneeId);
+    }
+    return getPendenciasWorkloadProjetistaOptionsHtml(currentAssigneeId);
+}
+
+function getPendenciasWorkloadAssigneeLabel(statusName) {
+    return isPendenciasWorkloadRevisionRevisorStatus(statusName) ? 'Revisor' : 'Projetista';
+}
+
 function getPendenciasWorkloadDetalhamentoProjetistaOptionsHtml(currentDesignerId = null) {
     const source = (typeof detalhamentoProjetistasCache !== 'undefined' && detalhamentoProjetistasCache.length)
         ? detalhamentoProjetistasCache
@@ -1248,7 +1267,12 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                 const clientName = getOrderClientName(project.order) || '—';
                 const projectName = project.name || 'Projeto';
                 const itemTitle = `${clientName} · ${projectName}`;
-                const assigneeId = Number(project.workloadAssigneeId || project.designerId) || '';
+                const assigneeId = Number(
+                    isPendenciasWorkloadRevisionRevisorStatus(statusName)
+                        ? (project.reviewerId || project.workloadAssigneeId)
+                        : (project.workloadAssigneeId || project.designerId)
+                ) || '';
+                const assigneeLabel = getPendenciasWorkloadAssigneeLabel(statusName);
                 const isRevisionInProgress = isPendenciasWorkloadProjectRevisionInProgress(
                     project,
                     statusName,
@@ -1287,13 +1311,13 @@ function renderPendenciasWorkloadStatusSections(projects, revisionInProgressIds 
                                 ? `<label class="block text-[10px] text-slate-500 mt-0.5">Previsão</label>
                             ${renderPendenciasWorkloadPrevisaoInputs(project)}`
                                 : ''}
-                            <label class="block text-[10px] text-slate-500 ${statusName === PENDENCIAS_STATUS_AGUARDANDO_PT ? 'mt-2' : 'mt-0.5'}">Projetista</label>
+                            <label class="block text-[10px] text-slate-500 ${statusName === PENDENCIAS_STATUS_AGUARDANDO_PT ? 'mt-2' : 'mt-0.5'}">${assigneeLabel}</label>
                             <div class="flex items-center gap-1.5 mt-1">
                                 <select class="pendencias-workload-designer-select flex-1 min-w-0 px-2 py-1 text-[11px] border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-violet-600"
                                     data-project-id="${project.id}"
                                     data-current-designer-id="${assigneeId}">
                                     <option value="">Selecione...</option>
-                                    ${getPendenciasWorkloadProjetistaOptionsHtml(assigneeId)}
+                                    ${getPendenciasWorkloadAssigneeOptionsHtml(statusName, assigneeId)}
                                 </select>
                                 <button type="button"
                                     class="pendencias-workload-atualizar-btn shrink-0 text-[10px] bg-violet-700 text-white hover:bg-violet-800 px-2 py-1 rounded-lg font-medium whitespace-nowrap"
@@ -1595,7 +1619,12 @@ async function loadPendenciasCargaPorProjetista() {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando carga por projetista...</p>';
     }
 
-    const workloadResult = await fetchPendenciasProjetistaWorkload();
+    const [, workloadResult] = await Promise.all([
+        typeof fetchPendenciasActiveReviewers === 'function'
+            ? fetchPendenciasActiveReviewers()
+            : Promise.resolve([]),
+        fetchPendenciasProjetistaWorkload()
+    ]);
     if (workloadResult.error) {
         renderPendenciasPlaceholder(
             'Carga por projetista',
@@ -1691,8 +1720,10 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
 
     if (!projectId) return;
 
-    const isImplantacao = normalizePendenciasWorkloadStatusName(statusName) === PENDENCIAS_STATUS_IMPLANTACAO;
-    const isAguardandoPt = normalizePendenciasWorkloadStatusName(statusName) === PENDENCIAS_STATUS_AGUARDANDO_PT;
+    const normalizedStatus = normalizePendenciasWorkloadStatusName(statusName);
+    const isRevisorStatus = isPendenciasWorkloadRevisionRevisorStatus(normalizedStatus);
+    const isImplantacao = normalizedStatus === PENDENCIAS_STATUS_IMPLANTACAO;
+    const isAguardandoPt = normalizedStatus === PENDENCIAS_STATUS_AGUARDANDO_PT;
     const shouldChangeDesigner = Boolean(newDesignerId) && Number(newDesignerId) !== Number(currentDesignerId);
 
     if (isAguardandoPt && !validatePendenciasAssociacaoPrevisao(inicioDate, previsaoDate, deliveryDate)) {
@@ -1700,22 +1731,36 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
     }
 
     if (!isAguardandoPt && !shouldChangeDesigner) {
-        alertAppDialog('Selecione um projetista para transferir.');
+        alertAppDialog(
+            isRevisorStatus
+                ? 'Selecione um revisor para transferir.'
+                : 'Selecione um projetista para transferir.'
+        );
         return;
     }
-    let projetista = null;
+    let assigneeUser = null;
 
     if (shouldChangeDesigner) {
-        projetista = pendenciasProjetistasCache.find(item => Number(item.id) === Number(newDesignerId));
-        if (!projetista) {
-            alertAppDialog('Projetista inválido.');
-            return;
-        }
+        if (isRevisorStatus) {
+            const revisores = typeof pendenciasRevisoresCache !== 'undefined' ? pendenciasRevisoresCache : [];
+            assigneeUser = revisores.find(item => Number(item.id) === Number(newDesignerId));
+            if (!assigneeUser) {
+                alertAppDialog('Revisor inválido.');
+                return;
+            }
+            if (!(await confirmAppDialog(`Transferir a revisão técnica para ${assigneeUser.name}?`))) return;
+        } else {
+            assigneeUser = pendenciasProjetistasCache.find(item => Number(item.id) === Number(newDesignerId));
+            if (!assigneeUser) {
+                alertAppDialog('Projetista inválido.');
+                return;
+            }
 
-        const confirmMessage = isImplantacao
-            ? `Transferir esta implantação para ${projetista.name}?`
-            : `Transferir este projeto para ${projetista.name}?`;
-        if (!(await confirmAppDialog(confirmMessage))) return;
+            const confirmMessage = isImplantacao
+                ? `Transferir esta implantação para ${assigneeUser.name}?`
+                : `Transferir este projeto para ${assigneeUser.name}?`;
+            if (!(await confirmAppDialog(confirmMessage))) return;
+        }
     }
 
     const now = new Date().toISOString();
@@ -1725,7 +1770,19 @@ async function atualizarPendenciaProjetoWorkload(projectId, newDesignerId, curre
         setPendenciasActionLoading(true, loadingMessage);
 
         if (shouldChangeDesigner) {
-            if (isImplantacao) {
+            if (isRevisorStatus) {
+                if (typeof assignOrderProjectTechnicalReviewer !== 'function') {
+                    alertAppDialog('Função de associação de revisor indisponível.');
+                    return;
+                }
+                const result = await assignOrderProjectTechnicalReviewer(projectId, newDesignerId);
+                if (!result?.ok) {
+                    alertAppDialog(
+                        'Erro ao atualizar revisor: ' + (result?.error?.message || 'erro desconhecido')
+                    );
+                    return;
+                }
+            } else if (isImplantacao) {
                 const { error } = await supabaseClient
                     .from('Implementation')
                     .update({

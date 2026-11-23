@@ -3,39 +3,27 @@ const MONTAGEM_INTERNA_STATUS = 'Montagem Interna';
 const MONTAGEM_EXPEDICAO_STATUS = 'Expedição';
 const MONTAGEM_EXTERNA_STATUS = 'Montagem Externa';
 
-async function getOrderProjectStatusIdByName(statusName) {
-    const { data, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .eq('isActive', true)
-        .maybeSingle();
-
-    if (!error && data?.id) return data.id;
-
-    const { data: fallback } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .maybeSingle();
-
-    return fallback?.id || null;
+async function resolveMontagemOrderProjectStatusId(statusName) {
+    if (typeof getOrderProjectStatusIdByName !== 'function') {
+        throw new Error('Cache de status de projeto indisponível.');
+    }
+    return getOrderProjectStatusIdByName(statusName);
 }
 
 async function getEmProducaoProjectStatusId() {
-    return getOrderProjectStatusIdByName(MONTAGEM_EM_PRODUCAO_STATUS);
+    return resolveMontagemOrderProjectStatusId(MONTAGEM_EM_PRODUCAO_STATUS);
 }
 
 async function getMontagemInternaProjectStatusId() {
-    return getOrderProjectStatusIdByName(MONTAGEM_INTERNA_STATUS);
+    return resolveMontagemOrderProjectStatusId(MONTAGEM_INTERNA_STATUS);
 }
 
 async function getExpedicaoProjectStatusId() {
-    return getOrderProjectStatusIdByName(MONTAGEM_EXPEDICAO_STATUS);
+    return resolveMontagemOrderProjectStatusId(MONTAGEM_EXPEDICAO_STATUS);
 }
 
 async function getMontagemExternaProjectStatusId() {
-    return getOrderProjectStatusIdByName(MONTAGEM_EXTERNA_STATUS);
+    return resolveMontagemOrderProjectStatusId(MONTAGEM_EXTERNA_STATUS);
 }
 
 function canActIniciarMontagemExterna() {

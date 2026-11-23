@@ -18,31 +18,12 @@ function rememberOrderProjectAsNomeado(projectId) {
     if (projectId) orderNomeadoProjectIdsCache.add(Number(projectId));
 }
 
-async function getOrderProjectStatusIdByNameNomear(statusName) {
-    const { data, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .eq('isActive', true)
-        .maybeSingle();
-
-    if (!error && data?.id) return data.id;
-
-    const { data: fallback } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .maybeSingle();
-
-    return fallback?.id || null;
-}
-
 async function getNomearProjectStatusIdForOrder() {
-    return getOrderProjectStatusIdByNameNomear(ORDER_NOMEAR_STATUS);
+    return getOrderProjectStatusIdByName(ORDER_NOMEAR_STATUS);
 }
 
 async function getAguardandoPpcpProjectStatusIdForNomear() {
-    return getOrderProjectStatusIdByNameNomear(ORDER_AGUARDANDO_PPCP_STATUS);
+    return getOrderProjectStatusIdByName(ORDER_AGUARDANDO_PPCP_STATUS);
 }
 
 function isOrderProjectNomeado(project) {

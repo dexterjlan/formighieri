@@ -48,12 +48,15 @@ async function persistAppUserInsert(payload, email, role) {
     return result;
 }
 
-async function enterApp(authUserId, authUser = null) {
+async function enterApp(authUserId, authUser = null, options = {}) {
     if (enterAppInProgress) {
         return enterAppInProgress;
     }
 
     enterAppInProgress = (async () => {
+        if (typeof assertAppSessionPolicyForEnterApp === 'function') {
+            await assertAppSessionPolicyForEnterApp(options);
+        }
         if (typeof ensureAppScriptsLoaded === 'function') {
             await showAppSessionLoading('Carregando...', 'Preparando a aplicação');
             await ensureAppScriptsLoaded();
@@ -75,6 +78,12 @@ async function enterApp(authUserId, authUser = null) {
         }
         if (typeof scheduleAppDocumentTitlePendenciasCountRefresh === 'function') {
             scheduleAppDocumentTitlePendenciasCountRefresh(0);
+        }
+        if (typeof recordAppSessionGrant === 'function') {
+            recordAppSessionGrant();
+        }
+        if (typeof startAppSessionPolicyWatcher === 'function') {
+            startAppSessionPolicyWatcher();
         }
     })();
 
@@ -436,6 +445,7 @@ function bindLogoutEvent() {
     btn.addEventListener("click", async function () {
         if (typeof clearUserImpersonationState === 'function') clearUserImpersonationState();
         if (typeof clearAppNavState === 'function') clearAppNavState();
+        if (typeof clearAppSessionGrant === 'function') clearAppSessionGrant();
         await supabaseClient.auth.signOut();
         location.reload();
     });
@@ -468,7 +478,7 @@ function bindAuthEvents() {
                 return;
             }
 
-            await enterApp(data.user.id, data.user);
+            await enterApp(data.user.id, data.user, { freshLogin: true });
         } catch (err) {
             console.error("login:", err);
             hideAppSessionLoading();
@@ -559,7 +569,7 @@ function bindAuthEvents() {
             }
 
             if (data.session) {
-                await enterApp(data.user.id, data.user);
+                await enterApp(data.user.id, data.user, { freshLogin: true });
                 document.getElementById("register-form").reset();
                 return;
             }
@@ -693,7 +703,7 @@ function bindAuthEvents() {
                 title: "Senha redefinida"
             });
             if (session?.user) {
-                await enterApp(session.user.id, session.user);
+                await enterApp(session.user.id, session.user, { freshLogin: true });
             } else {
                 showLoginScreen();
             }
@@ -726,6 +736,7 @@ function bindAuthEvents() {
             passwordRecoveryPending = false;
             if (typeof clearUserImpersonationState === 'function') clearUserImpersonationState();
             if (typeof clearAppNavState === 'function') clearAppNavState();
+            if (typeof clearAppSessionGrant === 'function') clearAppSessionGrant();
             if (typeof resetAppDocumentTitle === 'function') resetAppDocumentTitle();
             return;
         }

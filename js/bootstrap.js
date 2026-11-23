@@ -20,6 +20,7 @@ const BOOTSTRAP_CORE_SCRIPTS = [
     'js/core/utils.js',
     'js/core/utils-permissions.js',
     'js/core/dialog.js',
+    'js/core/app-session-policy.js',
     'js/core/navigation.js',
     'js/core/auth.js',
     'js/core/main.js'
@@ -376,6 +377,11 @@ async function bootstrap() {
         if (!session?.user && shouldShowLoginScreen()) {
             showLoginScreen();
         } else if (session?.user) {
+            const mayContinue = typeof enforceAppSessionPolicyOnBootstrap === 'function'
+                ? await enforceAppSessionPolicyOnBootstrap(session)
+                : true;
+            if (!mayContinue) return;
+
             // Sessão ativa: pré-carrega o app em paralelo com o fluxo de auth (enterApp reutiliza a mesma promise).
             ensureAppScriptsLoaded().catch(error => {
                 console.error('loadAppShell:', error);

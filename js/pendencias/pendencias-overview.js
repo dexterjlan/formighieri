@@ -207,21 +207,25 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 const { error, records } = await fetchPendenciasDetalhamentosSemProjetista();
                 return error ? null : records.length;
             }
-            case 'gestor-fabrica:aguardando-montagem-interna': {
-                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EM_PRODUCAO);
-                return error ? null : count;
-            }
-            case 'gestor-fabrica:em-montagem': {
-                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_INTERNA);
-                return error ? null : count;
-            }
-            case 'gestor-fabrica:expedicao': {
-                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_EXPEDICAO);
-                return error ? null : count;
-            }
+            case 'gestor-fabrica:aguardando-montagem-interna':
+            case 'gestor-fabrica:em-montagem':
+            case 'gestor-fabrica:expedicao':
             case 'gestor-fabrica:montagem-externa': {
-                const { error, count } = await countPendenciasProjectsByStatusName(PENDENCIAS_STATUS_MONTAGEM_EXTERNA);
-                return error ? null : count;
+                const statusByItem = {
+                    'aguardando-montagem-interna': PENDENCIAS_STATUS_EM_PRODUCAO,
+                    'em-montagem': PENDENCIAS_STATUS_MONTAGEM_INTERNA,
+                    expedicao: PENDENCIAS_STATUS_EXPEDICAO,
+                    'montagem-externa': PENDENCIAS_STATUS_MONTAGEM_EXTERNA
+                };
+                const statusName = statusByItem[itemId];
+                if (!statusName) return null;
+                if (typeof getPendenciasGestorFabricaOverviewCountsByStatusName !== 'function') {
+                    const { error, count } = await countPendenciasProjectsByStatusName(statusName);
+                    return error ? null : count;
+                }
+                const { error, byName } = await getPendenciasGestorFabricaOverviewCountsByStatusName();
+                if (error) return null;
+                return byName?.[statusName] ?? 0;
             }
             case 'gestor-fabrica:rota': {
                 if (typeof fetchExpeditionEntitiesForFabricaRotaPreview !== 'function') return null;
@@ -354,7 +358,7 @@ function renderPendenciasSectionOverview(section, cards) {
     `;
 
     content.querySelector('#btn-pendencias-refresh-overview')
-        ?.addEventListener('click', () => loadPendenciasSectionOverview());
+        ?.addEventListener('click', () => loadPendenciasSectionOverview({ invalidateCountCache: true }));
 
     content.querySelectorAll('.pendencias-overview-card').forEach(button => {
         button.addEventListener('click', async () => {
@@ -366,12 +370,20 @@ function renderPendenciasSectionOverview(section, cards) {
     });
 }
 
-async function loadPendenciasSectionOverview() {
+async function loadPendenciasSectionOverview(options = {}) {
     setPendenciasActionLoading(false);
+
+    if (options.invalidateCountCache && typeof invalidatePendenciasOrderProjectCountCache === 'function') {
+        invalidatePendenciasOrderProjectCountCache();
+    }
 
     const content = document.getElementById('pendencias-content');
     if (content) {
         content.innerHTML = '<p class="text-xs text-slate-400 text-center py-10">Carregando resumo...</p>';
+    }
+
+    if (typeof loadOrderProjectStatusesCache === 'function') {
+        await loadOrderProjectStatusesCache();
     }
 
     const sections = getPendenciasSidebarSections();
@@ -398,6 +410,9 @@ async function loadPendenciasSectionOverview() {
 }
 
 async function refreshPendenciasOverviewCounts() {
+    if (typeof invalidatePendenciasOrderProjectCountCache === 'function') {
+        invalidatePendenciasOrderProjectCountCache();
+    }
     if (typeof scheduleAppDocumentTitlePendenciasCountRefresh === 'function') {
         scheduleAppDocumentTitlePendenciasCountRefresh(100);
     }
@@ -446,6 +461,10 @@ async function fetchPendenciasUserTotalCount() {
     }
     if (typeof getPendenciasSidebarSections !== 'function') {
         return 0;
+    }
+
+    if (typeof loadOrderProjectStatusesCache === 'function') {
+        await loadOrderProjectStatusesCache();
     }
 
     const sections = getPendenciasSidebarSections();

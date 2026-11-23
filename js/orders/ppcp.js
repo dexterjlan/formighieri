@@ -9,31 +9,12 @@ const PPCP_STATUS_PIPELINE = [
     'Expedição'
 ];
 
-async function getOrderProjectStatusIdByNamePpcp(statusName) {
-    const { data, error } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .eq('isActive', true)
-        .maybeSingle();
-
-    if (!error && data?.id) return data.id;
-
-    const { data: fallback } = await supabaseClient
-        .from('OrderProjectStatus')
-        .select('id')
-        .eq('name', statusName)
-        .maybeSingle();
-
-    return fallback?.id || null;
-}
-
 async function getAguardandoPpcpProjectStatusId() {
-    return getOrderProjectStatusIdByNamePpcp(PPCP_AGUARDANDO_STATUS);
+    return getOrderProjectStatusIdByName(PPCP_AGUARDANDO_STATUS);
 }
 
 async function getPpcpImplantacaoProjectStatusId() {
-    return getOrderProjectStatusIdByNamePpcp(PPCP_IMPLANTACAO_STATUS);
+    return getOrderProjectStatusIdByName(PPCP_IMPLANTACAO_STATUS);
 }
 
 function canActOrderPpcp(user = currentUser) {
