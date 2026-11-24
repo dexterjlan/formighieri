@@ -69,6 +69,20 @@ async function enrichPesquisasPurchases(purchases = []) {
         }
     }
 
+    const createdByIds = [...new Set(purchases.map(item => item.createdById).filter(Boolean))];
+    let requestersById = {};
+
+    if (createdByIds.length) {
+        const usersResult = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .in('id', createdByIds);
+
+        if (!usersResult.error && usersResult.data) {
+            requestersById = Object.fromEntries(usersResult.data.map(row => [row.id, row.name]));
+        }
+    }
+
     return purchases.map(purchase => {
         const project = projectsById[purchase.orderProjectId] || null;
         const purchaseItem = purchaseItemsById[purchase.implementationPurchaseItemId] || null;
@@ -83,6 +97,7 @@ async function enrichPesquisasPurchases(purchases = []) {
             clientName: getOrderClientName(project?.order) || '—',
             projectName: project?.name || '—',
             tipoLabel,
+            requesterName: requestersById[purchase.createdById] || '—',
             statusName: purchase.status || '—',
             statusClass: typeof getCompraStatusBadgeClass === 'function'
                 ? getCompraStatusBadgeClass(purchase.status)
@@ -112,7 +127,7 @@ function renderPesquisasPurchasesTable(rows = []) {
         onRefresh: refreshPesquisasPurchasesQuery,
         tableId: 'pesquisas-purchases',
         rows,
-        minWidth: '960px',
+        minWidth: '1080px',
         emptyMessage: 'Nenhuma compra encontrada.',
         columns: [
             ...getPendenciasInteractiveIdentityColumns(),
@@ -120,6 +135,11 @@ function renderPesquisasPurchasesTable(rows = []) {
                 key: 'tipoLabel',
                 label: 'Tipo',
                 cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'requesterName',
+                label: 'Solicitante',
+                cellClass: 'p-3 text-xs text-slate-700 whitespace-nowrap'
             },
             getPendenciasInteractiveStatusColumn(),
             getPendenciasInteractiveDateColumn({
