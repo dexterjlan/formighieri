@@ -39,7 +39,8 @@ const PENDENCIAS_OVERVIEW_DESCRIPTIONS = {
         'em-montagem': 'Projetos em montagem interna aguardando finalização.',
         expedicao: 'Projetos em expedição aguardando início da montagem externa.',
         'montagem-externa': 'Projetos em montagem externa aguardando finalização.',
-        rota: 'Itens elegíveis para paradas de rota (todos os tipos somados), como na busca ao adicionar parada na expedição.'
+        rota: 'Itens elegíveis para paradas de rota (todos os tipos somados), como na busca ao adicionar parada na expedição.',
+        'ag-lib-medicao': 'Requisições de compra nos status Ag. Lib. de Medição (Fábrica ou Obra).'
     },
     compras: {
         'enviados-compras': 'Solicitações de compra em aberto geradas pela implantação.',
@@ -232,6 +233,24 @@ async function fetchPendenciasOverviewItemCount(sectionId, itemId) {
                 const { items, errors } = await fetchExpeditionEntitiesForFabricaRotaPreview();
                 if (errors.length && !items.length) return null;
                 return items.length;
+            }
+            case 'gestor-fabrica:ag-lib-medicao': {
+                if (typeof canSeePendenciasFabricaAgLibMedicaoMenu === 'function'
+                    && !canSeePendenciasFabricaAgLibMedicaoMenu()) {
+                    return 0;
+                }
+                if (typeof fetchPendenciasFabricaAgLibMedicao === 'function') {
+                    const { error, items } = await fetchPendenciasFabricaAgLibMedicao();
+                    return error ? null : (items || []).length;
+                }
+                if (typeof fetchPendenciasComprasByStatuses === 'function'
+                    && typeof getCompraAguardandoLibMedicaoStatusNames === 'function') {
+                    const { error, items } = await fetchPendenciasComprasByStatuses(
+                        getCompraAguardandoLibMedicaoStatusNames()
+                    );
+                    return error ? null : (items || []).length;
+                }
+                return null;
             }
             case 'compras:enviados-compras': {
                 const { error, items } = await fetchPendenciasEnviadosCompras();

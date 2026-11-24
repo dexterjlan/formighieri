@@ -380,32 +380,6 @@ function bindOrderCodePickerEvents() {
         }, 350);
     });
 
-    document.getElementById('btn-cal-event-order-picker')?.addEventListener('click', () => {
-        openOrderCodePicker({
-            orderInputId: 'cal-event-order-code',
-            clientInputId: 'cal-event-client-name',
-            onApply: () => {
-                if (typeof syncCalendarClientNameField === 'function') {
-                    syncCalendarClientNameField();
-                }
-            }
-        });
-    });
-
-    document.getElementById('btn-montagem-prog-order-picker')?.addEventListener('click', () => {
-        openOrderCodePicker({
-            orderInputId: 'montagem-prog-order-code',
-            clientInputId: 'montagem-prog-client-name',
-            clientIdInputId: 'montagem-prog-client-id',
-            hideSearchButton: true,
-            searchPlaceholder: 'Filtrar por nome do cliente...',
-            onApply: () => {
-                if (typeof syncMontagemProgClientRequired === 'function') {
-                    syncMontagemProgClientRequired();
-                }
-            }
-        });
-    });
 }
 
 window.openOrderCodePicker = openOrderCodePicker;

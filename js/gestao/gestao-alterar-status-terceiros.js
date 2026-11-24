@@ -388,7 +388,9 @@ async function loadGestaoAlterarStatusTerceirosList() {
     const countEl = document.getElementById('gestao-alterar-status-terceiros-count');
     if (!tbody || !canAccessGestao()) return;
 
-    const orderCode = document.getElementById('gestao-alterar-status-terceiros-filter-order')?.value.trim() || '';
+    const orderCode = typeof getOrderSearchFilterComboboxTerm === 'function'
+        ? getOrderSearchFilterComboboxTerm('gestao-alterar-status-terceiros', 'gestao-alterar-status-terceiros-filter-order-search')
+        : '';
     const clientName = document.getElementById('gestao-alterar-status-terceiros-filter-client')?.value.trim() || '';
 
     if (!orderCode && !clientName) {
@@ -432,11 +434,21 @@ async function loadGestaoAlterarStatusTerceirosList() {
 }
 
 function resetGestaoAlterarStatusTerceirosFilters() {
-    const orderInput = document.getElementById('gestao-alterar-status-terceiros-filter-order');
+    if (typeof clearOrderSearchFilterCombobox === 'function') {
+        clearOrderSearchFilterCombobox('gestao-alterar-status-terceiros');
+    }
     const clientInput = document.getElementById('gestao-alterar-status-terceiros-filter-client');
-    if (orderInput) orderInput.value = '';
     if (clientInput) clientInput.value = '';
     loadGestaoAlterarStatusTerceirosList();
+}
+
+function initGestaoAlterarStatusTerceirosOrderCombobox() {
+    if (typeof initOrderSearchFilterCombobox !== 'function') return;
+    initOrderSearchFilterCombobox('gestao-alterar-status-terceiros', {
+        wrap: document.getElementById('gestao-alterar-status-terceiros-filter-order-wrap'),
+        input: document.getElementById('gestao-alterar-status-terceiros-filter-order-search'),
+        list: document.getElementById('gestao-alterar-status-terceiros-filter-order-list')
+    });
 }
 
 function bindGestaoAlterarStatusTerceirosEvents() {
@@ -455,3 +467,4 @@ function bindGestaoAlterarStatusTerceirosEvents() {
 }
 
 bindGestaoAlterarStatusTerceirosEvents();
+initGestaoAlterarStatusTerceirosOrderCombobox();

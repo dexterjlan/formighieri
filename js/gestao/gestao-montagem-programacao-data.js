@@ -24,6 +24,32 @@ async function lookupMontagemProgOrderByCode(orderCode) {
     return result.data;
 }
 
+async function lookupMontagemProgOrderById(orderId) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId) return null;
+
+    let result = await supabaseClient
+        .from('salesOrders')
+        .select(getSalesOrderMinimalEmbedSelect('addrId'))
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (result.error && /addrId/i.test(result.error.message || '')) {
+        result = await supabaseClient
+            .from('salesOrders')
+            .select(getSalesOrderMinimalEmbedSelect())
+            .eq('id', normalizedId)
+            .maybeSingle();
+    }
+
+    if (result.error) {
+        console.error('lookupMontagemProgOrderById:', result.error);
+        return null;
+    }
+
+    return result.data;
+}
+
 async function persistMontagemProgAddrId(scheduleId, addrId) {
     const normalizedScheduleId = Number(scheduleId);
     if (!normalizedScheduleId) return;

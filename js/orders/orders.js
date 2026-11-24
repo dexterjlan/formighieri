@@ -1378,6 +1378,9 @@ function bindOrderEvents() {
             alertAppDialog("Erro ao salvar pedido: " + error.message);
             return;
         }
+        if (typeof invalidateOrderSearchComboboxCache === 'function') {
+            invalidateOrderSearchComboboxCache();
+        }
         toggleModal('order-modal', false);
         document.getElementById("order-form").reset();
         await loadClientesDatalist();

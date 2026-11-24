@@ -6,6 +6,100 @@ const montagemProgModalOverlay = typeof createAppOverlayHelper === 'function'
     })
     : null;
 
+let montagemProgOrderCombobox = null;
+
+function getMontagemProgFormOrderId() {
+    return Number(document.getElementById('montagem-prog-order-id')?.value) || null;
+}
+
+function montagemProgFormHasOrder() {
+    if (getMontagemProgFormOrderId()) return true;
+    if (montagemProgOrderCombobox?.getSelectedOrder?.()?.id) return true;
+    return Boolean(document.getElementById('montagem-prog-order-search')?.value.trim());
+}
+
+async function applyMontagemProgOrderSelection(order) {
+    if (!order) return;
+    const orderClientName = typeof getOrderClientName === 'function' ? getOrderClientName(order) : '';
+    if (orderClientName) {
+        document.getElementById('montagem-prog-client-name').value = orderClientName;
+    }
+    const clientIdInput = document.getElementById('montagem-prog-client-id');
+    if (clientIdInput) {
+        clientIdInput.value = order.clientId ? String(order.clientId) : '';
+    }
+    if (typeof applyMontagemProgOrderAddress === 'function') {
+        await applyMontagemProgOrderAddress(order);
+    }
+    syncMontagemProgClientRequired();
+}
+
+function initMontagemProgOrderCombobox(selectedOrderId) {
+    if (montagemProgOrderCombobox?.destroy) {
+        montagemProgOrderCombobox.destroy();
+        montagemProgOrderCombobox = null;
+    }
+
+    const wrap = document.getElementById('montagem-prog-order-wrap');
+    const input = document.getElementById('montagem-prog-order-search');
+    const list = document.getElementById('montagem-prog-order-list');
+    const hidden = document.getElementById('montagem-prog-order-id');
+    if (!wrap || !input || !list || !hidden || typeof mountOrderSearchCombobox !== 'function') return;
+
+    hidden.value = selectedOrderId ? String(selectedOrderId) : '';
+
+    montagemProgOrderCombobox = mountOrderSearchCombobox({
+        wrap,
+        input,
+        list,
+        selectedOrderId: selectedOrderId || null,
+        onSelect: order => {
+            hidden.value = order ? String(order.id) : '';
+            void applyMontagemProgOrderSelection(order);
+        },
+        onClear: () => {
+            hidden.value = '';
+            if (typeof setMontagemProgSelectedAddr === 'function') {
+                setMontagemProgSelectedAddr(null);
+            }
+            syncMontagemProgClientRequired();
+        }
+    });
+}
+
+async function resolveMontagemProgOrderFromInput() {
+    const hidden = document.getElementById('montagem-prog-order-id');
+    const input = document.getElementById('montagem-prog-order-search');
+    const selected = montagemProgOrderCombobox?.getSelectedOrder?.();
+    if (selected?.id) {
+        if (hidden) hidden.value = String(selected.id);
+        syncMontagemProgClientRequired();
+        return;
+    }
+
+    const raw = input?.value.trim() || '';
+    if (!raw) {
+        if (hidden) hidden.value = '';
+        syncMontagemProgClientRequired();
+        return;
+    }
+
+    const code = typeof parseOrderSearchComboboxFilterCode === 'function'
+        ? parseOrderSearchComboboxFilterCode(raw)
+        : raw;
+    const order = await lookupMontagemProgOrderByCode(code);
+    if (!order) {
+        syncMontagemProgClientRequired();
+        return;
+    }
+
+    if (hidden) hidden.value = String(order.id);
+    if (typeof formatOrderSearchComboboxLabel === 'function' && input) {
+        input.value = formatOrderSearchComboboxLabel(order);
+    }
+    await applyMontagemProgOrderSelection(order);
+}
+
 function getMontagemProgSaveErrorMessage(error) {
     const sqlHint = error?.message?.includes('AssemblyScheduleCabinetMaker')
         ? '\n\nConsulte PENDING-PROD-SQL.md ou supabase/schema/.'
@@ -149,10 +243,9 @@ function populateMontagemProgCrewSelects(options = {}) {
 }
 
 function syncMontagemProgClientRequired() {
-    const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
+    const hasOrder = montagemProgFormHasOrder();
     const requiredMarker = document.getElementById('montagem-prog-client-required');
     const clientBtn = document.getElementById('btn-montagem-prog-client-picker');
-    const hasOrder = Boolean(orderCode);
 
     requiredMarker?.classList.toggle('hidden', hasOrder);
     if (clientBtn) {
@@ -201,9 +294,8 @@ function getMontagemProgSelectedAddrId() {
 }
 
 function syncMontagemProgAddrField() {
-    const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
+    const hasOrder = montagemProgFormHasOrder();
     const clientId = Number(document.getElementById('montagem-prog-client-id')?.value) || null;
-    const hasOrder = Boolean(orderCode);
     const canPick = !hasOrder && Boolean(clientId);
     const btn = document.getElementById('btn-montagem-prog-addr-picker');
     const input = document.getElementById('montagem-prog-addr');
@@ -233,9 +325,9 @@ async function applyMontagemProgOrderAddress(order) {
 }
 
 async function applyMontagemProgAddressFromContext(prog) {
-    const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
-    if (orderCode) {
-        const order = await lookupMontagemProgOrderByCode(orderCode);
+    const orderId = Number(prog?.orderId) || Number(prog?.order?.id) || null;
+    if (orderId) {
+        const order = await lookupMontagemProgOrderById(orderId);
         if (order) {
             await applyMontagemProgOrderAddress(order);
             return;
@@ -295,6 +387,8 @@ function syncMontagemProgCrewExclusivity() {
     }
 }
 
+window.montagemProgFormHasOrder = montagemProgFormHasOrder;
+
 async function openMontagemProgModal(prog = null, presetDate = null, presetWorker = null) {
     if (!canEditProgramacaoMontagem()) return;
 
@@ -338,7 +432,7 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetWorke
     const defaultDate = presetDate || getMontagemProgWeekStartKey();
     document.getElementById('montagem-prog-start-date').value = prog?.startDate || defaultDate;
     document.getElementById('montagem-prog-end-date').value = prog?.endDate || defaultDate;
-    document.getElementById('montagem-prog-order-code').value = getMontagemProgOrderLabel(prog);
+    const selectedOrderId = Number(prog?.orderId) || Number(prog?.order?.id) || null;
     document.getElementById('montagem-prog-client-name').value = getMontagemProgClientLabel(prog);
     const clientIdInput = document.getElementById('montagem-prog-client-id');
     if (clientIdInput) {
@@ -349,6 +443,7 @@ async function openMontagemProgModal(prog = null, presetDate = null, presetWorke
     document.getElementById('montagem-prog-observation').value = prog?.observation || '';
 
     syncMontagemProgClientRequired();
+    initMontagemProgOrderCombobox(selectedOrderId);
     await applyMontagemProgAddressFromContext(prog);
 
     const skipWeekendsWrap = document.getElementById('montagem-prog-skip-weekends-wrap');
@@ -377,7 +472,7 @@ async function saveMontagemProg(event) {
     const montador2 = Number(document.getElementById('montagem-prog-montador-2')?.value);
     const marceneiro1 = Number(document.getElementById('montagem-prog-marceneiro-1')?.value);
     const marceneiro2 = Number(document.getElementById('montagem-prog-marceneiro-2')?.value);
-    const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
+    await resolveMontagemProgOrderFromInput();
     const clientId = Number(document.getElementById('montagem-prog-client-id')?.value) || null;
     const observation = document.getElementById('montagem-prog-observation')?.value.trim() || '';
 
@@ -414,16 +509,15 @@ async function saveMontagemProg(event) {
         return;
     }
 
-    let orderId = null;
+    let orderId = getMontagemProgFormOrderId();
     let resolvedClientId = clientId;
     let order = null;
-    if (orderCode) {
-        order = await lookupMontagemProgOrderByCode(orderCode);
+    if (orderId) {
+        order = await lookupMontagemProgOrderById(orderId);
         if (!order) {
             alertAppDialog('Pedido não encontrado para o código informado.');
             return;
         }
-        orderId = order.id;
         resolvedClientId = order.clientId || resolvedClientId;
     } else if (!resolvedClientId) {
         alertAppDialog('Selecione o cliente no cadastro quando não houver código de pedido.');

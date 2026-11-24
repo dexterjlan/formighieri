@@ -110,6 +110,132 @@ function getExpeditionUnloadingCurrentStop() {
     return stops.find(stop => Number(stop.stopId) === Number(expedicaoUnloadingCurrentStopId)) || null;
 }
 
+function buildExpeditionUnloadingNextStopSummary(volumes = [], pickupItems = []) {
+    const groupFn = typeof groupExpeditionUnloadingStopsFromVolumesAndPickups === 'function'
+        ? groupExpeditionUnloadingStopsFromVolumesAndPickups
+        : groupExpeditionUnloadingStops;
+    const stops = groupFn(volumes, pickupItems);
+    const next = findNextUnloadingStop(stops);
+    if (!next) {
+        return {
+            stopIndex: null,
+            totalStops: stops.length,
+            address: '',
+            completed: stops.length > 0
+        };
+    }
+    const stopIndex = stops.findIndex(stop => Number(stop.stopId) === Number(next.stopId)) + 1;
+    const address = typeof formatExpeditionAddressOneLine === 'function'
+        ? formatExpeditionAddressOneLine(next.addr)
+        : '';
+    return {
+        stopIndex,
+        totalStops: stops.length,
+        address: address || '',
+        completed: false
+    };
+}
+
+function formatExpeditionUnloadingNextStopListLabel(summary) {
+    if (!summary) return '—';
+    if (summary.completed || !summary.stopIndex) {
+        return summary.totalStops ? 'Concluído' : '—';
+    }
+    const address = String(summary.address || '').trim();
+    const head = `Parada ${summary.stopIndex} de ${summary.totalStops}`;
+    return address ? `${head} · ${address}` : head;
+}
+
+async function fetchExpeditionPickupStopItemsForRoutes(routeIds = []) {
+    const keys = [...new Set((routeIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!keys.length) return [];
+
+    const stopEmbedInner = 'stop:ExpeditionRouteStop!inner(id, routeId, sortOrder, addrSnapshot)';
+    const selects = [
+        `id, entityType, pickupUnloadedAt, stopId, routeId, ${stopEmbedInner}`,
+        `id, entityType, pickupUnloadedAt, stopId, ${stopEmbedInner}`
+    ];
+
+    let lastError = null;
+    for (const select of selects) {
+        const result = await supabaseClient
+            .from('ExpeditionRouteStopItem')
+            .select(select)
+            .eq('entityType', 'Pickup')
+            .in('stop.routeId', keys);
+        if (!result.error) return result.data || [];
+        lastError = result.error;
+        if (!/relationship|routeId|schema cache|pickupUnloaded/i.test(result.error.message || '')) {
+            throw result.error;
+        }
+    }
+
+    if (lastError && typeof isExpeditionPickupSchemaError === 'function' && isExpeditionPickupSchemaError(lastError)) {
+        return [];
+    }
+    if (lastError) console.warn('fetchExpeditionPickupStopItemsForRoutes:', lastError);
+    return [];
+}
+
+async function fetchExpeditionVolumesForRoutes(routeIds = []) {
+    const keys = [...new Set((routeIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!keys.length) return [];
+
+    const select = `
+        id, routeId, boardedAt, unloadedAt,
+        stopItem:ExpeditionRouteStopItem(
+            id,
+            stop:ExpeditionRouteStop(id, sortOrder, addrSnapshot)
+        )
+    `;
+
+    const { data, error } = await supabaseClient
+        .from('ExpeditionVolume')
+        .select(select)
+        .in('routeId', keys);
+
+    if (error) {
+        if (typeof isExpeditionTablesMissingError === 'function' && isExpeditionTablesMissingError(error)) {
+            return [];
+        }
+        throw error;
+    }
+    return data || [];
+}
+
+async function enrichExpeditionUnloadingRoutesWithNextStop(rows = []) {
+    const routeIds = (rows || []).map(row => Number(row.id)).filter(Boolean);
+    if (!routeIds.length) return rows || [];
+
+    const [volumes, pickupItems] = await Promise.all([
+        fetchExpeditionVolumesForRoutes(routeIds),
+        fetchExpeditionPickupStopItemsForRoutes(routeIds)
+    ]);
+
+    const volumesByRoute = new Map();
+    (volumes || []).forEach(vol => {
+        const key = Number(vol.routeId);
+        if (!volumesByRoute.has(key)) volumesByRoute.set(key, []);
+        volumesByRoute.get(key).push(vol);
+    });
+
+    const pickupsByRoute = new Map();
+    (pickupItems || []).forEach(item => {
+        const key = Number(item.routeId || item.stop?.routeId);
+        if (!key) return;
+        if (!pickupsByRoute.has(key)) pickupsByRoute.set(key, []);
+        pickupsByRoute.get(key).push(item);
+    });
+
+    return (rows || []).map(row => ({
+        ...row,
+        nextStopSummary: buildExpeditionUnloadingNextStopSummary(
+            volumesByRoute.get(Number(row.id)) || [],
+            pickupsByRoute.get(Number(row.id)) || []
+        )
+    }));
+}
+
 async function fetchExpeditionUnloadingRoutes() {
     if (typeof fetchExpeditionRoutesForUi === 'function') {
         return fetchExpeditionRoutesForUi({
@@ -283,6 +409,22 @@ async function lookupExpeditionVolumeForUnloading(volumeCode) {
     return result.data;
 }
 
+function renderExpeditionUnloadingNextStopHtml(summary) {
+    const label = formatExpeditionUnloadingNextStopListLabel(summary);
+    if (!summary || label === '—') {
+        return '<span class="text-slate-400">—</span>';
+    }
+    if (summary.completed || !summary.stopIndex) {
+        return `<span class="text-emerald-700 font-semibold">${escapeHtml(label)}</span>`;
+    }
+    const parts = label.split(' · ');
+    const head = parts.shift() || label;
+    const addr = parts.join(' · ');
+    return `<span class="font-semibold text-indigo-900">${escapeHtml(head)}</span>${
+        addr ? `<span class="text-slate-600"> · ${escapeHtml(addr)}</span>` : ''
+    }`;
+}
+
 function renderExpeditionUnloadingList(mount, rows) {
     const renderActions = (row, mobile = false) => {
         const mapsBtn = row.mapsUrl
@@ -313,9 +455,11 @@ function renderExpeditionUnloadingList(mount, rows) {
         const routeLabel = typeof formatExpeditionRouteDisplayName === 'function'
             ? formatExpeditionRouteDisplayName(row)
             : (row.name || `Rota ${row.id}`);
+        const nextStopHtml = renderExpeditionUnloadingNextStopHtml(row.nextStopSummary);
         return `
             <article class="md:hidden border border-slate-200 rounded-xl p-3 bg-white shadow-sm">
                 <p class="text-xs font-bold text-slate-900">${escapeHtml(routeLabel)}</p>
+                <p class="text-[11px] mt-1 leading-snug">Próxima parada: ${nextStopHtml}</p>
                 <p class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(dateLabel)} · ${escapeHtml(statusLabel)}</p>
                 ${typeof renderExpeditionRouteCrewMobile === 'function' ? renderExpeditionRouteCrewMobile(row) : ''}
                 ${renderActions(row, true)}
@@ -333,10 +477,14 @@ function renderExpeditionUnloadingList(mount, rows) {
         const routeLabel = typeof formatExpeditionRouteDisplayName === 'function'
             ? formatExpeditionRouteDisplayName(row)
             : (row.name || `Rota ${row.id}`);
+        const nextStopHtml = renderExpeditionUnloadingNextStopHtml(row.nextStopSummary);
         return `
             <tr class="hover:bg-slate-50/80">
                 <td class="p-3 text-xs whitespace-nowrap">${escapeHtml(dateLabel)}</td>
-                <td class="p-3 text-xs font-semibold text-slate-800">${escapeHtml(routeLabel)}</td>
+                <td class="p-3 text-xs">
+                    <p class="font-semibold text-slate-800">${escapeHtml(routeLabel)}</p>
+                    <p class="text-[10px] text-slate-500 mt-0.5"><span class="font-medium text-slate-600">Próxima:</span> ${nextStopHtml}</p>
+                </td>
                 <td class="p-3 text-xs">${escapeHtml(row.vehicleLabel || '—')}</td>
                 <td class="p-3 text-xs">${escapeHtml(row.driverName || '—')}</td>
                 <td class="p-3 text-xs">${typeof getExpeditionResponsibleLabel === 'function'
@@ -699,7 +847,9 @@ async function loadExpedicaoUnloadingList() {
 
     setExpedicaoActionLoading(true, 'Carregando desembarque...');
     try {
-        const rows = await fetchExpeditionUnloadingRoutes();
+        const rows = await enrichExpeditionUnloadingRoutesWithNextStop(
+            await fetchExpeditionUnloadingRoutes()
+        );
         renderExpeditionUnloadingList(mount, rows);
     } catch (error) {
         console.error('loadExpedicaoUnloadingList:', error);

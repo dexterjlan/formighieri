@@ -7,82 +7,44 @@ let gestaoAgruparProjetosSelectedDesignerKey = null;
 const gestaoAgruparProjetosSelectedIds = new Set();
 let gestaoAgruparProjetosOrders = [];
 let gestaoAgruparProjetosSelectedOrderId = null;
-let gestaoAgruparProjetosOrderHighlight = -1;
-let gestaoAgruparProjetosOrderQuery = '';
+let gestaoAgruparProjetosOrderCombobox = null;
 
 const GESTAO_AGRUPAR_PROJETOS_EMPTY_ORDER_MESSAGE = 'Selecione um pedido para ver os ambientes.';
 
-function normalizeGestaoAgruparProjetosSearch(value) {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim();
+async function ensureGestaoAgruparProjetosOrdersCache() {
+    if (typeof fetchOrderSearchComboboxOrders !== 'function') {
+        throw new Error('Cache de pedidos indisponível.');
+    }
+    gestaoAgruparProjetosOrders = await fetchOrderSearchComboboxOrders();
+    return gestaoAgruparProjetosOrders;
 }
 
-function gestaoAgruparProjetosOrderLabel(order) {
-    const clientName = order?.client?.name || '';
-    if (clientName && order.orderCode) return `${order.orderCode} — ${clientName}`;
-    return order?.orderCode || clientName || `Pedido ${order?.id || ''}`;
-}
-
-function filterGestaoAgruparProjetosOrders(query) {
-    const term = normalizeGestaoAgruparProjetosSearch(query);
-    const matches = !term
-        ? gestaoAgruparProjetosOrders
-        : gestaoAgruparProjetosOrders.filter(order => {
-            const clientName = normalizeGestaoAgruparProjetosSearch(order.client?.name);
-            const code = normalizeGestaoAgruparProjetosSearch(order.orderCode);
-            return clientName.includes(term) || code.includes(term);
-        });
-    return matches.slice(0, 40);
-}
-
-function setGestaoAgruparProjetosOrderListOpen(open) {
-    const list = document.getElementById('gestao-agrupar-projetos-order-list');
-    const input = document.getElementById('gestao-agrupar-projetos-order-search');
-    if (!list || !input) return;
-    list.classList.toggle('hidden', !open);
-    input.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (!open) gestaoAgruparProjetosOrderHighlight = -1;
-}
-
-function renderGestaoAgruparProjetosOrderOptions() {
-    const list = document.getElementById('gestao-agrupar-projetos-order-list');
-    if (!list) return;
-
-    const matches = filterGestaoAgruparProjetosOrders(gestaoAgruparProjetosOrderQuery);
-    if (!matches.length) {
-        gestaoAgruparProjetosOrderHighlight = -1;
-        list.innerHTML = '<p class="px-3 py-2 text-xs text-slate-400">Nenhum pedido encontrado para esse cliente.</p>';
-        return;
+function initGestaoAgruparProjetosOrderCombobox(selectedOrderId) {
+    if (gestaoAgruparProjetosOrderCombobox?.destroy) {
+        gestaoAgruparProjetosOrderCombobox.destroy();
+        gestaoAgruparProjetosOrderCombobox = null;
     }
 
-    list.innerHTML = matches.map((order, index) => {
-        const active = index === gestaoAgruparProjetosOrderHighlight ? ' bg-slate-100' : '';
-        return `<button type="button" class="gestao-agrupar-projetos-order-option w-full text-left px-3 py-2 text-sm text-slate-800 hover:bg-slate-50${active}" data-order-id="${order.id}" data-option-index="${index}" role="option">${escapeHtml(gestaoAgruparProjetosOrderLabel(order))}</button>`;
-    }).join('');
-}
-
-async function loadGestaoAgruparProjetosOrderOptions() {
+    const wrap = document.getElementById('gestao-agrupar-projetos-order-wrap');
     const input = document.getElementById('gestao-agrupar-projetos-order-search');
-    if (!input) return;
+    const list = document.getElementById('gestao-agrupar-projetos-order-list');
+    if (!wrap || !input || !list || typeof mountOrderSearchCombobox !== 'function') return;
 
-    const { data, error } = await supabaseClient
-        .from('salesOrders')
-        .select('id, orderCode, client:Client(name)')
-        .order('orderCode', { ascending: false })
-        .limit(1000);
-
-    if (error) throw error;
-
-    gestaoAgruparProjetosOrders = data || [];
-    const selected = gestaoAgruparProjetosOrders.find(
-        order => Number(order.id) === Number(gestaoAgruparProjetosSelectedOrderId)
-    );
-    input.value = selected ? gestaoAgruparProjetosOrderLabel(selected) : '';
-    gestaoAgruparProjetosOrderQuery = '';
-    renderGestaoAgruparProjetosOrderOptions();
+    gestaoAgruparProjetosOrderCombobox = mountOrderSearchCombobox({
+        wrap,
+        input,
+        list,
+        selectedOrderId: selectedOrderId || null,
+        onSelect: order => {
+            void selectGestaoAgruparProjetosOrder(order?.id || null);
+        },
+        onClear: () => {
+            gestaoAgruparProjetosSelectedOrderId = null;
+            clearGestaoAgruparProjetosOrderSelection();
+            renderGestaoAgruparProjetosList();
+            syncGestaoAgruparProjetosSaveButton();
+        }
+    });
 }
 
 function getGestaoAgruparProjetosDesignerKey(project) {
@@ -392,14 +354,25 @@ async function selectGestaoAgruparProjetosOrder(orderId) {
         return;
     }
 
-    const order = gestaoAgruparProjetosOrders.find(item => Number(item.id) === Number(orderId));
-    const input = document.getElementById('gestao-agrupar-projetos-order-search');
+    const numericId = Number(orderId) || null;
+    let order = gestaoAgruparProjetosOrders.find(item => Number(item.id) === numericId);
+    if (numericId && !order) {
+        const { data } = await supabaseClient
+            .from('salesOrders')
+            .select('id, orderCode, client:Client(name)')
+            .eq('id', numericId)
+            .maybeSingle();
+        if (data) {
+            order = data;
+            gestaoAgruparProjetosOrders.push(data);
+            if (typeof appendOrderSearchComboboxOrder === 'function') appendOrderSearchComboboxOrder(data);
+        }
+    }
+
     const summaryEl = document.getElementById('gestao-agrupar-projetos-order-summary');
     const tbody = document.getElementById('gestao-agrupar-projetos-list');
 
     gestaoAgruparProjetosSelectedOrderId = order ? Number(order.id) : null;
-    if (input) input.value = order ? gestaoAgruparProjetosOrderLabel(order) : '';
-    setGestaoAgruparProjetosOrderListOpen(false);
     clearGestaoAgruparProjetosProjectSelection();
 
     if (!order) {
@@ -446,18 +419,15 @@ async function reloadGestaoAgruparProjetosProjectsForSelectedOrder() {
 
 async function initGestaoAgruparProjetosPanel() {
     const nameInput = document.getElementById('gestao-agrupar-projetos-name');
-    const searchInput = document.getElementById('gestao-agrupar-projetos-order-search');
     if (nameInput) nameInput.value = '';
-    if (searchInput) searchInput.value = '';
-    gestaoAgruparProjetosOrderQuery = '';
-    gestaoAgruparProjetosOrderHighlight = -1;
-    setGestaoAgruparProjetosOrderListOpen(false);
+    gestaoAgruparProjetosOrderCombobox?.clear?.();
     clearGestaoAgruparProjetosOrderSelection();
     renderGestaoAgruparProjetosList();
     syncGestaoAgruparProjetosSaveButton();
 
     try {
-        await loadGestaoAgruparProjetosOrderOptions();
+        await ensureGestaoAgruparProjetosOrdersCache();
+        initGestaoAgruparProjetosOrderCombobox(gestaoAgruparProjetosSelectedOrderId);
     } catch (error) {
         console.error('initGestaoAgruparProjetosPanel:', error);
         alertAppDialog(`Erro ao carregar pedidos: ${error.message}`, { variant: 'error', title: 'Erro' });
@@ -641,92 +611,9 @@ async function saveGestaoAgruparProjetos() {
 }
 
 function bindGestaoAgruparProjetosEvents() {
-    const orderInput = document.getElementById('gestao-agrupar-projetos-order-search');
-    const orderList = document.getElementById('gestao-agrupar-projetos-order-list');
-
-    orderInput?.addEventListener('focus', () => {
-        const selected = gestaoAgruparProjetosOrders.find(
-            order => Number(order.id) === Number(gestaoAgruparProjetosSelectedOrderId)
-        );
-        const selectedLabel = selected ? gestaoAgruparProjetosOrderLabel(selected) : '';
-        gestaoAgruparProjetosOrderHighlight = -1;
-        gestaoAgruparProjetosOrderQuery = orderInput.value === selectedLabel ? '' : orderInput.value;
-        renderGestaoAgruparProjetosOrderOptions();
-        setGestaoAgruparProjetosOrderListOpen(true);
-    });
-
-    orderInput?.addEventListener('input', () => {
-        gestaoAgruparProjetosOrderQuery = orderInput.value;
-        const selected = gestaoAgruparProjetosOrders.find(
-            order => Number(order.id) === Number(gestaoAgruparProjetosSelectedOrderId)
-        );
-        const selectedLabel = selected ? gestaoAgruparProjetosOrderLabel(selected) : '';
-        if (orderInput.value.trim() !== selectedLabel) {
-            gestaoAgruparProjetosSelectedOrderId = null;
-            gestaoAgruparProjetosOrderCache = null;
-            gestaoAgruparProjetosEligibleCache = [];
-            clearGestaoAgruparProjetosProjectSelection();
-            const summaryEl = document.getElementById('gestao-agrupar-projetos-order-summary');
-            if (summaryEl) summaryEl.textContent = '';
-            renderGestaoAgruparProjetosList();
-            syncGestaoAgruparProjetosSaveButton();
-        }
-        gestaoAgruparProjetosOrderHighlight = -1;
-        renderGestaoAgruparProjetosOrderOptions();
-        setGestaoAgruparProjetosOrderListOpen(true);
-    });
-
-    orderInput?.addEventListener('keydown', async event => {
-        const optionCount = orderList?.querySelectorAll('.gestao-agrupar-projetos-order-option').length || 0;
-        if (event.key === 'Escape') {
-            setGestaoAgruparProjetosOrderListOpen(false);
-            return;
-        }
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            if (!optionCount) return;
-            setGestaoAgruparProjetosOrderListOpen(true);
-            const delta = event.key === 'ArrowDown' ? 1 : -1;
-            gestaoAgruparProjetosOrderHighlight = (gestaoAgruparProjetosOrderHighlight + delta + optionCount) % optionCount;
-            renderGestaoAgruparProjetosOrderOptions();
-            orderList?.querySelector(`[data-option-index="${gestaoAgruparProjetosOrderHighlight}"]`)?.scrollIntoView({ block: 'nearest' });
-            return;
-        }
-        if (event.key === 'Enter') {
-            const options = [...(orderList?.querySelectorAll('.gestao-agrupar-projetos-order-option') || [])];
-            const highlighted = options[gestaoAgruparProjetosOrderHighlight] || (options.length === 1 ? options[0] : null);
-            if (!highlighted) return;
-            event.preventDefault();
-            try {
-                await selectGestaoAgruparProjetosOrder(highlighted.dataset.orderId);
-            } catch (error) {
-                alertAppDialog(error.message || 'Erro ao carregar projetos.');
-            }
-        }
-    });
-
-    orderList?.addEventListener('mousedown', event => {
-        event.preventDefault();
-    });
-
-    orderList?.addEventListener('click', async event => {
-        const button = event.target.closest('[data-order-id]');
-        if (!button) return;
-        try {
-            await selectGestaoAgruparProjetosOrder(button.dataset.orderId);
-        } catch (error) {
-            alertAppDialog(error.message || 'Erro ao carregar projetos.');
-        }
-    });
-
-    if (!window.__gestaoAgruparProjetosOrderOutsideBound) {
-        window.__gestaoAgruparProjetosOrderOutsideBound = true;
-        document.addEventListener('mousedown', event => {
-            const wrap = document.getElementById('gestao-agrupar-projetos-order-wrap');
-            if (!wrap || wrap.contains(event.target)) return;
-            setGestaoAgruparProjetosOrderListOpen(false);
-        });
-    }
+    ensureGestaoAgruparProjetosOrdersCache()
+        .then(() => initGestaoAgruparProjetosOrderCombobox(gestaoAgruparProjetosSelectedOrderId))
+        .catch(error => console.error('bindGestaoAgruparProjetosEvents:', error));
 
     document.getElementById('gestao-agrupar-projetos-name')?.addEventListener('input', syncGestaoAgruparProjetosSaveButton);
 

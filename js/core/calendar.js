@@ -11,6 +11,7 @@ let editingCalendarEventId = null;
 let calendarFilterResponsibleId = '';
 let calendarFilterEventTypeId = '';
 let calendarEventSelectedAddrId = null;
+let calendarEventOrderCombobox = null;
 
 const CALENDAR_SALE_EVENT_TYPE_NAME = 'Venda';
 const CALENDAR_EVENT_TYPE_SELECT_COLUMNS = 'id, name, isActive, clientRequired, orderRequired, sortOrder, selectableFromCalendar';
@@ -699,10 +700,122 @@ function populateCalendarResponsibleSelect(selectedId = '') {
     ].join('');
 }
 
+function getCalendarEventFormOrderId() {
+    return Number(document.getElementById('cal-event-order-id')?.value) || null;
+}
+
+function setCalendarEventFormOrderId(orderId) {
+    const hidden = document.getElementById('cal-event-order-id');
+    if (hidden) hidden.value = orderId ? String(orderId) : '';
+}
+
+function calendarEventFormHasOrder() {
+    if (getCalendarEventFormOrderId()) return true;
+    if (calendarEventOrderCombobox?.getSelectedOrder?.()?.id) return true;
+    return Boolean(document.getElementById('cal-event-order-search')?.value.trim());
+}
+
+function parseCalendarEventOrderCodeFromSearchValue(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    return raw.split('—')[0].split('–')[0].trim();
+}
+
+async function ensureCalendarEventOrderInPicker(orderId) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId || typeof fetchOrderSearchComboboxOrders !== 'function') return;
+
+    const orders = await fetchOrderSearchComboboxOrders();
+    if (orders.some(order => Number(order.id) === normalizedId)) return;
+
+    const { data, error } = await supabaseClient
+        .from('salesOrders')
+        .select('id, orderCode, client:Client(name)')
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (error || !data) return;
+    if (typeof appendOrderSearchComboboxOrder === 'function') {
+        appendOrderSearchComboboxOrder(data);
+    }
+}
+
+function initCalendarEventOrderCombobox(selectedOrderId) {
+    const wrap = document.getElementById('cal-event-order-wrap');
+    const input = document.getElementById('cal-event-order-search');
+    const list = document.getElementById('cal-event-order-list');
+    const hidden = document.getElementById('cal-event-order-id');
+    if (!wrap || !input || !list || !hidden) return;
+
+    if (calendarEventOrderCombobox?.destroy) {
+        calendarEventOrderCombobox.destroy();
+        calendarEventOrderCombobox = null;
+    }
+
+    if (typeof mountOrderSearchCombobox !== 'function') return;
+
+    setCalendarEventFormOrderId(selectedOrderId);
+
+    calendarEventOrderCombobox = mountOrderSearchCombobox({
+        wrap,
+        input,
+        list,
+        selectedOrderId: selectedOrderId || null,
+        onSelect: order => {
+            setCalendarEventFormOrderId(order?.id || null);
+            void (async () => {
+                const full = order ? await lookupCalendarOrderById(order.id) : null;
+                fillCalendarEventClientFromOrder(full || order);
+                await applyCalendarOrderAddress(full || order);
+                syncCalendarClientNameField();
+            })();
+        },
+        onClear: () => {
+            setCalendarEventFormOrderId(null);
+            setCalendarEventSelectedAddr(null);
+            syncCalendarClientNameField();
+        }
+    });
+}
+
+async function resolveCalendarEventOrderFromInput() {
+    const selected = calendarEventOrderCombobox?.getSelectedOrder?.();
+    if (selected?.id) {
+        setCalendarEventFormOrderId(selected.id);
+        syncCalendarClientNameField();
+        return;
+    }
+
+    const input = document.getElementById('cal-event-order-search');
+    const raw = input?.value.trim() || '';
+    if (!raw) {
+        setCalendarEventFormOrderId(null);
+        syncCalendarClientNameField();
+        return;
+    }
+
+    const order = await lookupCalendarOrderByCode(parseCalendarEventOrderCodeFromSearchValue(raw));
+    if (!order) {
+        syncCalendarClientNameField();
+        return;
+    }
+
+    setCalendarEventFormOrderId(order.id);
+    if (typeof appendOrderSearchComboboxOrder === 'function') {
+        appendOrderSearchComboboxOrder(order);
+    }
+    if (typeof formatOrderSearchComboboxLabel === 'function') {
+        input.value = formatOrderSearchComboboxLabel(order);
+    }
+    fillCalendarEventClientFromOrder(order);
+    await applyCalendarOrderAddress(order);
+    syncCalendarClientNameField();
+}
+
 function syncCalendarEventTypeRequirements() {
     const typeId = document.getElementById('cal-event-type')?.value;
     const selectedType = getCalendarEventTypeById(typeId);
-    const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
+    const hasOrder = calendarEventFormHasOrder();
     const clientRequired = Boolean(selectedType?.clientRequired);
     const orderRequired = Boolean(selectedType?.orderRequired);
 
@@ -711,7 +824,7 @@ function syncCalendarEventTypeRequirements() {
 
     const clientBtn = document.getElementById('btn-cal-event-client-picker');
     if (clientBtn) {
-        clientBtn.disabled = Boolean(orderCode);
+        clientBtn.disabled = hasOrder;
     }
     syncCalendarClientViewButton();
     syncCalendarAddrField();
@@ -778,9 +891,8 @@ function getCalendarEventSelectedAddrId() {
 }
 
 function syncCalendarAddrField() {
-    const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
+    const hasOrder = calendarEventFormHasOrder();
     const clientId = Number(document.getElementById('cal-event-client-id')?.value) || null;
-    const hasOrder = Boolean(orderCode);
     const canPick = !hasOrder && Boolean(clientId);
     const btn = document.getElementById('btn-cal-event-addr-picker');
     const input = document.getElementById('cal-event-addr');
@@ -810,9 +922,9 @@ async function applyCalendarOrderAddress(order) {
 }
 
 async function applyCalendarEventAddressFromContext(event) {
-    const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
-    if (orderCode) {
-        const order = await lookupCalendarOrderByCode(orderCode);
+    const orderId = Number(event?.orderId) || Number(event?.order?.id) || null;
+    if (orderId) {
+        const order = await lookupCalendarOrderById(orderId);
         if (order) {
             await applyCalendarOrderAddress(order);
             return;
@@ -889,6 +1001,32 @@ async function lookupCalendarOrderByCode(orderCode) {
     return result.data;
 }
 
+async function lookupCalendarOrderById(orderId) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId) return null;
+
+    let result = await supabaseClient
+        .from('salesOrders')
+        .select(getSalesOrderMinimalEmbedSelect('addrId'))
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (result.error && /addrId/i.test(result.error.message || '')) {
+        result = await supabaseClient
+            .from('salesOrders')
+            .select(getSalesOrderMinimalEmbedSelect())
+            .eq('id', normalizedId)
+            .maybeSingle();
+    }
+
+    if (result.error) {
+        console.error('lookupCalendarOrderById:', result.error);
+        return null;
+    }
+
+    return result.data;
+}
+
 async function openCalendarEventModal(event = null, presetDate = calendarSelectedDate) {
     await loadCalendarUsers();
     await loadCalendarEventTypes();
@@ -918,7 +1056,11 @@ async function openCalendarEventModal(event = null, presetDate = calendarSelecte
     document.getElementById('cal-event-date').value = event?.eventDate || presetDate || toDateKey(new Date());
     document.getElementById('cal-event-time').value = formatCalendarTimeValue(event?.eventTime || '09:00');
     document.getElementById('cal-event-description').value = event?.description || '';
-    document.getElementById('cal-event-order-code').value = event?.order?.orderCode || '';
+
+    const selectedOrderId = Number(event?.orderId) || Number(event?.order?.id) || null;
+    if (selectedOrderId) {
+        await ensureCalendarEventOrderInPicker(selectedOrderId);
+    }
 
     const clientName = getCalendarEventClientLabel(event);
     document.getElementById('cal-event-client-name').value = clientName;
@@ -926,6 +1068,7 @@ async function openCalendarEventModal(event = null, presetDate = calendarSelecte
         event?.clientId || event?.client?.id || event?.order?.clientId || event?.order?.client?.id || '';
 
     syncCalendarClientNameField();
+    initCalendarEventOrderCombobox(selectedOrderId);
     await applyCalendarEventAddressFromContext(event);
     toggleModal('calendar-event-modal', true);
 }
@@ -938,7 +1081,7 @@ async function saveCalendarEvent(event) {
     const eventTypeId = Number(document.getElementById('cal-event-type').value);
     const responsibleId = Number(document.getElementById('cal-event-responsible').value);
     const description = document.getElementById('cal-event-description').value.trim();
-    const orderCode = document.getElementById('cal-event-order-code').value.trim();
+    const orderSearchValue = document.getElementById('cal-event-order-search')?.value.trim() || '';
     const clientName = document.getElementById('cal-event-client-name').value.trim();
     const clientIdInput = document.getElementById('cal-event-client-id');
     let clientId = Number(clientIdInput?.value) || null;
@@ -959,10 +1102,17 @@ async function saveCalendarEvent(event) {
         return;
     }
 
-    let orderId = null;
+    let orderId = getCalendarEventFormOrderId();
     let order = null;
-    if (orderCode) {
-        order = await lookupCalendarOrderByCode(orderCode);
+    if (orderId) {
+        order = await lookupCalendarOrderById(orderId);
+        if (!order) {
+            alertAppDialog('Pedido não encontrado para o código informado.');
+            return;
+        }
+        clientId = null;
+    } else if (orderSearchValue) {
+        order = await lookupCalendarOrderByCode(parseCalendarEventOrderCodeFromSearchValue(orderSearchValue));
         if (!order) {
             alertAppDialog('Pedido não encontrado para o código informado.');
             return;
@@ -1567,8 +1717,7 @@ function bindCalendarEvents() {
     document.getElementById('btn-cal-event-delete')?.addEventListener('click', deleteCalendarEvent);
 
     const triggerCalendarClientPicker = () => {
-        const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
-        if (orderCode) return;
+        if (calendarEventFormHasOrder()) return;
         if (typeof openClientePickerModal === 'function') {
             openClientePickerModal(cliente => {
                 const input = document.getElementById('cal-event-client-name');
@@ -1600,28 +1749,8 @@ function bindCalendarEvents() {
     document.getElementById('btn-cal-event-addr-picker')?.addEventListener('click', triggerCalendarAddrPicker);
     document.getElementById('cal-event-addr')?.addEventListener('click', triggerCalendarAddrPicker);
 
-    document.getElementById('cal-event-order-code')?.addEventListener('input', async function () {
-        syncCalendarClientNameField();
-        const orderCode = this.value.trim();
-        if (orderCode) {
-            const order = await lookupCalendarOrderByCode(orderCode);
-            fillCalendarEventClientFromOrder(order);
-            await applyCalendarOrderAddress(order);
-            return;
-        }
-        setCalendarEventSelectedAddr(null);
-        syncCalendarClientNameField();
-    });
-    document.getElementById('cal-event-order-code')?.addEventListener('blur', async () => {
-        const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
-        if (orderCode) {
-            const order = await lookupCalendarOrderByCode(orderCode);
-            fillCalendarEventClientFromOrder(order);
-            await applyCalendarOrderAddress(order);
-        } else {
-            setCalendarEventSelectedAddr(null);
-        }
-        syncCalendarClientNameField();
+    document.getElementById('cal-event-order-search')?.addEventListener('blur', () => {
+        void resolveCalendarEventOrderFromInput();
     });
 }
 
@@ -1629,3 +1758,4 @@ window.getCalendarEventFormClient = getCalendarEventFormClient;
 window.setCalendarEventSelectedAddr = setCalendarEventSelectedAddr;
 window.getCalendarEventSelectedAddrId = getCalendarEventSelectedAddrId;
 window.syncCalendarClientNameField = syncCalendarClientNameField;
+window.calendarEventFormHasOrder = calendarEventFormHasOrder;

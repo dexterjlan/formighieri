@@ -14,9 +14,20 @@ function waitGestaoCreateDetailingStatus(ms) {
 
 function getGestaoCreateDetailingFilters() {
     return {
-        orderCode: document.getElementById('gestao-create-detailing-filter-order')?.value.trim() || '',
+        orderCode: typeof getOrderSearchFilterComboboxTerm === 'function'
+            ? getOrderSearchFilterComboboxTerm('gestao-create-detailing', 'gestao-create-detailing-filter-order-search')
+            : '',
         clientName: document.getElementById('gestao-create-detailing-filter-client')?.value.trim() || ''
     };
+}
+
+function initGestaoCreateDetailingOrderCombobox() {
+    if (typeof initOrderSearchFilterCombobox !== 'function') return;
+    initOrderSearchFilterCombobox('gestao-create-detailing', {
+        wrap: document.getElementById('gestao-create-detailing-filter-order-wrap'),
+        input: document.getElementById('gestao-create-detailing-filter-order-search'),
+        list: document.getElementById('gestao-create-detailing-filter-order-list')
+    });
 }
 
 function getGestaoCreateDetailingProjectStatusName(project) {
@@ -233,9 +244,10 @@ async function loadGestaoCreateDetailingProjectsList() {
 }
 
 function resetGestaoCreateDetailingFilters() {
-    const orderInput = document.getElementById('gestao-create-detailing-filter-order');
+    if (typeof clearOrderSearchFilterCombobox === 'function') {
+        clearOrderSearchFilterCombobox('gestao-create-detailing');
+    }
     const clientInput = document.getElementById('gestao-create-detailing-filter-client');
-    if (orderInput) orderInput.value = '';
     if (clientInput) clientInput.value = '';
     gestaoCreateDetailingProjectsCache = [];
     const tbody = document.getElementById('gestao-create-detailing-list');
@@ -370,3 +382,4 @@ function bindGestaoCreateDetailingEvents() {
 }
 
 bindGestaoCreateDetailingEvents();
+initGestaoCreateDetailingOrderCombobox();

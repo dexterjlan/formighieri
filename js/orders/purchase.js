@@ -1,5 +1,17 @@
 const COMPRA_STATUS_ABERTO = 'Aberto';
 const COMPRA_STATUS_FECHADO = 'Fechado';
+const COMPRA_STATUS_AG_LIB_MEDICAO_OBRA = 'Ag. Lib. de Medição - Obra';
+const COMPRA_STATUS_AG_LIB_MEDICAO_FABRICA = 'Ag. Lib. de Medição - Fábrica';
+const COMPRA_STATUS_MEDICAO_LIBERADA = 'Medição Liberada';
+
+function getCompraAguardandoLibMedicaoStatusNames() {
+    return [COMPRA_STATUS_AG_LIB_MEDICAO_OBRA, COMPRA_STATUS_AG_LIB_MEDICAO_FABRICA];
+}
+
+function isCompraStatusAguardandoLibMedicao(status) {
+    const name = String(status || '').trim();
+    return getCompraAguardandoLibMedicaoStatusNames().includes(name);
+}
 
 const COMPRA_TIPO_MATERIAL = 'Material';
 const COMPRA_TIPO_FERRAGEM = 'Ferragem';
@@ -47,7 +59,8 @@ function getFallbackCompraStatuses() {
         { id: null, name: 'Aguardando Entrega', sortOrder: 3, isActive: true, isClosed: false },
         { id: null, name: 'Ag. Lib. de Medição - Obra', sortOrder: 4, isActive: true, isClosed: false },
         { id: null, name: 'Ag. Lib. de Medição - Fábrica', sortOrder: 5, isActive: true, isClosed: false },
-        { id: null, name: 'Fechado', sortOrder: 6, isActive: true, isClosed: true }
+        { id: null, name: COMPRA_STATUS_MEDICAO_LIBERADA, sortOrder: 6, isActive: true, isClosed: false },
+        { id: null, name: 'Fechado', sortOrder: 7, isActive: true, isClosed: true }
     ];
 }
 
@@ -1140,6 +1153,7 @@ async function handleCompraSalvar() {
     try {
         setCompraModalLoading(true, 'Salvando compra...');
 
+        const previousStatus = String(activeCompraRecord?.status || '').trim();
         const formValues = readCompraFormValues();
         const now = new Date().toISOString();
         const { data, error } = await supabaseClient
@@ -1180,12 +1194,40 @@ async function handleCompraSalvar() {
         };
         populateCompraForm(activeCompraRecord);
 
+        const newStatus = String(formValues.status || '').trim();
+        const statusChangedToAgLibMedicao = newStatus !== previousStatus
+            && typeof isCompraStatusAguardandoLibMedicao === 'function'
+            && isCompraStatusAguardandoLibMedicao(newStatus);
+
+        if (statusChangedToAgLibMedicao && typeof notifyCompraAguardandoLibMedicaoToCoordenacao === 'function') {
+            setCompraModalLoading(true, 'Notificando Coordenação...');
+            await notifyCompraAguardandoLibMedicaoToCoordenacao({
+                id: activeCompraRecord.id,
+                purchaseId: activeCompraRecord.id,
+                orderProjectId: activeCompraRecord.orderProjectId,
+                orderCode: activeCompraRecord.orderCode,
+                clientName: activeCompraRecord.clientName,
+                projectName: activeCompraRecord.projectName,
+                purchaseType: activeCompraRecord.purchaseType,
+                subtypeName: activeCompraRecord.subtypeName,
+                reasonName: activeCompraRecord.reasonName,
+                status: newStatus,
+                note: activeCompraRecord.note
+            });
+        }
+
         setCompraModalLoading(true, 'Atualizando telas...');
         if (typeof loadPendenciasEnviadosCompras === 'function'
             && !document.getElementById('pendencias-view')?.classList.contains('hidden')
             && pendenciasActiveSection === 'compras'
             && pendenciasActiveItem === 'enviados-compras') {
             await loadPendenciasEnviadosCompras();
+        }
+        if (typeof loadPendenciasFabricaAgLibMedicao === 'function'
+            && !document.getElementById('pendencias-view')?.classList.contains('hidden')
+            && pendenciasActiveSection === 'gestor-fabrica'
+            && pendenciasActiveItem === 'ag-lib-medicao') {
+            await loadPendenciasFabricaAgLibMedicao();
         }
 
         await refreshActiveOrderComprasTab();

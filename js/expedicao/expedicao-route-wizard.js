@@ -1192,7 +1192,15 @@ async function handleExpedicaoWizardAction(actionId) {
 }
 
 function closeExpedicaoRouteDetailModal() {
-    document.getElementById('expedition-route-detail-modal')?.classList.add('hidden');
+    const modal = document.getElementById('expedition-route-detail-modal');
+    modal?.classList.add('hidden');
+    const titleEl = modal?.querySelector('h3');
+    if (titleEl) titleEl.textContent = 'Detalhe da rota';
+    if (typeof setExpeditionRouteDetailModalActionsVisibility === 'function') {
+        setExpeditionRouteDetailModalActionsVisibility();
+    } else {
+        document.getElementById('btn-expedition-route-detail-history')?.classList.remove('hidden');
+    }
 }
 window.closeExpedicaoRouteDetailModal = closeExpedicaoRouteDetailModal;
 

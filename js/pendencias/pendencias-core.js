@@ -391,6 +391,10 @@ function getPendenciasSidebarSections() {
                 { id: 'montagem-externa', label: 'Montagem Externa' },
                 ...(typeof canSeePendenciasFabricaRotaMenu === 'function' && canSeePendenciasFabricaRotaMenu()
                     ? [{ id: 'rota', label: 'Rota' }]
+                    : []),
+                ...(typeof canSeePendenciasFabricaAgLibMedicaoMenu === 'function'
+                    && canSeePendenciasFabricaAgLibMedicaoMenu()
+                    ? [{ id: 'ag-lib-medicao', label: 'Ag. Lib. Medição' }]
                     : [])
             ]
         },
@@ -1346,6 +1350,13 @@ function loadPendenciasContent() {
     if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'rota') {
         if (typeof loadPendenciasFabricaRota === 'function') {
             loadPendenciasFabricaRota();
+        }
+        return;
+    }
+
+    if (pendenciasActiveSection === 'gestor-fabrica' && pendenciasActiveItem === 'ag-lib-medicao') {
+        if (typeof loadPendenciasFabricaAgLibMedicao === 'function') {
+            loadPendenciasFabricaAgLibMedicao();
         }
         return;
     }

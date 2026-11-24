@@ -2,77 +2,49 @@ let requisicoesProjectsOrderId = null;
 let requisicoesOrderProjectsCache = [];
 let requisicoesOrderAddrId = null;
 let requisicoesProjectsOrders = [];
-let requisicoesProjectsOrderHighlight = -1;
-let requisicoesProjectsOrderQuery = '';
-
-function normalizeRequisicoesSearch(value) {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .trim();
-}
+let requisicoesProjectsOrderCombobox = null;
 
 function requisicoesProjectOrderLabel(order) {
-    const clientName = order?.client?.name || '';
-    if (clientName && order.orderCode) return `${order.orderCode} — ${clientName}`;
-    return order?.orderCode || clientName || `Pedido ${order?.id || ''}`;
+    return typeof formatOrderSearchComboboxLabel === 'function'
+        ? formatOrderSearchComboboxLabel(order)
+        : (order?.orderCode || '');
 }
 
-function filterRequisicoesProjectOrders(query) {
-    const term = normalizeRequisicoesSearch(query);
-    const matches = !term
-        ? requisicoesProjectsOrders
-        : requisicoesProjectsOrders.filter(order => {
-            const clientName = normalizeRequisicoesSearch(order.client?.name);
-            const code = normalizeRequisicoesSearch(order.orderCode);
-            return clientName.includes(term) || code.includes(term);
-        });
-    return matches.slice(0, 40);
+async function ensureRequisicoesProjectsOrdersCache() {
+    if (typeof fetchOrderSearchComboboxOrders !== 'function') {
+        throw new Error('Cache de pedidos indisponível.');
+    }
+    requisicoesProjectsOrders = await fetchOrderSearchComboboxOrders();
+    return requisicoesProjectsOrders;
 }
 
-function setRequisicoesOrderListOpen(open) {
-    const list = document.getElementById('requisicoes-projects-order-list');
+function initRequisicoesProjectsOrderCombobox(selectedOrderId) {
+    const wrap = document.getElementById('requisicoes-projects-order-wrap');
     const input = document.getElementById('requisicoes-projects-order-search');
-    if (!list || !input) return;
-    list.classList.toggle('hidden', !open);
-    input.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (!open) requisicoesProjectsOrderHighlight = -1;
-}
-
-function renderRequisicoesOrderOptions() {
     const list = document.getElementById('requisicoes-projects-order-list');
-    if (!list) return;
-    const matches = filterRequisicoesProjectOrders(requisicoesProjectsOrderQuery);
-    if (!matches.length) {
-        requisicoesProjectsOrderHighlight = -1;
-        list.innerHTML = '<p class="px-3 py-2 text-xs text-slate-400">Nenhum pedido encontrado para esse cliente.</p>';
-        return;
+    if (!wrap || !input || !list) return;
+
+    if (requisicoesProjectsOrderCombobox?.destroy) {
+        requisicoesProjectsOrderCombobox.destroy();
+        requisicoesProjectsOrderCombobox = null;
     }
 
-    list.innerHTML = matches.map((order, index) => {
-        const active = index === requisicoesProjectsOrderHighlight ? ' bg-slate-100' : '';
-        return `<button type="button" class="requisicoes-order-option w-full text-left px-3 py-2 text-sm text-slate-800 hover:bg-slate-50${active}" data-order-id="${order.id}" data-option-index="${index}" role="option">${escapeHtml(requisicoesProjectOrderLabel(order))}</button>`;
-    }).join('');
-}
+    if (typeof mountOrderSearchCombobox !== 'function') return;
 
-async function loadRequisicoesOrderOptions() {
-    const input = document.getElementById('requisicoes-projects-order-search');
-    if (!input) return;
-
-    const { data, error } = await supabaseClient
-        .from('salesOrders')
-        .select('id, orderCode, client:Client(name)')
-        .order('orderCode', { ascending: false })
-        .limit(1000);
-
-    if (error) throw error;
-    requisicoesProjectsOrders = data || [];
-
-    const selected = requisicoesProjectsOrders.find(order => Number(order.id) === Number(requisicoesProjectsOrderId));
-    input.value = selected ? requisicoesProjectOrderLabel(selected) : '';
-    requisicoesProjectsOrderQuery = '';
-    renderRequisicoesOrderOptions();
+    requisicoesProjectsOrderCombobox = mountOrderSearchCombobox({
+        wrap,
+        input,
+        list,
+        selectedOrderId: selectedOrderId || null,
+        onSelect: order => {
+            void selectRequisicoesProjectOrder(order?.id || null);
+        },
+        onClear: () => {
+            requisicoesProjectsOrderId = null;
+            activeOrderId = null;
+            clearRequisicoesOrderDetail();
+        }
+    });
 }
 
 function clearRequisicoesOrderDetail() {
@@ -308,12 +280,30 @@ async function openRequisicoesProjectRequest(project) {
 }
 
 async function selectRequisicoesProjectOrder(orderId) {
-    const order = requisicoesProjectsOrders.find(item => Number(item.id) === Number(orderId));
-    const input = document.getElementById('requisicoes-projects-order-search');
-    requisicoesProjectsOrderId = order ? Number(order.id) : null;
-    activeOrderId = requisicoesProjectsOrderId;
-    if (input) input.value = order ? requisicoesProjectOrderLabel(order) : '';
-    setRequisicoesOrderListOpen(false);
+    const numericId = Number(orderId) || null;
+    if (!numericId) {
+        requisicoesProjectsOrderId = null;
+        activeOrderId = null;
+        clearRequisicoesOrderDetail();
+        return;
+    }
+
+    let order = requisicoesProjectsOrders.find(item => Number(item.id) === numericId);
+    if (!order && typeof appendOrderSearchComboboxOrder === 'function') {
+        const { data } = await supabaseClient
+            .from('salesOrders')
+            .select('id, orderCode, client:Client(name)')
+            .eq('id', numericId)
+            .maybeSingle();
+        if (data) {
+            order = data;
+            appendOrderSearchComboboxOrder(data);
+            requisicoesProjectsOrders.push(data);
+        }
+    }
+
+    requisicoesProjectsOrderId = numericId;
+    activeOrderId = numericId;
     await renderRequisicoesOrderDetail(requisicoesProjectsOrderId);
 }
 
@@ -325,7 +315,7 @@ async function loadRequisicoesProjects() {
         <div class="space-y-4">
             <div class="relative z-30 max-w-xl" id="requisicoes-projects-order-wrap">
                 <label class="block text-xs font-semibold text-slate-500 mb-1" for="requisicoes-projects-order-search">Pedido</label>
-                <input id="requisicoes-projects-order-search" type="text" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="requisicoes-projects-order-list" aria-autocomplete="list" placeholder="Digite o nome do cliente" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white">
+                <input id="requisicoes-projects-order-search" type="text" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="requisicoes-projects-order-list" aria-autocomplete="list" placeholder="Digite o código ou nome do cliente" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white">
                 <div id="requisicoes-projects-order-list" class="hidden absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg" role="listbox"></div>
             </div>
             <div id="requisicoes-order-detail"></div>
@@ -333,88 +323,11 @@ async function loadRequisicoesProjects() {
     `;
 
     try {
-        await loadRequisicoesOrderOptions();
+        await ensureRequisicoesProjectsOrdersCache();
+        initRequisicoesProjectsOrderCombobox(requisicoesProjectsOrderId);
         await renderRequisicoesOrderDetail(requisicoesProjectsOrderId);
     } catch (error) {
         content.insertAdjacentHTML('beforeend', `<p class="text-xs text-red-700 mt-3">${escapeHtml(error.message || 'Erro ao carregar pedidos.')}</p>`);
-    }
-
-    const orderInput = document.getElementById('requisicoes-projects-order-search');
-    const orderList = document.getElementById('requisicoes-projects-order-list');
-
-    orderInput?.addEventListener('focus', () => {
-        const selected = requisicoesProjectsOrders.find(order => Number(order.id) === Number(requisicoesProjectsOrderId));
-        const selectedLabel = selected ? requisicoesProjectOrderLabel(selected) : '';
-        requisicoesProjectsOrderHighlight = -1;
-        requisicoesProjectsOrderQuery = orderInput.value === selectedLabel ? '' : orderInput.value;
-        renderRequisicoesOrderOptions();
-        setRequisicoesOrderListOpen(true);
-    });
-
-    orderInput?.addEventListener('input', () => {
-        requisicoesProjectsOrderQuery = orderInput.value;
-        const selected = requisicoesProjectsOrders.find(order => Number(order.id) === Number(requisicoesProjectsOrderId));
-        const selectedLabel = selected ? requisicoesProjectOrderLabel(selected) : '';
-        if (orderInput.value.trim() !== selectedLabel) {
-            requisicoesProjectsOrderId = null;
-            activeOrderId = null;
-            clearRequisicoesOrderDetail();
-        }
-        requisicoesProjectsOrderHighlight = -1;
-        renderRequisicoesOrderOptions();
-        setRequisicoesOrderListOpen(true);
-    });
-
-    orderInput?.addEventListener('keydown', async event => {
-        const optionCount = orderList?.querySelectorAll('.requisicoes-order-option').length || 0;
-        if (event.key === 'Escape') {
-            setRequisicoesOrderListOpen(false);
-            return;
-        }
-        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            if (!optionCount) return;
-            setRequisicoesOrderListOpen(true);
-            const delta = event.key === 'ArrowDown' ? 1 : -1;
-            requisicoesProjectsOrderHighlight = (requisicoesProjectsOrderHighlight + delta + optionCount) % optionCount;
-            renderRequisicoesOrderOptions();
-            orderList?.querySelector(`[data-option-index="${requisicoesProjectsOrderHighlight}"]`)?.scrollIntoView({ block: 'nearest' });
-            return;
-        }
-        if (event.key === 'Enter') {
-            const options = [...(orderList?.querySelectorAll('.requisicoes-order-option') || [])];
-            const highlighted = options[requisicoesProjectsOrderHighlight] || (options.length === 1 ? options[0] : null);
-            if (!highlighted) return;
-            event.preventDefault();
-            try {
-                await selectRequisicoesProjectOrder(highlighted.dataset.orderId);
-            } catch (error) {
-                alertAppDialog(error.message || 'Erro ao carregar projetos.');
-            }
-        }
-    });
-
-    orderList?.addEventListener('mousedown', event => {
-        event.preventDefault();
-    });
-
-    orderList?.addEventListener('click', async event => {
-        const button = event.target.closest('[data-order-id]');
-        if (!button) return;
-        try {
-            await selectRequisicoesProjectOrder(button.dataset.orderId);
-        } catch (error) {
-            alertAppDialog(error.message || 'Erro ao carregar projetos.');
-        }
-    });
-
-    if (!window.__requisicoesProjectsOrderOutsideBound) {
-        window.__requisicoesProjectsOrderOutsideBound = true;
-        document.addEventListener('mousedown', event => {
-            const wrap = document.getElementById('requisicoes-projects-order-wrap');
-            if (!wrap || wrap.contains(event.target)) return;
-            setRequisicoesOrderListOpen(false);
-        });
     }
 
     document.getElementById('requisicoes-order-detail')?.addEventListener('click', async event => {

@@ -8014,6 +8014,59 @@ body.deal-won-celebration-open {
     }
 }
 
+/* Expedição — paradas da rota (modal / embarque) */
+.expedition-route-stops-sequence {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.expedition-route-stop-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    background: #f8fafc;
+    padding: 0.75rem 0.875rem;
+}
+
+.expedition-route-stop-card__head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.expedition-route-stop-card__seq {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 9999px;
+    background: #0f172a;
+    color: #fff;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.expedition-route-stop-card__items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+@media (max-width: 767px) {
+  #expedition-route-detail-modal .bg-white.rounded-2xl {
+        max-height: min(92dvh, 100%);
+    }
+
+    #expedition-route-detail-mount .expedition-route-stops-sequence-wrap {
+        max-height: min(58dvh, 32rem);
+    }
+}
+
 /* Expedição — Embarque */
 .expedicao-boarding-layout {
     display: flex;

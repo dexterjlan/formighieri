@@ -136,6 +136,14 @@ function canSeePendenciasFabricaRotaMenu(user = currentUser) {
     return canSeeAllPendenciasMenus() || isFactoryCoordination(user);
 }
 
+function canSeePendenciasFabricaAgLibMedicaoMenu(user = currentUser) {
+    return canSeeAllPendenciasMenus() || isFactoryCoordination(user);
+}
+
+function canActPendenciasFabricaAgLibMedicao(user = currentUser) {
+    return canSeePendenciasFabricaAgLibMedicaoMenu(user);
+}
+
 function canSeeRequestProfileField(user = currentUser) {
     return user?.role === 'Admin'
         || isGestorComercial(user)
@@ -210,7 +218,7 @@ function canSeePendenciasComprasMenu(user = currentUser) {
 }
 
 function canActPendenciasCompras(user = currentUser) {
-    return isCompras(user);
+    return isAdmin(user) || isCompras(user);
 }
 
 function canSeeOrderComprasTab(user = currentUser) {
@@ -226,7 +234,7 @@ function canSeeCompraModal(user = currentUser) {
 }
 
 function canActCompraModal(user = currentUser) {
-    return isCompras(user);
+    return isAdmin(user) || isCompras(user);
 }
 
 function canSeeQueryNav(user = currentUser) {

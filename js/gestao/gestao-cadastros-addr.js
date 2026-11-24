@@ -340,8 +340,10 @@ async function openGestaoOrderAddrPicker() {
 }
 
 async function openCalendarEventAddrPicker() {
-    const orderCode = document.getElementById('cal-event-order-code')?.value.trim();
-    if (orderCode) {
+    const hasOrder = typeof calendarEventFormHasOrder === 'function'
+        ? calendarEventFormHasOrder()
+        : Boolean(document.getElementById('cal-event-order-search')?.value.trim());
+    if (hasOrder) {
         alertAppDialog('Com pedido informado, o endereço vem do pedido.');
         return;
     }
@@ -368,8 +370,10 @@ async function openAssistanceAddrPicker() {
 }
 
 async function openMontagemProgAddrPicker() {
-    const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
-    if (orderCode) {
+    const hasOrder = typeof montagemProgFormHasOrder === 'function'
+        ? montagemProgFormHasOrder()
+        : Boolean(document.getElementById('montagem-prog-order-search')?.value.trim());
+    if (hasOrder) {
         alertAppDialog('Com pedido informado, o endereço vem do pedido.');
         return;
     }

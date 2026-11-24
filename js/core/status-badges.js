@@ -76,6 +76,7 @@ const PURCHASE_STATUS_BADGE_CLASSES = {
     'Aguardando Entrega': 'bg-violet-100 text-violet-800',
     'Ag. Lib. de Medição - Obra': 'bg-orange-100 text-orange-800',
     'Ag. Lib. de Medição - Fábrica': 'bg-cyan-100 text-cyan-800',
+    'Medição Liberada': 'bg-emerald-100 text-emerald-800',
     'Fechado': 'bg-slate-200 text-slate-700'
 };
 

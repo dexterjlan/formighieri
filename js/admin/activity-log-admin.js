@@ -75,7 +75,9 @@ function getActivityLogAdminFilters() {
     return {
         changedById: document.getElementById('activity-log-filter-user')?.value || '',
         action: document.getElementById('activity-log-filter-action')?.value || '',
-        orderCode: document.getElementById('activity-log-filter-order')?.value?.trim() || '',
+        orderCode: typeof getOrderSearchFilterComboboxTerm === 'function'
+            ? getOrderSearchFilterComboboxTerm('activity-log', 'activity-log-filter-order-search')
+            : '',
         dateFrom: document.getElementById('activity-log-filter-from')?.value || '',
         dateTo: document.getElementById('activity-log-filter-to')?.value || ''
     };
@@ -222,10 +224,20 @@ async function showActivityLogAdmin() {
     await initActivityLogAdminPanel();
 }
 
+function initActivityLogAdminOrderCombobox() {
+    if (typeof initOrderSearchFilterCombobox !== 'function') return;
+    initOrderSearchFilterCombobox('activity-log', {
+        wrap: document.getElementById('activity-log-filter-order-wrap'),
+        input: document.getElementById('activity-log-filter-order-search'),
+        list: document.getElementById('activity-log-filter-order-list')
+    });
+}
+
 async function initActivityLogAdminPanel() {
     fillActivityLogAdminActionFilter();
     await loadActivityLogAdminUsers();
     fillActivityLogAdminUserFilter();
+    initActivityLogAdminOrderCombobox();
     await loadActivityLogAdminList(true);
 }
 

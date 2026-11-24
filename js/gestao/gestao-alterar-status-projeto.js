@@ -300,7 +300,9 @@ async function loadGestaoAlterarStatusProjectsList() {
     const countEl = document.getElementById('gestao-alterar-status-count');
     if (!tbody || !canAccessGestao()) return;
 
-    const orderCode = document.getElementById('gestao-alterar-status-filter-order')?.value.trim() || '';
+    const orderCode = typeof getOrderSearchFilterComboboxTerm === 'function'
+        ? getOrderSearchFilterComboboxTerm('gestao-alterar-status', 'gestao-alterar-status-filter-order-search')
+        : '';
     const clientName = document.getElementById('gestao-alterar-status-filter-client')?.value.trim() || '';
 
     if (!orderCode && !clientName) {
@@ -346,11 +348,21 @@ async function loadGestaoAlterarStatusProjectsList() {
 }
 
 function resetGestaoAlterarStatusFilters() {
-    const orderInput = document.getElementById('gestao-alterar-status-filter-order');
+    if (typeof clearOrderSearchFilterCombobox === 'function') {
+        clearOrderSearchFilterCombobox('gestao-alterar-status');
+    }
     const clientInput = document.getElementById('gestao-alterar-status-filter-client');
-    if (orderInput) orderInput.value = '';
     if (clientInput) clientInput.value = '';
     loadGestaoAlterarStatusProjectsList();
+}
+
+function initGestaoAlterarStatusOrderCombobox() {
+    if (typeof initOrderSearchFilterCombobox !== 'function') return;
+    initOrderSearchFilterCombobox('gestao-alterar-status', {
+        wrap: document.getElementById('gestao-alterar-status-filter-order-wrap'),
+        input: document.getElementById('gestao-alterar-status-filter-order-search'),
+        list: document.getElementById('gestao-alterar-status-filter-order-list')
+    });
 }
 
 function bindGestaoAlterarStatusProjetoEvents() {
@@ -369,3 +381,4 @@ function bindGestaoAlterarStatusProjetoEvents() {
 }
 
 bindGestaoAlterarStatusProjetoEvents();
+initGestaoAlterarStatusOrderCombobox();

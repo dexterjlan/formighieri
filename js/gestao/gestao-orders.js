@@ -588,9 +588,20 @@ async function fetchGestaoOrders(filters = {}) {
 
 function getGestaoOrdersListFilters() {
     return {
-        orderCode: document.getElementById('gestao-orders-filter-order')?.value.trim() || '',
+        orderCode: typeof getOrderSearchFilterComboboxTerm === 'function'
+            ? getOrderSearchFilterComboboxTerm('gestao-orders-list', 'gestao-orders-filter-order-search')
+            : '',
         clientName: document.getElementById('gestao-orders-filter-client')?.value.trim() || ''
     };
+}
+
+function initGestaoOrdersListOrderCombobox() {
+    if (typeof initOrderSearchFilterCombobox !== 'function') return;
+    initOrderSearchFilterCombobox('gestao-orders-list', {
+        wrap: document.getElementById('gestao-orders-filter-order-wrap'),
+        input: document.getElementById('gestao-orders-filter-order-search'),
+        list: document.getElementById('gestao-orders-filter-order-list')
+    });
 }
 
 function renderGestaoOrdersListRows(orders) {
@@ -642,9 +653,10 @@ async function loadGestaoOrdersList() {
 }
 
 function resetGestaoOrdersListFilters() {
-    const orderInput = document.getElementById('gestao-orders-filter-order');
+    if (typeof clearOrderSearchFilterCombobox === 'function') {
+        clearOrderSearchFilterCombobox('gestao-orders-list');
+    }
     const clientInput = document.getElementById('gestao-orders-filter-client');
-    if (orderInput) orderInput.value = '';
     if (clientInput) clientInput.value = '';
     loadGestaoOrdersList();
 }
@@ -661,6 +673,7 @@ function bindGestaoOrdersListFilterEvents() {
 }
 
 bindGestaoOrdersListFilterEvents();
+initGestaoOrdersListOrderCombobox();
 
 async function insertGestaoProject(orderId, project, now) {
     const statusId = project.statusId || getDefaultProjectStatusId();

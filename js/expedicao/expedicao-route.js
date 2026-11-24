@@ -94,6 +94,9 @@ const EXPEDITION_ROUTE_LOCKED_ITEM_STATUSES = [
 ];
 
 let expedicaoRoutesCache = [];
+let expedicaoRouteListFilterOrder = '';
+let expedicaoRouteListFilterQuery = '';
+let expedicaoRouteListOrderCombobox = null;
 
 function formatExpeditionRouteStatus(status) {
     const match = EXPEDITION_ROUTE_STATUS_OPTIONS.find(item => item.value === status);
@@ -926,6 +929,418 @@ async function openExpedicaoRouteBoardingHistoryModal(routeId) {
     }
 }
 
+async function fetchExpeditionRouteStopItemsForRouteList(routeIds = []) {
+    const keys = [...new Set((routeIds || []).map(id => Number(id)).filter(Boolean))];
+    if (!keys.length) return [];
+
+    const stopEmbedInner = 'stop:ExpeditionRouteStop!inner(id, routeId)';
+    const selects = [
+        `id, entityType, entityId, entityLabel, metadataJson, routeId, ${stopEmbedInner}`,
+        `id, entityType, entityId, entityLabel, metadataJson, ${stopEmbedInner}`
+    ];
+
+    for (const select of selects) {
+        const { data, error } = await supabaseClient
+            .from('ExpeditionRouteStopItem')
+            .select(select)
+            .in('stop.routeId', keys);
+        if (!error) return data || [];
+        if (!/relationship|routeId|schema cache/i.test(error.message || '')) throw error;
+    }
+    return [];
+}
+
+function parseExpeditionEntityLabelForOrderClient(entityLabel) {
+    const parts = String(entityLabel || '').split('·').map(part => part.trim()).filter(Boolean);
+    let orderCode = parts[0] || '';
+    let clientName = parts[1] || '';
+    if (/^pedido\s+/i.test(orderCode)) {
+        orderCode = orderCode.replace(/^pedido\s+/i, '').trim();
+    }
+    return { orderCode, clientName };
+}
+
+function addExpeditionRouteListOrderClient(orderCodes, clientNames, orderCode, clientName) {
+    const code = String(orderCode || '').trim();
+    const client = String(clientName || '').trim();
+    if (code && code !== '—') orderCodes.add(code);
+    if (client && client !== '—') clientNames.add(client);
+}
+
+async function loadExpeditionRouteListOrderClientMaps(items = []) {
+    const orderProjectIds = new Set();
+    const partRequestIds = new Set();
+    const purchaseIds = new Set();
+    const assistanceIds = new Set();
+    const inspectionIds = new Set();
+    const pickupOrderIds = new Set();
+
+    (items || []).forEach(item => {
+        const id = Number(item.entityId);
+        switch (item.entityType) {
+            case 'OrderProject':
+                if (id) orderProjectIds.add(id);
+                break;
+            case 'PartRequest':
+                if (id) partRequestIds.add(id);
+                break;
+            case 'Purchase':
+                if (id) purchaseIds.add(id);
+                break;
+            case 'Assistance':
+                if (id) assistanceIds.add(id);
+                break;
+            case 'ExternalAssemblyInspection':
+                if (id) inspectionIds.add(id);
+                break;
+            case 'Pickup': {
+                const orderId = Number(item.metadataJson?.orderId);
+                if (orderId) pickupOrderIds.add(orderId);
+                break;
+            }
+            default:
+                break;
+        }
+    });
+
+    const maps = {
+        orderProject: new Map(),
+        partRequest: new Map(),
+        purchase: new Map(),
+        assistance: new Map(),
+        inspection: new Map(),
+        orderById: new Map()
+    };
+
+    const tasks = [];
+
+    if (orderProjectIds.size) {
+        tasks.push((async () => {
+            const { data } = await supabaseClient
+                .from('OrderProject')
+                .select('id, order:salesOrders(orderCode, client:Client(name))')
+                .in('id', [...orderProjectIds]);
+            (data || []).forEach(row => maps.orderProject.set(Number(row.id), row));
+        })());
+    }
+
+    if (partRequestIds.size) {
+        tasks.push((async () => {
+            const { data } = await supabaseClient
+                .from('PartRequest')
+                .select('id, client:Client(name), order:salesOrders(orderCode, client:Client(name))')
+                .in('id', [...partRequestIds]);
+            (data || []).forEach(row => maps.partRequest.set(Number(row.id), row));
+        })());
+    }
+
+    if (purchaseIds.size) {
+        tasks.push((async () => {
+            const { data, error } = await supabaseClient
+                .from('Purchase')
+                .select('id, order:salesOrders(orderCode, client:Client(name)), orderProject:OrderProject(order:salesOrders(orderCode, client:Client(name)))')
+                .in('id', [...purchaseIds]);
+            if (!error) {
+                (data || []).forEach(row => maps.purchase.set(Number(row.id), row));
+            }
+        })());
+    }
+
+    if (assistanceIds.size) {
+        tasks.push((async () => {
+            const { data } = await supabaseClient
+                .from('AssistanceRequest')
+                .select('id, order:salesOrders(orderCode, client:Client(name)), client:Client(name)')
+                .in('id', [...assistanceIds]);
+            (data || []).forEach(row => maps.assistance.set(Number(row.id), row));
+        })());
+    }
+
+    if (inspectionIds.size) {
+        tasks.push((async () => {
+            const { data } = await supabaseClient
+                .from('ExternalAssemblyInspection')
+                .select('id, order:salesOrders(orderCode, client:Client(name))')
+                .in('id', [...inspectionIds]);
+            (data || []).forEach(row => maps.inspection.set(Number(row.id), row));
+        })());
+    }
+
+    if (pickupOrderIds.size) {
+        tasks.push((async () => {
+            const { data } = await supabaseClient
+                .from('salesOrders')
+                .select('id, orderCode, client:Client(name)')
+                .in('id', [...pickupOrderIds]);
+            (data || []).forEach(row => maps.orderById.set(Number(row.id), row));
+        })());
+    }
+
+    await Promise.all(tasks);
+    return maps;
+}
+
+function accumulateExpeditionRouteStopItemOrderClient(item, maps, orderCodes, clientNames) {
+    const entityId = Number(item.entityId);
+    const pickOrderClient = (order, clientFallback) => {
+        addExpeditionRouteListOrderClient(
+            orderCodes,
+            clientNames,
+            order?.orderCode,
+            order?.client?.name || clientFallback
+        );
+    };
+
+    if (item.entityType === 'OrderProject') {
+        const row = maps.orderProject.get(entityId);
+        pickOrderClient(row?.order);
+        return;
+    }
+    if (item.entityType === 'PartRequest') {
+        const row = maps.partRequest.get(entityId);
+        pickOrderClient(row?.order, row?.client?.name);
+        return;
+    }
+    if (item.entityType === 'Purchase') {
+        const row = maps.purchase.get(entityId);
+        const order = row?.order || row?.orderProject?.order;
+        pickOrderClient(order);
+        return;
+    }
+    if (item.entityType === 'Assistance') {
+        const row = maps.assistance.get(entityId);
+        pickOrderClient(row?.order, row?.client?.name);
+        return;
+    }
+    if (item.entityType === 'ExternalAssemblyInspection') {
+        const row = maps.inspection.get(entityId);
+        pickOrderClient(row?.order);
+        return;
+    }
+    if (item.entityType === 'Pickup') {
+        const meta = item.metadataJson || {};
+        const orderRow = maps.orderById.get(Number(meta.orderId));
+        addExpeditionRouteListOrderClient(
+            orderCodes,
+            clientNames,
+            meta.orderCode || orderRow?.orderCode,
+            orderRow?.client?.name
+        );
+        return;
+    }
+
+    const parsed = parseExpeditionEntityLabelForOrderClient(item.entityLabel);
+    addExpeditionRouteListOrderClient(orderCodes, clientNames, parsed.orderCode, parsed.clientName);
+}
+
+async function enrichExpeditionRoutesWithOrderClient(rows = []) {
+    const routeIds = (rows || []).map(row => Number(row.id)).filter(Boolean);
+    if (!routeIds.length) return rows || [];
+
+    const items = await fetchExpeditionRouteStopItemsForRouteList(routeIds);
+    const maps = await loadExpeditionRouteListOrderClientMaps(items);
+
+    const itemsByRoute = new Map();
+    (items || []).forEach(item => {
+        const routeId = Number(item.routeId || item.stop?.routeId);
+        if (!routeId) return;
+        if (!itemsByRoute.has(routeId)) itemsByRoute.set(routeId, []);
+        itemsByRoute.get(routeId).push(item);
+    });
+
+    return (rows || []).map(row => {
+        const orderCodes = new Set();
+        const clientNames = new Set();
+        (itemsByRoute.get(Number(row.id)) || []).forEach(item => {
+            accumulateExpeditionRouteStopItemOrderClient(item, maps, orderCodes, clientNames);
+        });
+
+        const codes = [...orderCodes].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR', { numeric: true }));
+        const clients = [...clientNames].sort((a, b) => String(a).localeCompare(String(b), 'pt-BR', { sensitivity: 'base' }));
+
+        return {
+            ...row,
+            orderCodesList: codes,
+            clientNamesList: clients
+        };
+    });
+}
+
+function routeMatchesExpeditionOrderSearch(row) {
+    const orderCode = String(expedicaoRouteListFilterOrder || '').trim();
+    const query = String(expedicaoRouteListFilterQuery || '').trim();
+    if (!orderCode && !query) return true;
+
+    const normalize = typeof normalizeOrderSearchComboboxQuery === 'function'
+        ? normalizeOrderSearchComboboxQuery
+        : (typeof normalizeInteractiveTableSearch === 'function'
+            ? normalizeInteractiveTableSearch
+            : value => String(value || '').toLowerCase().trim());
+
+    const codes = Array.isArray(row?.orderCodesList) ? row.orderCodesList : [];
+    const clients = Array.isArray(row?.clientNamesList) ? row.clientNamesList : [];
+
+    if (orderCode) {
+        const term = normalize(orderCode);
+        return codes.some(code => normalize(code).includes(term));
+    }
+
+    const term = normalize(query);
+    if (!term) return true;
+    return codes.some(code => normalize(code).includes(term))
+        || clients.some(name => normalize(name).includes(term));
+}
+
+function filterExpeditionRoutesForList(rows = expedicaoRoutesCache) {
+    return (rows || []).filter(row => routeMatchesExpeditionOrderSearch(row));
+}
+
+function mountExpedicaoRouteListInteractiveTable(tableMount) {
+    if (!tableMount || typeof mountInteractiveTable !== 'function') return;
+
+    const rows = filterExpeditionRoutesForList(expedicaoRoutesCache);
+    if (!expedicaoRoutesCache.length) {
+        tableMount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Nenhuma rota cadastrada.</p>';
+        return;
+    }
+
+    mountInteractiveTable(tableMount, {
+        tableId: 'expedicao-route-list',
+        rows,
+        minWidth: '880px',
+        defaultSort: [{ key: 'routeDate', direction: 'desc' }],
+        filteredEmptyMessage: expedicaoRouteListFilterOrder || expedicaoRouteListFilterQuery
+            ? 'Nenhuma rota com parada para esse pedido ou cliente.'
+            : 'Nenhuma rota encontrada com os filtros aplicados.',
+        onBind: tbody => bindExpedicaoRouteListTableActions(tbody),
+        columns: [
+            {
+                key: 'routeDate',
+                label: 'Dia',
+                type: 'date',
+                thClass: 'whitespace-nowrap',
+                cellClass: 'p-3 text-xs text-slate-800 whitespace-nowrap',
+                getValue: row => (row.routeDate && typeof formatDate === 'function' ? formatDate(row.routeDate) : '—'),
+                getSortValue: row => row.routeDate
+            },
+            {
+                key: 'routeName',
+                label: 'Nome',
+                cellClass: 'p-3 text-xs font-semibold text-slate-800',
+                getValue: row => (typeof formatExpeditionRouteDisplayName === 'function'
+                    ? formatExpeditionRouteDisplayName(row)
+                    : (row.name || `Rota ${row.id}`)),
+                getSortValue: row => (typeof formatExpeditionRouteDisplayName === 'function'
+                    ? formatExpeditionRouteDisplayName(row)
+                    : (row.name || '')).toLowerCase(),
+                getFilterValue: row => (typeof formatExpeditionRouteDisplayName === 'function'
+                    ? formatExpeditionRouteDisplayName(row)
+                    : (row.name || `Rota ${row.id}`))
+            },
+            {
+                key: 'vehicleLabel',
+                label: 'Carro',
+                cellClass: 'p-3 text-xs text-slate-700 whitespace-nowrap',
+                getValue: row => row.vehicleLabel || '—'
+            },
+            {
+                key: 'driverName',
+                label: 'Motorista',
+                cellClass: 'p-3 text-xs text-slate-700 whitespace-nowrap',
+                getValue: row => row.driverName || '—'
+            },
+            {
+                key: 'responsible',
+                label: 'Responsável',
+                cellClass: 'p-3 text-xs text-slate-700 whitespace-nowrap',
+                getValue: row => (typeof getExpeditionResponsibleLabel === 'function'
+                    ? getExpeditionResponsibleLabel(row)
+                    : '—'),
+                getFilterValue: row => (typeof getExpeditionResponsibleLabel === 'function'
+                    ? getExpeditionResponsibleLabel(row)
+                    : '')
+            },
+            {
+                key: 'status',
+                label: 'Status',
+                cellClass: 'p-3 text-xs whitespace-nowrap',
+                getFilterValue: row => formatExpeditionRouteStatus(row.status),
+                getSortValue: row => formatExpeditionRouteStatus(row.status),
+                render: row => {
+                    const cls = expeditionRouteStatusBadgeClass(row.status);
+                    const label = formatExpeditionRouteStatus(row.status);
+                    return `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${cls}">${escapeHtml(label)}</span>`;
+                }
+            },
+            {
+                key: 'actions',
+                label: 'Ações',
+                type: 'action',
+                sortable: false,
+                filterable: false,
+                thClass: 'whitespace-nowrap',
+                cellClass: 'p-3 text-xs whitespace-nowrap',
+                render: row => `
+                    <div class="flex flex-wrap gap-1.5 justify-end">
+                        <button type="button"
+                            class="expedicao-route-open-btn text-xs bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-50"
+                            data-route-id="${row.id}">Abrir</button>
+                        <button type="button"
+                            class="expedicao-route-history-btn text-xs bg-white border border-blue-200 text-blue-800 px-2.5 py-1 rounded-lg font-medium hover:bg-blue-50"
+                            data-route-id="${row.id}">Histórico</button>
+                        ${canEditExpeditionRoute(row.status)
+        ? `<button type="button"
+                            class="expedicao-route-edit-btn text-xs bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-50"
+                            data-route-id="${row.id}">Editar</button>`
+        : ''}
+                        ${canPrintExpeditionRouteLabels(row.status)
+        ? `<button type="button"
+                            class="expedicao-route-print-btn text-xs bg-slate-900 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-slate-800"
+                            data-route-id="${row.id}">${escapeHtml(getExpeditionRoutePrintActionLabel(row.status))}</button>`
+        : ''}
+                    </div>
+                `
+            }
+        ]
+    });
+}
+
+function bindExpedicaoRouteListTableActions(container) {
+    if (!container) return;
+    container.querySelectorAll('.expedicao-route-open-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const routeId = Number(btn.dataset.routeId);
+            if (typeof openExpedicaoRouteDetail === 'function') openExpedicaoRouteDetail(routeId);
+        });
+    });
+    container.querySelectorAll('.expedicao-route-history-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            void openExpedicaoRouteBoardingHistoryModal(Number(btn.dataset.routeId));
+        });
+    });
+    container.querySelectorAll('.expedicao-route-edit-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const routeId = Number(btn.dataset.routeId);
+            if (typeof openExpedicaoRouteWizard === 'function') {
+                await openExpedicaoRouteWizard(routeId);
+            }
+        });
+    });
+    container.querySelectorAll('.expedicao-route-print-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const routeId = Number(btn.dataset.routeId);
+            const printWindow = typeof openExpeditionLabelsPrintShell === 'function'
+                ? openExpeditionLabelsPrintShell()
+                : null;
+            if (!printWindow) {
+                alertAppDialog('Permita pop-ups para imprimir as etiquetas.');
+                return;
+            }
+            void printExpedicaoRouteLabelsById(routeId, printWindow);
+        });
+    });
+}
+
 async function loadExpedicaoRouteList() {
     if (typeof canAccessExpedicaoRouteSection === 'function' && !canAccessExpedicaoRouteSection()) {
         if (typeof showExpedicao === 'function') showExpedicao('boarding');
@@ -964,7 +1379,7 @@ async function loadExpedicaoRouteList() {
             throw error;
         }
 
-        expedicaoRoutesCache = data;
+        expedicaoRoutesCache = await enrichExpeditionRoutesWithOrderClient(data);
         renderExpedicaoRouteList(mount, expedicaoRoutesCache);
     } catch (error) {
         console.error('loadExpedicaoRouteList:', error);
@@ -975,75 +1390,38 @@ async function loadExpedicaoRouteList() {
 }
 
 function renderExpedicaoRouteList(mount, rows) {
-    const tableRows = (rows || []).map(row => {
-        const statusBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${expeditionRouteStatusBadgeClass(row.status)}">${formatExpeditionRouteStatus(row.status)}</span>`;
-        const dateLabel = row.routeDate ? formatDate(row.routeDate) : '—';
-        const routeLabel = typeof formatExpeditionRouteDisplayName === 'function'
-            ? formatExpeditionRouteDisplayName(row)
-            : (row.name || `Rota ${row.id}`);
-        return `
-            <tr class="hover:bg-slate-50/80">
-                <td class="p-3 text-xs text-slate-800 whitespace-nowrap">${escapeHtml(dateLabel)}</td>
-                <td class="p-3 text-xs font-semibold text-slate-800">${escapeHtml(routeLabel)}</td>
-                <td class="p-3 text-xs text-slate-700">${escapeHtml(row.vehicleLabel || '—')}</td>
-                <td class="p-3 text-xs text-slate-700">${escapeHtml(row.driverName || '—')}</td>
-                <td class="p-3 text-xs text-slate-700">${typeof getExpeditionResponsibleLabel === 'function'
-        ? escapeHtml(getExpeditionResponsibleLabel(row))
-        : '—'}</td>
-                <td class="p-3 text-xs">${statusBadge}</td>
-                <td class="p-3 text-xs">
-                    <div class="flex flex-wrap gap-1.5">
-                        <button type="button"
-                            class="expedicao-route-open-btn text-xs bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-50"
-                            data-route-id="${row.id}">Abrir</button>
-                        <button type="button"
-                            class="expedicao-route-history-btn text-xs bg-white border border-blue-200 text-blue-800 px-2.5 py-1 rounded-lg font-medium hover:bg-blue-50"
-                            data-route-id="${row.id}">Histórico</button>
-                        ${canEditExpeditionRoute(row.status)
-        ? `<button type="button"
-                            class="expedicao-route-edit-btn text-xs bg-white border border-slate-200 text-slate-700 px-2.5 py-1 rounded-lg font-medium hover:bg-slate-50"
-                            data-route-id="${row.id}">Editar</button>`
-        : ''}
-                        ${canPrintExpeditionRouteLabels(row.status)
-        ? `<button type="button"
-                            class="expedicao-route-print-btn text-xs bg-slate-900 text-white px-2.5 py-1 rounded-lg font-medium hover:bg-slate-800"
-                            data-route-id="${row.id}">${escapeHtml(getExpeditionRoutePrintActionLabel(row.status))}</button>`
-        : ''}
-                    </div>
-                </td>
-            </tr>
-        `;
-    }).join('');
-
+    void rows;
     mount.innerHTML = `
         <div class="flex flex-col gap-4 min-h-[calc(100vh-140px)]">
             <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
                     <h2 class="text-lg font-bold text-slate-900">Rota</h2>
-                    <p class="text-xs text-slate-500 mt-1">Monte paradas, gere volumes e confirme a rota para liberar etiquetas.</p>
+                    <p class="text-xs text-slate-500 mt-1">Monte paradas, gere volumes e confirme a rota. Filtre por pedido/cliente nas paradas ou use os cabeçalhos da tabela.</p>
                 </div>
                 <button type="button" id="btn-expedicao-new-route"
                     class="text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-semibold hover:bg-slate-800">
                     Nova rota
                 </button>
             </div>
-            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                <table class="w-full text-left">
-                    <thead class="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
-                        <tr>
-                            <th class="p-3 font-semibold">Dia</th>
-                            <th class="p-3 font-semibold">Nome</th>
-                            <th class="p-3 font-semibold">Carro</th>
-                            <th class="p-3 font-semibold">Motorista</th>
-                            <th class="p-3 font-semibold">Responsável</th>
-                            <th class="p-3 font-semibold">Status</th>
-                            <th class="p-3 font-semibold">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        ${tableRows || `<tr><td colspan="7" class="p-8 text-center text-xs text-slate-400">Nenhuma rota cadastrada.</td></tr>`}
-                    </tbody>
-                </table>
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-3 md:p-4 space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,22rem)_auto] gap-3 items-end max-w-2xl">
+                    <div id="expedicao-route-order-combobox-wrap" class="relative z-30">
+                        <label class="block text-[10px] font-semibold text-slate-500 mb-1" for="expedicao-route-order-combobox-input">Pedido</label>
+                        <input id="expedicao-route-order-combobox-input" type="text" autocomplete="off"
+                            role="combobox" aria-expanded="false" aria-controls="expedicao-route-order-combobox-list" aria-autocomplete="list"
+                            placeholder="Digite o código ou nome do cliente"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white">
+                        <div id="expedicao-route-order-combobox-list"
+                            class="hidden absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+                            role="listbox"></div>
+                    </div>
+                    <button type="button" id="expedicao-route-filter-clear"
+                        class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium hover:bg-slate-200 sm:mb-0.5">
+                        Limpar pedido
+                    </button>
+                </div>
+                <p class="text-[10px] text-slate-400">Lista rotas com pelo menos uma parada do pedido selecionado. Enquanto digita, filtra por código ou nome do cliente (sem precisar escolher na lista).</p>
+                <div id="expedicao-route-list-table"></div>
             </div>
         </div>
     `;
@@ -1051,39 +1429,62 @@ function renderExpedicaoRouteList(mount, rows) {
     mount.querySelector('#btn-expedicao-new-route')?.addEventListener('click', () => {
         if (typeof openExpedicaoRouteWizard === 'function') openExpedicaoRouteWizard();
     });
-    mount.querySelectorAll('.expedicao-route-open-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const routeId = Number(btn.dataset.routeId);
-            if (typeof openExpedicaoRouteDetail === 'function') openExpedicaoRouteDetail(routeId);
-        });
-    });
-    mount.querySelectorAll('.expedicao-route-history-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const routeId = Number(btn.dataset.routeId);
-            void openExpedicaoRouteBoardingHistoryModal(routeId);
-        });
-    });
-    mount.querySelectorAll('.expedicao-route-edit-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const routeId = Number(btn.dataset.routeId);
-            if (typeof openExpedicaoRouteWizard === 'function') {
-                await openExpedicaoRouteWizard(routeId);
+
+    const tableMount = mount.querySelector('#expedicao-route-list-table');
+    const clearBtn = mount.querySelector('#expedicao-route-filter-clear');
+
+    const refreshTable = () => {
+        mountExpedicaoRouteListInteractiveTable(tableMount);
+    };
+
+    if (expedicaoRouteListOrderCombobox?.destroy) {
+        expedicaoRouteListOrderCombobox.destroy();
+        expedicaoRouteListOrderCombobox = null;
+    }
+
+    if (typeof mountOrderSearchCombobox === 'function') {
+        expedicaoRouteListOrderCombobox = mountOrderSearchCombobox({
+            wrap: mount.querySelector('#expedicao-route-order-combobox-wrap'),
+            input: mount.querySelector('#expedicao-route-order-combobox-input'),
+            list: mount.querySelector('#expedicao-route-order-combobox-list'),
+            selectedOrderCode: expedicaoRouteListFilterOrder,
+            onSelect: order => {
+                expedicaoRouteListFilterOrder = order?.orderCode ? String(order.orderCode).trim() : '';
+                expedicaoRouteListFilterQuery = '';
+                refreshTable();
+            },
+            onClear: () => {
+                expedicaoRouteListFilterOrder = '';
+                expedicaoRouteListFilterQuery = '';
+                refreshTable();
+            },
+            onQueryChange: ({ query, selectedOrder }) => {
+                if (selectedOrder) return;
+                expedicaoRouteListFilterOrder = '';
+                expedicaoRouteListFilterQuery = query;
+                refreshTable();
             }
         });
+    }
+
+    clearBtn?.addEventListener('click', () => {
+        expedicaoRouteListFilterOrder = '';
+        expedicaoRouteListFilterQuery = '';
+        if (expedicaoRouteListOrderCombobox?.clear) {
+            expedicaoRouteListOrderCombobox.clear();
+        } else {
+            refreshTable();
+        }
     });
-    mount.querySelectorAll('.expedicao-route-print-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const routeId = Number(btn.dataset.routeId);
-            const printWindow = typeof openExpeditionLabelsPrintShell === 'function'
-                ? openExpeditionLabelsPrintShell()
-                : null;
-            if (!printWindow) {
-                alertAppDialog('Permita pop-ups para imprimir as etiquetas.');
-                return;
-            }
-            void printExpedicaoRouteLabelsById(routeId, printWindow);
-        });
-    });
+
+    if (typeof mountInteractiveTable !== 'function') {
+        if (tableMount) {
+            tableMount.innerHTML = '<p class="text-xs text-red-500 text-center py-8">Componente de tabela indisponível.</p>';
+        }
+        return;
+    }
+
+    refreshTable();
 }
 
 async function printExpedicaoRouteLabelsById(routeId, printWindow = null) {
@@ -1114,9 +1515,59 @@ async function printExpedicaoRouteLabelsById(routeId, printWindow = null) {
     });
 }
 
-async function openExpedicaoRouteDetail(routeId) {
+function renderExpeditionRouteStopsSequenceHtml(sortedStops) {
+    if (!sortedStops?.length) {
+        return '<p class="text-xs text-slate-400 text-center py-4">Sem paradas cadastradas.</p>';
+    }
+
+    const cards = sortedStops.map((stop, index) => {
+        const addr = typeof formatExpeditionAddressOneLine === 'function'
+            ? formatExpeditionAddressOneLine(stop.addrSnapshot)
+            : '';
+        const stopItems = (stop.items || []).map(item => `
+            <li class="expedition-route-stop-card__item text-[11px] text-slate-600">
+                <span class="font-semibold text-slate-700">${escapeHtml(getExpeditionEntityTypeLabel(item.entityType))}</span>
+                <span> — ${escapeHtml(item.entityLabel || '')}</span>
+                <span class="text-slate-400"> (${Number(item.volumeCount) || 0} vol.)</span>
+            </li>
+        `).join('');
+        return `
+            <li class="expedition-route-stop-card">
+                <div class="expedition-route-stop-card__head">
+                    <span class="expedition-route-stop-card__seq" aria-hidden="true">${index + 1}</span>
+                    <p class="expedition-route-stop-card__title text-xs font-bold text-slate-900">Parada ${index + 1}</p>
+                </div>
+                <p class="expedition-route-stop-card__addr text-[11px] text-slate-600 whitespace-pre-wrap mt-1.5">${escapeHtml(addr || '—')}</p>
+                ${stopItems
+            ? `<ul class="expedition-route-stop-card__items mt-2 space-y-1">${stopItems}</ul>`
+            : '<p class="text-[11px] text-slate-400 mt-2">Sem itens nesta parada.</p>'}
+            </li>
+        `;
+    }).join('');
+
+    return `<ol class="expedition-route-stops-sequence" role="list">${cards}</ol>`;
+}
+
+function setExpeditionRouteDetailModalActionsVisibility(options = {}) {
+    const stopsView = options.view === 'stops';
+    ['btn-expedition-route-detail-edit', 'btn-expedition-route-detail-print', 'btn-expedition-route-detail-history'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (stopsView) {
+            el.classList.add('hidden');
+            return;
+        }
+        if (id === 'btn-expedition-route-detail-history') {
+            el.classList.remove('hidden');
+            return;
+        }
+    });
+}
+
+async function openExpedicaoRouteDetail(routeId, options = {}) {
     const key = Number(routeId);
     if (!key) return;
+    const stopsView = options.view === 'stops';
 
     setExpedicaoActionLoading(true, 'Carregando rota...');
     try {
@@ -1160,35 +1611,33 @@ async function openExpedicaoRouteDetail(routeId) {
             return;
         }
 
+        if (typeof ensureCurrentUserCanAccessExpeditionRoute === 'function') {
+            ensureCurrentUserCanAccessExpeditionRoute(route, {
+                filterByLoggedResponsibleUnlessAdmin: Boolean(options.filterByLoggedResponsibleUnlessAdmin ?? stopsView)
+            });
+        }
+
         const sortedStops = (route.stops || []).slice().sort((a, b) => a.sortOrder - b.sortOrder);
-        const stopLines = sortedStops.map((stop, index) => {
-            const addr = formatExpeditionAddressOneLine(stop.addrSnapshot);
-            const items = (stop.items || []).map(item => `
-                <li class="text-[11px] text-slate-600">
-                    ${escapeHtml(getExpeditionEntityTypeLabel(item.entityType))} — ${escapeHtml(item.entityLabel || '')}
-                    <span class="text-slate-400">(${item.volumeCount} vol.)</span>
-                </li>
-            `).join('');
-            return `
-                <li class="border border-slate-200 rounded-lg p-3 bg-slate-50/40">
-                    <p class="text-xs font-semibold text-slate-800">Parada ${index + 1}</p>
-                    <p class="text-[11px] text-slate-600 whitespace-pre-wrap mt-1">${escapeHtml(addr || '—')}</p>
-                    <ul class="mt-2 space-y-1 list-disc pl-4">${items || '<li class="text-[11px] text-slate-400">Sem itens</li>'}</ul>
-                </li>
-            `;
-        }).join('');
+        const stopsHtml = renderExpeditionRouteStopsSequenceHtml(sortedStops);
 
         const distanceLabel = typeof formatExpeditionRouteDistanceSummary === 'function'
             ? formatExpeditionRouteDistanceSummary(route.routeSummaryJson)
             : '';
         const mapsLink = route.mapsUrl
             ? `<a href="${escapeHtml(route.mapsUrl)}" target="_blank" rel="noopener noreferrer"
-                class="text-xs text-indigo-700 underline font-medium">Abrir no Google Maps</a>`
+                class="text-xs text-indigo-700 underline font-medium touch-manipulation">Abrir no Google Maps</a>`
             : '<span class="text-xs text-slate-400">Sem rota calculada</span>';
 
         const detailMount = document.getElementById('expedition-route-detail-mount');
         const detailModal = document.getElementById('expedition-route-detail-modal');
         if (detailMount && detailModal) {
+            const titleEl = detailModal.querySelector('h3');
+            if (titleEl) {
+                titleEl.textContent = stopsView ? 'Paradas da rota' : 'Detalhe da rota';
+            }
+
+            setExpeditionRouteDetailModalActionsVisibility(options);
+
             detailMount.innerHTML = `
                 <p class="text-sm font-bold text-slate-900">${escapeHtml(typeof formatExpeditionRouteDisplayName === 'function'
         ? formatExpeditionRouteDisplayName(route)
@@ -1200,11 +1649,16 @@ async function openExpedicaoRouteDetail(routeId) {
         : '—'}</p>
                 ${distanceLabel ? `<p class="text-xs text-slate-800 mt-1 font-semibold">Distância: ${escapeHtml(distanceLabel)}</p>` : ''}
                 <p class="text-xs mt-2">${mapsLink}</p>
-                <ol class="space-y-2 max-h-64 overflow-y-auto mt-3">${stopLines || '<li class="text-xs text-slate-400">Sem paradas</li>'}</ol>
+                <div class="mt-4">
+                    <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-2">Sequência de paradas</p>
+                    <div class="expedition-route-stops-sequence-wrap max-h-[min(52vh,28rem)] md:max-h-80 overflow-y-auto -mx-1 px-1">
+                        ${stopsHtml}
+                    </div>
+                </div>
             `;
             detailModal.classList.remove('hidden');
             const printBtn = document.getElementById('btn-expedition-route-detail-print');
-            if (printBtn) {
+            if (printBtn && !stopsView) {
                 printBtn.classList.toggle('hidden', !canPrintExpeditionRouteLabels(route.status));
                 printBtn.textContent = getExpeditionRoutePrintActionLabel(route.status);
                 printBtn.onclick = () => {
@@ -1219,7 +1673,7 @@ async function openExpedicaoRouteDetail(routeId) {
                 };
             }
             const editBtn = document.getElementById('btn-expedition-route-detail-edit');
-            if (editBtn) {
+            if (editBtn && !stopsView) {
                 editBtn.classList.toggle('hidden', !canEditExpeditionRoute(route.status));
                 editBtn.onclick = async () => {
                     closeExpedicaoRouteDetailModal();
@@ -1229,7 +1683,7 @@ async function openExpedicaoRouteDetail(routeId) {
                 };
             }
             const historyBtn = document.getElementById('btn-expedition-route-detail-history');
-            if (historyBtn) {
+            if (historyBtn && !stopsView) {
                 historyBtn.onclick = () => void openExpedicaoRouteBoardingHistoryModal(route.id);
             }
         }
@@ -1465,6 +1919,8 @@ window.canPrintExpeditionRouteLabels = canPrintExpeditionRouteLabels;
 window.getExpeditionRoutePrintActionLabel = getExpeditionRoutePrintActionLabel;
 window.buildWizardStateFromRoute = buildWizardStateFromRoute;
 window.openExpedicaoRouteDetail = openExpedicaoRouteDetail;
+window.setExpeditionRouteDetailModalActionsVisibility = setExpeditionRouteDetailModalActionsVisibility;
+window.renderExpeditionRouteStopsSequenceHtml = renderExpeditionRouteStopsSequenceHtml;
 window.printExpedicaoRouteLabelsById = printExpedicaoRouteLabelsById;
 window.fetchExpeditionEntityIdsAlreadyRouted = fetchExpeditionEntityIdsAlreadyRouted;
 window.EXPEDITION_DEFAULT_ROUTE_TIME = EXPEDITION_DEFAULT_ROUTE_TIME;

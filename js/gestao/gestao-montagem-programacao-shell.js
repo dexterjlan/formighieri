@@ -149,8 +149,7 @@ function bindMontagemProgramacaoEvents() {
     });
 
     const triggerMontagemProgClientPicker = () => {
-        const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
-        if (orderCode) return;
+        if (typeof montagemProgFormHasOrder === 'function' && montagemProgFormHasOrder()) return;
         if (typeof openClientePickerModal === 'function') {
             openClientePickerModal(cliente => {
                 const input = document.getElementById('montagem-prog-client-name');
@@ -180,50 +179,11 @@ function bindMontagemProgramacaoEvents() {
     document.getElementById('btn-montagem-prog-addr-picker')?.addEventListener('click', triggerMontagemProgAddrPicker);
     document.getElementById('montagem-prog-addr')?.addEventListener('click', triggerMontagemProgAddrPicker);
 
-    document.getElementById('montagem-prog-order-code')?.addEventListener('input', async function () {
-        syncMontagemProgClientRequired();
-        const orderCode = this.value.trim();
-        if (orderCode) {
-            const order = await lookupMontagemProgOrderByCode(orderCode);
-            const orderClientName = getOrderClientName(order);
-            if (orderClientName) {
-                document.getElementById('montagem-prog-client-name').value = orderClientName;
-            }
-            const clientIdInput = document.getElementById('montagem-prog-client-id');
-            if (clientIdInput) {
-                clientIdInput.value = order?.clientId ? String(order.clientId) : '';
-            }
-            if (typeof applyMontagemProgOrderAddress === 'function') {
-                await applyMontagemProgOrderAddress(order);
-            }
-            return;
-        }
-        if (typeof setMontagemProgSelectedAddr === 'function') {
-            setMontagemProgSelectedAddr(null);
-        }
-        syncMontagemProgClientRequired();
-    });
-    document.getElementById('montagem-prog-order-code')?.addEventListener('blur', async () => {
-        const orderCode = document.getElementById('montagem-prog-order-code')?.value.trim();
-        if (orderCode) {
-            const order = await lookupMontagemProgOrderByCode(orderCode);
-            const orderClientName = getOrderClientName(order);
-            if (orderClientName) {
-                document.getElementById('montagem-prog-client-name').value = orderClientName;
-            }
-            const clientIdInput = document.getElementById('montagem-prog-client-id');
-            if (clientIdInput) {
-                clientIdInput.value = order?.clientId ? String(order.clientId) : '';
-            }
-            if (typeof applyMontagemProgOrderAddress === 'function') {
-                await applyMontagemProgOrderAddress(order);
-            }
-        } else if (typeof setMontagemProgSelectedAddr === 'function') {
-            setMontagemProgSelectedAddr(null);
-        }
-        syncMontagemProgClientRequired();
+    document.getElementById('montagem-prog-order-search')?.addEventListener('blur', () => {
+        void resolveMontagemProgOrderFromInput();
     });
 }
+
 
 window.openMontagemProgModal = openMontagemProgModal;
 window.getMontagemProgFormClient = getMontagemProgFormClient;

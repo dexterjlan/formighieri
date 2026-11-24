@@ -436,6 +436,134 @@ async function notifyRequisicoesPurchaseEmail(details = {}) {
     }
 }
 
+async function buildCompraMedicaoNotificationPayload(details = {}) {
+    const context = details.orderProjectId && typeof fetchCompraLiberacaoNotificationContext === 'function'
+        ? await fetchCompraLiberacaoNotificationContext(details.orderProjectId)
+        : {
+            orderCode: details.orderCode || '—',
+            clientName: details.clientName || '—',
+            projectName: details.projectName || '—',
+            consultantName: '—',
+            projetistaName: '—'
+        };
+
+    const subtypeName = details.subtypeName || '';
+    const purchaseType = details.purchaseType || '—';
+    const tipoLabel = typeof formatCompraTipoLabel === 'function'
+        ? formatCompraTipoLabel(purchaseType, subtypeName)
+        : purchaseType;
+
+    return {
+        purchaseId: details.purchaseId || details.id,
+        orderProjectId: details.orderProjectId,
+        orderCode: details.orderCode || context.orderCode,
+        clientName: details.clientName || context.clientName,
+        projectName: details.projectName || context.projectName,
+        purchaseType,
+        subtypeName,
+        tipoLabel,
+        reasonName: details.reasonName || '',
+        status: details.status || '',
+        observation: details.observation || details.note || '',
+        consultantName: context.consultantName || '—',
+        projetistaName: context.projetistaName || '—'
+    };
+}
+
+async function notifyCompraMedicaoLiberadaToCompras(details = {}) {
+    if (!NOTIFICATIONS_ENABLED) return;
+    if (!details.purchaseId && !details.id && !details.orderProjectId) return;
+
+    try {
+        const payload = await buildCompraMedicaoNotificationPayload(details);
+
+        if (typeof notifyMatrixCompraMedicaoLiberadaToCompras === 'function') {
+            await notifyMatrixCompraMedicaoLiberadaToCompras(payload);
+        }
+
+        if (!isGoogleAppsScriptConfigured()) {
+            console.info('notifyCompraMedicaoLiberadaToCompras: Google Apps Script não configurado em js/core/config.js');
+            return;
+        }
+
+        const recipients = await fetchActiveComprasRecipientEmails();
+        const emailPayload = {
+            eventTitle: 'Medição liberada — requisição de compra',
+            orderCode: payload.orderCode,
+            projectName: payload.projectName,
+            clientName: payload.clientName,
+            consultantName: payload.consultantName,
+            projetistaName: payload.projetistaName,
+            purchaseType: payload.tipoLabel,
+            reasonName: payload.reasonName,
+            observation: payload.status
+                ? `Novo status: ${payload.status}`
+                : (payload.observation || '—'),
+            actedByName: currentUser?.name || '—',
+            actedByRole: currentUser?.role || '—'
+        };
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: recipients.join(', '),
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject: `Medição liberada — compra de ${payload.tipoLabel} - ${payload.clientName} (${payload.orderCode})`,
+            message_body: buildRequisicoesPurchaseEmailBody(emailPayload),
+            message_html: buildRequisicoesPurchaseEmailHtml(emailPayload)
+        }, { context: 'compra-medicao-liberada' });
+    } catch (err) {
+        console.warn('notifyCompraMedicaoLiberadaToCompras:', err);
+    }
+}
+
+async function notifyCompraAguardandoLibMedicaoToCoordenacao(details = {}) {
+    if (!NOTIFICATIONS_ENABLED) return;
+    if (!details.purchaseId && !details.id && !details.orderProjectId) return;
+
+    try {
+        const payload = await buildCompraMedicaoNotificationPayload(details);
+
+        if (typeof notifyMatrixCompraAguardandoLibMedicaoToCoordenacao === 'function') {
+            await notifyMatrixCompraAguardandoLibMedicaoToCoordenacao(payload);
+        }
+
+        if (!isGoogleAppsScriptConfigured()) {
+            console.info('notifyCompraAguardandoLibMedicaoToCoordenacao: Google Apps Script não configurado em js/core/config.js');
+            return;
+        }
+
+        const recipients = await fetchActiveGestorProjetosRecipientEmails();
+        if (!recipients.length) return;
+
+        const emailPayload = {
+            eventTitle: 'Aguardando liberação de medição — requisição de compra',
+            orderCode: payload.orderCode,
+            projectName: payload.projectName,
+            clientName: payload.clientName,
+            consultantName: payload.consultantName,
+            projetistaName: payload.projetistaName,
+            purchaseType: payload.tipoLabel,
+            reasonName: payload.reasonName,
+            observation: payload.status
+                ? `Status: ${payload.status}`
+                : (payload.observation || '—'),
+            actedByName: currentUser?.name || '—',
+            actedByRole: currentUser?.role || '—'
+        };
+
+        await sendEmailViaGoogleAppsScript({
+            to_email: recipients.join(', '),
+            from_name: NOTIFICATION_FROM_NAME,
+            reply_to: NOTIFICATION_FROM_EMAIL,
+            subject: `Aguardando liberação de medição — ${payload.clientName} (${payload.orderCode})`,
+            message_body: buildRequisicoesPurchaseEmailBody(emailPayload),
+            message_html: buildRequisicoesPurchaseEmailHtml(emailPayload)
+        }, { context: 'compra-aguardando-lib-medicao' });
+    } catch (err) {
+        console.warn('notifyCompraAguardandoLibMedicaoToCoordenacao:', err);
+    }
+}
+
 async function notifyCompraLiberacaoEmails(options = {}) {
     const { items = [], formValues = {}, orderProjectId } = options;
     if (!NOTIFICATIONS_ENABLED || !items.length || !orderProjectId) return;

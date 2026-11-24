@@ -255,9 +255,14 @@ function renderExpedicaoBoardingList(mount, rows) {
                 <p class="text-xs font-bold text-slate-900">${escapeHtml(routeLabel)}</p>
                 <p class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(dateLabel)} · ${escapeHtml(statusLabel)}</p>
                 ${typeof renderExpeditionRouteCrewMobile === 'function' ? renderExpeditionRouteCrewMobile(row) : ''}
-                <button type="button"
-                    class="expedicao-boarding-open-btn mt-3 w-full text-xs bg-slate-900 text-white px-3 py-2.5 rounded-lg font-semibold touch-manipulation"
-                    data-route-id="${row.id}">${typeof renderExpeditionMobileBtnLabel === 'function' ? renderExpeditionMobileBtnLabel('boarding', 'Embarcar') : 'Embarcar'}</button>
+                <div class="mt-3 flex flex-col gap-2">
+                    <button type="button"
+                        class="expedicao-boarding-view-route-btn w-full text-xs bg-white border border-slate-200 text-slate-800 px-3 py-2.5 rounded-lg font-semibold touch-manipulation"
+                        data-route-id="${row.id}">Ver Rota</button>
+                    <button type="button"
+                        class="expedicao-boarding-open-btn w-full text-xs bg-slate-900 text-white px-3 py-2.5 rounded-lg font-semibold touch-manipulation"
+                        data-route-id="${row.id}">${typeof renderExpeditionMobileBtnLabel === 'function' ? renderExpeditionMobileBtnLabel('boarding', 'Embarcar') : 'Embarcar'}</button>
+                </div>
             </article>
         `;
     }).join('');
@@ -283,9 +288,14 @@ function renderExpedicaoBoardingList(mount, rows) {
         : '—'}</td>
                 <td class="p-3 text-xs">${escapeHtml(statusLabel)}</td>
                 <td class="p-3 text-xs">
-                    <button type="button"
-                        class="expedicao-boarding-open-btn text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-semibold"
-                        data-route-id="${row.id}">Embarcar</button>
+                    <div class="flex flex-wrap gap-2 justify-end">
+                        <button type="button"
+                            class="expedicao-boarding-view-route-btn text-xs bg-white border border-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-semibold hover:bg-slate-50"
+                            data-route-id="${row.id}">Ver Rota</button>
+                        <button type="button"
+                            class="expedicao-boarding-open-btn text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg font-semibold"
+                            data-route-id="${row.id}">Embarcar</button>
+                    </div>
                 </td>
             </tr>
         `;
@@ -324,6 +334,16 @@ function renderExpedicaoBoardingList(mount, rows) {
         btn.addEventListener('click', () => {
             const routeId = Number(btn.dataset.routeId);
             void openExpedicaoBoardingRoute(routeId);
+        });
+    });
+    mount.querySelectorAll('.expedicao-boarding-view-route-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const routeId = Number(btn.dataset.routeId);
+            if (typeof openExpedicaoRouteDetail === 'function') {
+                void openExpedicaoRouteDetail(routeId, { view: 'stops' });
+            } else {
+                alertAppDialog('Não foi possível abrir a rota.');
+            }
         });
     });
 }

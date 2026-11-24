@@ -10,15 +10,9 @@ function resolvePendenciasPurchaseReasonName(compra, reasonsById = {}) {
     return '';
 }
 
-async function fetchPendenciasEnviadosCompras() {
-    const { error, compras } = await fetchComprasAbertas();
-
-    if (error) {
-        return { error, items: [] };
-    }
-
-    if (!compras.length) {
-        return { error: null, items: [] };
+async function enrichPendenciasCompraItemsFromRows(compras) {
+    if (!compras?.length) {
+        return [];
     }
 
     const projectIds = [...new Set(compras.map(item => item.orderProjectId).filter(Boolean))];
@@ -38,7 +32,7 @@ async function fetchPendenciasEnviadosCompras() {
         }
 
         if (projectResult.error) {
-            return { error: projectResult.error, items: [] };
+            throw projectResult.error;
         }
     }
 
@@ -103,7 +97,7 @@ async function fetchPendenciasEnviadosCompras() {
         }
     }
 
-    const items = compras.map(compra => {
+    return compras.map(compra => {
         const project = compra.orderProjectId ? projectsById[compra.orderProjectId] : null;
         const assistance = assistanceById[compra.assistanceRequestId] || null;
         const purchaseItem = purchaseItemsById[compra.implementationPurchaseItemId] || null;
@@ -128,8 +122,56 @@ async function fetchPendenciasEnviadosCompras() {
             reasonName: resolvePendenciasPurchaseReasonName(compra, reasonsById)
         };
     });
+}
 
-    return { error: null, items };
+async function fetchPendenciasComprasByStatuses(statusNames) {
+    const names = [...new Set((statusNames || []).map(name => String(name || '').trim()).filter(Boolean))];
+    if (!names.length) {
+        return { error: null, items: [] };
+    }
+
+    const { data, error } = await supabaseClient
+        .from('Purchase')
+        .select('*')
+        .in('status', names)
+        .order('createdAt', { ascending: false });
+
+    if (error?.message?.includes('Purchase') || error?.message?.includes('does not exist')) {
+        return {
+            error: new Error('Tabela Purchase não encontrada. Consulte PENDING-PROD-SQL.md ou supabase/schema/.'),
+            items: []
+        };
+    }
+
+    if (error) {
+        return { error, items: [] };
+    }
+
+    try {
+        const items = await enrichPendenciasCompraItemsFromRows(data || []);
+        return { error: null, items };
+    } catch (enrichError) {
+        return { error: enrichError, items: [] };
+    }
+}
+
+async function fetchPendenciasEnviadosCompras() {
+    const { error, compras } = await fetchComprasAbertas();
+
+    if (error) {
+        return { error, items: [] };
+    }
+
+    if (!compras.length) {
+        return { error: null, items: [] };
+    }
+
+    try {
+        const items = await enrichPendenciasCompraItemsFromRows(compras);
+        return { error: null, items };
+    } catch (enrichError) {
+        return { error: enrichError, items: [] };
+    }
 }
 
 async function loadPendenciasEnviadosCompras() {

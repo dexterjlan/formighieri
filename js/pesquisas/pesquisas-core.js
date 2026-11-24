@@ -1,4 +1,5 @@
 let pesquisasActiveSection = 'revisions';
+const pesquisasOrderComboboxes = {};
 
 const PESQUISAS_SECTIONS = [
     { id: 'revisions', label: 'Revisões' },
@@ -148,10 +149,16 @@ function renderPesquisasFilterLayout(content, config = {}) {
                 <h2 class="font-bold text-sm text-slate-900">${escapeHtml(title)}</h2>
                 <p class="text-xs text-slate-400 mt-1">${escapeHtml(description)}</p>
                 <form id="pesquisas-${sectionId}-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Pedido</label>
-                        <input type="text" id="pesquisas-${sectionId}-pedido" placeholder="Ex: PV-4050"
-                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-600">
+                    <div class="relative" id="pesquisas-${sectionId}-pedido-wrap">
+                        <label class="block text-xs font-semibold text-slate-500 uppercase mb-1" for="pesquisas-${sectionId}-pedido-search">Pedido</label>
+                        <input type="text" id="pesquisas-${sectionId}-pedido-search" autocomplete="off" role="combobox"
+                            aria-expanded="false" aria-controls="pesquisas-${sectionId}-pedido-list" aria-autocomplete="list"
+                            placeholder="Digite o código ou nome do cliente"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-indigo-600">
+                        <input type="hidden" id="pesquisas-${sectionId}-pedido-id" value="">
+                        <div id="pesquisas-${sectionId}-pedido-list"
+                            class="hidden absolute z-30 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+                            role="listbox"></div>
                     </div>
                     <div>
                         <label class="block text-xs font-semibold text-slate-500 uppercase mb-1">Cliente</label>
@@ -177,11 +184,68 @@ function renderPesquisasFilterLayout(content, config = {}) {
             <div id="pesquisas-${sectionId}-table-mount"></div>
         </div>
     `;
+
+    initPesquisasOrderCombobox(sectionId);
+}
+
+function destroyPesquisasOrderCombobox(sectionId) {
+    const existing = pesquisasOrderComboboxes[sectionId];
+    if (existing?.destroy) {
+        existing.destroy();
+    }
+    delete pesquisasOrderComboboxes[sectionId];
+}
+
+function initPesquisasOrderCombobox(sectionId) {
+    destroyPesquisasOrderCombobox(sectionId);
+
+    const wrap = document.getElementById(`pesquisas-${sectionId}-pedido-wrap`);
+    const input = document.getElementById(`pesquisas-${sectionId}-pedido-search`);
+    const list = document.getElementById(`pesquisas-${sectionId}-pedido-list`);
+    const hidden = document.getElementById(`pesquisas-${sectionId}-pedido-id`);
+    if (!wrap || !input || !list || typeof mountOrderSearchCombobox !== 'function') return;
+
+    pesquisasOrderComboboxes[sectionId] = mountOrderSearchCombobox({
+        wrap,
+        input,
+        list,
+        onSelect: order => {
+            if (hidden) hidden.value = order ? String(order.id) : '';
+        },
+        onClear: () => {
+            if (hidden) hidden.value = '';
+        }
+    });
+}
+
+function clearPesquisasOrderCombobox(sectionId) {
+    const combobox = pesquisasOrderComboboxes[sectionId];
+    if (combobox?.clear) {
+        combobox.clear();
+        return;
+    }
+    const input = document.getElementById(`pesquisas-${sectionId}-pedido-search`);
+    const hidden = document.getElementById(`pesquisas-${sectionId}-pedido-id`);
+    if (input) input.value = '';
+    if (hidden) hidden.value = '';
+}
+
+function getPesquisasPedidoFilterTerm(sectionId) {
+    const combobox = pesquisasOrderComboboxes[sectionId];
+    const selected = combobox?.getSelectedOrder?.();
+    if (selected?.orderCode) {
+        return String(selected.orderCode).trim().toLowerCase();
+    }
+
+    const raw = document.getElementById(`pesquisas-${sectionId}-pedido-search`)?.value.trim() || '';
+    if (!raw) return '';
+
+    return raw.split('—')[0].split('–')[0].trim().toLowerCase();
 }
 
 function getPesquisasTextFilters(sectionId) {
     return {
-        pedido: document.getElementById(`pesquisas-${sectionId}-pedido`)?.value.trim().toLowerCase() || '',
+        pedido: getPesquisasPedidoFilterTerm(sectionId),
         cliente: normalizeSearchText(document.getElementById(`pesquisas-${sectionId}-cliente`)?.value || ''),
         statuses: getCheckboxFilterValues(`pesquisas-${sectionId}-status`, [])
     };
@@ -205,9 +269,8 @@ function bindPesquisasQueryForm(sectionId, onSearch, defaultStatuses = [], extra
     });
 
     document.getElementById(`pesquisas-${sectionId}-clear`)?.addEventListener('click', () => {
-        const pedidoInput = document.getElementById(`pesquisas-${sectionId}-pedido`);
+        clearPesquisasOrderCombobox(sectionId);
         const clienteInput = document.getElementById(`pesquisas-${sectionId}-cliente`);
-        if (pedidoInput) pedidoInput.value = '';
         if (clienteInput) clienteInput.value = '';
         resetCheckboxFilter(`pesquisas-${sectionId}-status`, defaultStatuses);
         (extra.selectIds || []).forEach(selectId => {

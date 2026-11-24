@@ -1676,6 +1676,9 @@ async function submitGestaoImport() {
         renderGestaoImportResult(result);
         if (result.imported > 0) {
             gestaoImportValidationPassed = false;
+            if (typeof invalidateOrderSearchComboboxCache === 'function') {
+                invalidateOrderSearchComboboxCache();
+            }
         }
     } catch (error) {
         console.error('submitGestaoImport:', error);
