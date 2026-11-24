@@ -63,6 +63,9 @@ let partRequestOrderProjectsCache = [];
 let partRequestEventsBound = false;
 let partRequestModalLayoutBound = false;
 let partRequestListLayoutBound = false;
+/** Temporário: permite editar vínculo e metadados em qualquer status (reverter depois). */
+const PART_REQUEST_TEMP_EDIT_ANY_STATUS = true;
+let partRequestOrderCombobox = null;
 const partRequestModalOverlay = typeof createAppOverlayHelper === 'function'
     ? createAppOverlayHelper('part-request-modal', {
         closeButtonSelector: '#btn-part-request-close'
@@ -330,6 +333,19 @@ function canEditPartRequestExecutor(record = partRequestEditingRecord) {
     return status !== PART_REQUEST_STATUS_DELIVERED;
 }
 
+function isPartRequestTempEditAnyStatusEnabled() {
+    return PART_REQUEST_TEMP_EDIT_ANY_STATUS === true;
+}
+
+function canEditPartRequestClientOrder(record = partRequestEditingRecord) {
+    if (!canUsePartRequestScreen()) return false;
+    if (!record?.id) return true;
+    if (!isPartRequestTempEditAnyStatusEnabled()) {
+        return canEditPartRequestMetadata(record);
+    }
+    return canActPartRequestWorkflow() || isPartRequestOwner(record);
+}
+
 function canEditPartRequestMetadata(record = partRequestEditingRecord) {
     if (!record?.id) return true;
     return canEditPartRequestDrawing(record);
@@ -452,12 +468,17 @@ function syncPartRequestModalChrome(record = partRequestEditingRecord) {
         historyBtn.classList.toggle('hidden', !record?.id);
     }
     const saveBtn = document.getElementById('btn-part-request-save');
+    const saveLinksBtn = document.getElementById('btn-part-request-save-client-order');
     const canFullEdit = canEditPartRequestMetadata(record);
     const canExecutor = canEditPartRequestExecutor(record);
     const canMontador = canEditPartRequestMontador(record);
+    const canClientOrder = canEditPartRequestClientOrder(record);
     if (saveBtn) {
         saveBtn.classList.toggle('hidden', !canFullEdit && !canExecutor && !canMontador);
         saveBtn.textContent = canFullEdit ? 'Salvar' : 'Salvar atribuições';
+    }
+    if (saveLinksBtn) {
+        saveLinksBtn.classList.toggle('hidden', !record?.id || !canClientOrder);
     }
     syncPartRequestExecutorField(record);
     syncPartRequestMontadorField(record);
@@ -642,9 +663,111 @@ function isPartRequestOwner(record = partRequestEditingRecord) {
 }
 
 function canEditPartRequestDrawing(record = partRequestEditingRecord) {
+    if (isPartRequestTempEditAnyStatusEnabled()) {
+        if (!record?.id) return true;
+        return isPartRequestOwner(record)
+            || (typeof isAdmin === 'function' && isAdmin())
+            || canActPartRequestWorkflow();
+    }
     const status = record?.status || PART_REQUEST_STATUS_OPEN;
     if (status !== PART_REQUEST_STATUS_OPEN) return false;
     return isPartRequestOwner(record);
+}
+
+function getPartRequestClientIdForOrderFilter() {
+    const clientId = Number(document.getElementById('part-request-client-id')?.value);
+    return Number.isFinite(clientId) && clientId > 0 ? clientId : null;
+}
+
+function partRequestOrderMatchesClientFilter(order, clientId) {
+    if (!clientId) return true;
+    const orderClientId = Number(order?.clientId) || Number(order?.client?.id);
+    return orderClientId === clientId;
+}
+
+function getPartRequestSelectedOrderCodeFromForm() {
+    if (partRequestOrderCombobox?.getSelectedOrderCode) {
+        const code = partRequestOrderCombobox.getSelectedOrderCode();
+        if (code) return code;
+    }
+    const order = partRequestOrderCombobox?.getSelectedOrder?.();
+    if (order?.orderCode) return String(order.orderCode).trim();
+    return '';
+}
+
+async function ensurePartRequestOrderInComboboxCache(orderId) {
+    const normalizedId = Number(orderId);
+    if (!normalizedId || typeof fetchOrderSearchComboboxOrders !== 'function') return;
+
+    const orders = await fetchOrderSearchComboboxOrders();
+    if (orders.some(order => Number(order.id) === normalizedId)) return;
+
+    const { data, error } = await supabaseClient
+        .from('salesOrders')
+        .select('id, orderCode, clientId, client:Client(id, name)')
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (error || !data) return;
+    if (typeof appendOrderSearchComboboxOrder === 'function') {
+        appendOrderSearchComboboxOrder(data);
+    }
+}
+
+function destroyPartRequestOrderCombobox() {
+    if (partRequestOrderCombobox?.destroy) {
+        partRequestOrderCombobox.destroy();
+    }
+    partRequestOrderCombobox = null;
+}
+
+function initPartRequestOrderCombobox(selectedOrderId = null, selectedOrderCode = '') {
+    destroyPartRequestOrderCombobox();
+
+    const wrap = document.getElementById('part-request-order-wrap');
+    const input = document.getElementById('part-request-order-search');
+    const list = document.getElementById('part-request-order-list');
+    if (!wrap || !input || !list || typeof mountOrderSearchCombobox !== 'function') return;
+
+    const canEditOrder = !partRequestEditingRecord
+        || canEditPartRequestClientOrder(partRequestEditingRecord)
+        || canEditPartRequestMetadata(partRequestEditingRecord);
+    input.disabled = !canEditOrder;
+    input.readOnly = !canEditOrder;
+
+    partRequestOrderCombobox = mountOrderSearchCombobox({
+        wrap,
+        input,
+        list,
+        selectedOrderId: selectedOrderId ? Number(selectedOrderId) : null,
+        selectedOrderCode: selectedOrderCode || undefined,
+        filterOrders: pool => {
+            const clientId = getPartRequestClientIdForOrderFilter();
+            if (!clientId) return pool;
+            return (pool || []).filter(order => partRequestOrderMatchesClientFilter(order, clientId));
+        },
+        onSelect: order => {
+            const hidden = document.getElementById('part-request-order-id');
+            if (hidden) hidden.value = order?.id ? String(order.id) : '';
+            if (order) {
+                void applyPartRequestOrder({
+                    id: order.id,
+                    orderCode: order.orderCode,
+                    clientId: order.clientId || order.client?.id,
+                    client: order.client
+                });
+            } else {
+                clearPartRequestOrderProjectUi();
+            }
+            syncPartRequestClientClearButton(computePartRequestClientActionsLocked());
+        },
+        onClear: () => {
+            const hidden = document.getElementById('part-request-order-id');
+            if (hidden) hidden.value = '';
+            clearPartRequestOrderProjectUi();
+            syncPartRequestClientClearButton(computePartRequestClientActionsLocked());
+        }
+    });
 }
 
 function setPartRequestModalLoading(active, message = 'Processando...', status = 'loading') {
@@ -699,6 +822,11 @@ function getRequisicoesPartRequestColumns() {
         });
 
     return [
+        {
+            key: 'id',
+            label: 'ID',
+            cellClass: 'p-3 text-xs font-mono tabular-nums text-slate-600 whitespace-nowrap'
+        },
         { key: 'pieceName', label: 'Peça', cellClass: 'p-3 text-xs font-medium text-slate-900' },
         {
             key: 'orderCode',
@@ -991,10 +1119,14 @@ function resetPartRequestForm() {
     document.getElementById('part-request-form')?.reset();
     const clientId = document.getElementById('part-request-client-id');
     const orderId = document.getElementById('part-request-order-id');
-    const orderCode = document.getElementById('part-request-order-code');
+    const orderSearch = document.getElementById('part-request-order-search');
     if (clientId) clientId.value = '';
     if (orderId) orderId.value = '';
-    if (orderCode) orderCode.value = '';
+    if (orderSearch) orderSearch.value = '';
+    destroyPartRequestOrderCombobox();
+    document.getElementById('part-request-modal-id')?.classList.add('hidden');
+    const modalIdValue = document.getElementById('part-request-modal-id-value');
+    if (modalIdValue) modalIdValue.textContent = '';
     document.getElementById('part-request-status-label').innerHTML =
         renderPartRequestStatusBadge(PART_REQUEST_STATUS_OPEN);
     const executorSelect = document.getElementById('part-request-executor-id');
@@ -1017,7 +1149,9 @@ function syncPartRequestFormReadOnly(readOnly) {
         'part-request-thickness-mm',
         'part-request-material',
         'btn-part-request-client-picker',
-        'btn-part-request-order-picker',
+        'btn-part-request-client-clear',
+        'part-request-order-search',
+        'btn-part-request-save-client-order',
         'btn-part-request-save',
         'btn-part-request-print',
         'part-request-executor-id',
@@ -1029,7 +1163,9 @@ function syncPartRequestFormReadOnly(readOnly) {
         const el = document.getElementById(id);
         if (!el) return;
         if (el.tagName === 'BUTTON') {
-            el.disabled = readOnly && id !== 'btn-part-request-print';
+            el.disabled = readOnly
+                && id !== 'btn-part-request-print'
+                && id !== 'btn-part-request-save-client-order';
         } else {
             el.readOnly = readOnly;
             el.disabled = readOnly;
@@ -1052,6 +1188,25 @@ function syncPartRequestFormReadOnly(readOnly) {
         const metaEditable = canEditPartRequestMetadata(partRequestEditingRecord);
         deliveryInput.disabled = readOnly || !metaEditable;
         deliveryInput.readOnly = readOnly || !metaEditable;
+    }
+    const clientOrderEditable = !partRequestEditingRecord
+        || canEditPartRequestClientOrder(partRequestEditingRecord)
+        || canEditPartRequestMetadata(partRequestEditingRecord);
+    const clientPicker = document.getElementById('btn-part-request-client-picker');
+    const clientActionsLocked = computePartRequestClientActionsLocked();
+    if (clientPicker) {
+        clientPicker.disabled = partRequestEditingRecord ? clientActionsLocked : false;
+    }
+    syncPartRequestClientClearButton(clientActionsLocked);
+    const orderSearch = document.getElementById('part-request-order-search');
+    if (orderSearch) {
+        const orderLocked = partRequestEditingRecord && (readOnly || !clientOrderEditable);
+        orderSearch.disabled = orderLocked;
+        orderSearch.readOnly = orderLocked;
+    }
+    const projectSelect = document.getElementById('part-request-order-project-id');
+    if (projectSelect && partRequestEditingRecord) {
+        projectSelect.disabled = readOnly || !clientOrderEditable;
     }
     syncPartRequestModalChrome(partRequestEditingRecord);
 }
@@ -1122,20 +1277,62 @@ async function collectPartRequestFormMeta() {
     return { ...base, drawingJson };
 }
 
+function hasPartRequestOrderSelected() {
+    const orderId = Number(document.getElementById('part-request-order-id')?.value);
+    if (Number.isFinite(orderId) && orderId > 0) return true;
+    return Boolean(partRequestOrderCombobox?.getSelectedOrder?.());
+}
+
+function computePartRequestClientActionsLocked() {
+    if (!partRequestEditingRecord) return false;
+    const readOnly = !canEditPartRequestDrawing(partRequestEditingRecord);
+    const clientOrderEditable = canEditPartRequestClientOrder(partRequestEditingRecord)
+        || canEditPartRequestMetadata(partRequestEditingRecord);
+    return readOnly || !clientOrderEditable;
+}
+
+function syncPartRequestClientClearButton(clientActionsLocked = false) {
+    const clientClearBtn = document.getElementById('btn-part-request-client-clear');
+    if (!clientClearBtn) return;
+    const orderFilled = hasPartRequestOrderSelected();
+    clientClearBtn.disabled = clientActionsLocked || orderFilled;
+    clientClearBtn.title = orderFilled
+        ? 'Remova ou troque o pedido antes de limpar o cliente'
+        : 'Limpar cliente';
+}
+
+function clearPartRequestClient() {
+    if (hasPartRequestOrderSelected()) {
+        alertAppDialog('Limpe ou altere o pedido antes de remover o cliente.');
+        return;
+    }
+    setPartRequestClient(null);
+    if (partRequestOrderCombobox?.reloadOrders) {
+        void partRequestOrderCombobox.reloadOrders();
+    }
+}
+
 function setPartRequestClient(client) {
     const nameInput = document.getElementById('part-request-client-name');
     const idInput = document.getElementById('part-request-client-id');
     if (nameInput) nameInput.value = client?.name || '';
     if (idInput) idInput.value = client?.id ? String(client.id) : '';
+
+    const selected = partRequestOrderCombobox?.getSelectedOrder?.();
+    const clientId = client?.id ? Number(client.id) : null;
+    if (selected && clientId && !partRequestOrderMatchesClientFilter(selected, clientId)) {
+        partRequestOrderCombobox?.clear?.();
+        const orderIdInput = document.getElementById('part-request-order-id');
+        if (orderIdInput) orderIdInput.value = '';
+        clearPartRequestOrderProjectUi();
+    }
 }
 
 async function applyPartRequestOrder(order, selectedProjectId = null) {
     if (!order) return;
-    const orderInput = document.getElementById('part-request-order-code');
     const orderIdInput = document.getElementById('part-request-order-id');
     const previousOrderId = Number(orderIdInput?.value) || null;
     const nextOrderId = order.id ? Number(order.id) : null;
-    if (orderInput) orderInput.value = order.orderCode || '';
     if (orderIdInput) orderIdInput.value = nextOrderId ? String(nextOrderId) : '';
     if (order.clientId || order.client) {
         setPartRequestClient({
@@ -1167,6 +1364,16 @@ async function openPartRequestForm(record = null) {
         ? 'Editar solicitação de fabricação'
         : 'Solicitação de fabricação — peça com defeito';
 
+    const modalIdRow = document.getElementById('part-request-modal-id');
+    const modalIdValue = document.getElementById('part-request-modal-id-value');
+    if (record?.id) {
+        modalIdRow?.classList.remove('hidden');
+        if (modalIdValue) modalIdValue.textContent = String(record.id);
+    } else {
+        modalIdRow?.classList.add('hidden');
+        if (modalIdValue) modalIdValue.textContent = '';
+    }
+
     const readOnly = record && !canEditPartRequestDrawing(record);
     await Promise.all([
         ensurePartRequestExecutorOptions(record?.factoryEmployeeId || record?.factoryEmployee?.id),
@@ -1188,15 +1395,20 @@ async function openPartRequestForm(record = null) {
             setPartRequestClient({ id: record.clientId, name: record.client?.name || '' });
         }
         if (record.orderId) {
+            await ensurePartRequestOrderInComboboxCache(record.orderId);
             await applyPartRequestOrder({
                 id: record.orderId,
                 orderCode: record.order?.orderCode,
                 clientId: record.clientId,
                 client: record.client
             }, record.orderProjectId || record.orderProject?.id);
+            initPartRequestOrderCombobox(record.orderId, record.order?.orderCode || '');
         } else {
             clearPartRequestOrderProjectUi();
+            initPartRequestOrderCombobox();
         }
+    } else {
+        initPartRequestOrderCombobox();
     }
 
     toggleModal('part-request-modal', true);
@@ -1227,6 +1439,49 @@ async function openPartRequestForm(record = null) {
         bumpPartRequestModalLayout();
         window.setTimeout(bumpPartRequestModalLayout, 200);
     });
+}
+
+async function savePartRequestClientOrder() {
+    if (!partRequestEditingId || !canEditPartRequestClientOrder(partRequestEditingRecord)) {
+        alertAppDialog('Não é possível alterar cliente/pedido nesta requisição.');
+        return;
+    }
+
+    const clientId = Number(document.getElementById('part-request-client-id')?.value) || null;
+    const orderId = Number(document.getElementById('part-request-order-id')?.value) || null;
+    const orderProjectRaw = document.getElementById('part-request-order-project-id')?.value || '';
+    const orderProjectId = orderProjectRaw ? Number(orderProjectRaw) : null;
+
+    try {
+        setPartRequestModalLoading(true, 'Salvando cliente/pedido...');
+        const now = new Date().toISOString();
+        const userId = currentUser?.id || null;
+        const { error } = await supabaseClient
+            .from('PartRequest')
+            .update({
+                clientId: Number.isFinite(clientId) ? clientId : null,
+                orderId: Number.isFinite(orderId) ? orderId : null,
+                orderProjectId: orderId && Number.isFinite(orderProjectId) ? orderProjectId : null,
+                updatedAt: now,
+                updatedById: userId
+            })
+            .eq('id', partRequestEditingId);
+
+        if (error) throw error;
+
+        await loadPartRequests({ silent: true });
+        partRequestEditingRecord = partRequestsCache.find(
+            item => Number(item.id) === Number(partRequestEditingId)
+        ) || partRequestEditingRecord;
+
+        setPartRequestModalLoading(true, 'Cliente/pedido salvos!', 'success');
+        await new Promise(resolve => setTimeout(resolve, 600));
+        setPartRequestModalLoading(false);
+        syncPartRequestModalChrome(partRequestEditingRecord);
+    } catch (error) {
+        setPartRequestModalLoading(false);
+        alertAppDialog(`Erro ao salvar cliente/pedido: ${error.message}`);
+    }
 }
 
 async function savePartRequest(event) {
@@ -1308,7 +1563,7 @@ function buildPartRequestPrintMeta(record = null) {
             : (document.getElementById('part-request-client-name')?.value.trim() || ''),
         orderCode: fromRecord
             ? (record.order?.orderCode || '')
-            : (document.getElementById('part-request-order-code')?.value.trim() || ''),
+            : getPartRequestSelectedOrderCodeFromForm(),
         thicknessMm: fromRecord
             ? record.thicknessMm
             : document.getElementById('part-request-thickness-mm')?.value.trim(),
@@ -1424,6 +1679,7 @@ function bindPartRequestEvents() {
         if (targetStatus) void transitionPartRequestStatus(partRequestEditingRecord, targetStatus);
     });
     document.getElementById('btn-part-request-close')?.addEventListener('click', () => {
+        destroyPartRequestOrderCombobox();
         if (typeof partRequestDrawioDispose === 'function') partRequestDrawioDispose();
         toggleModal('part-request-modal', false);
     });
@@ -1447,14 +1703,20 @@ function bindPartRequestEvents() {
     });
     document.getElementById('btn-part-request-client-picker')?.addEventListener('click', () => {
         if (typeof openClientePickerModal !== 'function') return;
-        openClientePickerModal(client => setPartRequestClient(client));
-    });
-    document.getElementById('btn-part-request-order-picker')?.addEventListener('click', () => {
-        if (typeof openOrderCodePicker !== 'function') return;
-        openOrderCodePicker({
-            clientInputId: 'part-request-client-name',
-            onSelect: order => applyPartRequestOrder(order)
+        if (partRequestEditingRecord && !canEditPartRequestClientOrder(partRequestEditingRecord)) return;
+        openClientePickerModal(client => {
+            setPartRequestClient(client);
+            if (partRequestOrderCombobox?.reloadOrders) {
+                void partRequestOrderCombobox.reloadOrders();
+            }
         });
+    });
+    document.getElementById('btn-part-request-client-clear')?.addEventListener('click', () => {
+        if (partRequestEditingRecord && !canEditPartRequestClientOrder(partRequestEditingRecord)) return;
+        clearPartRequestClient();
+    });
+    document.getElementById('btn-part-request-save-client-order')?.addEventListener('click', () => {
+        void savePartRequestClientOrder();
     });
 
 }

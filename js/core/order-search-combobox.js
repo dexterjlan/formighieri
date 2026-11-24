@@ -172,7 +172,7 @@ async function fetchOrderSearchComboboxOrders(options = {}) {
 
     const { data, error } = await supabaseClient
         .from('salesOrders')
-        .select('id, orderCode, client:Client(name)')
+        .select('id, orderCode, clientId, client:Client(id, name)')
         .order('orderCode', { ascending: false })
         .limit(ORDER_SEARCH_COMBOBOX_FETCH_LIMIT);
 

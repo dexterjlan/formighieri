@@ -2713,6 +2713,7 @@
             </div>
             <div class="part-request-modal__head px-4 sm:px-6 py-4 border-b border-slate-200 shrink-0">
                 <h3 id="part-request-modal-title" class="font-bold text-base sm:text-lg text-slate-900">Solicitação de fabricação — peça com defeito</h3>
+                <p id="part-request-modal-id" class="hidden text-[11px] sm:text-xs text-slate-500 font-mono tabular-nums mt-0.5">ID: <span id="part-request-modal-id-value"></span></p>
                 <p class="part-request-modal__subtitle text-[11px] sm:text-xs text-slate-400 mt-0.5">Desenhe a peça de reposição (draw.io, A4, mm) para a fábrica executar o corte/usinagem.</p>
             </div>
             <form id="part-request-form" class="part-request-modal__form flex flex-col min-h-0 flex-1">
@@ -2745,19 +2746,23 @@
                             <input type="text" id="part-request-client-name" readonly
                                 class="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50" />
                             <input type="hidden" id="part-request-client-id" />
+                            <button type="button" id="btn-part-request-client-clear" title="Limpar cliente"
+                                class="part-request-modal__picker-btn shrink-0 px-2.5 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-500"
+                                aria-label="Limpar cliente">×</button>
                             <button type="button" id="btn-part-request-client-picker" title="Buscar cliente"
                                 class="part-request-modal__picker-btn shrink-0 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">···</button>
                         </div>
                     </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-order-code">Pedido</label>
-                        <div class="flex gap-2">
-                            <input type="text" id="part-request-order-code" readonly
-                                class="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 font-mono" />
-                            <input type="hidden" id="part-request-order-id" />
-                            <button type="button" id="btn-part-request-order-picker" title="Buscar pedido"
-                                class="part-request-modal__picker-btn shrink-0 px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg hover:bg-slate-50">···</button>
-                        </div>
+                    <div class="relative" id="part-request-order-wrap">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-order-search">Pedido</label>
+                        <input type="text" id="part-request-order-search" autocomplete="off" role="combobox"
+                            aria-expanded="false" aria-controls="part-request-order-list" aria-autocomplete="list"
+                            placeholder="Digite o código ou nome do cliente"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400 font-mono" />
+                        <input type="hidden" id="part-request-order-id" />
+                        <div id="part-request-order-list"
+                            class="hidden absolute z-30 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg"
+                            role="listbox"></div>
                     </div>
                 </div>
                 <div id="part-request-order-project-wrap" class="hidden space-y-2">
@@ -2815,6 +2820,8 @@
                 <div class="part-request-modal__footer flex flex-wrap gap-2 px-4 sm:px-6 py-3 shrink-0 border-t border-slate-200 bg-white">
                     <button type="button" id="btn-part-request-close"
                         class="part-request-modal__action-btn text-sm bg-slate-100 text-slate-600 px-4 py-2.5 rounded-lg font-medium">Fechar</button>
+                    <button type="button" id="btn-part-request-save-client-order"
+                        class="part-request-modal__action-btn hidden text-sm bg-white border border-cyan-200 text-cyan-900 px-4 py-2.5 rounded-lg font-medium hover:bg-cyan-50">Salvar cliente/pedido</button>
                     <button type="button" id="btn-part-request-print"
                         class="part-request-modal__action-btn text-sm bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-lg font-medium hover:bg-slate-50">Imprimir</button>
                     <button type="button" id="btn-part-request-status-history"
