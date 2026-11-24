@@ -136,6 +136,12 @@ function showWelcome() {
         return;
     }
 
+    if (typeof hasPickerOnlyExpeditionAccess === 'function' && hasPickerOnlyExpeditionAccess()
+        && typeof showExpedicao === 'function') {
+        showExpedicao('boarding');
+        return;
+    }
+
     if (typeof isThirdParty === 'function' && isThirdParty()
         && typeof canAccessPendencias === 'function' && canAccessPendencias()
         && typeof showPendencias === 'function') {

@@ -114,14 +114,22 @@ async function fetchExpeditionUnloadingRoutes() {
     if (typeof fetchExpeditionRoutesForUi === 'function') {
         return fetchExpeditionRoutesForUi({
             limit: 80,
+            filterByLoggedResponsibleUnlessAdmin: true,
             extraQuery: query => query.in('status', EXPEDITION_UNLOADING_LIST_STATUSES)
         });
     }
 
-    const { data, error } = await supabaseClient
+    let query = supabaseClient
         .from('ExpeditionRoute')
         .select('id, routeDate, vehicleLabel, driverName, status, mapsUrl, updatedAt')
-        .in('status', EXPEDITION_UNLOADING_LIST_STATUSES)
+        .in('status', EXPEDITION_UNLOADING_LIST_STATUSES);
+    const responsibleUserId = typeof getExpeditionRoutesResponsibleFilterUserId === 'function'
+        ? getExpeditionRoutesResponsibleFilterUserId({ filterByLoggedResponsibleUnlessAdmin: true })
+        : null;
+    if (responsibleUserId) {
+        query = query.eq('responsibleUserId', responsibleUserId);
+    }
+    const { data, error } = await query
         .order('routeDate', { ascending: false })
         .order('id', { ascending: false })
         .limit(80);
@@ -138,6 +146,9 @@ async function fetchExpeditionUnloadingRouteDetail(routeId, options = {}) {
         ? await fetchExpeditionRouteById(key, 'mapsUrl')
         : null;
     if (!route) throw new Error('Rota não encontrada.');
+    if (typeof ensureCurrentUserCanAccessExpeditionRoute === 'function') {
+        ensureCurrentUserCanAccessExpeditionRoute(route, { filterByLoggedResponsibleUnlessAdmin: true });
+    }
 
     const inActiveSession = Number(key) === Number(expedicaoUnloadingRouteId);
     const allowFinished = options.includeFinishedStatus || inActiveSession;
@@ -299,9 +310,13 @@ function renderExpeditionUnloadingList(mount, rows) {
         const dateLabel = row.routeDate && typeof formatDate === 'function'
             ? formatDate(row.routeDate)
             : '—';
+        const routeLabel = typeof formatExpeditionRouteDisplayName === 'function'
+            ? formatExpeditionRouteDisplayName(row)
+            : (row.name || `Rota ${row.id}`);
         return `
             <article class="md:hidden border border-slate-200 rounded-xl p-3 bg-white shadow-sm">
-                <p class="text-xs font-bold text-slate-900">${escapeHtml(dateLabel)} · ${escapeHtml(statusLabel)}</p>
+                <p class="text-xs font-bold text-slate-900">${escapeHtml(routeLabel)}</p>
+                <p class="text-[11px] text-slate-500 mt-0.5">${escapeHtml(dateLabel)} · ${escapeHtml(statusLabel)}</p>
                 ${typeof renderExpeditionRouteCrewMobile === 'function' ? renderExpeditionRouteCrewMobile(row) : ''}
                 ${renderActions(row, true)}
             </article>
@@ -315,9 +330,13 @@ function renderExpeditionUnloadingList(mount, rows) {
         const dateLabel = row.routeDate && typeof formatDate === 'function'
             ? formatDate(row.routeDate)
             : '—';
+        const routeLabel = typeof formatExpeditionRouteDisplayName === 'function'
+            ? formatExpeditionRouteDisplayName(row)
+            : (row.name || `Rota ${row.id}`);
         return `
             <tr class="hover:bg-slate-50/80">
                 <td class="p-3 text-xs whitespace-nowrap">${escapeHtml(dateLabel)}</td>
+                <td class="p-3 text-xs font-semibold text-slate-800">${escapeHtml(routeLabel)}</td>
                 <td class="p-3 text-xs">${escapeHtml(row.vehicleLabel || '—')}</td>
                 <td class="p-3 text-xs">${escapeHtml(row.driverName || '—')}</td>
                 <td class="p-3 text-xs">${typeof getExpeditionResponsibleLabel === 'function'
@@ -341,6 +360,7 @@ function renderExpeditionUnloadingList(mount, rows) {
                     <thead class="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="p-3 font-semibold">Dia</th>
+                            <th class="p-3 font-semibold">Nome</th>
                             <th class="p-3 font-semibold">Carro</th>
                             <th class="p-3 font-semibold">Motorista</th>
                             <th class="p-3 font-semibold">Responsável</th>
@@ -349,7 +369,7 @@ function renderExpeditionUnloadingList(mount, rows) {
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        ${tableRows || '<tr><td colspan="6" class="p-8 text-center text-xs text-slate-400">Nenhuma rota disponível.</td></tr>'}
+                        ${tableRows || '<tr><td colspan="7" class="p-8 text-center text-xs text-slate-400">Nenhuma rota disponível.</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -435,7 +455,9 @@ function renderExpeditionUnloadingStopView(mount, detail) {
                 class="text-xs text-slate-500 hover:text-slate-800 font-medium">← Voltar à lista</button>
             <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <p class="text-sm font-bold text-slate-900">Rota #${route.id} · ${escapeHtml(dateLabel)}</p>
+                    <p class="text-sm font-bold text-slate-900">${escapeHtml(typeof formatExpeditionRouteDisplayName === 'function'
+            ? formatExpeditionRouteDisplayName(route)
+            : `Rota ${route.id}`)} · ${escapeHtml(dateLabel)}</p>
                     <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold md:hidden">${escapeHtml(statusLabel)}</span>
                 </div>
                 ${typeof renderExpeditionRouteCrewMobile === 'function' ? renderExpeditionRouteCrewMobile(route) : ''}

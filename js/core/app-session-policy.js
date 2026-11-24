@@ -72,16 +72,30 @@ async function isRunningStaleAppBundle() {
     return deployed !== bundled;
 }
 
+function scrubFgpRefreshFromBrowserUrl() {
+    try {
+        const url = new URL(window.location.href);
+        const hadRefresh = url.searchParams.has('fgp_refresh');
+        url.searchParams.delete('fgp_refresh');
+        if (!hadRefresh) return;
+        const next = `${url.pathname}${url.search}${url.hash}`;
+        history.replaceState(null, '', next || url.pathname);
+    } catch (_error) {
+        // ignora
+    }
+}
+
 function buildAppSessionRefreshUrl() {
     try {
         const url = new URL(window.location.href);
-        url.searchParams.set('fgp_refresh', String(Date.now()));
+        url.searchParams.delete('fgp_refresh');
         url.hash = '';
         url.searchParams.delete('code');
         url.searchParams.delete('type');
-        return url.toString();
+        const query = url.search;
+        return `${url.origin}${url.pathname}${query}`;
     } catch (_error) {
-        return `${window.location.pathname}?fgp_refresh=${Date.now()}`;
+        return `${window.location.origin}${window.location.pathname}`;
     }
 }
 
@@ -141,6 +155,13 @@ async function assertAppSessionPolicyForEnterApp(options = {}) {
 async function enforceAppSessionPolicyOnBootstrap(session) {
     if (!session?.user) {
         clearAppSessionGrant();
+        return true;
+    }
+
+    if (typeof passwordRecoveryPending !== 'undefined' && passwordRecoveryPending) {
+        return true;
+    }
+    if (typeof isPasswordRecoveryRedirect === 'function' && isPasswordRecoveryRedirect()) {
         return true;
     }
 
@@ -206,3 +227,6 @@ window.forceAppSessionRefresh = forceAppSessionRefresh;
 window.enforceAppSessionPolicyOnBootstrap = enforceAppSessionPolicyOnBootstrap;
 window.assertAppSessionPolicyForEnterApp = assertAppSessionPolicyForEnterApp;
 window.startAppSessionPolicyWatcher = startAppSessionPolicyWatcher;
+window.scrubFgpRefreshFromBrowserUrl = scrubFgpRefreshFromBrowserUrl;
+
+scrubFgpRefreshFromBrowserUrl();

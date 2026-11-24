@@ -3680,6 +3680,13 @@ body.installer-only-nav #btn-logout {
     display: inline-flex !important;
 }
 
+/* Só itens de 1º nível — não esconder Embarque/Desembarque dentro de #btn-expedicao */
+body.picker-only-expedition-nav #app-header-nav > button:not(#btn-logout),
+body.picker-only-expedition-nav #app-header-nav > details:not(#btn-expedicao),
+body.picker-only-expedition-nav #app-header-nav > .app-nav-divider {
+    display: none !important;
+}
+
 .app-header-nav {
     display: flex;
     flex-wrap: wrap;

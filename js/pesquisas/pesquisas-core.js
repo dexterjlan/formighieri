@@ -8,7 +8,7 @@ const PESQUISAS_SECTIONS = [
 ];
 
 function canAccessPesquisas() {
-    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) return false;
+    if (typeof hasInstallerOrPickerOnlyAccess === 'function' && hasInstallerOrPickerOnlyAccess()) return false;
     return Boolean(currentUser?.id) && !isThirdParty();
 }
 
@@ -104,7 +104,7 @@ function showPesquisas() {
 function updatePesquisasNav() {
     const btn = document.getElementById('btn-pesquisas');
     if (!btn) return;
-    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) {
+    if (typeof hasInstallerOrPickerOnlyAccess === 'function' && hasInstallerOrPickerOnlyAccess()) {
         btn.classList.add('hidden');
         return;
     }

@@ -284,7 +284,7 @@ function canActPendenciasGestorFabrica() {
 }
 
 function canAccessPendencias() {
-    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) return false;
+    if (typeof hasInstallerOrPickerOnlyAccess === 'function' && hasInstallerOrPickerOnlyAccess()) return false;
     return canSeeAllPendenciasMenus()
         || canSeePendenciasConsultorMenu()
         || canSeePendenciasProjetistaMenu()
@@ -1423,7 +1423,7 @@ function persistPendenciasNavState() {
 function updatePendenciasNav() {
     const btn = document.getElementById('btn-pendencias');
     if (!btn) return;
-    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) {
+    if (typeof hasInstallerOrPickerOnlyAccess === 'function' && hasInstallerOrPickerOnlyAccess()) {
         btn.classList.add('hidden');
         return;
     }

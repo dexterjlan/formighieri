@@ -10,7 +10,7 @@ let requisicoesActiveSection = 'projects';
 let requisicoesPurchaseDraft = null;
 
 function canAccessRequisicoes() {
-    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) return false;
+    if (typeof hasInstallerOrPickerOnlyAccess === 'function' && hasInstallerOrPickerOnlyAccess()) return false;
     return Boolean(currentUser?.id) && !(typeof isThirdParty === 'function' && isThirdParty());
 }
 

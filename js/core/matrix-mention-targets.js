@@ -33,14 +33,23 @@ async function fetchActiveReviewerMatrixMentionTargets() {
 
     let { data, error } = await supabaseClient
         .from('appUsers')
-        .select('id, name, matrixUserId, isReviewer, isProjectLeader, role, isActive')
+        .select('id, name, matrixUserId, isReviewer, role, isActive')
         .eq('role', 'Projetista')
         .eq('isActive', true);
 
-    if (error?.message?.includes('matrixUserId') || error?.message?.includes('isProjectLeader')) {
+    if (error?.message?.includes('matrixUserId')) {
         ({ data, error } = await supabaseClient
             .from('appUsers')
-            .select('id, name, isReviewer, isProjectLeader, role, isActive')
+            .select('id, name, isReviewer, role, isActive')
+            .eq('role', 'Projetista')
+            .eq('isActive', true));
+    }
+
+    if (error?.message?.includes('isReviewer')) {
+        ({ data, error } = await supabaseClient
+            .from('appUsers')
+            .select('id, name, matrixUserId, role, isActive')
+            .eq('role', 'Projetista')
             .eq('isActive', true));
     }
 
@@ -50,7 +59,7 @@ async function fetchActiveReviewerMatrixMentionTargets() {
     }
 
     return (data || [])
-        .filter(user => user.role === 'Projetista' && (user.isReviewer || user.isProjectLeader))
+        .filter(user => user.role === 'Projetista' && (typeof isReviewer === 'function' ? isReviewer(user) : Boolean(user.isReviewer)))
         .map(user => ({
             appUserId: user.id,
             name: user.name,

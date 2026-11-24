@@ -310,6 +310,19 @@ async function restoreAppNavState() {
             return false;
         }
 
+        if (typeof hasPickerOnlyExpeditionAccess === 'function' && hasPickerOnlyExpeditionAccess()) {
+            if (state.view === 'expedicao' && typeof restoreExpedicaoView === 'function') {
+                await restoreExpedicaoView(state);
+                return true;
+            }
+            if (typeof showExpedicao === 'function') {
+                const section = state.expedicaoSection === 'unloading' ? 'unloading' : 'boarding';
+                showExpedicao(section);
+                return true;
+            }
+            return false;
+        }
+
         const legacyViewMap = {
             'programacao-projetos': 'project-scheduling'
         };
@@ -451,6 +464,9 @@ async function showMainPanel() {
         if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()
             && typeof showView3d === 'function') {
             showView3d();
+        } else if (typeof hasPickerOnlyExpeditionAccess === 'function' && hasPickerOnlyExpeditionAccess()
+            && typeof showExpedicao === 'function') {
+            showExpedicao('boarding');
         } else if (typeof isThirdParty === 'function' && isThirdParty()
             && typeof canAccessPendencias === 'function' && canAccessPendencias()
             && typeof showPendencias === 'function') {
@@ -484,6 +500,8 @@ const INSTALLER_HIDDEN_MAIN_NAV_IDS = [
     'btn-system-settings'
 ];
 
+const PICKER_ONLY_HIDDEN_MAIN_NAV_IDS = INSTALLER_HIDDEN_MAIN_NAV_IDS.filter(id => id !== 'btn-expedicao');
+
 function applyInstallerOnlyMainNav() {
     const installerOnly = typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess();
     document.body.classList.toggle('installer-only-nav', installerOnly);
@@ -498,10 +516,31 @@ function applyInstallerOnlyMainNav() {
     return true;
 }
 
+function applyPickerOnlyExpeditionMainNav() {
+    const pickerOnly = typeof hasPickerOnlyExpeditionAccess === 'function' && hasPickerOnlyExpeditionAccess();
+    document.body.classList.toggle('picker-only-expedition-nav', pickerOnly);
+    if (!pickerOnly) return false;
+
+    PICKER_ONLY_HIDDEN_MAIN_NAV_IDS.forEach(id => {
+        document.getElementById(id)?.classList.add('hidden');
+    });
+    const expedicaoNav = document.getElementById('btn-expedicao');
+    expedicaoNav?.classList.remove('hidden');
+    if (expedicaoNav?.tagName === 'DETAILS') {
+        expedicaoNav.open = true;
+    }
+    document.getElementById('btn-view3d')?.classList.add('hidden');
+    document.getElementById('btn-logout')?.classList.remove('hidden');
+    if (typeof renderExpedicaoSidebar === 'function') renderExpedicaoSidebar();
+    if (typeof updateExpedicaoNav === 'function') updateExpedicaoNav();
+    return true;
+}
+
 function updateAdminNav() {
     if (applyInstallerOnlyMainNav()) return;
+    if (applyPickerOnlyExpeditionMainNav()) return;
 
-    document.body.classList.remove('installer-only-nav');
+    document.body.classList.remove('installer-only-nav', 'picker-only-expedition-nav');
 
     const thirdParty = typeof isThirdParty === 'function' && isThirdParty();
     document.getElementById("btn-inicio")?.classList.toggle("hidden", thirdParty);

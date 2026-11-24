@@ -470,24 +470,21 @@ async function fetchActiveReviewerRecipientEmails() {
 
     let { data, error } = await supabaseClient
         .from('appUsers')
-        .select('email, isReviewer, isProjectLeader')
+        .select('email, isReviewer')
         .eq('role', 'Projetista')
         .eq('isActive', true)
         .eq('isReviewer', true);
 
-    if (error?.message?.includes('isReviewer') || error?.message?.includes('isProjectLeader')) {
-        ({ data, error } = await supabaseClient
-            .from('appUsers')
-            .select('email, isProjectLeader')
-            .eq('role', 'Projetista')
-            .eq('isActive', true)
-            .eq('isProjectLeader', true));
+    if (error?.message?.includes('isReviewer')) {
+        console.warn('fetchActiveReviewerRecipientEmails: coluna isReviewer ausente.');
+        data = [];
+        error = null;
     }
 
     if (error) throw error;
 
     const emails = (data || [])
-        .filter(user => user.isReviewer || user.isProjectLeader)
+        .filter(user => user.isReviewer)
         .map(user => user.email);
 
     const unique = uniqueEmails(emails);

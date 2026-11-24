@@ -11,6 +11,30 @@ function isExpeditionResponsibleUserSchemaError(error) {
     return /responsibleUserId|isPicker|schema cache|column/i.test(message);
 }
 
+function isExpeditionRouteNameSchemaError(error) {
+    const message = String(error?.message || '');
+    return /Could not find the 'name' column|'name' column of 'ExpeditionRoute'|ExpeditionRoute.*\bname\b/i.test(message);
+}
+
+const EXPEDITION_DEFAULT_ROUTE_NAME_PREFIX = 'Rota ';
+
+function formatExpeditionRouteDisplayName(route) {
+    if (!route) return '—';
+    const custom = String(route.name ?? '').trim();
+    if (custom) return custom;
+    const id = Number(route.id);
+    if (Number.isFinite(id) && id > 0) return `${EXPEDITION_DEFAULT_ROUTE_NAME_PREFIX}${id}`;
+    return '—';
+}
+
+function resolveExpeditionRouteNameForPersist(routeId, rawName) {
+    const trimmed = String(rawName ?? '').trim();
+    if (trimmed) return trimmed;
+    const id = Number(routeId);
+    if (Number.isFinite(id) && id > 0) return `${EXPEDITION_DEFAULT_ROUTE_NAME_PREFIX}${id}`;
+    return '';
+}
+
 function getExpeditionResponsibleLabel(route) {
     const embedded = route?.responsibleUser?.name;
     if (embedded) return String(embedded).trim() || '—';
@@ -100,20 +124,54 @@ window.getExpeditionResponsibleLabel = getExpeditionResponsibleLabel;
 window.renderExpeditionWizardResponsibleSelect = renderExpeditionWizardResponsibleSelect;
 window.expeditionResponsibleUserSqlHint = expeditionResponsibleUserSqlHint;
 window.isExpeditionResponsibleUserSchemaError = isExpeditionResponsibleUserSchemaError;
+window.isExpeditionRouteNameSchemaError = isExpeditionRouteNameSchemaError;
+window.formatExpeditionRouteDisplayName = formatExpeditionRouteDisplayName;
+window.resolveExpeditionRouteNameForPersist = resolveExpeditionRouteNameForPersist;
 
-const EXPEDITION_ROUTE_UI_FIELDS = 'id, routeDate, vehicleLabel, driverName, status, mapsUrl, createdAt, confirmedAt, updatedAt';
+const EXPEDITION_ROUTE_UI_FIELDS = 'id, name, routeDate, vehicleLabel, driverName, status, mapsUrl, createdAt, confirmedAt, updatedAt';
+
+function getExpeditionRoutesResponsibleFilterUserId(options = {}) {
+    const boardingScope = options.filterByLoggedResponsibleUnlessAdmin === true;
+    if (boardingScope) {
+        if (typeof isAdmin === 'function' && isAdmin()) return null;
+        const userId = Number(currentUser?.id);
+        return Number.isFinite(userId) && userId > 0 ? userId : null;
+    }
+
+    if (typeof hasPickerOnlyExpeditionAccess === 'function' && hasPickerOnlyExpeditionAccess()) {
+        const userId = Number(currentUser?.id);
+        return Number.isFinite(userId) && userId > 0 ? userId : null;
+    }
+    return null;
+}
+
+function applyExpeditionResponsibleUserRouteFilter(query, options = {}) {
+    const responsibleUserId = getExpeditionRoutesResponsibleFilterUserId(options);
+    if (!responsibleUserId) return query;
+    return query.eq('responsibleUserId', responsibleUserId);
+}
+
+function ensureCurrentUserCanAccessExpeditionRoute(route, options = {}) {
+    const responsibleUserId = getExpeditionRoutesResponsibleFilterUserId(options);
+    if (!responsibleUserId) return;
+    if (Number(route?.responsibleUserId) !== responsibleUserId) {
+        throw new Error('Esta rota não está atribuída a você como responsável.');
+    }
+}
 
 async function fetchExpeditionRoutesForUi(options = {}) {
     const {
         limit = 80,
         extraQuery,
-        orderRouteDateAsc = false
+        orderRouteDateAsc = false,
+        filterByLoggedResponsibleUnlessAdmin = false
     } = options;
 
     const selects = [
         `${EXPEDITION_ROUTE_UI_FIELDS}, responsibleUserId, responsibleUser:appUsers!responsibleUserId(id, name)`,
         `${EXPEDITION_ROUTE_UI_FIELDS}, responsibleUserId`,
-        EXPEDITION_ROUTE_UI_FIELDS
+        EXPEDITION_ROUTE_UI_FIELDS,
+        'id, routeDate, vehicleLabel, driverName, status, mapsUrl, createdAt, confirmedAt, updatedAt, responsibleUserId'
     ];
 
     let lastError = null;
@@ -126,6 +184,10 @@ async function fetchExpeditionRoutesForUi(options = {}) {
             query = extraQuery(query);
         }
 
+        query = applyExpeditionResponsibleUserRouteFilter(query, {
+            filterByLoggedResponsibleUnlessAdmin
+        });
+
         query = query
             .order('routeDate', { ascending: orderRouteDateAsc })
             .order('id', { ascending: false });
@@ -135,7 +197,8 @@ async function fetchExpeditionRoutesForUi(options = {}) {
         const result = await query;
         if (!result.error) return result.data || [];
         lastError = result.error;
-        if (!isExpeditionResponsibleUserSchemaError(result.error)) {
+        if (!isExpeditionResponsibleUserSchemaError(result.error)
+            && !isExpeditionRouteNameSchemaError(result.error)) {
             throw result.error;
         }
     }
@@ -145,17 +208,20 @@ async function fetchExpeditionRoutesForUi(options = {}) {
 }
 
 window.fetchExpeditionRoutesForUi = fetchExpeditionRoutesForUi;
+window.getExpeditionRoutesResponsibleFilterUserId = getExpeditionRoutesResponsibleFilterUserId;
+window.ensureCurrentUserCanAccessExpeditionRoute = ensureCurrentUserCanAccessExpeditionRoute;
 
 async function fetchExpeditionRouteById(routeId, extraFieldList = '') {
     const key = Number(routeId);
     if (!key) return null;
 
     const suffix = extraFieldList ? `, ${extraFieldList}` : '';
-    const base = `id, routeDate, vehicleLabel, driverName, status${suffix}`;
+    const base = `id, name, routeDate, vehicleLabel, driverName, status${suffix}`;
     const selects = [
         `${base}, responsibleUserId, responsibleUser:appUsers!responsibleUserId(id, name)`,
         `${base}, responsibleUserId`,
-        base
+        base,
+        `id, routeDate, vehicleLabel, driverName, status${suffix}`
     ];
 
     let lastError = null;
@@ -167,7 +233,8 @@ async function fetchExpeditionRouteById(routeId, extraFieldList = '') {
             .maybeSingle();
         if (!result.error) return result.data || null;
         lastError = result.error;
-        if (!isExpeditionResponsibleUserSchemaError(result.error)) {
+        if (!isExpeditionResponsibleUserSchemaError(result.error)
+            && !isExpeditionRouteNameSchemaError(result.error)) {
             throw lastError;
         }
     }

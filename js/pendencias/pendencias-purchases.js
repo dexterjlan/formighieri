@@ -89,6 +89,20 @@ async function fetchPendenciasEnviadosCompras() {
         }
     }
 
+    const createdByIds = [...new Set(compras.map(item => item.createdById).filter(Boolean))];
+    let requestersById = {};
+
+    if (createdByIds.length) {
+        const usersResult = await supabaseClient
+            .from('appUsers')
+            .select('id, name')
+            .in('id', createdByIds);
+
+        if (!usersResult.error && usersResult.data) {
+            requestersById = Object.fromEntries(usersResult.data.map(row => [row.id, row.name]));
+        }
+    }
+
     const items = compras.map(compra => {
         const project = compra.orderProjectId ? projectsById[compra.orderProjectId] : null;
         const assistance = assistanceById[compra.assistanceRequestId] || null;
@@ -110,6 +124,7 @@ async function fetchPendenciasEnviadosCompras() {
             orderCode,
             projectName: project?.name || '—',
             subtypeName,
+            requesterName: requestersById[compra.createdById] || '',
             reasonName: resolvePendenciasPurchaseReasonName(compra, reasonsById)
         };
     });
@@ -151,6 +166,7 @@ function renderPendenciasEnviadosComprasList(items) {
         tipoLabel: typeof formatCompraTipoLabel === 'function'
             ? formatCompraTipoLabel(item.purchaseType, item.subtypeName)
             : (item.purchaseType || '—'),
+        requesterName: item.requesterName || '—',
         reasonName: item.reasonName || resolvePendenciasPurchaseReasonName(item) || '—',
         statusName: item.status || '—',
         statusClass: typeof getCompraStatusBadgeClass === 'function'
@@ -170,7 +186,7 @@ function renderPendenciasEnviadosComprasList(items) {
         onRefresh: loadPendenciasEnviadosCompras,
         tableId: 'pendencias-enviados-compras',
         rows,
-        minWidth: '980px',
+        minWidth: '1080px',
         emptyMessage: 'Nenhuma solicitação de compra em aberto.',
         columns: [
             ...getPendenciasInteractiveIdentityColumns({
@@ -182,6 +198,11 @@ function renderPendenciasEnviadosComprasList(items) {
                 key: 'tipoLabel',
                 label: 'Tipo',
                 cellClass: 'p-3 text-xs text-slate-600'
+            },
+            {
+                key: 'requesterName',
+                label: 'Solicitante',
+                cellClass: 'p-3 text-xs text-slate-700 whitespace-nowrap'
             },
             {
                 key: 'reasonName',

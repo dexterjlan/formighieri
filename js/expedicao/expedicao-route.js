@@ -1,5 +1,5 @@
 const EXPEDITION_ROUTE_LIST_SELECT = `
-    id, routeDate, vehicleLabel, driverName, status, mapsUrl, createdAt, confirmedAt, responsibleUserId
+    id, name, routeDate, vehicleLabel, driverName, status, mapsUrl, createdAt, confirmedAt, responsibleUserId
 `;
 
 const EXPEDITION_ROUTE_STATUS_OPTIONS = [
@@ -19,10 +19,30 @@ const EXPEDITION_ROUTE_WIZARD_STATUS_OPTIONS = [
 ];
 
 const EXPEDITION_DEFAULT_ROUTE_TIME = '08:00';
+const EXPEDITION_ROUTE_TIME_STEP_MINUTES = 5;
+
+function normalizeExpeditionRouteTimeValue(timeValue, stepMinutes = EXPEDITION_ROUTE_TIME_STEP_MINUTES) {
+    const raw = String(timeValue || '').trim();
+    if (!raw) return raw;
+    const match = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return raw;
+    const step = Math.max(1, Number(stepMinutes) || EXPEDITION_ROUTE_TIME_STEP_MINUTES);
+    let hours = Number(match[1]) || 0;
+    let minutes = Number(match[2]) || 0;
+    minutes = Math.round(minutes / step) * step;
+    if (minutes >= 60) {
+        hours += Math.floor(minutes / 60);
+        minutes %= 60;
+    }
+    hours = Math.min(23, Math.max(0, hours));
+    minutes = Math.min(59, Math.max(0, minutes));
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
 
 function getExpeditionRouteTimeDefault() {
     const now = new Date();
-    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const raw = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    return normalizeExpeditionRouteTimeValue(raw);
 }
 
 function toExpeditionRouteDateInputValue(routeDate) {
@@ -39,12 +59,15 @@ function toExpeditionRouteTimeInputValue(routeDate) {
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return EXPEDITION_DEFAULT_ROUTE_TIME;
     const parsed = new Date(raw);
     if (Number.isNaN(parsed.getTime())) return EXPEDITION_DEFAULT_ROUTE_TIME;
-    return `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+    const timeLabel = `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+    return normalizeExpeditionRouteTimeValue(timeLabel);
 }
 
 function buildExpeditionRouteDateTimeIso(dateValue, timeValue) {
     const date = String(dateValue || '').trim();
-    const time = String(timeValue || EXPEDITION_DEFAULT_ROUTE_TIME).trim() || EXPEDITION_DEFAULT_ROUTE_TIME;
+    const time = normalizeExpeditionRouteTimeValue(
+        String(timeValue || EXPEDITION_DEFAULT_ROUTE_TIME).trim() || EXPEDITION_DEFAULT_ROUTE_TIME
+    );
     if (!date) return null;
     const [year, month, day] = date.split('-').map(Number);
     const [hours, minutes] = time.split(':').map(part => Number(part) || 0);
@@ -282,6 +305,11 @@ async function buildWizardStateFromRoute(routeId) {
     if (!key) throw new Error('Rota inválida.');
 
     const routeSelects = [
+        `id, name, routeDate, vehicleLabel, driverName, responsibleUserId, status, mapsUrl, routeSummaryJson,
+            stops:ExpeditionRouteStop(
+                id, sortOrder, addrId, addrSnapshot,
+                items:ExpeditionRouteStopItem(id, entityType, entityId, entityLabel, volumeCount, metadataJson, pickupUnloadedAt)
+            )`,
         `id, routeDate, vehicleLabel, driverName, responsibleUserId, status, mapsUrl, routeSummaryJson,
             stops:ExpeditionRouteStop(
                 id, sortOrder, addrId, addrSnapshot,
@@ -365,6 +393,7 @@ async function buildWizardStateFromRoute(routeId) {
         editingRouteId: key,
         routeDate: toExpeditionRouteDateInputValue(route.routeDate) || empty.routeDate,
         routeTime: toExpeditionRouteTimeInputValue(route.routeDate) || empty.routeTime,
+        routeName: route.name || '',
         vehicleLabel: route.vehicleLabel || '',
         driverName: route.driverName || '',
         responsibleUserId: route.responsibleUserId ? Number(route.responsibleUserId) : null,
@@ -458,7 +487,9 @@ function setExpeditionRouteHistoryModalTitle(route) {
     const title = document.getElementById('expedition-route-history-title');
     if (!title) return;
     if (route?.id) {
-        title.textContent = `Histórico · Rota #${Number(route.id)}`;
+        title.textContent = `Histórico · ${typeof formatExpeditionRouteDisplayName === 'function'
+            ? formatExpeditionRouteDisplayName(route)
+            : `Rota ${Number(route.id)}`}`;
         return;
     }
     title.textContent = 'Histórico de embarque e desembarque';
@@ -538,7 +569,9 @@ function renderExpeditionRouteHistoryHero(route, metrics = {}) {
     `.replace('<motion></motion>', `
         <div class="bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
             <div class="flex flex-wrap items-center justify-between gap-2">
-                <p class="text-sm font-bold text-slate-900">Rota #${Number(route.id)} · ${escapeHtml(dateLabel)}</p>
+                <p class="text-sm font-bold text-slate-900">${escapeHtml(typeof formatExpeditionRouteDisplayName === 'function'
+                    ? formatExpeditionRouteDisplayName(route)
+                    : `Rota ${Number(route.id)}`)} · ${escapeHtml(dateLabel)}</p>
                 <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">${escapeHtml(statusLabel)}</span>
             </div>
             ${typeof renderExpeditionRouteCrewMobile === 'function' ? renderExpeditionRouteCrewMobile(route) : ''}
@@ -894,6 +927,10 @@ async function openExpedicaoRouteBoardingHistoryModal(routeId) {
 }
 
 async function loadExpedicaoRouteList() {
+    if (typeof canAccessExpedicaoRouteSection === 'function' && !canAccessExpedicaoRouteSection()) {
+        if (typeof showExpedicao === 'function') showExpedicao('boarding');
+        return;
+    }
     const mount = document.getElementById('expedicao-content');
     if (!mount) return;
 
@@ -941,9 +978,13 @@ function renderExpedicaoRouteList(mount, rows) {
     const tableRows = (rows || []).map(row => {
         const statusBadge = `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold ${expeditionRouteStatusBadgeClass(row.status)}">${formatExpeditionRouteStatus(row.status)}</span>`;
         const dateLabel = row.routeDate ? formatDate(row.routeDate) : '—';
+        const routeLabel = typeof formatExpeditionRouteDisplayName === 'function'
+            ? formatExpeditionRouteDisplayName(row)
+            : (row.name || `Rota ${row.id}`);
         return `
             <tr class="hover:bg-slate-50/80">
                 <td class="p-3 text-xs text-slate-800 whitespace-nowrap">${escapeHtml(dateLabel)}</td>
+                <td class="p-3 text-xs font-semibold text-slate-800">${escapeHtml(routeLabel)}</td>
                 <td class="p-3 text-xs text-slate-700">${escapeHtml(row.vehicleLabel || '—')}</td>
                 <td class="p-3 text-xs text-slate-700">${escapeHtml(row.driverName || '—')}</td>
                 <td class="p-3 text-xs text-slate-700">${typeof getExpeditionResponsibleLabel === 'function'
@@ -991,6 +1032,7 @@ function renderExpedicaoRouteList(mount, rows) {
                     <thead class="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="p-3 font-semibold">Dia</th>
+                            <th class="p-3 font-semibold">Nome</th>
                             <th class="p-3 font-semibold">Carro</th>
                             <th class="p-3 font-semibold">Motorista</th>
                             <th class="p-3 font-semibold">Responsável</th>
@@ -999,7 +1041,7 @@ function renderExpedicaoRouteList(mount, rows) {
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
-                        ${tableRows || `<tr><td colspan="6" class="p-8 text-center text-xs text-slate-400">Nenhuma rota cadastrada.</td></tr>`}
+                        ${tableRows || `<tr><td colspan="7" class="p-8 text-center text-xs text-slate-400">Nenhuma rota cadastrada.</td></tr>`}
                     </tbody>
                 </table>
             </div>
@@ -1148,7 +1190,9 @@ async function openExpedicaoRouteDetail(routeId) {
         const detailModal = document.getElementById('expedition-route-detail-modal');
         if (detailMount && detailModal) {
             detailMount.innerHTML = `
-                <p class="text-sm font-bold text-slate-900">Rota ${escapeHtml(formatDate(route.routeDate))}</p>
+                <p class="text-sm font-bold text-slate-900">${escapeHtml(typeof formatExpeditionRouteDisplayName === 'function'
+        ? formatExpeditionRouteDisplayName(route)
+        : `Rota ${route.id}`)} · ${escapeHtml(formatDate(route.routeDate))}</p>
                 <p class="text-xs text-slate-600 mt-1">Status: ${escapeHtml(formatExpeditionRouteStatus(route.status))}</p>
                 <p class="text-xs text-slate-600 mt-1">Carro: ${escapeHtml(route.vehicleLabel || '—')} · Motorista: ${escapeHtml(route.driverName || '—')}</p>
                 <p class="text-xs text-slate-600 mt-1">Responsável: ${typeof getExpeditionResponsibleLabel === 'function'
@@ -1197,23 +1241,27 @@ async function openExpedicaoRouteDetail(routeId) {
     }
 }
 
-async function persistExpeditionRoute(wizardState) {
+async function persistExpeditionRoute(wizardState, options = {}) {
     const now = new Date().toISOString();
     const maps = wizardState.maps || {};
     const status = normalizeExpeditionRouteWizardStatus(wizardState.routeStatus);
     const isConfirmed = status === 'Confirmed';
+    const isDraft = status === 'Draft';
     const editingRouteId = wizardState.editingRouteId ? Number(wizardState.editingRouteId) : null;
+    const allowEmptyStops = Boolean(options.allowEmptyStops) && isDraft;
 
     if (isConfirmed && !maps.url) {
         throw new Error('Para status Confirmado, calcule a rota no Google Maps antes de salvar.');
     }
 
-    if (!wizardState.stops?.length) {
+    if (!wizardState.stops?.length && !allowEmptyStops) {
         throw new Error('Inclua ao menos uma parada antes de salvar.');
     }
 
-    const routeItems = collectExpeditionItemsFromStops(wizardState.stops);
-    validateExpeditionRouteItemsNotDuplicated(wizardState.stops);
+    const routeItems = collectExpeditionItemsFromStops(wizardState.stops || []);
+    if (wizardState.stops?.length) {
+        validateExpeditionRouteItemsNotDuplicated(wizardState.stops);
+    }
     if (isConfirmed) {
         await assertExpeditionItemsNotInLockedRoutes(routeItems, editingRouteId);
     }
@@ -1276,12 +1324,34 @@ async function persistExpeditionRoute(wizardState) {
     };
 
     let routeId;
+    const resolveRouteName = typeof resolveExpeditionRouteNameForPersist === 'function'
+        ? resolveExpeditionRouteNameForPersist
+        : (id, raw) => {
+            const trimmed = String(raw ?? '').trim();
+            return trimmed || (Number(id) > 0 ? `Rota ${id}` : '');
+        };
+
+    const withRouteName = (payload, targetRouteId) => {
+        const nameValue = resolveRouteName(targetRouteId, wizardState.routeName);
+        return nameValue ? { ...payload, name: nameValue } : payload;
+    };
 
     if (editingRouteId) {
-        const { error: updateError } = await supabaseClient
+        routeId = editingRouteId;
+        let updatePayload = withRouteName(routePayload, routeId);
+        let { error: updateError } = await supabaseClient
             .from('ExpeditionRoute')
-            .update(routePayload)
+            .update(updatePayload)
             .eq('id', editingRouteId);
+
+        if (updateError && typeof isExpeditionRouteNameSchemaError === 'function'
+            && isExpeditionRouteNameSchemaError(updateError)) {
+            const { name, ...legacy } = updatePayload;
+            ({ error: updateError } = await supabaseClient
+                .from('ExpeditionRoute')
+                .update(legacy)
+                .eq('id', editingRouteId));
+        }
 
         if (updateError) {
             if (isExpeditionTablesMissingError(updateError)) {
@@ -1295,14 +1365,13 @@ async function persistExpeditionRoute(wizardState) {
         }
 
         await deleteExpeditionRouteChildren(editingRouteId);
-        routeId = editingRouteId;
     } else {
         const insertPayload = {
             ...routePayload,
             createdById: currentUser?.id || null
         };
 
-        const { data: routeRow, error: routeError } = await supabaseClient
+        let { data: routeRow, error: routeError } = await supabaseClient
             .from('ExpeditionRoute')
             .insert(insertPayload)
             .select('id')
@@ -1320,6 +1389,17 @@ async function persistExpeditionRoute(wizardState) {
         }
 
         routeId = routeRow.id;
+        const nameValue = resolveRouteName(routeId, wizardState.routeName);
+        if (nameValue) {
+            const { error: nameError } = await supabaseClient
+                .from('ExpeditionRoute')
+                .update({ name: nameValue, updatedAt: now })
+                .eq('id', routeId);
+            if (nameError && typeof isExpeditionRouteNameSchemaError === 'function'
+                && !isExpeditionRouteNameSchemaError(nameError)) {
+                console.warn('persistExpeditionRoute: name', nameError);
+            }
+        }
     }
 
     try {
@@ -1388,6 +1468,8 @@ window.openExpedicaoRouteDetail = openExpedicaoRouteDetail;
 window.printExpedicaoRouteLabelsById = printExpedicaoRouteLabelsById;
 window.fetchExpeditionEntityIdsAlreadyRouted = fetchExpeditionEntityIdsAlreadyRouted;
 window.EXPEDITION_DEFAULT_ROUTE_TIME = EXPEDITION_DEFAULT_ROUTE_TIME;
+window.EXPEDITION_ROUTE_TIME_STEP_MINUTES = EXPEDITION_ROUTE_TIME_STEP_MINUTES;
+window.normalizeExpeditionRouteTimeValue = normalizeExpeditionRouteTimeValue;
 window.getExpeditionRouteTimeDefault = getExpeditionRouteTimeDefault;
 window.buildExpeditionRouteDateTimeIso = buildExpeditionRouteDateTimeIso;
 window.formatExpeditionRouteDateTimeLabel = formatExpeditionRouteDateTimeLabel;

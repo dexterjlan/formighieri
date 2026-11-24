@@ -166,7 +166,7 @@ async function restoreProgramacoesView(state = {}) {
 function updateProgramacoesNav() {
     const btn = document.getElementById('btn-programacoes');
     if (!btn) return;
-    if (typeof hasInstallerOnlyAccess === 'function' && hasInstallerOnlyAccess()) {
+    if (typeof hasInstallerOrPickerOnlyAccess === 'function' && hasInstallerOrPickerOnlyAccess()) {
         btn.classList.add('hidden');
         return;
     }

@@ -66,8 +66,8 @@ const SCRIPTS = [
     'js/core/matrix-room-notifier.js',
     'js/core/matrix-revision-notifications.js',
     'js/core/matrix-project-notifications.js',
-    'js/core/matrix-wps-item-notifications.js',
     'js/core/matrix-compras-notifications.js',
+    'js/core/matrix-wps-item-notifications.js',
     'js/core/matrix-detailing-notifications.js',
     'js/core/welcome.js',
     'js/comercial/comercial.js',
@@ -373,7 +373,39 @@ async function bootstrap() {
 
         initAuthShellEvents();
 
-        const { data: { session } } = await supabaseClient.auth.getSession();
+        if (typeof scrubFgpRefreshFromBrowserUrl === 'function') {
+            scrubFgpRefreshFromBrowserUrl();
+        }
+
+        if (typeof handleAuthCallbackFromUrl === 'function') {
+            await handleAuthCallbackFromUrl();
+        }
+
+        const recoveryFlow = (typeof passwordRecoveryPending !== 'undefined' && passwordRecoveryPending)
+            || (typeof isPasswordRecoveryRedirect === 'function' && isPasswordRecoveryRedirect());
+
+        let { data: { session } } = await supabaseClient.auth.getSession();
+        if (recoveryFlow && !session?.user) {
+            await new Promise(resolve => setTimeout(resolve, 150));
+            ({ data: { session } } = await supabaseClient.auth.getSession());
+        }
+
+        if (recoveryFlow) {
+            passwordRecoveryPending = true;
+            if (session?.user && typeof beginPasswordRecovery === 'function') {
+                beginPasswordRecovery();
+            } else if (shouldShowLoginScreen()) {
+                showLoginScreen();
+                if (typeof alertAppDialog === 'function') {
+                    alertAppDialog(
+                        'Não foi possível validar o link de recuperação. Solicite um novo e-mail de redefinição de senha.',
+                        { variant: 'warning', title: 'Link inválido ou expirado' }
+                    );
+                }
+            }
+            return;
+        }
+
         if (!session?.user && shouldShowLoginScreen()) {
             showLoginScreen();
         } else if (session?.user) {

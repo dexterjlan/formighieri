@@ -101,6 +101,23 @@ function setExpeditionScanModalFeedbackActive(modalId, active) {
 
 let expedicaoActiveSection = 'route';
 
+function getExpedicaoNavSections() {
+    const canRoute = typeof canAccessExpedicaoRouteSection === 'function' && canAccessExpedicaoRouteSection();
+    if (canRoute) return EXPEDICAO_SECTIONS;
+    return EXPEDICAO_SECTIONS.filter(section => section.id === 'boarding' || section.id === 'unloading');
+}
+
+function getDefaultExpedicaoSection() {
+    const sections = getExpedicaoNavSections();
+    return sections[0]?.id || 'boarding';
+}
+
+function normalizeExpedicaoSectionId(sectionId) {
+    const sections = getExpedicaoNavSections();
+    if (sections.some(section => section.id === sectionId)) return sectionId;
+    return getDefaultExpedicaoSection();
+}
+
 function expeditionSqlHint() {
     return 'Execute supabase/feats/create-expedition-route.sql no Supabase SQL Editor (DEV). Ver PENDING-PROD-SQL.md.';
 }
@@ -154,7 +171,7 @@ function renderExpedicaoMobileSectionBar() {
     nav.hidden = !visible;
     if (!visible) return;
 
-    nav.innerHTML = EXPEDICAO_SECTIONS.map(section => `
+    nav.innerHTML = getExpedicaoNavSections().map(section => `
         <button type="button"
             class="expedicao-mobile-sections__btn${expedicaoActiveSection === section.id ? ' is-active' : ''}"
             data-expedicao-section="${section.id}">
@@ -169,7 +186,7 @@ function renderExpedicaoSidebar() {
     if (!nav) return;
 
     const markSelection = !document.getElementById('expedicao-view')?.classList.contains('hidden');
-    nav.innerHTML = EXPEDICAO_SECTIONS.map(section => `
+    nav.innerHTML = getExpedicaoNavSections().map(section => `
         <button type="button"
             class="app-nav-item app-nav-item--nested ${markSelection && expedicaoActiveSection === section.id ? 'is-active' : ''}"
             data-expedicao-section="${section.id}">
@@ -191,8 +208,20 @@ function persistExpedicaoNavState() {
 }
 
 async function loadExpedicaoContent() {
+    expedicaoActiveSection = normalizeExpedicaoSectionId(expedicaoActiveSection);
+
     if (expedicaoActiveSection === 'route') {
-        if (typeof loadExpedicaoRouteList === 'function') await loadExpedicaoRouteList();
+        if (typeof canAccessExpedicaoRouteSection === 'function' && !canAccessExpedicaoRouteSection()) {
+            expedicaoActiveSection = getDefaultExpedicaoSection();
+            renderExpedicaoSidebar();
+            persistExpedicaoNavState();
+        } else if (typeof loadExpedicaoRouteList === 'function') {
+            await loadExpedicaoRouteList();
+            return;
+        }
+    }
+
+    if (expedicaoActiveSection === 'route') {
         return;
     }
 
@@ -221,7 +250,7 @@ function ensureExpedicaoViewVisible() {
 }
 
 function selectExpedicaoSection(sectionId) {
-    if (!EXPEDICAO_SECTIONS.some(section => section.id === sectionId)) return;
+    if (!getExpedicaoNavSections().some(section => section.id === sectionId)) return;
     showExpedicao(sectionId);
 }
 
@@ -238,11 +267,9 @@ function showExpedicao(sectionId) {
     }
 
     if (sectionId) {
-        expedicaoActiveSection = EXPEDICAO_SECTIONS.some(section => section.id === sectionId)
-            ? sectionId
-            : 'route';
-    } else if (!EXPEDICAO_SECTIONS.some(section => section.id === expedicaoActiveSection)) {
-        expedicaoActiveSection = 'route';
+        expedicaoActiveSection = normalizeExpedicaoSectionId(sectionId);
+    } else {
+        expedicaoActiveSection = normalizeExpedicaoSectionId(expedicaoActiveSection);
     }
 
     const details = document.getElementById('btn-expedicao');
@@ -269,10 +296,8 @@ async function restoreExpedicaoView(state = {}) {
         return;
     }
 
-    const savedSection = state.expedicaoSection || 'route';
-    expedicaoActiveSection = EXPEDICAO_SECTIONS.some(section => section.id === savedSection)
-        ? savedSection
-        : 'route';
+    const savedSection = state.expedicaoSection || getDefaultExpedicaoSection();
+    expedicaoActiveSection = normalizeExpedicaoSectionId(savedSection);
 
     hideSubViews();
     document.getElementById('expedicao-view')?.classList.remove('hidden');
@@ -311,7 +336,10 @@ function bindExpedicaoEvents() {
         event.preventDefault();
         const details = event.currentTarget;
         details.open = true;
-        showExpedicao('route');
+        const defaultSection = typeof getDefaultExpedicaoSection === 'function'
+            ? getDefaultExpedicaoSection()
+            : 'route';
+        showExpedicao(defaultSection);
     });
 
     const onExpedicaoSectionClick = event => {

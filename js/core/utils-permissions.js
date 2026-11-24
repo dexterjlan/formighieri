@@ -162,6 +162,39 @@ function hasInstallerOnlyAccess(user = currentUser) {
     return isInstallerProfile(user);
 }
 
+function isPickerProfile(user = currentUser) {
+    return Boolean(user?.isPicker);
+}
+
+/** Expedição completa (rotas, embarque, desembarque). */
+function hasFullExpedicaoAccess(user = currentUser) {
+    if (!user?.id || isThirdParty(user)) return false;
+    return isAdmin(user)
+        || isGestorProjetos(user)
+        || isGestorFabrica(user)
+        || isFactoryAdministrative(user)
+        || isPpcp(user);
+}
+
+/**
+ * Separador fábrica (isPicker) sem perfil de gestão/expedição completa:
+ * só menu Expedição → Embarque e Desembarque.
+ */
+function hasPickerOnlyExpeditionAccess(user = currentUser) {
+    if (!user?.id || isThirdParty(user)) return false;
+    if (hasInstallerOnlyAccess(user)) return false;
+    if (!isPickerProfile(user)) return false;
+    return !hasFullExpedicaoAccess(user);
+}
+
+function hasInstallerOrPickerOnlyAccess(user = currentUser) {
+    return hasInstallerOnlyAccess(user) || hasPickerOnlyExpeditionAccess(user);
+}
+
+function canAccessExpedicaoRouteSection(user = currentUser) {
+    return hasFullExpedicaoAccess(user);
+}
+
 function isBuyer(user = currentUser) {
     if (!user) return false;
     if (user.role === 'Compras') return true;
@@ -197,7 +230,7 @@ function canActCompraModal(user = currentUser) {
 }
 
 function canSeeQueryNav(user = currentUser) {
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     if (isThirdParty(user)) return false;
     if (typeof QUERY_NAV_ENABLED !== 'undefined' && !QUERY_NAV_ENABLED) return false;
     if (typeof isBuyer === 'function' && isBuyer(user)) return true;
@@ -206,7 +239,7 @@ function canSeeQueryNav(user = currentUser) {
 }
 
 function canAccessGestao(user = currentUser) {
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     if (!user || isThirdParty(user)) return false;
     return user.role === 'Admin'
         || isGestorComercial(user)
@@ -223,7 +256,7 @@ function canAccessMontagemProgramacao(user = currentUser) {
 }
 
 function canViewKanban(user = currentUser) {
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     if (!user || isThirdParty(user)) return false;
     return isAdmin(user)
         || isGestorComercial(user)
@@ -233,7 +266,7 @@ function canViewKanban(user = currentUser) {
 }
 
 function canViewProjectScheduling(user = currentUser) {
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     return Boolean(user) && !isThirdParty(user);
 }
 
@@ -242,7 +275,7 @@ function canViewProjectSchedulingOld(user = currentUser) {
 }
 
 function canAccessProgramacoes(user = currentUser) {
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     return Boolean(user) && !isThirdParty(user);
 }
 
@@ -259,7 +292,7 @@ function canEditProjectScheduling(user = currentUser) {
 }
 
 function canViewProgramacaoMontagem(user = currentUser) {
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     return Boolean(user) && !isThirdParty(user);
 }
 
@@ -272,7 +305,7 @@ function canEditProgramacaoMontagem(user = currentUser) {
 }
 
 function canAccessCalendar(user = currentUser) {
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     if (!user || isThirdParty(user)) return false;
     return isAdmin(user)
         || user.role === 'Consultor'
@@ -283,7 +316,7 @@ function canAccessCalendar(user = currentUser) {
 }
 
 function canAccessComercial(user = currentUser) {
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     if (!user || isThirdParty(user)) return false;
     return isAdmin(user)
         || user.role === 'Consultor'
@@ -297,7 +330,7 @@ function canSeeAllDeals(user = currentUser) {
 
 function canAccessOrdersDashboard(user = currentUser) {
     if (!user || isThirdParty(user)) return false;
-    if (hasInstallerOnlyAccess(user)) return false;
+    if (hasInstallerOrPickerOnlyAccess(user)) return false;
     return true;
 }
 
@@ -362,20 +395,17 @@ function canCreateAsAdminOrConferente() {
     return isAdmin() || isConferente();
 }
 
-/** Expedição: Admin, gestor de projetos, gestor fábrica, administrativo fábrica ou PPCP. */
+/** Expedição: gestão completa de rotas ou separador (só embarque/desembarque). */
 function canAccessExpedicao(user = currentUser) {
     if (hasInstallerOnlyAccess(user)) return false;
     if (!user?.id || isThirdParty(user)) return false;
-    return isAdmin(user)
-        || isGestorProjetos(user)
-        || isGestorFabrica(user)
-        || isFactoryAdministrative(user)
-        || isPpcp(user);
+    return hasFullExpedicaoAccess(user) || hasPickerOnlyExpeditionAccess(user);
 }
 
 /** Requisições → Peça: Admin, gestor de projetos ou perfil Fábrica (incl. Marceneiro). */
 function canAccessRequisicoesPartRequest(user = currentUser) {
     if (!user?.id || isThirdParty(user)) return false;
+    if (hasPickerOnlyExpeditionAccess(user)) return false;
     if (isAdmin(user)) return true;
     if (isGestorProjetos(user)) return true;
     return isFabricaRole(user);

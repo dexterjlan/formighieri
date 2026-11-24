@@ -1161,6 +1161,61 @@ function getEligibleExternalAssemblyInspectionProjects(projects) {
     });
 }
 
+function findOrderProjectInGestaoCache(orderId, orderProjectId) {
+    const orderKey = Number(orderId);
+    const projectKey = Number(orderProjectId);
+    if (!orderKey || !projectKey) return null;
+
+    const gestaoOrder = typeof gestaoOrdersCache !== 'undefined' && Array.isArray(gestaoOrdersCache)
+        ? gestaoOrdersCache.find(item => Number(item.id) === orderKey)
+        : null;
+    const project = (gestaoOrder?.projects || []).find(item => Number(item.id) === projectKey);
+    return project ? { ...project, orderId: project.orderId || orderKey } : null;
+}
+
+/** Projetos do pedido para criar vistoria (kanban/gestão não preenche orderProjectsCache). */
+async function loadOrderProjectsForExternalAssemblyInspectionCreate(orderId) {
+    const orderKey = Number(orderId);
+    if (!orderKey) return [];
+
+    let projects = (typeof orderProjectsCache !== 'undefined' && Array.isArray(orderProjectsCache)
+        ? orderProjectsCache
+        : []
+    ).filter(project => Number(project.orderId) === orderKey);
+
+    const eligibleFromCache = getEligibleExternalAssemblyInspectionProjects(projects);
+    if (eligibleFromCache.length) {
+        return projects;
+    }
+
+    if (typeof fetchOrderProjectsForOrder === 'function') {
+        try {
+            const fetched = await fetchOrderProjectsForOrder(orderKey);
+            if (fetched.length) {
+                projects = fetched;
+            }
+        } catch (error) {
+            console.warn('loadOrderProjectsForExternalAssemblyInspectionCreate:', error);
+        }
+    }
+
+    if (getEligibleExternalAssemblyInspectionProjects(projects).length) {
+        return projects;
+    }
+
+    const gestaoOrder = typeof gestaoOrdersCache !== 'undefined' && Array.isArray(gestaoOrdersCache)
+        ? gestaoOrdersCache.find(item => Number(item.id) === orderKey)
+        : null;
+    if (gestaoOrder?.projects?.length) {
+        return gestaoOrder.projects.map(project => ({
+            ...project,
+            orderId: project.orderId || orderKey
+        }));
+    }
+
+    return projects;
+}
+
 async function fetchExternalAssemblyInspectionsForProject(orderProjectId) {
     const { data: links, error: linkError } = await supabaseClient
         .from('ExternalAssemblyInspectionProject')
@@ -1910,15 +1965,26 @@ async function openExternalAssemblyInspectionCreateModal(orderId = activeOrderId
         return;
     }
 
-    const projects = typeof orderProjectsCache !== 'undefined' ? orderProjectsCache : [];
-    const eligible = getEligibleExternalAssemblyInspectionProjects(projects);
+    const orderKey = Number(orderId);
+    let projects = await loadOrderProjectsForExternalAssemblyInspectionCreate(orderKey);
+    let eligible = getEligibleExternalAssemblyInspectionProjects(projects);
+
+    const preselectOrderProjectId = Number(options.preselectOrderProjectId);
+    if (!eligible.length && preselectOrderProjectId) {
+        const hintedProject = findOrderProjectInGestaoCache(orderKey, preselectOrderProjectId)
+            || projects.find(item => Number(item.id) === preselectOrderProjectId);
+        if (hintedProject && getEligibleExternalAssemblyInspectionProjects([hintedProject]).length) {
+            eligible = [hintedProject];
+        }
+    }
+
     if (!eligible.length) {
         alertAppDialog('Nenhum projeto em Montagem Externa neste pedido.');
         return;
     }
 
     eaiCreateState = {
-        orderId: Number(orderId),
+        orderId: orderKey,
         orderCode: order.orderCode || '',
         availableProjects: eligible.map(project => ({
             orderProjectId: Number(project.id),
@@ -1936,7 +2002,6 @@ async function openExternalAssemblyInspectionCreateModal(orderId = activeOrderId
     const projectsMount = document.getElementById('eai-create-projects-mount');
     if (projectsMount) projectsMount.innerHTML = '';
 
-    const preselectOrderProjectId = Number(options.preselectOrderProjectId);
     if (preselectOrderProjectId) {
         const preselectProject = eaiCreateState.availableProjects.find(
             item => Number(item.orderProjectId) === preselectOrderProjectId

@@ -621,9 +621,10 @@ function bindAuthEvents() {
         }
 
         try {
-            const redirectTo = typeof getAppPublicUrl === "function"
+            const baseUrl = typeof getAppPublicUrl === "function"
                 ? getAppPublicUrl()
                 : window.location.origin.replace(/\/$/, "");
+            const redirectTo = `${baseUrl}?auth=recovery`;
 
             const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
                 redirectTo
@@ -779,11 +780,35 @@ function bindAuthEvents() {
 function isPasswordRecoveryRedirect() {
     try {
         const url = new URL(window.location.href);
+        if (url.searchParams.get('auth') === 'recovery') return true;
         if (url.searchParams.get('type') === 'recovery') return true;
         const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
         return hashParams.get('type') === 'recovery';
     } catch {
         return false;
+    }
+}
+
+async function handleAuthCallbackFromUrl() {
+    if (isPasswordRecoveryRedirect()) {
+        passwordRecoveryPending = true;
+    }
+
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('code');
+    if (!code) return;
+
+    try {
+        const { error } = await supabaseClient.auth.exchangeCodeForSession(code);
+        if (error) {
+            console.warn('handleAuthCallbackFromUrl exchangeCodeForSession:', error);
+            return;
+        }
+        if (isPasswordRecoveryRedirect()) {
+            passwordRecoveryPending = true;
+        }
+    } catch (error) {
+        console.warn('handleAuthCallbackFromUrl:', error);
     }
 }
 
@@ -808,6 +833,7 @@ function clearAuthRedirectUrl() {
         url.hash = '';
         url.searchParams.delete('code');
         url.searchParams.delete('type');
+        url.searchParams.delete('auth');
         history.replaceState(null, '', url.pathname + url.search);
     } catch {
         history.replaceState(null, '', window.location.pathname);
@@ -822,3 +848,7 @@ function beginPasswordRecovery() {
         showResetPasswordScreen();
     }
 }
+
+window.isPasswordRecoveryRedirect = isPasswordRecoveryRedirect;
+window.handleAuthCallbackFromUrl = handleAuthCallbackFromUrl;
+window.beginPasswordRecovery = beginPasswordRecovery;

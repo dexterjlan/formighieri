@@ -1,5 +1,13 @@
 let expedicaoWizardState = null;
 
+function normalizeExpeditionAddressPostalCode(postalCode) {
+    return String(postalCode || '').replace(/\D/g, '');
+}
+
+function normalizeExpeditionAddressNumber(number) {
+    return String(number || '').trim().toLowerCase();
+}
+
 function getExpeditionAddressKey(addr) {
     if (!addr) return '';
     const addrId = Number(addr.id);
@@ -8,6 +16,23 @@ function getExpeditionAddressKey(addr) {
         ? expeditionMapsAddressParam(addr)
         : (typeof formatExpeditionAddressOneLine === 'function' ? formatExpeditionAddressOneLine(addr) : '');
     return line.trim().toLowerCase();
+}
+
+/** Mesma parada quando CEP + número coincidem (endereços diferentes no cadastro). */
+function getExpeditionAddressStopMatchKey(addr) {
+    if (!addr) return '';
+    const postal = normalizeExpeditionAddressPostalCode(addr.postalCode);
+    const number = normalizeExpeditionAddressNumber(addr.number);
+    if (postal && number) return `cep:${postal}|num:${number}`;
+    return getExpeditionAddressKey(addr);
+}
+
+function findExpeditionWizardStopByAddressMatch(addr) {
+    const matchKey = getExpeditionAddressStopMatchKey(addr);
+    if (!matchKey) return null;
+    return (expedicaoWizardState?.stops || []).find(stop =>
+        getExpeditionAddressStopMatchKey(stop.addr) === matchKey
+    ) || null;
 }
 
 function expeditionWizardEntityAlreadyInRoute(entityType, entityId) {
@@ -22,11 +47,11 @@ function expeditionWizardEntityAlreadyInRoute(entityType, entityId) {
 }
 
 function expedicaoWizardPrepareStopForPendingAddress(pendingAddr) {
-    const pendingKey = getExpeditionAddressKey(pendingAddr);
+    const pendingKey = getExpeditionAddressStopMatchKey(pendingAddr);
     const current = getWizardCurrentStop();
     if (!current?.items?.length) return;
 
-    const currentKey = getExpeditionAddressKey(current.addr);
+    const currentKey = getExpeditionAddressStopMatchKey(current.addr);
     if (currentKey && pendingKey && currentKey !== pendingKey) {
         expedicaoWizardState.currentStop = null;
     }
@@ -34,7 +59,7 @@ function expedicaoWizardPrepareStopForPendingAddress(pendingAddr) {
 
 const expedicaoRouteWizardOverlay = typeof createAppOverlayHelper === 'function'
     ? createAppOverlayHelper('expedition-route-wizard', {
-        closeButtonSelector: '#btn-expedition-route-wizard-close, #btn-expedition-route-wizard-cancel'
+        closeButtonSelector: '#btn-expedition-route-wizard-close'
     })
     : null;
 
@@ -47,6 +72,7 @@ function createEmptyExpedicaoWizardState() {
         routeTime: typeof getExpeditionRouteTimeDefault === 'function'
             ? getExpeditionRouteTimeDefault()
             : '08:00',
+        routeName: '',
         vehicleLabel: '',
         driverName: '',
         responsibleUserId: null,
@@ -98,6 +124,7 @@ function syncExpeditionWizardMetaFromDom() {
 
     const routeDate = document.getElementById('expedition-wizard-route-date')?.value;
     const routeTime = document.getElementById('expedition-wizard-route-time')?.value;
+    const routeName = document.getElementById('expedition-wizard-route-name')?.value?.trim() || '';
     const vehicle = document.getElementById('expedition-wizard-vehicle')?.value?.trim() || '';
     const driver = document.getElementById('expedition-wizard-driver')?.value?.trim() || '';
     const responsibleRaw = document.getElementById('expedition-wizard-responsible')?.value;
@@ -118,7 +145,12 @@ function syncExpeditionWizardMetaFromDom() {
             alertAppDialog('Informe o horário da rota.');
             return false;
         }
-        expedicaoWizardState.routeTime = routeTime;
+        expedicaoWizardState.routeTime = typeof normalizeExpeditionRouteTimeValue === 'function'
+            ? normalizeExpeditionRouteTimeValue(routeTime)
+            : routeTime;
+    }
+    if (document.getElementById('expedition-wizard-route-name')) {
+        expedicaoWizardState.routeName = routeName;
     }
     if (document.getElementById('expedition-wizard-vehicle')) {
         if (!vehicle) {
@@ -166,39 +198,79 @@ function syncExpeditionWizardMetaFromDom() {
     return true;
 }
 
-async function saveExpeditionRouteFromWizard() {
-    if (!expedicaoWizardState) return;
+function prependExpeditionWizardSaveFooterButton(buttons = []) {
+    const rest = (buttons || []).filter(btn => btn.id !== 'expedition-wizard-save-route');
+    return [{ id: 'expedition-wizard-save-route', label: 'Salvar' }, ...rest];
+}
+
+async function saveExpeditionRouteFromWizard(options = {}) {
+    if (!expedicaoWizardState) return false;
+
+    const keepOpen = options.keepOpen !== false;
+    const notify = options.notify !== false;
 
     const statusEl = document.getElementById('expedition-wizard-route-status');
     if (statusEl) {
         expedicaoWizardState.routeStatus = readExpeditionWizardRouteStatusFromDom();
     }
-    if (!syncExpeditionWizardMetaFromDom()) return;
+    if (!syncExpeditionWizardMetaFromDom()) return false;
     syncExpeditionWizardRouteMetricsIntoState();
 
     const savedRouteStatus = expedicaoWizardState.routeStatus || 'Draft';
+    const allowEmptyStops = savedRouteStatus === 'Draft';
+
+    captureExpeditionWizardDraftFieldsFromDom();
 
     expedicaoRouteWizardOverlay?.setLoading(true, 'Salvando rota...');
     try {
-        const routeId = await persistExpeditionRoute(expedicaoWizardState);
-        closeExpedicaoRouteWizard();
-        await loadExpedicaoRouteList();
-        const statusLabel = typeof formatExpeditionRouteStatus === 'function'
-            ? formatExpeditionRouteStatus(savedRouteStatus)
-            : savedRouteStatus;
-        const labelsHint = savedRouteStatus === 'Confirmed'
-            ? ' Você já pode imprimir as etiquetas.'
-            : '';
-        alertAppDialog(`Rota salva (#${routeId}) — ${statusLabel}.${labelsHint}`, { variant: 'success' });
+        const routeId = await persistExpeditionRoute(expedicaoWizardState, { allowEmptyStops });
+        expedicaoWizardState.editingRouteId = routeId;
+        if (typeof loadExpedicaoRouteList === 'function') {
+            await loadExpedicaoRouteList();
+        }
+
+        const titleEl = document.querySelector('#expedition-route-wizard-modal h3');
+        if (titleEl) titleEl.textContent = 'Editar rota de expedição';
+
+        if (notify) {
+            const statusLabel = typeof formatExpeditionRouteStatus === 'function'
+                ? formatExpeditionRouteStatus(savedRouteStatus)
+                : savedRouteStatus;
+            const labelsHint = savedRouteStatus === 'Confirmed'
+                ? ' Você já pode imprimir as etiquetas.'
+                : '';
+            const savedName = typeof resolveExpeditionRouteNameForPersist === 'function'
+                ? resolveExpeditionRouteNameForPersist(routeId, expedicaoWizardState?.routeName)
+                : `Rota ${routeId}`;
+
+            if (keepOpen) {
+                alertAppDialog(
+                    `${savedName} salva (${statusLabel}). Você pode continuar montando a rota e salvar de novo quando quiser.${labelsHint}`,
+                    { variant: 'success' }
+                );
+            } else {
+                closeExpedicaoRouteWizard();
+                alertAppDialog(`${savedName} salva — ${statusLabel}.${labelsHint}`, { variant: 'success' });
+            }
+        } else if (!keepOpen) {
+            closeExpedicaoRouteWizard();
+        }
+
+        return true;
     } catch (error) {
         console.error('saveExpeditionRouteFromWizard:', error);
         alertAppDialog(error.message || 'Erro ao salvar rota.');
+        return false;
     } finally {
         expedicaoRouteWizardOverlay?.setLoading(false);
     }
 }
 
 async function openExpedicaoRouteWizard(routeId) {
+    if (typeof canAccessExpedicaoRouteSection === 'function' && !canAccessExpedicaoRouteSection()) {
+        alertAppDialog('Você não tem permissão para montar ou editar rotas.');
+        return;
+    }
     const key = routeId ? Number(routeId) : null;
     const titleEl = document.querySelector('#expedition-route-wizard-modal h3');
 
@@ -354,7 +426,14 @@ function captureExpeditionWizardDraftFieldsFromDom() {
     const statusEl = document.getElementById('expedition-wizard-route-status');
 
     if (routeDate) expedicaoWizardState.routeDate = routeDate;
-    if (routeTime) expedicaoWizardState.routeTime = routeTime;
+    if (routeTime) {
+        expedicaoWizardState.routeTime = typeof normalizeExpeditionRouteTimeValue === 'function'
+            ? normalizeExpeditionRouteTimeValue(routeTime)
+            : routeTime;
+    }
+    if (document.getElementById('expedition-wizard-route-name')) {
+        expedicaoWizardState.routeName = document.getElementById('expedition-wizard-route-name')?.value?.trim() || '';
+    }
     if (vehicle !== undefined && vehicle !== null) expedicaoWizardState.vehicleLabel = vehicle;
     if (driver !== undefined && driver !== null) expedicaoWizardState.driverName = driver;
     if (statusEl) {
@@ -472,7 +551,7 @@ function renderExpeditionWizardMapsSection() {
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="expedition-wizard-route-duration-min">Tempo total (min)</label>
-                    <input type="number" id="expedition-wizard-route-duration-min" min="0" step="1"
+                    <input type="number" id="expedition-wizard-route-duration-min" min="0" step="5"
                         value="${escapeHtml(minValue)}"
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg"
                         placeholder="Ex: 195">
@@ -556,14 +635,29 @@ async function renderExpedicaoRouteWizard() {
     if (step === 'meta') {
         mount.innerHTML = `
             <div class="space-y-4">
-                <p class="text-xs text-slate-500">Informe os dados da rota e comece a incluir paradas.</p>
+                <p class="text-xs text-slate-500">Informe os dados da rota, use <strong class="font-semibold text-slate-600">Salvar</strong> para gravar o rascunho a qualquer momento e depois inclua as paradas.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="expedition-wizard-route-name">Nome da rota</label>
+                        <input type="text" id="expedition-wizard-route-name"
+                            value="${escapeHtml(expedicaoWizardState.routeName || '')}"
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg"
+                            placeholder="${escapeHtml(
+        expedicaoWizardState.editingRouteId
+            ? (typeof resolveExpeditionRouteNameForPersist === 'function'
+                ? resolveExpeditionRouteNameForPersist(expedicaoWizardState.editingRouteId, '')
+                : `Rota ${expedicaoWizardState.editingRouteId}`)
+            : 'Padrão ao salvar: Rota {número}'
+    )}">
+                        <p class="text-[10px] text-slate-400 mt-1">Se vazio, usa <strong class="font-semibold text-slate-500">Rota</strong> + número.</p>
+                    </div>
                     <div class="md:col-span-2 lg:col-span-4">
                         <label class="block text-xs font-semibold text-slate-500 mb-1">Data e horário da rota</label>
                         <div class="expedition-route-wizard-datetime flex gap-2 flex-wrap items-stretch">
                             <input type="date" id="expedition-wizard-route-date" value="${escapeHtml(expedicaoWizardState.routeDate)}"
                                 class="expedition-route-wizard-datetime__date px-3 py-2 text-sm border border-slate-200 rounded-lg">
                             <input type="time" id="expedition-wizard-route-time"
+                                step="300"
                                 value="${escapeHtml(expedicaoWizardState.routeTime || (typeof EXPEDITION_DEFAULT_ROUTE_TIME !== 'undefined' ? EXPEDITION_DEFAULT_ROUTE_TIME : '08:00'))}"
                                 class="expedition-route-wizard-datetime__time px-2 py-2 text-sm border border-slate-200 rounded-lg">
                         </div>
@@ -596,12 +690,17 @@ async function renderExpedicaoRouteWizard() {
                 </div>
             </div>
         `;
-        const metaFooter = [];
-        if (expedicaoWizardState.stops?.length) {
-            metaFooter.push({ id: 'expedition-wizard-save-route', label: 'Salvar', primary: true });
-            metaFooter.push({ id: 'expedition-wizard-calc-route', label: 'Abrir rota no Maps' });
-        }
-        metaFooter.push({ id: 'expedition-wizard-start-stop', label: 'Adicionar parada', primary: !expedicaoWizardState.stops?.length });
+        const hasStops = Boolean(expedicaoWizardState.stops?.length);
+        const metaFooter = prependExpeditionWizardSaveFooterButton([
+            ...(hasStops ? [{ id: 'expedition-wizard-calc-route', label: 'Abrir rota no Maps' }] : []),
+            {
+                id: 'expedition-wizard-start-stop',
+                label: 'Adicionar parada',
+                primary: !hasStops
+            },
+            { id: 'expedition-wizard-close', label: 'Fechar' }
+        ]);
+        metaFooter[0].primary = hasStops || Boolean(expedicaoWizardState.editingRouteId);
         syncExpedicaoWizardFooter(metaFooter);
         syncExpedicaoWizardModalAuxChrome(true);
         bindExpedicaoWizardMetaStepInteractions(mount);
@@ -651,10 +750,10 @@ async function renderExpedicaoRouteWizard() {
         }
         bindExpedicaoWizardEntitySearch();
         syncExpedicaoWizardModalAuxChrome(false);
-        const footerButtons = [{ id: 'expedition-wizard-back-meta', label: 'Voltar' }];
-        if (pickupSelected) {
-            footerButtons.push({ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true });
-        }
+        const footerButtons = [
+            { id: 'expedition-wizard-back-meta', label: 'Voltar' },
+            ...(pickupSelected ? [{ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true }] : [])
+        ];
         syncExpedicaoWizardFooter(footerButtons);
         return;
     }
@@ -682,7 +781,7 @@ async function renderExpedicaoRouteWizard() {
             { id: 'expedition-wizard-back-pick', label: 'Voltar' },
             { id: 'expedition-wizard-confirm-item', label: 'Confirmar item', primary: true }
         ]);
-        syncExpedicaoWizardModalAuxChrome(true);
+        syncExpedicaoWizardModalAuxChrome(false);
         return;
     }
 
@@ -712,7 +811,7 @@ async function renderExpedicaoRouteWizard() {
             { id: 'expedition-wizard-add-item-same-stop', label: 'Sim, outro item', primary: true },
             { id: 'expedition-wizard-finish-stop', label: 'Concluir parada' }
         ]);
-        syncExpedicaoWizardModalAuxChrome(true);
+        syncExpedicaoWizardModalAuxChrome(false);
         return;
     }
 
@@ -750,10 +849,10 @@ function bindExpedicaoWizardEntitySearch() {
         document.getElementById('expedition-wizard-pickup-panel')?.classList.toggle('hidden', !pickup);
         document.getElementById('expedition-wizard-search-panel')?.classList.toggle('hidden', pickup);
         document.getElementById('expedition-wizard-search-field-wrap')?.classList.toggle('hidden', pickup);
-        const footerButtons = [{ id: 'expedition-wizard-back-meta', label: 'Voltar' }];
-        if (pickup) {
-            footerButtons.push({ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true });
-        }
+        const footerButtons = [
+            { id: 'expedition-wizard-back-meta', label: 'Voltar' },
+            ...(pickup ? [{ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true }] : [])
+        ];
         syncExpedicaoWizardFooter(footerButtons);
         if (wizardMount && !wizardMount.dataset.expeditionPickupPickerBound) {
             wizardMount.dataset.expeditionPickupPickerBound = '1';
@@ -867,19 +966,40 @@ function bindExpedicaoWizardEntitySearch() {
     syncPickupLayout();
 }
 
+function notifyExpeditionWizardMergedIntoExistingStop(stop) {
+    if (!stop?.items?.length) return;
+    const stops = expedicaoWizardState?.stops || [];
+    const idx = stops.findIndex(s => s.localId === stop.localId);
+    const paradaLabel = idx >= 0 ? `parada ${idx + 1}` : 'parada existente';
+    const addrLine = typeof formatExpeditionAddressOneLine === 'function'
+        ? formatExpeditionAddressOneLine(stop.addr)
+        : '';
+    const addrHint = addrLine ? `\n\n${addrLine}` : '';
+    alertAppDialog(
+        `Este endereço (mesmo CEP e número) já está na rota. O item será adicionado à ${paradaLabel}.${addrHint}`
+    );
+}
+
+/** @returns {boolean} true se o item entrou em parada já existente (não é “outro item” na parada atual). */
 function ensureWizardCurrentStopFromPendingItem(pendingItem) {
-    const pendingKey = getExpeditionAddressKey(pendingItem.addr);
+    const pendingKey = getExpeditionAddressStopMatchKey(pendingItem?.addr);
     let current = getWizardCurrentStop();
 
     if (current?.items?.length) {
-        const currentKey = getExpeditionAddressKey(current.addr);
-        if (currentKey !== pendingKey) {
+        const currentKey = getExpeditionAddressStopMatchKey(current.addr);
+        if (pendingKey && currentKey && currentKey !== pendingKey) {
             expedicaoWizardState.currentStop = null;
             current = null;
         }
     }
 
     if (!expedicaoWizardState.currentStop) {
+        const existingStop = findExpeditionWizardStopByAddressMatch(pendingItem?.addr);
+        if (existingStop) {
+            expedicaoWizardState.currentStop = existingStop;
+            return (existingStop.items?.length || 0) > 0;
+        }
+
         const localId = `stop-${Date.now()}`;
         expedicaoWizardState.currentStop = {
             localId,
@@ -887,12 +1007,14 @@ function ensureWizardCurrentStopFromPendingItem(pendingItem) {
             items: []
         };
         expedicaoWizardState.stops.push(expedicaoWizardState.currentStop);
-        return;
+        return false;
     }
 
-    if (!current.items?.length) {
+    current = getWizardCurrentStop();
+    if (current && !current.items?.length) {
         current.addr = pendingItem.addr;
     }
+    return false;
 }
 
 async function handleExpedicaoWizardAction(actionId) {
@@ -908,7 +1030,12 @@ async function handleExpedicaoWizardAction(actionId) {
     }
 
     if (actionId === 'expedition-wizard-save-route') {
-        await saveExpeditionRouteFromWizard();
+        await saveExpeditionRouteFromWizard({ keepOpen: true });
+        return;
+    }
+
+    if (actionId === 'expedition-wizard-close') {
+        closeExpedicaoRouteWizard();
         return;
     }
 
@@ -930,8 +1057,11 @@ async function handleExpedicaoWizardAction(actionId) {
                 alertAppDialog(ctx.message || 'Não foi possível incluir a coleta.');
                 return;
             }
-            ensureWizardCurrentStopFromPendingItem(ctx);
+            const mergedIntoExisting = ensureWizardCurrentStopFromPendingItem(ctx);
             const currentStop = getWizardCurrentStop();
+            if (mergedIntoExisting) {
+                notifyExpeditionWizardMergedIntoExistingStop(currentStop);
+            }
             currentStop.items.push({
                 entityType: ctx.entityType,
                 entityId: ctx.entityId,
@@ -969,9 +1099,12 @@ async function handleExpedicaoWizardAction(actionId) {
             return;
         }
 
-        ensureWizardCurrentStopFromPendingItem(pending);
+        const mergedIntoExisting = ensureWizardCurrentStopFromPendingItem(pending);
         const volumes = buildExpeditionVolumesForItem(volumeCount);
         const currentStop = getWizardCurrentStop();
+        if (mergedIntoExisting) {
+            notifyExpeditionWizardMergedIntoExistingStop(currentStop);
+        }
         currentStop.items.push({
             entityType: pending.entityType,
             entityId: pending.entityId,
@@ -1000,6 +1133,11 @@ async function handleExpedicaoWizardAction(actionId) {
             return;
         }
         expedicaoWizardState.currentStop = null;
+        const saved = await saveExpeditionRouteFromWizard({ keepOpen: true, notify: false });
+        if (!saved) {
+            expedicaoWizardState.currentStop = currentStop;
+            return;
+        }
         expedicaoWizardState.step = 'meta';
         renderExpedicaoRouteWizard();
         return;
@@ -1060,11 +1198,13 @@ window.closeExpedicaoRouteDetailModal = closeExpedicaoRouteDetailModal;
 
 function bindExpedicaoRouteWizardEvents() {
     document.getElementById('btn-expedition-route-wizard-close')?.addEventListener('click', closeExpedicaoRouteWizard);
-    document.getElementById('btn-expedition-route-wizard-cancel')?.addEventListener('click', closeExpedicaoRouteWizard);
     document.getElementById('btn-expedition-route-detail-close')?.addEventListener('click', closeExpedicaoRouteDetailModal);
     document.getElementById('btn-expedition-route-detail-close-footer')?.addEventListener('click', closeExpedicaoRouteDetailModal);
-    document.getElementById('btn-expedition-route-history-close')?.addEventListener('click', closeExpedicaoRouteHistoryModal);
-    document.getElementById('btn-expedition-route-history-close-top')?.addEventListener('click', closeExpedicaoRouteHistoryModal);
+    const closeHistory = typeof closeExpedicaoRouteHistoryModal === 'function'
+        ? closeExpedicaoRouteHistoryModal
+        : () => document.getElementById('expedition-route-history-modal')?.classList.add('hidden');
+    document.getElementById('btn-expedition-route-history-close')?.addEventListener('click', closeHistory);
+    document.getElementById('btn-expedition-route-history-close-top')?.addEventListener('click', closeHistory);
 }
 
 window.openExpedicaoRouteWizard = openExpedicaoRouteWizard;

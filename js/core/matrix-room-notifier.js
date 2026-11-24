@@ -54,6 +54,12 @@ class MatrixRoomNotifier {
             throw new Error('Sala Matrix não configurada.');
         }
 
+        if (typeof isMatrixRoomPostingBlockedForBot === 'function'
+            && isMatrixRoomPostingBlockedForBot(this.roomIdOrAlias)) {
+            console.warn('MatrixRoomNotifier: envio para esta sala está desabilitado no FGP (ex.: Móveis).');
+            return null;
+        }
+
         let { message, mentionUserIds } = this.formatMessageWithMentions(
             linesOrText,
             options.mentionTargets

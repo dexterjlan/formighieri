@@ -1455,6 +1455,12 @@ body.installer-only-nav #app-header-nav button:not(#btn-view3d):not(#btn-logout)
     display: none !important;
 }
 
+body.picker-only-expedition-nav #app-header-nav > button:not(#btn-logout),
+body.picker-only-expedition-nav #app-header-nav > details:not(#btn-expedicao),
+body.picker-only-expedition-nav #app-header-nav > .app-nav-divider {
+    display: none !important;
+}
+
 .app-mobile-topbar {
     display: none;
 }

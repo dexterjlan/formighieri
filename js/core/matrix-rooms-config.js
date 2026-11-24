@@ -21,7 +21,9 @@ const MATRIX_ROOM_DEFINITIONS = [
     {
         key: 'furniture',
         label: 'Móveis',
-        roomAlias: '#formighieri_moveis:matrix.org'
+        roomAlias: '#formighieri_moveis:matrix.org',
+        /** O bot do FGP não deve publicar nesta sala (uso legado / referência apenas). */
+        botPostingDisabled: true
     },
     {
         key: 'revisions',
@@ -53,6 +55,25 @@ function getMatrixRoomLabel(roomKey) {
     return getMatrixRoomDefinition(roomKey)?.label || '';
 }
 
+function isMatrixFurnitureRoomAlias(roomIdOrAlias) {
+    const value = String(roomIdOrAlias || '').trim().toLowerCase();
+    if (!value) return false;
+    const furnitureAlias = String(getMatrixRoomAlias('furniture') || '').trim().toLowerCase();
+    if (furnitureAlias && value === furnitureAlias) return true;
+    return value.includes('formighieri_moveis');
+}
+
+/** Bloqueia envio automático do FGP para a sala Móveis (compras/WPS usam DM). */
+function isMatrixRoomPostingBlockedForBot(roomIdOrAlias) {
+    if (isMatrixFurnitureRoomAlias(roomIdOrAlias)) return true;
+    const definition = typeof MATRIX_ROOM_DEFINITIONS !== 'undefined'
+        ? MATRIX_ROOM_DEFINITIONS.find(
+            item => String(item.roomAlias || '').trim().toLowerCase() === String(roomIdOrAlias || '').trim().toLowerCase()
+        )
+        : null;
+    return Boolean(definition?.botPostingDisabled);
+}
+
 const MATRIX_COMMERCIAL_ROOM_ALIAS = getMatrixRoomAlias('commercial');
 const MATRIX_PROJECTS_ROOM_ALIAS = getMatrixRoomAlias('projects');
 const MATRIX_DETAILING_ROOM_ALIAS = getMatrixRoomAlias('detailing');
@@ -64,6 +85,8 @@ window.MATRIX_ROOMS_BY_KEY = MATRIX_ROOMS_BY_KEY;
 window.getMatrixRoomDefinition = getMatrixRoomDefinition;
 window.getMatrixRoomAlias = getMatrixRoomAlias;
 window.getMatrixRoomLabel = getMatrixRoomLabel;
+window.isMatrixFurnitureRoomAlias = isMatrixFurnitureRoomAlias;
+window.isMatrixRoomPostingBlockedForBot = isMatrixRoomPostingBlockedForBot;
 window.MATRIX_COMMERCIAL_ROOM_ALIAS = MATRIX_COMMERCIAL_ROOM_ALIAS;
 window.MATRIX_PROJECTS_ROOM_ALIAS = MATRIX_PROJECTS_ROOM_ALIAS;
 window.MATRIX_DETAILING_ROOM_ALIAS = MATRIX_DETAILING_ROOM_ALIAS;

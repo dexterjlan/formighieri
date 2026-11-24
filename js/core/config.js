@@ -67,6 +67,7 @@ const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 function readPasswordRecoveryRedirect() {
     try {
         const url = new URL(window.location.href);
+        if (url.searchParams.get('auth') === 'recovery') return true;
         if (url.searchParams.get('type') === 'recovery') return true;
         const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
         return hashParams.get('type') === 'recovery';

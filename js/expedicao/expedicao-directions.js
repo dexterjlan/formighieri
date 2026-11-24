@@ -105,12 +105,15 @@ function parseExpeditionManualDistanceKm(raw) {
     return Math.round(value * 10) / 10;
 }
 
+const EXPEDITION_ROUTE_DURATION_STEP_MINUTES = 5;
+
 function parseExpeditionManualDurationMinutes(raw) {
     const trimmed = String(raw ?? '').trim();
     if (!trimmed) return null;
     const value = Number.parseInt(trimmed, 10);
     if (!Number.isInteger(value) || value < 0) return null;
-    return value;
+    const step = EXPEDITION_ROUTE_DURATION_STEP_MINUTES;
+    return Math.round(value / step) * step;
 }
 
 /** Monta o link, abre o Google Maps e devolve URL + resumo base (km/tempo vêm do preenchimento manual). */

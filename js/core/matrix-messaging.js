@@ -571,6 +571,12 @@ function applyMatrixNotificationTestRoomPrefix(message, delivery) {
 }
 
 async function sendMatrixMessageToProductionRoom(productionRoomIdOrAlias, message, options = {}) {
+    if (typeof isMatrixRoomPostingBlockedForBot === 'function'
+        && isMatrixRoomPostingBlockedForBot(productionRoomIdOrAlias)) {
+        console.warn('sendMatrixMessageToProductionRoom: sala bloqueada para o bot do FGP (Móveis).');
+        return null;
+    }
+
     const delivery = getMatrixNotificationDeliveryRoom(productionRoomIdOrAlias);
     const trimmed = applyMatrixNotificationTestRoomPrefix(message, delivery);
 

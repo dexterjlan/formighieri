@@ -113,11 +113,14 @@ function renderExpeditionDriverSummaryHtml(route, summary) {
         : '';
     const vehicle = escapeHtml(route?.vehicleLabel || '—');
     const driver = escapeHtml(route?.driverName || '—');
-    const routeId = route?.id ? `#${route.id}` : '';
+    const routeTitle = typeof formatExpeditionRouteDisplayName === 'function'
+        ? formatExpeditionRouteDisplayName(route)
+        : (route?.id ? `Rota ${route.id}` : '');
     const distanceLabel = typeof formatExpeditionRouteDistanceSummary === 'function'
         ? formatExpeditionRouteDistanceSummary(route?.routeSummaryJson)
         : '';
     const metaRows = [
+        `<tr><th>Rota</th><td>${escapeHtml(routeTitle || '—')}</td></tr>`,
         `<tr><th>Data / horário</th><td>${escapeHtml(routeDate || '—')}</td></tr>`,
         `<tr><th>Carro</th><td>${vehicle}</td></tr>`,
         `<tr><th>Motorista</th><td>${driver}</td></tr>`,
@@ -157,7 +160,7 @@ function renderExpeditionDriverSummaryHtml(route, summary) {
     return `
         <section class="driver-sheet" aria-label="Resumo da rota para o motorista">
             <header class="driver-header">
-                <h1>Rota de expedição ${escapeHtml(routeId)}</h1>
+                <h1>${escapeHtml(routeTitle || 'Rota de expedição')}</h1>
                 <p class="driver-subtitle">Documento de conferência — fica com o motorista</p>
             </header>
             <table class="meta-table">
@@ -246,6 +249,9 @@ function printExpeditionVolumeLabels(route, volumes, options = {}) {
     const routeDate = route?.routeDate && typeof formatDate === 'function'
         ? formatDate(route.routeDate)
         : '';
+    const routeDocTitle = typeof formatExpeditionRouteDisplayName === 'function'
+        ? formatExpeditionRouteDisplayName(route)
+        : `Rota ${route?.id || ''}`;
     const driverSheet = renderExpeditionDriverSummaryHtml(route, summary);
     const volumeCards = summary.sortedVolumes
         .map(vol => renderExpeditionVolumeLabelHtml(vol))
@@ -264,7 +270,7 @@ function printExpeditionVolumeLabels(route, volumes, options = {}) {
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8">
-    <title>Expedição — Rota ${escapeHtml(routeDate)}</title>
+    <title>Expedição — ${escapeHtml(routeDocTitle)}</title>
     <style>
         * { box-sizing: border-box; }
         body { font-family: system-ui, -apple-system, sans-serif; margin: 0; color: #0f172a; }

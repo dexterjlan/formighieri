@@ -442,24 +442,15 @@ function uniquePendenciasReviewersById(users = []) {
 async function fetchPendenciasActiveReviewers() {
     let result = await supabaseClient
         .from('appUsers')
-        .select('id, name, role, isReviewer, isProjectLeader, isActive')
+        .select('id, name, role, isReviewer, isActive')
         .eq('role', 'Projetista')
         .eq('isActive', true)
         .order('name', { ascending: true });
 
-    if (result.error?.message?.includes('isProjectLeader')) {
-        result = await supabaseClient
-            .from('appUsers')
-            .select('id, name, role, isReviewer, isActive')
-            .eq('role', 'Projetista')
-            .eq('isActive', true)
-            .order('name', { ascending: true });
-    }
-
     if (result.error?.message?.includes('isReviewer')) {
         result = await supabaseClient
             .from('appUsers')
-            .select('id, name, role, isProjectLeader, isActive')
+            .select('id, name, role, isActive')
             .eq('role', 'Projetista')
             .eq('isActive', true)
             .order('name', { ascending: true });
