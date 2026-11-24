@@ -187,11 +187,13 @@ function hasFullExpedicaoAccess(user = currentUser) {
 /**
  * Separador fábrica (isPicker) sem perfil de gestão/expedição completa:
  * só menu Expedição → Embarque e Desembarque.
+ * Comprador (isBuyer) no mesmo usuário mantém menus de compras/requisições além da expedição.
  */
 function hasPickerOnlyExpeditionAccess(user = currentUser) {
     if (!user?.id || isThirdParty(user)) return false;
     if (hasInstallerOnlyAccess(user)) return false;
     if (!isPickerProfile(user)) return false;
+    if (isBuyer(user)) return false;
     return !hasFullExpedicaoAccess(user);
 }
 
@@ -403,11 +405,11 @@ function canCreateAsAdminOrConferente() {
     return isAdmin() || isConferente();
 }
 
-/** Expedição: gestão completa de rotas ou separador (só embarque/desembarque). */
+/** Expedição: gestão completa de rotas ou separador (embarque/desembarque), inclusive comprador+separador. */
 function canAccessExpedicao(user = currentUser) {
     if (hasInstallerOnlyAccess(user)) return false;
     if (!user?.id || isThirdParty(user)) return false;
-    return hasFullExpedicaoAccess(user) || hasPickerOnlyExpeditionAccess(user);
+    return hasFullExpedicaoAccess(user) || isPickerProfile(user);
 }
 
 /** Requisições → Peça: Admin, gestor de projetos ou perfil Fábrica (incl. Marceneiro). */
