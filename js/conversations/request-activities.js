@@ -277,14 +277,14 @@ function canEditRequestActivityDescriptions(conv) {
 
     if (!conv) {
         const profile = getRequestProfileForCreate();
-        if (profile === 'Projetista') return currentUser?.role === 'Projetista';
+        if (profile === 'Projetista') return isOrderRequestProjetistaActor(null);
         if (profile === 'Consultor') return currentUser?.role === 'Consultor';
         return false;
     }
 
     const profile = conv.requestProfile || 'Projetista';
     if (profile === 'Projetista') {
-        return currentUser?.role === 'Projetista' && conv.designerId === currentUser.id;
+        return isOrderRequestProjetistaActor(conv);
     }
     return currentUser?.role === 'Consultor' && isOrderConsultorForRequest(conv);
 }

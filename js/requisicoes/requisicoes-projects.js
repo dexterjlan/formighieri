@@ -300,6 +300,7 @@ async function openRequisicoesProjectRequest(project) {
     activeOrderId = Number(requisicoesProjectsOrderId);
     await openConvModal({
         orderId: activeOrderId,
+        source: 'requisicoes-projects',
         lockOrderProjectId: Number(project.id),
         lockOrderProjectLabel: project.name || 'Projeto',
         orderLabel: order ? requisicoesProjectOrderLabel(order) : ''

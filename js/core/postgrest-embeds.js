@@ -45,6 +45,9 @@ function getPendenciasProjectSelect(options = {}) {
         'deliveryPhaseId',
         'technicalProjectForecastStartDate',
         'technicalProjectForecastEndDate',
+        'isComplementary',
+        'isReplaced',
+        'parentProjectId',
         'isAggregator',
         'aggregatorOrderProjectId'
     ];
@@ -75,6 +78,9 @@ function getPendenciasFabricaProjectSelect(options = {}) {
         'cabinetMakerId',
         'internalAssemblyStartDate',
         'internalAssemblyEndDate',
+        'isComplementary',
+        'isReplaced',
+        'parentProjectId',
         'isAggregator',
         'aggregatorOrderProjectId'
     ];

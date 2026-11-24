@@ -243,6 +243,49 @@ async function fetchEligibleOrdersForCurrentDesignerRequest() {
     return { error: null, orders };
 }
 
+function formatConvDesignerOptionLabel(user) {
+    if (!user) return '';
+    const isFactoryCoord = (user.role === 'Fábrica' || user.role === 'Marceneiro') && Boolean(user.isCoordination);
+    return isFactoryCoord ? `${user.name} (Coordenação)` : (user.name || '');
+}
+
+async function fetchConvDesignerSelectUsers() {
+    const [projetistasResult, coordinationResult] = await Promise.all([
+        supabaseClient
+            .from('appUsers')
+            .select('id, name, role, isCoordination')
+            .eq('role', 'Projetista')
+            .eq('isActive', true)
+            .order('name', { ascending: true }),
+        supabaseClient
+            .from('appUsers')
+            .select('id, name, role, isCoordination')
+            .eq('isActive', true)
+            .eq('isCoordination', true)
+    ]);
+
+    const byId = new Map();
+    (projetistasResult.data || []).forEach(user => byId.set(Number(user.id), user));
+
+    let coordinationUsers = coordinationResult.data || [];
+    if (coordinationResult.error?.message?.includes('isCoordination')) {
+        coordinationUsers = [];
+    } else {
+        coordinationUsers = coordinationUsers.filter(
+            user => user.role === 'Fábrica' || user.role === 'Marceneiro'
+        );
+    }
+    coordinationUsers.forEach(user => {
+        if (!byId.has(Number(user.id))) byId.set(Number(user.id), user);
+    });
+
+    return [...byId.values()].sort((a, b) => String(a.name || '').localeCompare(
+        String(b.name || ''),
+        'pt-BR',
+        { sensitivity: 'base' }
+    ));
+}
+
 async function loadProjetistas() {
     const select = document.getElementById("conv-designer");
     select.disabled = false;
@@ -256,23 +299,22 @@ async function loadProjetistas() {
         return;
     }
 
-    const { data: projetistas, error } = await supabaseClient
-        .from('appUsers')
-        .select('id, name')
-        .eq('role', 'Projetista')
-        .eq('isActive', true)
-        .order('name', { ascending: true });
-
+    const designers = await fetchConvDesignerSelectUsers();
     select.innerHTML = '<option value="">Selecione...</option>';
 
-    if (error || !projetistas || projetistas.length === 0) {
+    if (!designers.length) {
         select.innerHTML += '<option value="" disabled>Nenhum projetista cadastrado</option>';
         return;
     }
 
-    projetistas.forEach(p => {
-        select.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    designers.forEach(user => {
+        const label = escapeHtml(formatConvDesignerOptionLabel(user));
+        select.innerHTML += `<option value="${user.id}">${label}</option>`;
     });
+
+    if (isConvModalFactoryCoordinationProjetistaFlow()) {
+        select.value = String(currentUser.id);
+    }
 }
 
 function resetConvResponseFields() {
@@ -383,14 +425,14 @@ async function ensureDesignerInConvSelect(designerId) {
 
     const { data: user } = await supabaseClient
         .from('appUsers')
-        .select('id, name')
+        .select('id, name, role, isCoordination')
         .eq('id', designerId)
         .maybeSingle();
 
     if (user) {
         const option = document.createElement('option');
         option.value = String(user.id);
-        option.textContent = user.name;
+        option.textContent = formatConvDesignerOptionLabel(user);
         select.appendChild(option);
     }
 }
@@ -478,6 +520,9 @@ function closeConvModal() {
     editingConversationId = null;
     convModalContext = getDefaultConvModalContext();
     setConvModalSubtitle('');
+    if (typeof hideConvModalConsultantLine === 'function') {
+        hideConvModalConsultantLine();
+    }
     syncConvDesignerFieldVisibility(false);
     document.getElementById("conv-form-submit")?.classList.remove('hidden');
     toggleModal('conv-modal', false);

@@ -1070,12 +1070,28 @@ async function fetchPendenciasImplantacoesAbertas(options = {}) {
     }
 
     const projectIds = [...new Set(implantacoes.map(item => item.orderProjectId).filter(Boolean))];
-    let projectResult = await supabaseClient
-        .from('OrderProject')
-        .select(PENDENCIAS_PROJECT_SELECT)
-        .in('id', projectIds);
+    const buildProjectQuery = (select) => {
+        let query = supabaseClient
+            .from('OrderProject')
+            .select(select)
+            .in('id', projectIds);
+        if (typeof applyPendenciasExcludedOrderProjectQueryFilters === 'function') {
+            query = applyPendenciasExcludedOrderProjectQueryFilters(query);
+        } else {
+            query = query.eq('isComplementary', false).eq('isReplaced', false);
+        }
+        return query;
+    };
+
+    let projectResult = await buildProjectQuery(PENDENCIAS_PROJECT_SELECT);
 
     if (projectResult.error?.message?.includes('projectStatus') || projectResult.error?.message?.includes('designer')) {
+        projectResult = await buildProjectQuery(PENDENCIAS_PROJECT_SELECT_FALLBACK);
+    }
+
+    if (projectResult.error?.message?.includes('isComplementary') || projectResult.error?.message?.includes('isReplaced')
+        || (typeof isPendenciasAggregatorColumnQueryError === 'function'
+            && isPendenciasAggregatorColumnQueryError(projectResult.error?.message))) {
         projectResult = await supabaseClient
             .from('OrderProject')
             .select(PENDENCIAS_PROJECT_SELECT_FALLBACK)

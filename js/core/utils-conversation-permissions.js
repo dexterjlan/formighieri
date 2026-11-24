@@ -11,6 +11,25 @@ function isDetailingRequest(conv) {
     return getRequestType(conv) === REQUEST_TYPE_DETAILING;
 }
 
+/** Fábrica + coordenação criando requisição em Requisições → Projetos: fluxo do projetista (resposta do consultor). */
+function isConvModalFactoryCoordinationProjetistaFlow() {
+    if (typeof isFactoryCoordination !== 'function' || !isFactoryCoordination()) return false;
+    if (typeof isConvModalDetailingContext === 'function' && isConvModalDetailingContext()) return false;
+    return convModalContext?.source === 'requisicoes-projects';
+}
+
+/** Quem age como autor da requisição no lado Projetista (criação ou edição). */
+function isOrderRequestProjetistaActor(conv) {
+    if (currentUser?.role === 'Projetista') {
+        return !conv || Number(conv.designerId) === Number(currentUser.id);
+    }
+    if (isFactoryCoordination()) {
+        if (!conv) return isConvModalFactoryCoordinationProjetistaFlow();
+        return Number(conv.designerId) === Number(currentUser?.id);
+    }
+    return false;
+}
+
 function isProjectRequest(conv) {
     return !isDetailingRequest(conv);
 }
@@ -210,6 +229,59 @@ function updateConvRequestLabel(profile) {
     }
 }
 
+function hideConvModalConsultantLine() {
+    document.getElementById('conv-profile-consultant-line')?.classList.add('hidden');
+}
+
+async function updateConvModalConsultantLine(options = {}) {
+    const line = document.getElementById('conv-profile-consultant-line');
+    const label = document.getElementById('conv-profile-consultant-label');
+    if (!line || !label) return;
+
+    const conv = options.conv || null;
+    let profile = options.profile || conv?.requestProfile || '';
+    if (!profile && !options.isEdit && typeof getRequestProfileForCreate === 'function') {
+        profile = getRequestProfileForCreate();
+    }
+    if (currentUser?.role === 'Admin' && !options.isEdit) {
+        profile = document.getElementById('conv-profile')?.value?.trim() || profile;
+    }
+
+    if (profile !== 'Projetista') {
+        hideConvModalConsultantLine();
+        return;
+    }
+
+    const orderId = conv?.orderId
+        || (typeof activeOrderId !== 'undefined' ? activeOrderId : null);
+    if (!orderId) {
+        hideConvModalConsultantLine();
+        return;
+    }
+
+    let consultantName = typeof getOrderConsultantName === 'function'
+        ? (getOrderConsultantName(orderId) || '')
+        : '';
+    if (!consultantName && typeof ordersCache !== 'undefined') {
+        const cached = ordersCache.find(item => Number(item.id) === Number(orderId));
+        consultantName = getOrderConsultantNameFromRecord(cached) || '';
+    }
+    if (!consultantName) {
+        const relationsSelect = typeof SALES_ORDER_RELATIONS_SELECT !== 'undefined'
+            ? SALES_ORDER_RELATIONS_SELECT
+            : 'consultantUserId';
+        const { data } = await supabaseClient
+            .from('salesOrders')
+            .select(`consultantUserId, ${relationsSelect}`)
+            .eq('id', orderId)
+            .maybeSingle();
+        consultantName = getOrderConsultantNameFromRecord(data) || '—';
+    }
+
+    label.textContent = consultantName || '—';
+    line.classList.remove('hidden');
+}
+
 function setupConvProfileFields(isEdit, conv) {
     const adminWrap = document.getElementById('conv-profile-wrap');
     const profileSelect = document.getElementById('conv-profile');
@@ -228,18 +300,23 @@ function setupConvProfileFields(isEdit, conv) {
             readOnlyLabel.textContent = formatRequestProfile(conv?.requestProfile);
         }
         updateConvRequestLabel(conv?.requestProfile);
+        void updateConvModalConsultantLine({ isEdit: true, conv });
         return;
     }
 
-    const forceProjetista = typeof isConvModalDetailingContext === 'function'
-        && isConvModalDetailingContext();
+    hideConvModalConsultantLine();
+
+    const forceProjetista = (typeof isConvModalDetailingContext === 'function' && isConvModalDetailingContext())
+        || isConvModalFactoryCoordinationProjetistaFlow();
 
     if (forceProjetista) {
-        if (canSeeProfile) {
+        const showReadonly = canSeeProfile || isConvModalFactoryCoordinationProjetistaFlow();
+        if (showReadonly) {
             readOnlyWrap.classList.remove('hidden');
             readOnlyLabel.textContent = formatRequestProfile('Projetista');
         }
         updateConvRequestLabel('Projetista');
+        void updateConvModalConsultantLine({ profile: 'Projetista' });
         return;
     }
 
@@ -250,6 +327,7 @@ function setupConvProfileFields(isEdit, conv) {
         updateConvRequestLabel('');
         profileSelect.onchange = () => {
             updateConvRequestLabel(profileSelect.value);
+            void updateConvModalConsultantLine({ profile: profileSelect.value });
             if (typeof applyConvDesignerFromSelectedProject === 'function') {
                 applyConvDesignerFromSelectedProject();
             }
@@ -262,6 +340,9 @@ function setupConvProfileFields(isEdit, conv) {
 
 function getRequestProfileForCreate() {
     if (typeof isConvModalDetailingContext === 'function' && isConvModalDetailingContext()) {
+        return 'Projetista';
+    }
+    if (isConvModalFactoryCoordinationProjetistaFlow()) {
         return 'Projetista';
     }
     if (currentUser.role === 'Admin') {
