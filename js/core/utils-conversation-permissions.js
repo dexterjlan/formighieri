@@ -20,12 +20,15 @@ function isConvModalFactoryCoordinationProjetistaFlow() {
 
 /** Quem age como autor da requisição no lado Projetista (criação ou edição). */
 function isOrderRequestProjetistaActor(conv) {
+    if (typeof isGestorProjetos === 'function' && isGestorProjetos()) {
+        if (!conv) {
+            if (currentUser?.role === 'Projetista') return true;
+            return isFactoryCoordination() && isConvModalFactoryCoordinationProjetistaFlow();
+        }
+        return true;
+    }
     if (currentUser?.role === 'Projetista') {
         return !conv || Number(conv.designerId) === Number(currentUser.id);
-    }
-    if (isFactoryCoordination()) {
-        if (!conv) return isConvModalFactoryCoordinationProjetistaFlow();
-        return Number(conv.designerId) === Number(currentUser?.id);
     }
     return false;
 }

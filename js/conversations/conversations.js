@@ -359,12 +359,42 @@ function setupConvResponseFields(conv) {
     }
 }
 
-async function loadConvOrderProjects(selectedId) {
+function resolveConvOrderProjectsOrderId(orderId) {
+    const fromArg = Number(orderId);
+    if (Number.isFinite(fromArg) && fromArg > 0) return fromArg;
+    const fromActive = Number(activeOrderId);
+    if (Number.isFinite(fromActive) && fromActive > 0) return fromActive;
+    return null;
+}
+
+function ensureConvOrderProjectOptionInSelect(conv) {
+    const select = document.getElementById('conv-order-project');
+    if (!select || !conv?.orderProjectId) return;
+
+    const projectId = Number(conv.orderProjectId);
+    const value = String(projectId);
+    if ([...select.options].some(option => option.value === value)) {
+        select.value = value;
+        return;
+    }
+
+    const project = conv.orderProject || getConvOrderProjectById(projectId);
+    const name = String(project?.name || convModalContext.lockOrderProjectLabel || '').trim() || 'Projeto';
+    const env = project?.environmentType?.name ? ` (${project.environmentType.name})` : '';
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = `${name}${env}`;
+    select.appendChild(option);
+    select.value = value;
+}
+
+async function loadConvOrderProjects(selectedId, orderId = null) {
     const select = document.getElementById('conv-order-project');
     if (!select) return;
 
-    const projects = activeOrderId
-        ? await fetchOrderProjectsForOrder(activeOrderId)
+    const resolvedOrderId = resolveConvOrderProjectsOrderId(orderId);
+    const projects = resolvedOrderId
+        ? await fetchOrderProjectsForOrder(resolvedOrderId)
         : [];
 
     const filteredProjects = filterProjectsForConvPicker(projects, selectedId);
@@ -528,25 +558,33 @@ function closeConvModal() {
     toggleModal('conv-modal', false);
 }
 
+function canUserEditOrderRequestByProfile(conv) {
+    if (!conv) return false;
+    const requestProfile = conv.requestProfile || 'Projetista';
+
+    if (requestProfile === 'Projetista') {
+        return typeof isOrderRequestProjetistaActor === 'function'
+            && isOrderRequestProjetistaActor(conv);
+    }
+
+    if (requestProfile === 'Consultor') {
+        return currentUser?.role === 'Consultor' && isOrderConsultorForRequest(conv);
+    }
+
+    return false;
+}
+
 function canEditConversation(conv) {
     if (isRequestClosed(conv)) return false;
     if (currentUser.role === 'Admin') return true;
 
-    const requestProfile = conv.requestProfile || 'Projetista';
+    if (!canUserEditOrderRequestByProfile(conv)) return false;
 
-    if (currentUser.role === 'Projetista') {
-        if (Number(conv.designerId) !== Number(currentUser.id)) return false;
-        if (requestProfile === 'Projetista') return true;
-        return isRequestWaitingProjetista(conv);
-    }
+    const hasCompleted = typeof requestHasAnyCompletedActivity === 'function'
+        && requestHasAnyCompletedActivity(conv);
+    if (!hasCompleted) return true;
 
-    if (currentUser.role === 'Consultor') {
-        if (!isOrderConsultorForRequest(conv)) return false;
-        if (requestProfile === 'Consultor') return true;
-        return isRequestWaitingConsultor(conv);
-    }
-
-    return false;
+    return isConvRespondOnlyMode(conv);
 }
 
 function canRespondAsConsultor(conv) {
@@ -572,6 +610,10 @@ function isProjetistaRespondingToConsultorRequest(conv) {
 }
 
 function isConvRespondOnlyMode(conv) {
+    if (!conv) return false;
+    const hasCompleted = typeof requestHasAnyCompletedActivity === 'function'
+        && requestHasAnyCompletedActivity(conv);
+    if (!hasCompleted) return false;
     return isConsultorRespondingToProjetistaRequest(conv)
         || isProjetistaRespondingToConsultorRequest(conv);
 }
@@ -595,8 +637,10 @@ function syncConvDesignerFieldVisibility(isCreate) {
 
 function setupConvModalFieldLocks(conv) {
     const isEdit = Boolean(conv);
-    const respondOnly = isConvRespondOnlyMode(conv);
-    const lockRequestField = respondOnly || isRequestFromConference(conv);
+    const respondOnly = currentUser?.role === 'Admin'
+        ? false
+        : isConvRespondOnlyMode(conv);
+    const lockRequestField = respondOnly || (isRequestFromConference(conv) && currentUser?.role !== 'Admin');
     const lockDetailingFields = !isEdit && isConvModalDetailingContext();
 
     const hasProject = Boolean(conv?.orderProjectId);
@@ -625,12 +669,18 @@ function setupConvModalFieldLocks(conv) {
 }
 
 async function editConversation(id) {
-    const conv = conversationsCache.find(c => Number(c.id) === Number(id));
-    if (!conv || !canEditConversation(conv)) return;
+    let conv = conversationsCache.find(c => Number(c.id) === Number(id));
+    if (!conv) return;
+    if (typeof attachRequestActivitiesToConv === 'function') {
+        conv = await attachRequestActivitiesToConv(conv);
+    }
+    if (!canEditConversation(conv)) return;
 
     applyConvModalContextFromRequest(conv);
     editingConversationId = id;
-    const respondOnly = isConvRespondOnlyMode(conv);
+    const respondOnly = currentUser?.role === 'Admin'
+        ? false
+        : isConvRespondOnlyMode(conv);
     document.getElementById("conv-modal-title").textContent = getConvModalTitle(
         conv,
         respondOnly ? 'respond' : 'edit'
@@ -644,10 +694,11 @@ async function editConversation(id) {
     setupConvResponseFields(conv);
     await Promise.all([
         loadProjetistas(),
-        loadConvOrderProjects(conv.orderProjectId),
+        loadConvOrderProjects(conv.orderProjectId, conv.orderId),
         loadRequestActivitiesForModal(id),
         loadOrderRequestAttachmentsForModal(id)
     ]);
+    ensureConvOrderProjectOptionInSelect(conv);
     document.getElementById("conv-designer").value = String(conv.designerId);
     document.getElementById("conv-request").value = conv.designerRequest;
     updateRequestActivityModalControls(conv);
@@ -674,10 +725,11 @@ async function viewConversationDetails(id) {
     setupConvResponseFields(conv);
     await Promise.all([
         loadProjetistas(),
-        loadConvOrderProjects(conv.orderProjectId),
+        loadConvOrderProjects(conv.orderProjectId, conv.orderId),
         loadRequestActivitiesForModal(id),
         loadOrderRequestAttachmentsForModal(id)
     ]);
+    ensureConvOrderProjectOptionInSelect(conv);
     document.getElementById("conv-designer").value = String(conv.designerId || '');
     document.getElementById("conv-request").value = conv.designerRequest || '';
     updateRequestActivityModalControls(conv);
@@ -1242,8 +1294,12 @@ function bindConversationEvents() {
         const existing = editingConversationId
             ? conversationsCache.find(c => Number(c.id) === Number(editingConversationId))
             : null;
-        const respondOnly = existing && isConvRespondOnlyMode(existing);
-        const lockDesignerRequest = Boolean(existing && (respondOnly || isRequestFromConference(existing)));
+        const respondOnly = existing
+            && currentUser?.role !== 'Admin'
+            && isConvRespondOnlyMode(existing);
+        const lockDesignerRequest = Boolean(existing && (
+            respondOnly || (isRequestFromConference(existing) && currentUser?.role !== 'Admin')
+        ));
 
         if (!orderProjectId) {
             alertAppDialog('Selecione o projeto da requisição.');

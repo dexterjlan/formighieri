@@ -38,7 +38,7 @@ const PART_REQUEST_SELECT = `
     factoryEmployeeId, montadorId, deliveryDueDate, orderProjectId,
     clientId, orderId, createdAt, updatedAt, createdById,
     client:Client(id, name),
-    order:salesOrders(id, orderCode),
+    order:salesOrders(id, orderCode, clientId, client:Client(id, name)),
     orderProject:OrderProject(id, name, projectCode, cabinetMakerId, cabinetMaker:CabinetMaker(id, name)),
     factoryEmployee:FactoryEmployee(id, name, factoryRole:FactoryRole(id, name)),
     montador:Installer(id, name),
@@ -50,7 +50,7 @@ const PART_REQUEST_SELECT_FALLBACK = `
     factoryEmployeeId, cabinetMakerId, montadorId, deliveryDueDate,
     clientId, orderId, createdAt, updatedAt, createdById,
     client:Client(id, name),
-    order:salesOrders(id, orderCode),
+    order:salesOrders(id, orderCode, clientId, client:Client(id, name)),
     cabinetMaker:CabinetMaker(id, name)
 `;
 
@@ -488,6 +488,7 @@ function syncPartRequestModalChrome(record = partRequestEditingRecord) {
     syncPartRequestExecutorField(record);
     syncPartRequestMontadorField(record);
     syncPartRequestDeliveryDueField(record);
+    syncPartRequestPrintButton(record);
 }
 
 async function fetchPartRequestStatusHistory(partRequestId) {
@@ -535,6 +536,20 @@ function resolvePartRequestPrintId(record = null) {
     const raw = record?.id ?? partRequestEditingId ?? partRequestEditingRecord?.id;
     const id = Number(raw);
     return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function canPrintPartRequestFromModal(record = partRequestEditingRecord) {
+    return Boolean(resolvePartRequestPrintId(record));
+}
+
+function syncPartRequestPrintButton(record = partRequestEditingRecord) {
+    const btn = document.getElementById('btn-part-request-print');
+    if (!btn) return;
+    const canPrint = canPrintPartRequestFromModal(record);
+    btn.disabled = !canPrint;
+    btn.classList.toggle('opacity-50', !canPrint);
+    btn.classList.toggle('cursor-not-allowed', !canPrint);
+    btn.title = canPrint ? '' : 'Salve a solicitação antes de imprimir.';
 }
 
 function buildPartRequestStatusHistorySubtitle(record = partRequestEditingRecord) {
@@ -785,6 +800,15 @@ function bumpPartRequestModalLayout() {
     window.dispatchEvent(new Event('resize'));
 }
 
+function getPartRequestClientDisplayName(record) {
+    const direct = String(record?.client?.name || '').trim();
+    if (direct) return direct;
+    const fromOrder = typeof getOrderClientName === 'function'
+        ? String(getOrderClientName(record?.order) || '').trim()
+        : '';
+    return fromOrder || '—';
+}
+
 function bindPartRequestModalLayoutWatch() {
     if (partRequestModalLayoutBound) return;
     partRequestModalLayoutBound = true;
@@ -802,7 +826,7 @@ function mapPartRequestInteractiveRow(record) {
         thicknessLabel: record?.thicknessMm != null ? `${record.thicknessMm} mm` : '—',
         material: String(record?.material || '').trim() || '—',
         orderCode: record?.order?.orderCode || '—',
-        clientName: record?.client?.name || '—',
+        clientName: getPartRequestClientDisplayName(record),
         executorName: getPartRequestExecutorDisplayName(record),
         montadorName: record?.montador?.name || '—',
         deliveryDueLabel: formatPartRequestDeliveryDueLabel(record?.deliveryDueDate),
@@ -1151,6 +1175,7 @@ function resetPartRequestForm() {
     document.getElementById('btn-part-request-status-history')?.classList.add('hidden');
     clearPartRequestOrderProjectUi();
     syncPartRequestFormReadOnly(false);
+    syncPartRequestPrintButton(null);
 }
 
 function syncPartRequestFormReadOnly(readOnly) {
@@ -1173,7 +1198,8 @@ function syncPartRequestFormReadOnly(readOnly) {
         const el = document.getElementById(id);
         if (!el) return;
         if (el.tagName === 'BUTTON') {
-            el.disabled = readOnly && id !== 'btn-part-request-print';
+            if (id === 'btn-part-request-print') return;
+            el.disabled = readOnly;
         } else {
             el.readOnly = readOnly;
             el.disabled = readOnly;
@@ -1217,6 +1243,7 @@ function syncPartRequestFormReadOnly(readOnly) {
         projectSelect.disabled = readOnly || !clientOrderEditable;
     }
     syncPartRequestModalChrome(partRequestEditingRecord);
+    syncPartRequestPrintButton(partRequestEditingRecord);
 }
 
 function resolvePartRequestOrderIdFromForm() {
@@ -1241,8 +1268,20 @@ async function collectPartRequestFormMeta() {
     const description = document.getElementById('part-request-description')?.value.trim() || '';
     const thicknessRaw = document.getElementById('part-request-thickness-mm')?.value.trim() || '';
     const material = document.getElementById('part-request-material')?.value.trim() || '';
-    const clientId = resolvePartRequestClientIdFromForm();
+    let clientId = resolvePartRequestClientIdFromForm();
     const orderId = resolvePartRequestOrderIdFromForm();
+    if (!clientId && orderId) {
+        const selected = partRequestOrderCombobox?.getSelectedOrder?.();
+        if (selected && Number(selected.id) === Number(orderId)) {
+            const fromOrder = Number(selected.clientId) || Number(selected.client?.id);
+            if (Number.isFinite(fromOrder) && fromOrder > 0) clientId = fromOrder;
+        }
+        if (!clientId && partRequestEditingRecord?.order) {
+            const fromEmbed = Number(partRequestEditingRecord.order.clientId)
+                || Number(partRequestEditingRecord.order.client?.id);
+            if (Number.isFinite(fromEmbed) && fromEmbed > 0) clientId = fromEmbed;
+        }
+    }
     const orderProjectRaw = document.getElementById('part-request-order-project-id')?.value || '';
     const orderProjectId = orderProjectRaw ? Number(orderProjectRaw) : null;
     const factoryEmployeeRaw = document.getElementById('part-request-executor-id')?.value || '';
@@ -1423,16 +1462,24 @@ async function openPartRequestForm(record = null) {
         syncPartRequestExecutorField(record);
         syncPartRequestMontadorField(record);
         syncPartRequestDeliveryDueField(record);
-        if (record.clientId) {
-            setPartRequestClient({ id: record.clientId, name: record.client?.name || '' });
+        const clientIdForForm = record.clientId
+            || record.order?.clientId
+            || record.order?.client?.id
+            || null;
+        const clientNameForForm = getPartRequestClientDisplayName(record);
+        if (clientIdForForm || clientNameForForm !== '—') {
+            setPartRequestClient({
+                id: clientIdForForm,
+                name: record.client?.name || record.order?.client?.name || clientNameForForm
+            });
         }
         if (record.orderId) {
             await ensurePartRequestOrderInComboboxCache(record.orderId);
             await applyPartRequestOrder({
                 id: record.orderId,
                 orderCode: record.order?.orderCode,
-                clientId: record.clientId,
-                client: record.client
+                clientId: clientIdForForm,
+                client: record.client || record.order?.client
             }, record.orderProjectId || record.orderProject?.id);
             initPartRequestOrderCombobox(record.orderId, record.order?.orderCode || '');
         } else {
@@ -1546,7 +1593,7 @@ function buildPartRequestPrintMeta(record = null) {
             ? getPartRequestStatusLabel(record.status)
             : getPartRequestStatusLabel(partRequestEditingRecord?.status || PART_REQUEST_STATUS_OPEN),
         clientName: fromRecord
-            ? (record.client?.name || '')
+            ? getPartRequestClientDisplayName(record)
             : (document.getElementById('part-request-client-name')?.value.trim() || ''),
         orderCode: fromRecord
             ? (record.order?.orderCode || '')
@@ -1620,6 +1667,10 @@ async function printPartRequestFromRecord(record) {
 }
 
 async function printPartRequestFromForm() {
+    if (!canPrintPartRequestFromModal()) {
+        alertAppDialog('Salve a solicitação antes de imprimir.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
     const printRecord = partRequestEditingRecord
         || (partRequestEditingId ? { id: partRequestEditingId } : null);
     const meta = buildPartRequestPrintMeta(printRecord);

@@ -8,6 +8,33 @@ function allRequestActivitiesCompleted(activities) {
     return activities.every(a => a.completed);
 }
 
+function requestHasAnyCompletedActivity(conv) {
+    if (!conv) return false;
+
+    if (Array.isArray(conv.requestActivities)) {
+        return conv.requestActivities.some(activity => Boolean(activity?.completed));
+    }
+
+    if (editingConversationId && Number(conv.id) === Number(editingConversationId)) {
+        return collectRequestActivitiesFromDom().some(activity => Boolean(activity?.completed));
+    }
+
+    return false;
+}
+
+async function attachRequestActivitiesToConv(conv) {
+    if (!conv?.id) return conv;
+    if (Array.isArray(conv.requestActivities)) return conv;
+    const byRequestId = await fetchRequestActivitiesByRequestIds([Number(conv.id)]);
+    const activities = byRequestId[Number(conv.id)] || [];
+    const enriched = { ...conv, requestActivities: activities };
+    upsertConversationIntoCache(enriched);
+    return enriched;
+}
+
+window.requestHasAnyCompletedActivity = requestHasAnyCompletedActivity;
+window.attachRequestActivitiesToConv = attachRequestActivitiesToConv;
+
 function updateRequestReplyControls(requestId) {
     const activities = collectRequestActivitiesFromCard(requestId);
     const hasActivities = activities.length > 0;
@@ -270,10 +297,10 @@ function validateRequestActivitiesBeforeReply(activities) {
 }
 
 function canEditRequestActivityDescriptions(conv) {
+    if (currentUser?.role === 'Admin') return !conv || !isRequestClosed(conv);
     if (isRequestFromConference(conv)) return false;
     if (conv && isRequestClosed(conv)) return false;
     if (isConvRespondOnlyMode(conv)) return false;
-    if (currentUser?.role === 'Admin') return true;
 
     if (!conv) {
         const profile = getRequestProfileForCreate();
@@ -391,8 +418,16 @@ function renderRequestActivityRow(activity, conv) {
             delete tr.dataset.completedAt;
             completedAtEl.textContent = '—';
         }
+        const conv = getCurrentEditingRequest();
+        if (conv) {
+            conv.requestActivities = collectRequestActivitiesFromDom();
+            upsertConversationIntoCache(conv);
+        }
         updateConvModalActivitiesHint();
         updateConvModalEncerrarButton();
+        if (typeof setupConvModalFieldLocks === 'function') {
+            setupConvModalFieldLocks(conv);
+        }
     });
 
     return tr;
@@ -480,11 +515,20 @@ async function loadRequestActivitiesForModal(requestId) {
 
     const conv = getCurrentEditingRequest();
     if (!activities?.length) {
+        if (conv) {
+            conv.requestActivities = [];
+            upsertConversationIntoCache(conv);
+        }
         updateRequestActivityModalControls(conv);
         return;
     }
 
-    activities.forEach(activity => addRequestActivityRow(activity, conv));
+    const loaded = activities || [];
+    if (conv) {
+        conv.requestActivities = loaded;
+        upsertConversationIntoCache(conv);
+    }
+    loaded.forEach(activity => addRequestActivityRow(activity, conv));
 }
 
 async function fetchRequestActivitiesByRequestIds(requestIds) {

@@ -14,6 +14,137 @@ const VIEW3D_DESKTOP_ROTATE_SPEED = 1;
 const VIEW3D_DESKTOP_ZOOM_SPEED = 1;
 const VIEW3D_TOUCH_ROTATE_SPEED = 0.5;
 const VIEW3D_TOUCH_ZOOM_SPEED = 0.6;
+/** Limite de nós no relatório de hierarquia (análise do GLB). */
+const VIEW3D_HIERARCHY_MAX_NODES = 1200;
+/** Profundidade máxima exibida (1 = só raiz). */
+const VIEW3D_HIERARCHY_MAX_DEPTH = 6;
+/** Nos 2 primeiros níveis (0 e 1) ainda mostra nós sem nome; a partir do 3º omite. */
+const VIEW3D_HIERARCHY_UNNAMED_ALLOWED_MAX_DEPTH = 2;
+/** Destaque por nome na hierarquia (teste / análise). */
+const VIEW3D_NAME_HIGHLIGHT_COLOR = 0xf97316;
+const VIEW3D_XRAY_BASE_OPACITY = 0.22;
+const VIEW3D_XRAY_HIGHLIGHT_OPACITY = 0.95;
+/** Trechos no name do nó: hierarquia + destaque (evitar "Gas" — casava em "Gastronomia"). */
+const VIEW3D_IGNORED_NAME_FRAGMENTS = [
+    'wps_edge',
+    'Usinagem',
+    'Interruptor',
+    'Água',
+    'Esgoto',
+    'Gás',
+    'Minifix',
+    'Cavilha'
+];
+/** Só na árvore do painel (malhas geométricas repetidas). */
+const VIEW3D_HIERARCHY_ONLY_NAME_FRAGMENTS = ['Geom3D'];
+
+function view3dNameMatchesIgnoredFragments(rawName, extraFragments = []) {
+    const name = String(rawName || '');
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    const fragments = VIEW3D_IGNORED_NAME_FRAGMENTS.concat(extraFragments);
+    return fragments.some(fragment => lower.includes(String(fragment).toLowerCase()));
+}
+
+function isView3dIgnoredObjectName(rawName) {
+    return view3dNameMatchesIgnoredFragments(rawName);
+}
+
+function isView3dIgnoredHierarchyNode(node) {
+    if (!node) return false;
+    if (view3dNameMatchesIgnoredFragments(node.name, VIEW3D_HIERARCHY_ONLY_NAME_FRAGMENTS)) {
+        return true;
+    }
+    if (node.isMesh && view3dNameMatchesIgnoredFragments(node.geometry?.name, VIEW3D_HIERARCHY_ONLY_NAME_FRAGMENTS)) {
+        return true;
+    }
+    return false;
+}
+
+/** Destaque 3D: só ignora nó pelo name (malhas Geom3D continuam pintáveis). */
+function isView3dIgnoredHighlightNode(node) {
+    if (!node) return false;
+    return isView3dIgnoredObjectName(node.name);
+}
+
+function visitView3dObjectTreeForHighlight(node, visitor) {
+    if (!node || isView3dIgnoredHighlightNode(node)) return;
+    visitor(node);
+    for (const child of node.children || []) {
+        visitView3dObjectTreeForHighlight(child, visitor);
+    }
+}
+
+function visitView3dObjectTreeForHierarchy(node, visitor) {
+    if (!node || isView3dIgnoredHierarchyNode(node)) return;
+    visitor(node);
+    for (const child of node.children || []) {
+        visitView3dObjectTreeForHierarchy(child, visitor);
+    }
+}
+
+function isView3dUnnamedHierarchyNode(node) {
+    return !String(node?.name || '').trim();
+}
+
+function shouldOmitUnnamedFromHierarchy(depth) {
+    return depth >= VIEW3D_HIERARCHY_UNNAMED_ALLOWED_MAX_DEPTH;
+}
+
+function countView3dHierarchyVisibleChildren(node, depth) {
+    let count = 0;
+    for (const child of node.children || []) {
+        if (isView3dIgnoredHierarchyNode(child)) continue;
+        const childDepth = depth + 1;
+        if (isView3dUnnamedHierarchyNode(child) && shouldOmitUnnamedFromHierarchy(childDepth)) {
+            count += countView3dHierarchyVisibleChildren(child, childDepth);
+        } else {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+function normalizeView3dObjectNameInput(raw) {
+    let name = String(raw || '').trim();
+    if (!name) return '';
+    // Aceita colar a linha inteira da hierarquia.
+    const lineMatch = name.match(/^(?:Group|Mesh|Object3D):\s*(.+?)(?:\s*\[|\s*—|$)/);
+    if (lineMatch) name = lineMatch[1].trim();
+    return name;
+}
+
+function summarizeObject3DNode(node, depth = 0) {
+    const name = String(node.name || '').trim();
+    const label = name || '(sem nome)';
+    let kind = node.type || 'Object3D';
+    if (node.isMesh) kind = 'Mesh';
+    else if (node.isGroup) kind = 'Group';
+
+    const hints = [];
+    if (node.isMesh) {
+        const geoName = String(node.geometry?.name || '').trim();
+        if (geoName) hints.push(`geo: ${geoName}`);
+        const materials = Array.isArray(node.material) ? node.material : [node.material];
+        const materialNames = materials
+            .filter(Boolean)
+            .map(material => String(material.name || '').trim())
+            .filter(Boolean);
+        if (materialNames.length) hints.push(`mat: ${materialNames.join(', ')}`);
+    }
+
+    const userKeys = node.userData && typeof node.userData === 'object'
+        ? Object.keys(node.userData).filter(key => key !== 'name')
+        : [];
+    if (userKeys.length) hints.push(`userData: ${userKeys.join(', ')}`);
+
+    return {
+        label,
+        kind,
+        hints,
+        childCount: countView3dHierarchyVisibleChildren(node, depth)
+    };
+}
 
 function isView3dTouchNavigation() {
     return window.matchMedia('(pointer: coarse)').matches;
@@ -45,6 +176,8 @@ class View3dThreeViewer {
         this.clipBounds = null;
         this.clipPlane = new THREE.Plane();
         this.clipPlanes = [this.clipPlane];
+        this.nameHighlightedMeshes = new Set();
+        this.nameHighlightColor = new THREE.Color(VIEW3D_NAME_HIGHLIGHT_COLOR);
 
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color(0x191919);
@@ -214,7 +347,156 @@ class View3dThreeViewer {
         return this.edgesEnabled;
     }
 
+    cloneMeshMaterialsForHighlight(mesh) {
+        const sourceList = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const clonedList = sourceList.filter(Boolean).map(material => material.clone());
+        mesh.userData.view3dHighlightOriginalMaterials = Array.isArray(mesh.material)
+            ? mesh.material.slice()
+            : mesh.material;
+        mesh.material = clonedList.length === 1 ? clonedList[0] : clonedList;
+        return clonedList;
+    }
+
+    restoreMeshMaterialsFromHighlight(mesh) {
+        const original = mesh.userData?.view3dHighlightOriginalMaterials;
+        if (!original) {
+            delete mesh.userData?.view3dNameHighlight;
+            return;
+        }
+        const currentList = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        const originalList = Array.isArray(original) ? original : [original];
+        currentList.forEach((material, index) => {
+            if (material && material !== originalList[index]) {
+                material.dispose?.();
+            }
+        });
+        mesh.material = Array.isArray(original) ? original : original;
+        delete mesh.userData.view3dHighlightOriginalMaterials;
+        delete mesh.userData.view3dNameHighlight;
+    }
+
+    clearNameHighlight() {
+        for (const mesh of this.nameHighlightedMeshes) {
+            this.restoreMeshMaterialsFromHighlight(mesh);
+        }
+        this.nameHighlightedMeshes.clear();
+        this.syncXrayWithHighlight();
+    }
+
+    applyHighlightMaterials(materials) {
+        materials.forEach(material => {
+            if (!material) return;
+            if (material.color) material.color.copy(this.nameHighlightColor);
+            if (material.emissive) {
+                material.emissive.copy(this.nameHighlightColor);
+                material.emissiveIntensity = Math.max(material.emissiveIntensity || 0, 0.4);
+            }
+            material.needsUpdate = true;
+        });
+    }
+
+    /**
+     * Destaca na cena o nó cujo name coincide (e todas as malhas abaixo dele).
+     * Clona materiais por malha para não pintar peças que compartilham o mesmo material do GLB.
+     * @returns {{ matchedRoots: number, meshCount: number, name: string }}
+     */
+    highlightObjectByName(rawName) {
+        const name = normalizeView3dObjectNameInput(rawName);
+        this.clearNameHighlight();
+
+        if (!name || !this.model) {
+            return { matchedRoots: 0, meshCount: 0, name };
+        }
+
+        if (isView3dIgnoredObjectName(name)) {
+            return { matchedRoots: 0, meshCount: 0, name };
+        }
+
+        const matchedRoots = [];
+        this.model.traverse(node => {
+            if (String(node.name || '').trim() === name) {
+                matchedRoots.push(node);
+            }
+        });
+
+        if (!matchedRoots.length) {
+            return { matchedRoots: 0, meshCount: 0, name };
+        }
+
+        let meshCount = 0;
+        matchedRoots.forEach(root => {
+            visitView3dObjectTreeForHighlight(root, node => {
+                if (!node.isMesh || !node.material) return;
+                meshCount += 1;
+                const materials = this.cloneMeshMaterialsForHighlight(node);
+                this.applyHighlightMaterials(materials);
+                node.userData.view3dNameHighlight = true;
+                this.nameHighlightedMeshes.add(node);
+            });
+        });
+
+        this.syncXrayWithHighlight();
+        return { matchedRoots: matchedRoots.length, meshCount, name };
+    }
+
+    /**
+     * Raio-X deixa o conjunto transparente; peças destacadas permanecem visíveis (útil para peças internas).
+     */
+    syncXrayWithHighlight() {
+        if (!this.model) return;
+
+        if (!this.xrayEnabled) {
+            this.applyMaterialStateFromSnapshot();
+            this.nameHighlightedMeshes.forEach(mesh => {
+                const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                this.applyHighlightMaterials(materials);
+                materials.forEach(material => {
+                    if (!material) return;
+                    material.transparent = false;
+                    material.opacity = 1;
+                    material.depthWrite = true;
+                    material.side = THREE.FrontSide;
+                    material.needsUpdate = true;
+                });
+                mesh.renderOrder = 0;
+            });
+            if (this.sectionCutEnabled) {
+                this.applySectionCutToMaterials();
+            }
+            return;
+        }
+
+        this.model.traverse(child => {
+            if (!child.isMesh || !child.material) return;
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            if (child.userData?.view3dNameHighlight) {
+                materials.forEach(material => {
+                    if (!material) return;
+                    this.applyHighlightMaterials([material]);
+                    material.transparent = true;
+                    material.opacity = VIEW3D_XRAY_HIGHLIGHT_OPACITY;
+                    material.depthWrite = true;
+                    material.side = THREE.DoubleSide;
+                    material.needsUpdate = true;
+                });
+                child.renderOrder = 2;
+                return;
+            }
+
+            child.renderOrder = 0;
+            materials.forEach(material => {
+                if (!material) return;
+                material.transparent = true;
+                material.opacity = VIEW3D_XRAY_BASE_OPACITY;
+                material.depthWrite = false;
+                material.side = THREE.DoubleSide;
+                material.needsUpdate = true;
+            });
+        });
+    }
+
     clearModel() {
+        this.clearNameHighlight();
         this.setSectionCutEnabled(false);
         this.clipBounds = null;
         this.removeEdgeOverlays();
@@ -366,26 +648,7 @@ class View3dThreeViewer {
 
     setXray(enabled) {
         this.xrayEnabled = Boolean(enabled);
-        if (!this.model) return;
-
-        if (this.xrayEnabled) {
-            this.model.traverse(child => {
-                if (!child.isMesh || !child.material) return;
-                const materials = Array.isArray(child.material) ? child.material : [child.material];
-                materials.forEach(material => {
-                    material.transparent = true;
-                    material.opacity = 0.22;
-                    material.depthWrite = false;
-                    material.side = THREE.DoubleSide;
-                });
-            });
-            return;
-        }
-
-        this.applyMaterialStateFromSnapshot();
-        if (this.sectionCutEnabled) {
-            this.applySectionCutToMaterials();
-        }
+        this.syncXrayWithHighlight();
     }
 
     toggleXray() {
@@ -532,6 +795,79 @@ class View3dThreeViewer {
         return this.setSectionCutInvert(!this.sectionCutInvert);
     }
 
+    /** Árvore do GLB/GLTF para análise (nomes, meshes, userData). */
+    buildModelHierarchyReport() {
+        if (!this.model) return null;
+
+        let meshCount = 0;
+        visitView3dObjectTreeForHierarchy(this.model, node => {
+            if (node.isMesh) meshCount += 1;
+        });
+
+        let nodeCount = 0;
+        let truncated = false;
+        let depthLimited = false;
+        const lines = [];
+        /** @type {{ depth: number, kind: string, label: string, highlightName: string|null, suffix: string }[]} */
+        const entries = [];
+
+        const visit = (node, depth) => {
+            if (isView3dIgnoredHierarchyNode(node)) return;
+            if (isView3dUnnamedHierarchyNode(node) && shouldOmitUnnamedFromHierarchy(depth)) {
+                for (const child of node.children || []) {
+                    if (isView3dIgnoredHierarchyNode(child)) continue;
+                    visit(child, depth);
+                }
+                return;
+            }
+            if (depth >= VIEW3D_HIERARCHY_MAX_DEPTH) return;
+            if (nodeCount >= VIEW3D_HIERARCHY_MAX_NODES) {
+                truncated = true;
+                return;
+            }
+            nodeCount += 1;
+            const { label, kind, hints, childCount } = summarizeObject3DNode(node, depth);
+            const indent = '  '.repeat(depth);
+            const hintText = hints.length ? ` — ${hints.join(' · ')}` : '';
+            const atDepthLimit = depth + 1 >= VIEW3D_HIERARCHY_MAX_DEPTH;
+            const hiddenChildren = atDepthLimit && childCount > 0;
+            if (hiddenChildren) depthLimited = true;
+            const childrenNote = childCount
+                ? (hiddenChildren
+                    ? ` [${childCount} filho${childCount === 1 ? '' : 's'}, níveis abaixo omitidos]`
+                    : ` [${childCount} filho${childCount === 1 ? '' : 's'}]`)
+                : '';
+            const suffix = `${childrenNote}${hintText}`;
+            lines.push(`${indent}${kind}: ${label}${suffix}`);
+            const objectName = String(node.name || '').trim();
+            entries.push({
+                depth,
+                kind,
+                label,
+                highlightName: objectName || null,
+                suffix
+            });
+            if (atDepthLimit) return;
+            for (const child of node.children || []) {
+                if (isView3dIgnoredHierarchyNode(child)) continue;
+                visit(child, depth + 1);
+            }
+        };
+
+        visit(this.model, 0);
+
+        return {
+            lines,
+            entries,
+            nodeCount,
+            meshCount,
+            truncated,
+            depthLimited,
+            maxDepth: VIEW3D_HIERARCHY_MAX_DEPTH,
+            text: lines.join('\n')
+        };
+    }
+
     loadFromUrl(url) {
         return new Promise((resolve, reject) => {
             this.clearModel();
@@ -570,3 +906,4 @@ class View3dThreeViewer {
 }
 
 window.View3dThreeViewer = View3dThreeViewer;
+window.isView3dIgnoredObjectName = isView3dIgnoredObjectName;

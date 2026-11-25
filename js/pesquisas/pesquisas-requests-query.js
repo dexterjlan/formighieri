@@ -118,13 +118,29 @@ async function openPesquisasRequestDetail(requestId) {
             ...data,
             projectName: data.orderProject?.name || '—'
         };
+    } else if (request && !request.orderProject) {
+        const fromProjects = pesquisasRequestsCache.find(item => Number(item.id) === id);
+        if (fromProjects?.orderProject) {
+            request = { ...request, orderProject: fromProjects.orderProject };
+        }
     }
 
     const cacheIndex = conversationsCache.findIndex(item => Number(item.id) === id);
+    const merged = {
+        ...(cacheIndex >= 0 ? conversationsCache[cacheIndex] : {}),
+        ...request,
+        order: request.order || conversationsCache[cacheIndex]?.order || pesquisasRequestsCache.find(item => Number(item.id) === id)?.order,
+        orderProject: request.orderProject || conversationsCache[cacheIndex]?.orderProject || pesquisasRequestsCache.find(item => Number(item.id) === id)?.orderProject
+    };
     if (cacheIndex >= 0) {
-        conversationsCache[cacheIndex] = { ...conversationsCache[cacheIndex], ...request };
+        conversationsCache[cacheIndex] = merged;
     } else {
-        conversationsCache = [...conversationsCache, request];
+        conversationsCache = [...conversationsCache, merged];
+    }
+    request = merged;
+
+    if (typeof attachRequestActivitiesToConv === 'function') {
+        request = await attachRequestActivitiesToConv(request);
     }
 
     if (typeof canEditConversation === 'function' && canEditConversation(request)) {

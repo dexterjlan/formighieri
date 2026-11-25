@@ -886,6 +886,10 @@ async function openConsultorRequestFromPendencias(requestId) {
         return;
     }
 
+    if (typeof attachRequestActivitiesToConv === 'function') {
+        request = await attachRequestActivitiesToConv(request);
+    }
+
     const canOpen = currentUser?.role === 'Admin'
         || canRespondAsConsultor(request)
         || canEditConversation(request);

@@ -3655,6 +3655,55 @@
                             <path d="M15 9v6"></path>
                         </svg>
                     </button>
+                    <button type="button" id="btn-view3d-toggle-hierarchy"
+                        class="view3d-viewer-toolbar-btn--icon text-xs bg-slate-800 text-slate-100 hover:bg-slate-700 px-2 py-1.5 rounded-lg font-medium border border-slate-600"
+                        title="Hierarquia do arquivo GLB (nomes e grupos)" aria-label="Hierarquia do modelo">
+                        <svg class="view3d-toolbar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M6 4h12v4H6z"></path>
+                            <path d="M4 20v-4h6v4z"></path>
+                            <path d="M14 20v-4h6v4z"></path>
+                            <path d="M12 8v4"></path>
+                            <path d="M10 12h4"></path>
+                            <path d="M7 16v-4"></path>
+                            <path d="M17 16v-4"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="view3d-hierarchy-panel"
+                    class="view3d-hierarchy-panel hidden absolute z-20 top-2 left-2 w-[min(38rem,calc(100%-3.5rem))] max-w-[min(38rem,calc(100%-3.5rem))] flex flex-col rounded-xl border border-slate-600/80 bg-slate-900/92 backdrop-blur-sm shadow-lg text-slate-100">
+                    <div class="view3d-hierarchy-panel__header flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-700/80 shrink-0">
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-0">
+                                Hierarquia do GLB
+                            </p>
+                            <p id="view3d-hierarchy-stats" class="text-[10px] text-slate-500 mt-0.5 truncate"></p>
+                        </div>
+                        <div class="flex gap-1 shrink-0">
+                            <button type="button" id="btn-view3d-hierarchy-copy"
+                                class="text-[10px] px-2 py-1 rounded-md border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-200"
+                                title="Copiar árvore para a área de transferência">Copiar</button>
+                            <button type="button" id="btn-view3d-hierarchy-close"
+                                class="text-[10px] px-2 py-1 rounded-md border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-200"
+                                title="Fechar painel" aria-label="Fechar hierarquia">×</button>
+                        </div>
+                    </div>
+                    <div class="px-3 py-2 shrink-0 border-b border-slate-800/80 flex gap-1 items-center">
+                        <input type="text" id="view3d-highlight-name-input" autocomplete="off" spellcheck="false"
+                            class="flex-1 min-w-0 text-[11px] font-mono rounded-lg border border-slate-600 bg-slate-950 text-slate-100 px-2 py-1.5 placeholder:text-slate-600"
+                            placeholder="Nome do objeto">
+                        <button type="button" id="btn-view3d-highlight-apply"
+                            class="text-[10px] px-2.5 py-1.5 rounded-md border border-orange-500 bg-orange-600 hover:bg-orange-500 text-white font-medium shrink-0">
+                            OK
+                        </button>
+                        <button type="button" id="btn-view3d-highlight-clear"
+                            class="text-[10px] px-2 py-1.5 rounded-md border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-200 shrink-0">
+                            Limpar
+                        </button>
+                    </div>
+                    <p id="view3d-highlight-feedback" class="text-[10px] text-slate-500 px-3 pb-1 min-h-[1.1rem] shrink-0"></p>
+                    <div id="view3d-hierarchy-tree"
+                        class="view3d-hierarchy-tree flex-1 min-h-0 px-2 py-2 overflow-auto text-[10px] leading-relaxed text-slate-200 font-mono"></div>
                 </div>
                 <div id="view3d-section-cut-panel"
                     class="view3d-section-cut-panel hidden absolute z-20 left-2 bottom-2 max-w-[min(16rem,calc(100%-5.5rem))] p-3 rounded-xl border border-slate-600/80 bg-slate-900/90 backdrop-blur-sm shadow-lg text-slate-100">

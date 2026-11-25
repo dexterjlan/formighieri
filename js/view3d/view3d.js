@@ -812,6 +812,9 @@ async function openView3dViewerModal(file, title = 'Modelo 3D') {
         scheduleView3dViewerResize();
         await view3dThreeViewer.loadFromUrl(modelSrc);
         scheduleView3dViewerResize();
+        if (!document.getElementById('view3d-hierarchy-panel')?.classList.contains('hidden')) {
+            renderView3dHierarchyPanel();
+        }
 
         setView3dNavigationToolbar('orbit');
         toggleView3dToolbarActive(document.getElementById('btn-view3d-toggle-edges'), view3dThreeViewer?.edgesEnabled);
@@ -841,10 +844,11 @@ async function openView3dViewerModal(file, title = 'Modelo 3D') {
 function closeView3dViewerModal() {
     disposeView3dThreeSession();
     setView3dThreeOverlay(false);
-    ['btn-view3d-toggle-xray', 'btn-view3d-toggle-edges', 'btn-view3d-toggle-section-cut'].forEach(id => {
+    ['btn-view3d-toggle-xray', 'btn-view3d-toggle-edges', 'btn-view3d-toggle-section-cut', 'btn-view3d-toggle-hierarchy'].forEach(id => {
         toggleView3dToolbarActive(document.getElementById(id), false);
     });
     resetView3dSectionCutPanel();
+    resetView3dHierarchyPanel();
     setView3dNavigationToolbar('orbit');
     setView3dMobileBodyScrollLock(false);
     toggleModal('view3d-viewer-modal', false);
@@ -1134,6 +1138,166 @@ function bindView3dEvents() {
     document.getElementById('view3d-section-cut-slider')?.addEventListener('input', event => {
         view3dThreeViewer?.setSectionCutPosition(Number(event.target.value) / 100);
     });
+    document.getElementById('btn-view3d-toggle-hierarchy')?.addEventListener('click', event => {
+        const panel = document.getElementById('view3d-hierarchy-panel');
+        if (!panel || !view3dThreeViewer?.model) return;
+        const willShow = panel.classList.contains('hidden');
+        panel.classList.toggle('hidden', !willShow);
+        toggleView3dToolbarActive(event.currentTarget, willShow);
+        if (willShow) {
+            renderView3dHierarchyPanel();
+        }
+    });
+    document.getElementById('btn-view3d-hierarchy-close')?.addEventListener('click', () => {
+        resetView3dHierarchyPanel();
+    });
+    document.getElementById('btn-view3d-highlight-apply')?.addEventListener('click', () => {
+        applyView3dNameHighlight();
+    });
+    document.getElementById('view3d-hierarchy-tree')?.addEventListener('click', event => {
+        const link = event.target.closest('.view3d-hierarchy-name-link');
+        if (!link) return;
+        const highlightName = link.dataset.view3dHighlightName;
+        if (!highlightName) return;
+        const inputEl = document.getElementById('view3d-highlight-name-input');
+        if (inputEl) inputEl.value = highlightName;
+        applyView3dNameHighlight(highlightName);
+    });
+    document.getElementById('view3d-highlight-name-input')?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            applyView3dNameHighlight();
+        }
+    });
+    document.getElementById('btn-view3d-highlight-clear')?.addEventListener('click', () => {
+        view3dThreeViewer?.clearNameHighlight?.();
+        const feedbackEl = document.getElementById('view3d-highlight-feedback');
+        if (feedbackEl) feedbackEl.textContent = 'Destaque removido.';
+        const inputEl = document.getElementById('view3d-highlight-name-input');
+        if (inputEl) inputEl.value = '';
+    });
+    document.getElementById('btn-view3d-hierarchy-copy')?.addEventListener('click', async () => {
+        const report = view3dThreeViewer?.buildModelHierarchyReport?.();
+        const text = report?.text || document.getElementById('view3d-hierarchy-tree')?.textContent || '';
+        if (!text.trim()) {
+            alertAppDialog('Não há hierarquia para copiar.', { variant: 'warning', title: 'Hierarquia' });
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(text);
+            alertAppDialog('Hierarquia copiada.', { variant: 'success', title: 'Hierarquia' });
+        } catch (error) {
+            console.warn('view3d hierarchy copy:', error);
+            alertAppDialog('Não foi possível copiar. Selecione o texto do painel manualmente.', {
+                variant: 'warning',
+                title: 'Hierarquia'
+            });
+        }
+    });
+}
+
+function renderView3dHierarchyPanel() {
+    const treeEl = document.getElementById('view3d-hierarchy-tree');
+    const statsEl = document.getElementById('view3d-hierarchy-stats');
+    const report = view3dThreeViewer?.buildModelHierarchyReport?.();
+    if (!treeEl) return;
+
+    if (!report) {
+        if (statsEl) statsEl.textContent = '';
+        treeEl.innerHTML = '';
+        treeEl.textContent = 'Nenhum modelo carregado.';
+        return;
+    }
+
+    const activeName = document.getElementById('view3d-highlight-name-input')?.value?.trim() || '';
+    const rows = (report.entries || []).map(entry => {
+        const pad = Math.max(0, entry.depth) * 0.65;
+        const kind = escapeHtml(entry.kind);
+        const label = escapeHtml(entry.label);
+        const suffix = escapeHtml(entry.suffix || '');
+        const canHighlight = Boolean(entry.highlightName)
+            && !(typeof isView3dIgnoredObjectName === 'function' && isView3dIgnoredObjectName(entry.highlightName));
+        const nameEsc = canHighlight ? escapeHtml(entry.highlightName) : '';
+        const nameAttr = canHighlight
+            ? entry.highlightName.replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+            : '';
+        const labelHtml = canHighlight
+            ? `<button type="button" class="view3d-hierarchy-name-link${activeName === entry.highlightName ? ' is-active' : ''}" data-view3d-highlight-name="${nameAttr}">${nameEsc}</button>`
+            : `<span class="text-slate-400">${label}</span>`;
+        return `<div class="view3d-hierarchy-row" style="padding-left:${pad}rem" role="treeitem">`
+            + `<span class="text-slate-500">${kind}:</span> ${labelHtml}`
+            + (suffix ? `<span class="view3d-hierarchy-row__meta">${suffix}</span>` : '')
+            + `</div>`;
+    });
+    treeEl.innerHTML = rows.join('');
+    if (statsEl) {
+        let stats = `${report.nodeCount} nós · ${report.meshCount} mesh${report.meshCount === 1 ? '' : 'es'}`;
+        if (report.truncated) stats += ' · truncado';
+        statsEl.textContent = stats;
+    }
+}
+
+function resetView3dHierarchyPanel() {
+    const panel = document.getElementById('view3d-hierarchy-panel');
+    panel?.classList.add('hidden');
+    toggleView3dToolbarActive(document.getElementById('btn-view3d-toggle-hierarchy'), false);
+    const treeEl = document.getElementById('view3d-hierarchy-tree');
+    const statsEl = document.getElementById('view3d-hierarchy-stats');
+    if (treeEl) {
+        treeEl.innerHTML = '';
+        treeEl.textContent = '';
+    }
+    if (statsEl) statsEl.textContent = '';
+    const inputEl = document.getElementById('view3d-highlight-name-input');
+    if (inputEl) inputEl.value = '';
+    const feedbackEl = document.getElementById('view3d-highlight-feedback');
+    if (feedbackEl) feedbackEl.textContent = '';
+}
+
+function applyView3dNameHighlight(nameOverride = null) {
+    const inputEl = document.getElementById('view3d-highlight-name-input');
+    const feedbackEl = document.getElementById('view3d-highlight-feedback');
+    const raw = nameOverride != null ? String(nameOverride) : (inputEl?.value ?? '');
+    const viewer = view3dThreeViewer;
+
+    if (!viewer?.model) {
+        if (feedbackEl) feedbackEl.textContent = 'Nenhum modelo carregado.';
+        return;
+    }
+
+    const result = viewer.highlightObjectByName?.(raw) || {
+        matchedRoots: 0,
+        meshCount: 0,
+        name: String(raw).trim()
+    };
+
+    if (!result.name) {
+        if (feedbackEl) feedbackEl.textContent = 'Informe o nome do objeto.';
+        return;
+    }
+
+    if (!result.matchedRoots) {
+        if (feedbackEl) {
+            const ignored = typeof isView3dIgnoredObjectName === 'function'
+                && isView3dIgnoredObjectName(result.name);
+            feedbackEl.textContent = ignored
+                ? `Nome na lista de ignorados ou não encontrado: "${result.name}".`
+                : `Nenhum objeto com o nome "${result.name}".`;
+        }
+        return;
+    }
+
+    if (feedbackEl) {
+        let message = `${result.matchedRoots} nó(s), ${result.meshCount} mesh(es) em laranja.`;
+        if (result.matchedRoots > 1) {
+            message += ' (vários nós com o mesmo nome no arquivo.)';
+        }
+        feedbackEl.textContent = message;
+    }
+    if (inputEl && result.name) inputEl.value = result.name;
+    if (!document.getElementById('view3d-hierarchy-panel')?.classList.contains('hidden')) {
+        renderView3dHierarchyPanel();
+    }
 }
 
 function syncView3dSectionCutPanelVisibility(enabled) {

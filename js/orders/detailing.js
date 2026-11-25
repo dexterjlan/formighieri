@@ -1044,6 +1044,10 @@ async function openDetalhamentoRequest(requestId) {
         conversationsCache = [...conversationsCache.filter(item => Number(item.id) !== id), request];
     }
 
+    if (typeof attachRequestActivitiesToConv === 'function') {
+        request = await attachRequestActivitiesToConv(request);
+    }
+
     if (typeof canEditConversation === 'function' && canEditConversation(request)
         && typeof editConversation === 'function') {
         await editConversation(id);
