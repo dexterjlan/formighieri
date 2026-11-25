@@ -5,6 +5,9 @@ const FGP_APP_VERSION_POLL_MS = 5 * 60 * 1000;
 
 let fgpAppSessionPolicyWatchStarted = false;
 let fgpAppSessionForceRefreshInProgress = false;
+let fgpAppVersionUpdateNoticeQueued = false;
+let fgpAppVersionUpdateDeployedVersion = null;
+let fgpAppVersionUpdateBannerBound = false;
 
 function parseAppSessionGrant() {
     try {
@@ -72,6 +75,52 @@ async function isRunningStaleAppBundle() {
     return deployed !== bundled;
 }
 
+function bindAppVersionUpdateBannerActions() {
+    if (fgpAppVersionUpdateBannerBound) return;
+    const button = document.getElementById('btn-app-version-update-now');
+    if (!button) return;
+    fgpAppVersionUpdateBannerBound = true;
+    button.addEventListener('click', () => {
+        void forceAppSessionRefresh('version-user');
+    });
+}
+
+function tryShowAppVersionUpdateBanner() {
+    if (!fgpAppVersionUpdateNoticeQueued) return false;
+    const banner = document.getElementById('app-version-update-banner');
+    if (!banner) return false;
+
+    const bundled = typeof APP_CACHE_VERSION !== 'undefined'
+        ? normalizeAppBundleVersion(APP_CACHE_VERSION)
+        : '';
+    const deployed = fgpAppVersionUpdateDeployedVersion;
+    const versionEl = document.getElementById('app-version-update-banner-version');
+    if (versionEl) {
+        versionEl.textContent = bundled && deployed && bundled !== deployed
+            ? ` (${bundled} → ${deployed})`
+            : '';
+    }
+
+    banner.classList.remove('hidden');
+    bindAppVersionUpdateBannerActions();
+    return true;
+}
+
+async function notifyAppVersionUpdateAvailable() {
+    if (!fgpAppVersionUpdateDeployedVersion) {
+        fgpAppVersionUpdateDeployedVersion = await fetchDeployedAppVersion();
+    }
+    if (!fgpAppVersionUpdateDeployedVersion) return;
+
+    fgpAppVersionUpdateNoticeQueued = true;
+    tryShowAppVersionUpdateBanner();
+}
+
+async function checkAndNotifyStaleAppBundle() {
+    if (!(await isRunningStaleAppBundle())) return;
+    await notifyAppVersionUpdateAvailable();
+}
+
 function scrubFgpRefreshFromBrowserUrl() {
     try {
         const url = new URL(window.location.href);
@@ -115,17 +164,6 @@ async function forceAppSessionRefresh(reason = 'policy') {
         console.warn('forceAppSessionRefresh signOut:', error);
     }
 
-    if (reason === 'version' && typeof alertAppDialog === 'function') {
-        try {
-            await alertAppDialog(
-                'Há uma nova versão do FGP. Você será redirecionado para atualizar e entrar novamente.',
-                { title: 'Atualização', variant: 'success' }
-            );
-        } catch (_error) {
-            // segue com o reload mesmo se o diálogo falhar
-        }
-    }
-
     window.location.replace(buildAppSessionRefreshUrl());
 }
 
@@ -144,10 +182,7 @@ async function assertAppSessionPolicyForEnterApp(options = {}) {
         throw new Error('Sessão expirada. Faça login novamente.');
     }
 
-    if (await shouldForceStaleBundleRefresh()) {
-        await forceAppSessionRefresh('version');
-        throw new Error('Nova versão disponível. Atualizando...');
-    }
+    await checkAndNotifyStaleAppBundle();
 
     return true;
 }
@@ -170,18 +205,9 @@ async function enforceAppSessionPolicyOnBootstrap(session) {
         return false;
     }
 
-    if (await shouldForceStaleBundleRefresh()) {
-        await forceAppSessionRefresh('version');
-        return false;
-    }
+    await checkAndNotifyStaleAppBundle();
 
     return true;
-}
-
-/** Evita reload em loop: só força atualização de versão quando já existe grant válido (< 12h). */
-async function shouldForceStaleBundleRefresh() {
-    if (isAppSessionGrantExpired()) return false;
-    return isRunningStaleAppBundle();
 }
 
 async function runAppSessionPolicyPeriodicCheck() {
@@ -200,9 +226,7 @@ async function runAppSessionPolicyPeriodicCheck() {
         return;
     }
 
-    if (await shouldForceStaleBundleRefresh()) {
-        await forceAppSessionRefresh('version');
-    }
+    await checkAndNotifyStaleAppBundle();
 }
 
 function startAppSessionPolicyWatcher() {
@@ -228,5 +252,6 @@ window.enforceAppSessionPolicyOnBootstrap = enforceAppSessionPolicyOnBootstrap;
 window.assertAppSessionPolicyForEnterApp = assertAppSessionPolicyForEnterApp;
 window.startAppSessionPolicyWatcher = startAppSessionPolicyWatcher;
 window.scrubFgpRefreshFromBrowserUrl = scrubFgpRefreshFromBrowserUrl;
+window.tryShowAppVersionUpdateBanner = tryShowAppVersionUpdateBanner;
 
 scrubFgpRefreshFromBrowserUrl();

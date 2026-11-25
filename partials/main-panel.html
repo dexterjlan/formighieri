@@ -226,6 +226,25 @@
             </svg>
         </button>
         <header id="app-header" class="app-topbar">
+            <div id="app-version-update-banner"
+                class="hidden border-b border-sky-300 bg-sky-100 px-4 py-2 text-slate-900"
+                role="status" aria-live="polite">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p class="text-xs font-medium min-w-0">
+                        <span class="font-bold text-sky-900">Nova versão do FGP</span>
+                        <span class="block sm:inline sm:ml-1 font-normal text-slate-800">
+                            Há uma atualização disponível
+                            <span id="app-version-update-banner-version" class="font-mono text-[0.7rem] text-sky-800"></span>.
+                            Quando puder, atualize para carregar as mudanças — faça logout e login de novo.
+                            Você pode continuar o que estiver fazendo; nada será encerrado automaticamente.
+                        </span>
+                    </p>
+                    <button type="button" id="btn-app-version-update-now"
+                        class="text-xs bg-sky-800 text-white px-3 py-1.5 rounded-lg font-medium hover:bg-sky-900 shrink-0">
+                        Atualizar agora
+                    </button>
+                </div>
+            </div>
             <div id="user-impersonation-banner"
                 class="hidden border-t border-amber-300 bg-amber-400 px-4 py-2 text-slate-900">
                 <div class="flex flex-wrap items-center justify-between gap-2">

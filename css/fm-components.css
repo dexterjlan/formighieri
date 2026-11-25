@@ -1340,7 +1340,7 @@ body.app-subnav-collapsed .app-nav-group[open] > .app-subnav {
     transform: rotate(180deg);
 }
 
-#app-header:not(:has(#user-impersonation-banner:not(.hidden))) {
+#app-header:not(:has(#user-impersonation-banner:not(.hidden))):not(:has(#app-version-update-banner:not(.hidden))) {
     display: none;
 }
 

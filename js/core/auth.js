@@ -88,6 +88,9 @@ async function enterApp(authUserId, authUser = null, options = {}) {
         if (typeof startAppSessionPolicyWatcher === 'function') {
             startAppSessionPolicyWatcher();
         }
+        if (typeof tryShowAppVersionUpdateBanner === 'function') {
+            tryShowAppVersionUpdateBanner();
+        }
     })();
 
     try {
