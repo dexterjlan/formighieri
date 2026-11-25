@@ -384,6 +384,14 @@ function renderPartRequestListStatusButtons(record) {
     return parts.join('');
 }
 
+/** Botão de avançar status na lista (mesmo rótulo do modal). */
+function renderPartRequestListForwardStatusButton(record) {
+    if (!canActPartRequestWorkflow() || !record?.id) return '';
+    const forward = getPartRequestForwardStatus(record.status);
+    if (!forward) return '';
+    return renderPartRequestStatusTransitionButton(record, forward);
+}
+
 function renderPartRequestModalStatusActions(record = partRequestEditingRecord) {
     const host = document.getElementById('part-request-status-actions');
     if (!host) return;
@@ -468,17 +476,14 @@ function syncPartRequestModalChrome(record = partRequestEditingRecord) {
         historyBtn.classList.toggle('hidden', !record?.id);
     }
     const saveBtn = document.getElementById('btn-part-request-save');
-    const saveLinksBtn = document.getElementById('btn-part-request-save-client-order');
     const canFullEdit = canEditPartRequestMetadata(record);
     const canExecutor = canEditPartRequestExecutor(record);
     const canMontador = canEditPartRequestMontador(record);
     const canClientOrder = canEditPartRequestClientOrder(record);
     if (saveBtn) {
-        saveBtn.classList.toggle('hidden', !canFullEdit && !canExecutor && !canMontador);
-        saveBtn.textContent = canFullEdit ? 'Salvar' : 'Salvar atribuições';
-    }
-    if (saveLinksBtn) {
-        saveLinksBtn.classList.toggle('hidden', !record?.id || !canClientOrder);
+        const canSave = canFullEdit || canExecutor || canMontador || (record?.id && canClientOrder);
+        saveBtn.classList.toggle('hidden', !canSave);
+        saveBtn.textContent = 'Salvar';
     }
     syncPartRequestExecutorField(record);
     syncPartRequestMontadorField(record);
@@ -825,7 +830,8 @@ function getRequisicoesPartRequestColumns() {
         {
             key: 'id',
             label: 'ID',
-            cellClass: 'p-3 text-xs font-mono tabular-nums text-slate-600 whitespace-nowrap'
+            thClass: 'w-[3.25rem] max-w-[3.25rem]',
+            cellClass: 'p-3 text-xs font-mono tabular-nums text-slate-600 whitespace-nowrap w-[3.25rem] max-w-[3.25rem]'
         },
         { key: 'pieceName', label: 'Peça', cellClass: 'p-3 text-xs font-medium text-slate-900' },
         {
@@ -860,7 +866,10 @@ function getRequisicoesPartRequestColumns() {
             label: 'Ações',
             align: 'left',
             render: row => {
+                const record = row.record || partRequestsCache.find(item => Number(item.id) === Number(row.id));
+                const forwardStatusBtn = record ? renderPartRequestListForwardStatusButton(record) : '';
                 return `<div class="flex flex-wrap gap-1.5 items-center">
+                    ${forwardStatusBtn}
                     <button type="button" class="part-request-edit-btn text-[11px] font-medium text-indigo-700 hover:text-indigo-900" data-part-request-id="${row.id}">Abrir</button>
                     <button type="button" class="part-request-print-list-btn text-[11px] font-medium px-2 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200" data-part-request-id="${row.id}">Imprimir</button>
                 </div>`;
@@ -929,8 +938,10 @@ function renderRequisicoesPartRequestMobileCard(row) {
         ? `<p class="requisicoes-part-request-mobile__created text-[11px] text-slate-400 mt-1">${escapeHtml(row.createdLabel)}</p>`
         : '';
 
+    const forwardStatusBtn = row.record ? renderPartRequestListForwardStatusButton(row.record) : '';
     const actionsHtml = `
         <div class="requisicoes-part-request-mobile__actions">
+            ${forwardStatusBtn}
             <button type="button"
                 class="part-request-edit-btn requisicoes-part-request-mobile__btn requisicoes-part-request-mobile__btn--primary"
                 data-part-request-id="${Number(row.id)}">Abrir</button>
@@ -1151,7 +1162,6 @@ function syncPartRequestFormReadOnly(readOnly) {
         'btn-part-request-client-picker',
         'btn-part-request-client-clear',
         'part-request-order-search',
-        'btn-part-request-save-client-order',
         'btn-part-request-save',
         'btn-part-request-print',
         'part-request-executor-id',
@@ -1163,9 +1173,7 @@ function syncPartRequestFormReadOnly(readOnly) {
         const el = document.getElementById(id);
         if (!el) return;
         if (el.tagName === 'BUTTON') {
-            el.disabled = readOnly
-                && id !== 'btn-part-request-print'
-                && id !== 'btn-part-request-save-client-order';
+            el.disabled = readOnly && id !== 'btn-part-request-print';
         } else {
             el.readOnly = readOnly;
             el.disabled = readOnly;
@@ -1211,13 +1219,30 @@ function syncPartRequestFormReadOnly(readOnly) {
     syncPartRequestModalChrome(partRequestEditingRecord);
 }
 
+function resolvePartRequestOrderIdFromForm() {
+    const fromHidden = Number(document.getElementById('part-request-order-id')?.value);
+    if (Number.isFinite(fromHidden) && fromHidden > 0) return fromHidden;
+    const selected = partRequestOrderCombobox?.getSelectedOrder?.();
+    const fromCombobox = Number(selected?.id);
+    return Number.isFinite(fromCombobox) && fromCombobox > 0 ? fromCombobox : null;
+}
+
+function resolvePartRequestClientIdFromForm() {
+    const fromHidden = Number(document.getElementById('part-request-client-id')?.value);
+    if (Number.isFinite(fromHidden) && fromHidden > 0) return fromHidden;
+    const selected = partRequestOrderCombobox?.getSelectedOrder?.();
+    const fromOrder = Number(selected?.clientId) || Number(selected?.client?.id);
+    if (Number.isFinite(fromOrder) && fromOrder > 0) return fromOrder;
+    return null;
+}
+
 async function collectPartRequestFormMeta() {
     const pieceName = document.getElementById('part-request-piece-name')?.value.trim() || '';
     const description = document.getElementById('part-request-description')?.value.trim() || '';
     const thicknessRaw = document.getElementById('part-request-thickness-mm')?.value.trim() || '';
     const material = document.getElementById('part-request-material')?.value.trim() || '';
-    const clientId = Number(document.getElementById('part-request-client-id')?.value) || null;
-    const orderId = Number(document.getElementById('part-request-order-id')?.value) || null;
+    const clientId = resolvePartRequestClientIdFromForm();
+    const orderId = resolvePartRequestOrderIdFromForm();
     const orderProjectRaw = document.getElementById('part-request-order-project-id')?.value || '';
     const orderProjectId = orderProjectRaw ? Number(orderProjectRaw) : null;
     const factoryEmployeeRaw = document.getElementById('part-request-executor-id')?.value || '';
@@ -1257,10 +1282,16 @@ async function collectPartRequestFormMeta() {
     };
 
     if (partRequestEditingRecord && !canEditPartRequestMetadata(partRequestEditingRecord)) {
-        return {
+        const partial = {
             factoryEmployeeId: base.factoryEmployeeId,
             montadorId: base.montadorId
         };
+        if (canEditPartRequestClientOrder(partRequestEditingRecord)) {
+            partial.clientId = clientId;
+            partial.orderId = orderId;
+            partial.orderProjectId = base.orderProjectId;
+        }
+        return partial;
     }
 
     let drawingJson = null;
@@ -1334,11 +1365,12 @@ async function applyPartRequestOrder(order, selectedProjectId = null) {
     const previousOrderId = Number(orderIdInput?.value) || null;
     const nextOrderId = order.id ? Number(order.id) : null;
     if (orderIdInput) orderIdInput.value = nextOrderId ? String(nextOrderId) : '';
-    if (order.clientId || order.client) {
-        setPartRequestClient({
-            id: order.clientId || order.client?.id,
-            name: order.client?.name || (typeof getOrderClientName === 'function' ? getOrderClientName(order) : '')
-        });
+    const resolvedClientId = order.clientId || order.client?.id || null;
+    const resolvedClientName = order.client?.name
+        || (typeof getOrderClientName === 'function' ? getOrderClientName(order) : '')
+        || '';
+    if (resolvedClientId || resolvedClientName) {
+        setPartRequestClient({ id: resolvedClientId, name: resolvedClientName });
     }
     if (!nextOrderId) {
         clearPartRequestOrderProjectUi();
@@ -1441,55 +1473,13 @@ async function openPartRequestForm(record = null) {
     });
 }
 
-async function savePartRequestClientOrder() {
-    if (!partRequestEditingId || !canEditPartRequestClientOrder(partRequestEditingRecord)) {
-        alertAppDialog('Não é possível alterar cliente/pedido nesta requisição.');
-        return;
-    }
-
-    const clientId = Number(document.getElementById('part-request-client-id')?.value) || null;
-    const orderId = Number(document.getElementById('part-request-order-id')?.value) || null;
-    const orderProjectRaw = document.getElementById('part-request-order-project-id')?.value || '';
-    const orderProjectId = orderProjectRaw ? Number(orderProjectRaw) : null;
-
-    try {
-        setPartRequestModalLoading(true, 'Salvando cliente/pedido...');
-        const now = new Date().toISOString();
-        const userId = currentUser?.id || null;
-        const { error } = await supabaseClient
-            .from('PartRequest')
-            .update({
-                clientId: Number.isFinite(clientId) ? clientId : null,
-                orderId: Number.isFinite(orderId) ? orderId : null,
-                orderProjectId: orderId && Number.isFinite(orderProjectId) ? orderProjectId : null,
-                updatedAt: now,
-                updatedById: userId
-            })
-            .eq('id', partRequestEditingId);
-
-        if (error) throw error;
-
-        await loadPartRequests({ silent: true });
-        partRequestEditingRecord = partRequestsCache.find(
-            item => Number(item.id) === Number(partRequestEditingId)
-        ) || partRequestEditingRecord;
-
-        setPartRequestModalLoading(true, 'Cliente/pedido salvos!', 'success');
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setPartRequestModalLoading(false);
-        syncPartRequestModalChrome(partRequestEditingRecord);
-    } catch (error) {
-        setPartRequestModalLoading(false);
-        alertAppDialog(`Erro ao salvar cliente/pedido: ${error.message}`);
-    }
-}
-
 async function savePartRequest(event) {
     event.preventDefault();
     const canFullEdit = !partRequestEditingRecord || canEditPartRequestMetadata(partRequestEditingRecord);
     const canExecutor = partRequestEditingRecord && canEditPartRequestExecutor(partRequestEditingRecord);
     const canMontador = partRequestEditingRecord && canEditPartRequestMontador(partRequestEditingRecord);
-    if (partRequestEditingRecord && !canFullEdit && !canExecutor && !canMontador) {
+    const canClientOrder = partRequestEditingRecord && canEditPartRequestClientOrder(partRequestEditingRecord);
+    if (partRequestEditingRecord && !canFullEdit && !canExecutor && !canMontador && !canClientOrder) {
         alertAppDialog('Esta requisição não pode ser alterada.');
         return;
     }
@@ -1505,14 +1495,11 @@ async function savePartRequest(event) {
         let savedId = partRequestEditingId;
 
         if (partRequestEditingId) {
-            const updatePayload = canFullEdit
-                ? { ...payload, updatedAt: now, updatedById: userId }
-                : {
-                    factoryEmployeeId: payload.factoryEmployeeId,
-                    montadorId: payload.montadorId,
-                    updatedAt: now,
-                    updatedById: userId
-                };
+            const updatePayload = {
+                ...payload,
+                updatedAt: now,
+                updatedById: userId
+            };
             const { error } = await supabaseClient
                 .from('PartRequest')
                 .update(updatePayload)
@@ -1668,6 +1655,17 @@ function bindPartRequestEvents() {
         if (printBtn) {
             const record = partRequestsCache.find(item => Number(item.id) === Number(printBtn.dataset.partRequestId));
             if (record) void printPartRequestFromRecord(record);
+            return;
+        }
+        const statusBtn = event.target.closest('.part-request-status-forward-btn, .part-request-status-back-btn');
+        if (statusBtn) {
+            const record = partRequestsCache.find(
+                item => Number(item.id) === Number(statusBtn.dataset.partRequestId)
+            );
+            const targetStatus = statusBtn.dataset.partRequestTargetStatus;
+            if (record && targetStatus) {
+                void transitionPartRequestStatus(record, targetStatus);
+            }
         }
     });
 
@@ -1715,10 +1713,6 @@ function bindPartRequestEvents() {
         if (partRequestEditingRecord && !canEditPartRequestClientOrder(partRequestEditingRecord)) return;
         clearPartRequestClient();
     });
-    document.getElementById('btn-part-request-save-client-order')?.addEventListener('click', () => {
-        void savePartRequestClientOrder();
-    });
-
 }
 
 window.loadPartRequests = loadPartRequests;
