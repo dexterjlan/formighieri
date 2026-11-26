@@ -1034,6 +1034,10 @@
                         <p class="text-[10px] font-semibold uppercase text-slate-400">Código do Pedido</p>
                         <p id="compra-modal-order-code" class="text-sm font-mono font-semibold text-slate-800">—</p>
                     </div>
+                    <div id="compra-modal-tracking-wrap">
+                        <p class="text-[10px] font-semibold uppercase text-slate-400">Código expedição</p>
+                        <p id="compra-modal-tracking-code" class="text-sm font-mono font-semibold text-slate-800">—</p>
+                    </div>
                     <p class="text-sm text-slate-700">
                         <span class="font-semibold">Cliente:</span>
                         <span id="compra-modal-client-name"> —</span>
@@ -1146,6 +1150,10 @@
             </div>
 
             <div class="flex flex-wrap gap-2 pt-5 mt-5 border-t border-slate-100">
+                <button type="button" id="btn-compra-print-tracking"
+                    class="bg-indigo-700 text-white text-xs px-4 py-2 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Imprimir código
+                </button>
                 <button type="button" id="btn-compra-salvar"
                     class="bg-amber-600 text-white text-xs px-4 py-2 rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed">
                     Salvar
@@ -3963,6 +3971,10 @@
                     class="text-xs bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50">
                     Req. Compra
                 </button>
+                <button type="button" id="btn-eai-detail-part-requests"
+                    class="text-xs bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50">
+                    Req. Peça
+                </button>
                 <button type="button" id="btn-eai-detail-export-pdf"
                     class="text-xs bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-medium hover:bg-slate-50"
                     title="Abrir visualização para salvar como PDF">Gerar PDF</button>
@@ -3994,6 +4006,30 @@
                     class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
             </div>
             <div id="eai-purchase-request-form-mount" class="overflow-y-auto flex-1 min-h-0 p-4 md:p-5"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: REQUISIÇÕES DE PEÇA — VISTORIA -->
+    <div id="eai-part-requests-modal"
+        class="hidden fixed inset-0 bg-slate-900/45 backdrop-blur-sm flex items-center justify-center p-4 z-[95]">
+        <div class="bg-white rounded-2xl w-full max-w-3xl shadow-xl border border-slate-200 max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="p-5 border-b border-slate-100 flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h3 class="font-bold text-base text-slate-900">Requisições de peça</h3>
+                    <p id="eai-part-requests-subtitle" class="text-xs text-slate-500 mt-1">Vistoria —</p>
+                </div>
+                <button type="button" id="btn-eai-part-requests-close"
+                    class="text-slate-400 hover:text-slate-600 text-xl leading-none px-1" aria-label="Fechar">×</button>
+            </div>
+            <div id="eai-part-requests-mount" class="p-5 overflow-y-auto flex-1 min-h-0">
+                <p class="text-xs text-slate-400 text-center py-8">Carregando...</p>
+            </div>
+            <div class="p-4 border-t border-slate-100 flex flex-wrap gap-2 justify-end bg-white">
+                <button type="button" id="btn-eai-part-requests-close-footer"
+                    class="text-xs bg-slate-100 text-slate-600 px-4 py-2 rounded-lg font-medium">Fechar</button>
+                <button type="button" id="btn-eai-part-requests-create"
+                    class="text-xs bg-slate-900 text-white px-4 py-2 rounded-lg font-medium">Criar Req. Peça</button>
+            </div>
         </div>
     </div>
 

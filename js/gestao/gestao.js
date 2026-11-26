@@ -1156,8 +1156,8 @@ async function saveGestaoProjectDraftAsync() {
         const orderIdForThirdParty = Number(editingGestaoOrderId || savedProject?.orderId);
 
         if (savedProjectId && thirdPartyCharacteristicChanges?.removedThirdPartyCharacteristicIds?.length
-            && typeof deleteThirdPartyProjectsForOrderProjectCharacteristics === 'function') {
-            await deleteThirdPartyProjectsForOrderProjectCharacteristics(
+            && typeof cancelThirdPartyProjectsForRemovedCharacteristics === 'function') {
+            await cancelThirdPartyProjectsForRemovedCharacteristics(
                 savedProjectId,
                 thirdPartyCharacteristicChanges.removedThirdPartyCharacteristicIds
             );

@@ -347,9 +347,16 @@ async function fillRequisicoesPurchaseOrders(selectedOrderId) {
     if (selectedOrderId) {
         await ensureRequisicoesPurchaseOrderInPicker(selectedOrderId);
     }
-    const selected = requisicoesPurchaseOrders.find(order => Number(order.id) === Number(selectedOrderId));
-    hidden.value = selected ? String(selected.id) : '';
+    let selected = requisicoesPurchaseOrders.find(order => Number(order.id) === Number(selectedOrderId));
+    if (!selected && selectedOrderId) {
+        await ensureRequisicoesPurchaseOrderInPicker(selectedOrderId);
+        selected = requisicoesPurchaseOrders.find(order => Number(order.id) === Number(selectedOrderId));
+    }
+    hidden.value = selected ? String(selected.id) : (selectedOrderId ? String(selectedOrderId) : '');
     initRequisicoesPurchaseOrderCombobox(selectedOrderId);
+    if (input.disabled) {
+        input.value = selected ? requisicoesPurchaseOrderLabel(selected) : '';
+    }
 }
 
 async function fillRequisicoesPurchaseProjects(orderId, selectedProjectId) {
@@ -440,8 +447,12 @@ async function setupRequisicoesPurchaseForm(draft, submitOptions = {}) {
         } else {
             const hiddenOrder = document.getElementById('requisicoes-purchase-order');
             const hiddenProject = document.getElementById('requisicoes-purchase-project');
+            const orderSearch = document.getElementById('requisicoes-purchase-order-search');
             if (hiddenOrder && draft?.orderId) hiddenOrder.value = String(draft.orderId);
             if (hiddenProject && draft?.orderProjectId) hiddenProject.value = String(draft.orderProjectId);
+            if (orderSearch?.disabled && !String(orderSearch.value || '').trim() && draft?.orderCode) {
+                orderSearch.value = String(draft.orderCode).trim();
+            }
             const lockedProjectLabel = document.getElementById('requisicoes-purchase-project-locked');
             if (lockedProjectLabel && draft?.projectLabel) {
                 lockedProjectLabel.value = draft.projectLabel;

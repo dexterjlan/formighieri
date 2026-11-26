@@ -390,15 +390,46 @@ async function validateAndConfirmGestaoProjectCharacteristicsChanges(options = {
             return { proceed: false };
         }
 
+        const openStatus = typeof THIRD_PARTY_PROJECT_STATUS_OPEN === 'string'
+            ? THIRD_PARTY_PROJECT_STATUS_OPEN
+            : 'Open';
+        const canceledStatus = typeof THIRD_PARTY_PROJECT_STATUS_CANCELED === 'string'
+            ? THIRD_PARTY_PROJECT_STATUS_CANCELED
+            : 'Canceled';
+
         const existingProjects = typeof fetchThirdPartyProjectsByOrderProjectId === 'function'
             ? await fetchThirdPartyProjectsByOrderProjectId(project.id)
             : [];
-        const projectsToDelete = existingProjects.filter(row =>
+        const linkedProjects = existingProjects.filter(row => (
             removedThirdPartyIds.includes(Number(row.projectCharacteristicId))
-        );
+        ));
 
-        if (projectsToDelete.length) {
-            const labels = projectsToDelete.map(row => {
+        const blockedByStatus = linkedProjects.filter(row => {
+            const status = String(row.status || '');
+            return status !== openStatus && status !== canceledStatus;
+        });
+
+        if (blockedByStatus.length) {
+            const details = blockedByStatus.map(row => {
+                const subtypeName = row.thirdPartySubtype?.name || 'Terceiros';
+                const statusLabel = typeof getThirdPartyProjectStatusLabel === 'function'
+                    ? getThirdPartyProjectStatusLabel(row.status)
+                    : (row.status || '—');
+                return `${subtypeName} (${statusLabel})`;
+            });
+            alertAppDialog(
+                `Não é possível remover a característica enquanto o projeto de terceiros estiver em andamento: ${details.join(', ')}.\n\nCancele o projeto de terceiros antes de alterar as características do projeto.`,
+                { variant: 'warning', title: 'Ação não permitida' }
+            );
+            return { proceed: false };
+        }
+
+        const projectsToCancel = linkedProjects.filter(row => (
+            String(row.status || '') === openStatus
+        ));
+
+        if (projectsToCancel.length) {
+            const labels = projectsToCancel.map(row => {
                 const characteristicName = row.projectCharacteristic?.name
                     || getProjectCharacteristicNameById(row.projectCharacteristicId, characteristics);
                 const subtypeName = row.thirdPartySubtype?.name;
@@ -407,9 +438,9 @@ async function validateAndConfirmGestaoProjectCharacteristicsChanges(options = {
             const uniqueLabels = [...new Set(labels)];
 
             const confirmed = await confirmAppDialog(
-                `Ao remover ${uniqueLabels.length > 1 ? 'essas características' : 'esta característica'}, ${projectsToDelete.length > 1 ? 'os projetos de terceiros vinculados serão excluídos' : 'o projeto de terceiros vinculado será excluído'}: ${uniqueLabels.join(', ')}.\n\nDeseja continuar?`,
+                `Ao remover ${uniqueLabels.length > 1 ? 'essas características' : 'esta característica'}, ${projectsToCancel.length > 1 ? 'os projetos de terceiros vinculados serão cancelados' : 'o projeto de terceiros vinculado será cancelado'} (o histórico será mantido): ${uniqueLabels.join(', ')}.\n\nDeseja continuar?`,
                 {
-                    title: 'Excluir projeto de terceiros?',
+                    title: 'Cancelar projeto de terceiros?',
                     confirmLabel: 'Sim, continuar',
                     cancelLabel: 'Não, voltar',
                     variant: 'danger'

@@ -284,6 +284,7 @@ function partRequestDrawioEscapePrintMeta(meta = {}) {
         projectLabel: escapeHtml(String(meta.projectLabel || '—').trim() || '—'),
         projectCabinetMakerName: escapeHtml(String(meta.projectCabinetMakerName || '—').trim() || '—'),
         deliveryDueLabel: escapeHtml(String(meta.deliveryDueLabel || '—').trim() || '—'),
+        trackingCode: escapeHtml(String(meta.trackingCode || '—').trim() || '—'),
         printedLabel: escapeHtml(
             typeof formatDateTime === 'function'
                 ? formatDateTime(new Date().toISOString())
@@ -325,7 +326,8 @@ function partRequestDrawioBuildPrintSheetHtml(meta = {}, options = {}) {
             partRequestDrawioPrintFieldBox('Esp.', row.thickness),
             partRequestDrawioPrintFieldBox('Prazo', row.deliveryDueLabel),
             partRequestDrawioPrintFieldBox('Executor', row.executorName),
-            partRequestDrawioPrintFieldBox('Montador', row.montadorName)
+            partRequestDrawioPrintFieldBox('Montador', row.montadorName),
+            partRequestDrawioPrintFieldBox('Cód. exp.', row.trackingCode)
         ].join('')
         : [
             partRequestDrawioPrintFieldBox('Requisição Nº', row.requestId),
@@ -343,6 +345,14 @@ function partRequestDrawioBuildPrintSheetHtml(meta = {}, options = {}) {
             partRequestDrawioPrintFieldBox('Solicitante', row.createdByName)
         ].join('');
 
+    const trackingBlock = row.trackingCode && row.trackingCode !== '—'
+        ? `<div class="part-request-print-sheet__tracking" aria-label="Código de expedição">
+            <span class="part-request-print-field__label">Código expedição (embarque / desembarque)</span>
+            <svg class="part-request-print-barcode" data-barcode="${row.trackingCode}"></svg>
+            <p class="part-request-print-sheet__tracking-code">${row.trackingCode}</p>
+           </div>`
+        : '';
+
     const printedAtBlock = isCompact
         ? ''
         : `<p class="part-request-print-sheet__printed-at">Impresso em: ${row.printedLabel}</p>`;
@@ -359,6 +369,7 @@ function partRequestDrawioBuildPrintSheetHtml(meta = {}, options = {}) {
                 <p class="part-request-print-sheet__kicker">FGP · Peça${requestKickerSuffix}${copySuffix}</p>
                 <h1 class="part-request-print-sheet__title">${row.pieceName}</h1>
                 <div class="part-request-print-sheet__fields">${fieldsHtml}</div>
+                ${trackingBlock}
                 ${defectBlock}
                 ${printedAtBlock}
             </header>
@@ -399,6 +410,47 @@ function partRequestDrawioEnsurePrintSurface() {
     return surface;
 }
 
+function partRequestDrawioLoadJsBarcodeScript() {
+    if (typeof JsBarcode !== 'undefined') return Promise.resolve();
+    if (typeof resolveExpeditionJsBarcodeScriptUrl !== 'function') return Promise.resolve();
+    const url = resolveExpeditionJsBarcodeScriptUrl();
+    return new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-part-request-jsbarcode]');
+        if (existing) {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error('JsBarcode')), { once: true });
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.dataset.partRequestJsbarcode = '1';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('JsBarcode'));
+        document.head.appendChild(script);
+    });
+}
+
+function partRequestDrawioApplyPrintBarcodes(surface) {
+    const nodes = surface?.querySelectorAll?.('.part-request-print-barcode[data-barcode]') || [];
+    if (!nodes.length || typeof JsBarcode === 'undefined') return;
+    nodes.forEach(node => {
+        const code = String(node.getAttribute('data-barcode') || '').trim();
+        if (!code) return;
+        try {
+            JsBarcode(node, code, {
+                format: 'CODE128',
+                displayValue: false,
+                margin: 4,
+                width: 1.4,
+                height: 44
+            });
+        } catch (error) {
+            console.warn('partRequestDrawioApplyPrintBarcodes:', error);
+        }
+    });
+}
+
 function printPartRequestDrawingPage(meta = {}, imageDataUrl = '') {
     if (!imageDataUrl) {
         alertAppDialog('Não foi possível gerar a imagem para impressão.');
@@ -407,6 +459,7 @@ function printPartRequestDrawingPage(meta = {}, imageDataUrl = '') {
 
     const surface = partRequestDrawioEnsurePrintSurface();
     surface.innerHTML = partRequestDrawioBuildPrintPageHtml(meta);
+    void partRequestDrawioLoadJsBarcodeScript().catch(() => {});
     surface.hidden = false;
     surface.removeAttribute('hidden');
     surface.removeAttribute('aria-hidden');
@@ -429,6 +482,7 @@ function printPartRequestDrawingPage(meta = {}, imageDataUrl = '') {
     const triggerPrint = () => {
         if (printed) return;
         printed = true;
+        partRequestDrawioApplyPrintBarcodes(surface);
         document.title = ' ';
         document.body.classList.add('part-request-print-active');
         window.print();

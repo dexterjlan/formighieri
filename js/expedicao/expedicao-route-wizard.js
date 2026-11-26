@@ -763,18 +763,30 @@ async function renderExpedicaoRouteWizard() {
         const addrDisplay = typeof formatAddrFullDisplay === 'function'
             ? formatAddrFullDisplay(pending?.addr)
             : formatExpeditionAddressOneLine(pending?.addr);
+        const isRequisition = typeof isExpeditionRequisitionEntityType === 'function'
+            && isExpeditionRequisitionEntityType(pending?.entityType);
+        const trackingCode = typeof normalizeScannableTrackingCode === 'function'
+            ? normalizeScannableTrackingCode(pending?.meta?.trackingCode)
+            : String(pending?.meta?.trackingCode || '').trim();
         mount.innerHTML = `
             <div class="space-y-4">
                 <div class="rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <p class="text-xs font-semibold text-slate-800">${escapeHtml(pending?.label || '')}</p>
                     <p class="text-[11px] text-slate-600 whitespace-pre-wrap mt-2">${escapeHtml(addrDisplay || '')}</p>
                 </div>
-                <p class="text-xs text-slate-500">Confira o endereço e informe a quantidade de volumes.</p>
-                <div class="max-w-xs">
-                    <label class="block text-xs font-semibold text-slate-500 mb-1">Volumes</label>
-                    <input type="number" id="expedition-wizard-volume-count" min="1" step="1" value="1"
-                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
-                </div>
+                ${isRequisition
+                    ? `<p class="text-xs text-slate-600">
+                        Esta requisição usa <strong>1 volume</strong> com o código da ficha impressa
+                        ${trackingCode ? `( <span class="font-mono">${escapeHtml(trackingCode)}</span> )` : ''}.
+                      </p>
+                      <p class="text-[11px] text-slate-500">O código deve estar na impressão (RPP/RPC). Imprima a requisição se ainda não tiver código.</p>
+                      <input type="hidden" id="expedition-wizard-volume-count" value="1">`
+                    : `<p class="text-xs text-slate-500">Confira o endereço e informe a quantidade de volumes.</p>
+                        <div class="max-w-xs">
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">Volumes</label>
+                            <input type="number" id="expedition-wizard-volume-count" min="1" step="1" value="1"
+                                class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg">
+                        </div>`}
             </div>
         `;
         syncExpedicaoWizardFooter([
@@ -939,6 +951,19 @@ function bindExpedicaoWizardEntitySearch() {
                             alertAppDialog('Este item já foi incluído nesta rota.');
                             return;
                         }
+                        if (typeof isExpeditionRequisitionEntityType === 'function'
+                            && isExpeditionRequisitionEntityType(resolveEntityType)
+                            && ctx.meta) {
+                            try {
+                                if (resolveEntityType === 'PartRequest' && typeof ensurePartRequestTrackingCode === 'function') {
+                                    await ensurePartRequestTrackingCode(ctx.meta);
+                                } else if (resolveEntityType === 'Purchase' && typeof ensurePurchaseTrackingCode === 'function') {
+                                    await ensurePurchaseTrackingCode(ctx.meta);
+                                }
+                            } catch (trackingError) {
+                                console.warn('expedition wizard trackingCode:', trackingError);
+                            }
+                        }
                         expedicaoWizardPrepareStopForPendingAddress(ctx.addr);
                         expedicaoWizardState.pendingItem = ctx;
                         expedicaoWizardState.step = 'confirm-item';
@@ -1093,14 +1118,31 @@ async function handleExpedicaoWizardAction(actionId) {
             alertAppDialog('Selecione um item válido.');
             return;
         }
-        const volumeCount = Number(document.getElementById('expedition-wizard-volume-count')?.value);
-        if (!Number.isInteger(volumeCount) || volumeCount < 1) {
+        const isRequisition = typeof isExpeditionRequisitionEntityType === 'function'
+            && isExpeditionRequisitionEntityType(pending.entityType);
+        const trackingCode = typeof normalizeScannableTrackingCode === 'function'
+            ? normalizeScannableTrackingCode(pending?.meta?.trackingCode)
+            : String(pending?.meta?.trackingCode || '').trim();
+        let volumeCount = Number(document.getElementById('expedition-wizard-volume-count')?.value);
+        if (isRequisition) {
+            volumeCount = 1;
+            if (!trackingCode) {
+                alertAppDialog('Requisição sem código de expedição. Execute o SQL de trackingCode, salve ou imprima a ficha.');
+                return;
+            }
+        } else if (!Number.isInteger(volumeCount) || volumeCount < 1) {
             alertAppDialog('Informe ao menos 1 volume.');
             return;
         }
 
         const mergedIntoExisting = ensureWizardCurrentStopFromPendingItem(pending);
-        const volumes = buildExpeditionVolumesForItem(volumeCount);
+        const volumes = typeof buildExpeditionVolumesForStopItem === 'function'
+            ? buildExpeditionVolumesForStopItem({
+                entityType: pending.entityType,
+                volumeCount,
+                trackingCode
+            })
+            : buildExpeditionVolumesForItem(volumeCount);
         const currentStop = getWizardCurrentStop();
         if (mergedIntoExisting) {
             notifyExpeditionWizardMergedIntoExistingStop(currentStop);
@@ -1111,6 +1153,7 @@ async function handleExpedicaoWizardAction(actionId) {
             label: pending.label,
             volumeCount,
             volumes,
+            trackingCode: isRequisition ? trackingCode : '',
             metadata: pending.metadata || {}
         });
 

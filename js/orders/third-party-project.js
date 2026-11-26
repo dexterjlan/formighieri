@@ -911,32 +911,57 @@ async function createThirdPartyProjectsForOrderProjectCharacteristics(options = 
     return { created, existing: existingProjects };
 }
 
-async function deleteThirdPartyProjectsForOrderProjectCharacteristics(orderProjectId, characteristicIds = []) {
+async function cancelThirdPartyProjectsForRemovedCharacteristics(orderProjectId, characteristicIds = []) {
     const normalizedProjectId = Number(orderProjectId);
     const uniqueCharacteristicIds = [...new Set(characteristicIds.map(id => Number(id)).filter(Boolean))];
 
     if (!normalizedProjectId || !uniqueCharacteristicIds.length) return [];
 
-    const { data, error } = await supabaseClient
-        .from('ThirdPartyProject')
-        .delete()
-        .eq('orderProjectId', normalizedProjectId)
-        .in('projectCharacteristicId', uniqueCharacteristicIds)
-        .select(`
-            id,
-            projectCharacteristicId,
-            thirdPartySubtype:ThirdPartySubtype(id, name),
-            projectCharacteristic:ProjectCharacteristic(id, name)
-        `);
+    const existingProjects = await fetchThirdPartyProjectsByOrderProjectId(normalizedProjectId);
+    const targets = existingProjects.filter(row => (
+        uniqueCharacteristicIds.includes(Number(row.projectCharacteristicId))
+    ));
 
-    if (error) {
-        if (error.message?.includes('ThirdPartyProject')) {
-            throw new Error('Execute supabase/create-third-party-project.sql no Supabase.');
+    const canceled = [];
+    for (const project of targets) {
+        const status = String(project.status || '');
+        if (status === THIRD_PARTY_PROJECT_STATUS_CANCELED) {
+            continue;
         }
-        throw error;
+
+        if (status !== THIRD_PARTY_PROJECT_STATUS_OPEN) {
+            const statusLabel = typeof getThirdPartyProjectStatusLabel === 'function'
+                ? getThirdPartyProjectStatusLabel(status)
+                : status;
+            const subtypeName = project.thirdPartySubtype?.name || 'Terceiros';
+            throw new Error(
+                `Projeto de terceiros (${subtypeName}) está ${statusLabel}. Cancele o projeto de terceiros antes de remover a característica.`
+            );
+        }
+
+        const characteristicName = project.projectCharacteristic?.name
+            || `Característica #${project.projectCharacteristicId}`;
+        const cancelObservation = `Característica "${characteristicName}" retirada do projeto.`;
+
+        if (typeof updateThirdPartyProjectStatus !== 'function') {
+            throw new Error('Cancelamento de projeto de terceiros indisponível.');
+        }
+
+        const updated = await updateThirdPartyProjectStatus(
+            project.id,
+            THIRD_PARTY_PROJECT_STATUS_CANCELED,
+            status,
+            { cancelObservation, skipNotify: true }
+        );
+        canceled.push(updated);
     }
 
-    return data || [];
+    return canceled;
+}
+
+/** @deprecated Use cancelThirdPartyProjectsForRemovedCharacteristics — mantém histórico. */
+async function deleteThirdPartyProjectsForOrderProjectCharacteristics(orderProjectId, characteristicIds = []) {
+    return cancelThirdPartyProjectsForRemovedCharacteristics(orderProjectId, characteristicIds);
 }
 
 async function fetchThirdPartyProjectsWithoutDesigner() {

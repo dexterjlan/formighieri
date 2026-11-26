@@ -493,12 +493,12 @@ const EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED_NO_STATUS =
     'orderProject:OrderProject(id, name, projectCode, orderId, statusId, order:salesOrders(id, orderCode, addrId, clientId, client:Client(name)))';
 
 const EXPEDITION_PURCHASE_SELECTS = [
-    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name, isSystem)`,
-    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name)`,
-    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, note, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name)`,
-    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED_NO_STATUS}, purchaseReason:PurchaseReason(name, isSystem)`,
-    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED_NO_STATUS}, purchaseReason:PurchaseReason(name)`,
-    `id, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, note, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED_NO_STATUS}, purchaseReason:PurchaseReason(name)`
+    `id, trackingCode, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name, isSystem)`,
+    `id, trackingCode, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name)`,
+    `id, trackingCode, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, note, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED}, purchaseReason:PurchaseReason(name)`,
+    `id, trackingCode, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED_NO_STATUS}, purchaseReason:PurchaseReason(name, isSystem)`,
+    `id, trackingCode, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, requestObservation, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED_NO_STATUS}, purchaseReason:PurchaseReason(name)`,
+    `id, trackingCode, status, orderProjectId, assistanceRequestId, externalAssemblyInspectionId, purchaseReasonId, note, purchaseType, ${EXPEDITION_PURCHASE_ORDER_PROJECT_EMBED_NO_STATUS}, purchaseReason:PurchaseReason(name)`
 ];
 
 function getExpeditionPurchaseOrderId(row) {
@@ -1157,7 +1157,7 @@ async function resolveExpeditionEntityContext(entityType, entityId) {
     if (entityType === 'PartRequest') {
         const result = await supabaseClient
             .from('PartRequest')
-            .select('id, pieceName, status, clientId, orderId, orderProjectId, client:Client(name), order:salesOrders(id, orderCode, addrId), orderProject:OrderProject(name, projectCode)')
+            .select('id, pieceName, status, trackingCode, clientId, orderId, orderProjectId, client:Client(name), order:salesOrders(id, orderCode, addrId), orderProject:OrderProject(name, projectCode)')
             .eq('id', key)
             .maybeSingle();
 
@@ -1348,8 +1348,8 @@ async function searchExpeditionEntities(entityType, queryText, limit = 25, optio
 
     if (entityType === 'PartRequest') {
         const partRequestSelects = [
-            'id, pieceName, status, orderProjectId, client:Client(name), order:salesOrders(orderCode, addrId), orderProject:OrderProject(name, projectCode, statusId, projectStatus:OrderProjectStatus(id, name))',
-            'id, pieceName, status, orderProjectId, client:Client(name), order:salesOrders(orderCode, addrId), orderProject:OrderProject(name, projectCode, statusId)'
+            'id, pieceName, status, trackingCode, orderProjectId, client:Client(name), order:salesOrders(orderCode, addrId), orderProject:OrderProject(name, projectCode, statusId, projectStatus:OrderProjectStatus(id, name))',
+            'id, pieceName, status, trackingCode, orderProjectId, client:Client(name), order:salesOrders(orderCode, addrId), orderProject:OrderProject(name, projectCode, statusId)'
         ];
         let lastError = null;
         let data = [];

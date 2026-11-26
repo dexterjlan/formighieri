@@ -580,9 +580,15 @@ function handleExternalAssemblyInspectionPurchaseRequestViewClick(event) {
     void openPurchaseModal(purchaseId, { readOnly: true });
 }
 
-async function openExternalAssemblyInspectionPurchaseRequestFormModal(draftInput = {}) {
+function collectExternalAssemblyInspectionOrderProjectIds(detail = eaiDetailState) {
+    return [...new Set((detail?.projects || [])
+        .map(row => Number(row.orderProjectId || row.orderProject?.id))
+        .filter(id => id > 0))];
+}
+
+async function resolveExternalAssemblyInspectionOrderContext(draftInput = {}) {
     const inspectionId = Number(draftInput.externalAssemblyInspectionId || eaiDetailState?.inspection?.id);
-    if (!inspectionId) return;
+    if (!inspectionId) return null;
 
     let projectContext = resolveExternalAssemblyInspectionPrimaryOrderProject(eaiDetailState);
     let orderId = Number(draftInput.orderId || eaiDetailState?.inspection?.orderId || projectContext?.orderId);
@@ -616,9 +622,57 @@ async function openExternalAssemblyInspectionPurchaseRequestFormModal(draftInput
     }
 
     if (!orderId || !orderProjectId) {
+        return null;
+    }
+
+    let orderCode = String(draftInput.orderCode || '').trim();
+    let clientId = Number(draftInput.clientId) || null;
+    let clientName = String(draftInput.clientName || '').trim();
+    if (!orderCode || !clientName) {
+        const { data: orderRow } = await supabaseClient
+            .from('salesOrders')
+            .select('id, orderCode, clientId, client:Client(id, name)')
+            .eq('id', orderId)
+            .maybeSingle();
+        if (orderRow) {
+            orderCode = orderCode || String(orderRow.orderCode || '').trim();
+            clientId = clientId || Number(orderRow.clientId) || Number(orderRow.client?.id) || null;
+            clientName = clientName || (
+                typeof getOrderClientName === 'function'
+                    ? getOrderClientName(orderRow)
+                    : (orderRow.client?.name || '')
+            );
+        }
+    }
+
+    return {
+        externalAssemblyInspectionId: inspectionId,
+        orderId,
+        orderProjectId,
+        orderCode,
+        clientId,
+        clientName,
+        projectLabel: draftInput.projectLabel || projectContext?.projectLabel
+            || getExternalAssemblyInspectionProjectName({ id: orderProjectId }),
+        orderProjectIds: collectExternalAssemblyInspectionOrderProjectIds(eaiDetailState)
+    };
+}
+
+async function openExternalAssemblyInspectionPurchaseRequestFormModal(draftInput = {}) {
+    const context = await resolveExternalAssemblyInspectionOrderContext(draftInput);
+    if (!context) {
         alertAppDialog('Não foi possível identificar pedido e projeto desta vistoria.');
         return;
     }
+
+    const {
+        externalAssemblyInspectionId: inspectionId,
+        orderId,
+        orderProjectId,
+        orderCode,
+        clientName,
+        projectLabel
+    } = context;
 
     let purchaseReasonId = Number(draftInput.purchaseReasonId) || null;
     if (!purchaseReasonId && typeof resolveRequisicoesVistoriaPurchaseReasonId === 'function') {
@@ -634,9 +688,10 @@ async function openExternalAssemblyInspectionPurchaseRequestFormModal(draftInput
         externalAssemblyInspectionId: inspectionId,
         orderId,
         orderProjectId,
+        orderCode,
+        clientName,
         purchaseReasonId,
-        projectLabel: draftInput.projectLabel || projectContext?.projectLabel
-            || getExternalAssemblyInspectionProjectName({ id: orderProjectId })
+        projectLabel
     };
 
     const mount = document.getElementById('eai-purchase-request-form-mount');
@@ -673,6 +728,147 @@ async function handleExternalAssemblyInspectionCreatePurchaseRequest() {
     });
 }
 
+function closeExternalAssemblyInspectionPartRequestsModal() {
+    toggleModal('eai-part-requests-modal', false);
+}
+
+async function openExternalAssemblyInspectionPartRequestsModal() {
+    if (!eaiDetailState?.inspection?.id) return;
+
+    const inspectionId = Number(eaiDetailState.inspection.id);
+    const mount = document.getElementById('eai-part-requests-mount');
+    const subtitle = document.getElementById('eai-part-requests-subtitle');
+    if (subtitle) {
+        subtitle.textContent = `Vistoria #${inspectionId}`;
+    }
+    if (mount) {
+        mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando requisições...</p>';
+    }
+    toggleModal('eai-part-requests-modal', true);
+
+    if (typeof fetchPartRequestsByExternalAssemblyInspectionId !== 'function') {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-red-600 text-center py-8">Módulo de peças indisponível.</p>';
+        }
+        return;
+    }
+
+    const { rows, missingColumn, error } = await fetchPartRequestsByExternalAssemblyInspectionId(inspectionId);
+
+    if (missingColumn) {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-amber-700 text-center py-8">Execute <code>supabase/feats/add-part-request-external-assembly-inspection-id.sql</code> no Supabase SQL Editor.</p>';
+        }
+        return;
+    }
+    if (error) {
+        if (mount) {
+            mount.innerHTML = `<p class="text-xs text-red-600 text-center py-8">${escapeHtml(error.message)}</p>`;
+        }
+        return;
+    }
+
+    if (!rows.length) {
+        if (mount) {
+            mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Nenhuma solicitação de peça vinculada a esta vistoria.</p>';
+        }
+        return;
+    }
+
+    if (mount) {
+        mount.innerHTML = `
+            <table class="w-full text-xs border border-slate-200 rounded-lg overflow-hidden">
+                <thead class="bg-slate-50 text-slate-500 uppercase text-[10px]">
+                    <tr>
+                        <th class="text-left px-3 py-2">#</th>
+                        <th class="text-left px-3 py-2">Peça</th>
+                        <th class="text-left px-3 py-2">Pedido</th>
+                        <th class="text-left px-3 py-2">Status</th>
+                        <th class="text-left px-3 py-2">Criada em</th>
+                        <th class="text-right px-3 py-2 w-24">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows.map(row => `
+                        <tr class="border-t border-slate-100">
+                            <td class="px-3 py-2 font-mono">${row.id}</td>
+                            <td class="px-3 py-2">${escapeHtml(row.pieceName || '—')}</td>
+                            <td class="px-3 py-2 font-mono">${escapeHtml(row.order?.orderCode || '—')}</td>
+                            <td class="px-3 py-2">${escapeHtml(typeof getPartRequestStatusLabel === 'function'
+                                ? getPartRequestStatusLabel(row.status)
+                                : (row.status || '—'))}</td>
+                            <td class="px-3 py-2">${typeof formatDisplayDate === 'function'
+                                ? formatDisplayDate(row.createdAt)
+                                : (typeof formatDate === 'function' ? formatDate(row.createdAt) : (row.createdAt || '—'))}</td>
+                            <td class="px-3 py-2 text-right">
+                                <button type="button" class="eai-part-request-view text-xs font-medium text-indigo-700 hover:text-indigo-900"
+                                    data-part-request-id="${row.id}">Abrir</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    }
+}
+
+async function handleExternalAssemblyInspectionCreatePartRequest() {
+    if (!eaiDetailState?.inspection?.id) return;
+    if (typeof canAccessRequisicoesPartRequest === 'function' && !canAccessRequisicoesPartRequest()) {
+        alertAppDialog('Sem permissão para solicitação de peça.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+    if (typeof openPartRequestFormFromExternalAssemblyInspection !== 'function') {
+        alertAppDialog('Formulário de peça indisponível.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const context = await resolveExternalAssemblyInspectionOrderContext({
+        externalAssemblyInspectionId: eaiDetailState.inspection.id
+    });
+    if (!context) {
+        alertAppDialog('Não foi possível identificar pedido e projeto desta vistoria.');
+        return;
+    }
+
+    await openPartRequestFormFromExternalAssemblyInspection({
+        ...context,
+        fromExternalAssemblyInspection: true,
+        reopenList: () => openExternalAssemblyInspectionPartRequestsModal()
+    });
+}
+
+async function handleExternalAssemblyInspectionPartRequestViewClick(event) {
+    const button = event.target?.closest?.('.eai-part-request-view');
+    if (!button) return;
+    const partRequestId = Number(button.dataset.partRequestId);
+    if (!partRequestId) return;
+
+    if (typeof canAccessRequisicoesPartRequest === 'function' && !canAccessRequisicoesPartRequest()) {
+        alertAppDialog('Sem permissão para solicitação de peça.', { variant: 'warning', title: 'Aviso' });
+        return;
+    }
+
+    const record = typeof fetchPartRequestRecordById === 'function'
+        ? await fetchPartRequestRecordById(partRequestId)
+        : null;
+    if (!record) {
+        alertAppDialog('Solicitação de peça não encontrada.');
+        return;
+    }
+    if (typeof openPartRequestFormFromExternalAssemblyInspection !== 'function') return;
+
+    await openPartRequestFormFromExternalAssemblyInspection({
+        record,
+        externalAssemblyInspectionId: Number(record.externalAssemblyInspectionId)
+            || Number(eaiDetailState?.inspection?.id)
+            || null,
+        reopenList: () => openExternalAssemblyInspectionPartRequestsModal()
+    });
+}
+
+window.openExternalAssemblyInspectionPartRequestsModal = openExternalAssemblyInspectionPartRequestsModal;
+
 async function ensureExternalAssemblyInspectionListContext(orderProjectId, options = {}) {
     const context = resolveExternalAssemblyInspectionOpenContext(orderProjectId, options);
     const orderHasMeta = Boolean(context.order?.orderCode)
@@ -685,7 +881,7 @@ async function ensureExternalAssemblyInspectionListContext(orderProjectId, optio
     if (!context.orderId) {
         const { data, error } = await supabaseClient
             .from('OrderProject')
-            .select('id, name, projectCode, orderId, order:Order(id, orderCode, client:Client(name))')
+            .select('id, name, projectCode, orderId, order:salesOrders(id, orderCode, client:Client(name))')
             .eq('id', orderProjectId)
             .maybeSingle();
 
@@ -2173,6 +2369,12 @@ function renderExternalAssemblyInspectionDetail(detail) {
     const canPurchaseRequests = typeof canAccessRequisicoes !== 'function' || canAccessRequisicoes();
     purchaseRequestsBtn?.classList.toggle('hidden', !canPurchaseRequests);
 
+    const partRequestsBtn = document.getElementById('btn-eai-detail-part-requests');
+    const canPartRequests = typeof canAccessRequisicoesPartRequest === 'function'
+        ? canAccessRequisicoesPartRequest()
+        : false;
+    partRequestsBtn?.classList.toggle('hidden', !canPartRequests);
+
     const mount = document.getElementById('eai-detail-projects-mount');
     if (!mount) return;
 
@@ -3099,6 +3301,17 @@ function bindExternalAssemblyInspectionEvents() {
     });
     document.getElementById('eai-purchase-requests-mount')?.addEventListener('click', handleExternalAssemblyInspectionPurchaseRequestViewClick);
     document.getElementById('btn-eai-purchase-request-close')?.addEventListener('click', closeExternalAssemblyInspectionPurchaseRequestFormModal);
+    document.getElementById('btn-eai-detail-part-requests')?.addEventListener('click', () => {
+        void openExternalAssemblyInspectionPartRequestsModal();
+    });
+    document.getElementById('btn-eai-part-requests-close')?.addEventListener('click', closeExternalAssemblyInspectionPartRequestsModal);
+    document.getElementById('btn-eai-part-requests-close-footer')?.addEventListener('click', closeExternalAssemblyInspectionPartRequestsModal);
+    document.getElementById('btn-eai-part-requests-create')?.addEventListener('click', () => {
+        void handleExternalAssemblyInspectionCreatePartRequest();
+    });
+    document.getElementById('eai-part-requests-mount')?.addEventListener('click', event => {
+        void handleExternalAssemblyInspectionPartRequestViewClick(event);
+    });
     document.getElementById('btn-eai-detail-export-pdf')?.addEventListener('click', () => {
         void exportExternalAssemblyInspectionPdf();
     });

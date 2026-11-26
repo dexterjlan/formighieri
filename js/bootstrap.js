@@ -128,6 +128,7 @@ const SCRIPTS = [
     'js/gestao/gestao-montagem-programacao-shell.js',
     'js/orders/nomear.js',
     'js/orders/projeto-tecnico.js',
+    'js/core/scannable-tracking-code.js',
     'js/orders/purchase.js',
     'js/orders/implementation.js',
     'js/orders/implementation-list-upload.js',

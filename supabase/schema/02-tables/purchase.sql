@@ -24,8 +24,8 @@ CREATE TABLE public."Purchase" (
     "attachmentFileName" text,
     "externalAssemblyInspectionId" bigint,
     "assistanceRequestId" bigint,
+    "trackingCode" text,
     CONSTRAINT "Purchase_purchaseType_check" CHECK (("purchaseType" = ANY (ARRAY['Material'::text, 'Ferragem'::text, 'Tinta'::text, 'Terceiro'::text, 'Implantação'::text])))
-);
 
 -- Name: COLUMN "Purchase"."externalAssemblyInspectionId"; Type: COMMENT; Schema: public; Owner: -
 
@@ -38,6 +38,8 @@ COMMENT ON COLUMN public."Purchase"."externalAssemblyInspectionId" IS 'Purchase 
 --
 
 COMMENT ON COLUMN public."Purchase"."assistanceRequestId" IS 'Purchase request created from assistance flow.';
+
+COMMENT ON COLUMN public."Purchase"."trackingCode" IS 'Scannable code on the purchase request label; used as route volume code (RPC-…).';
 
 -- Name: Purchase_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 

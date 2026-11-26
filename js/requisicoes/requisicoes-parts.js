@@ -36,6 +36,7 @@ const PART_REQUEST_STATUS_HISTORY_CHANGED_BY_EMBED =
 const PART_REQUEST_SELECT = `
     id, pieceName, description, thicknessMm, material, drawingJson, status,
     factoryEmployeeId, montadorId, deliveryDueDate, orderProjectId,
+    externalAssemblyInspectionId, trackingCode,
     clientId, orderId, createdAt, updatedAt, createdById,
     client:Client(id, name),
     order:salesOrders(id, orderCode, clientId, client:Client(id, name)),
@@ -48,6 +49,7 @@ const PART_REQUEST_SELECT = `
 const PART_REQUEST_SELECT_FALLBACK = `
     id, pieceName, description, thicknessMm, material, drawingJson, status,
     factoryEmployeeId, cabinetMakerId, montadorId, deliveryDueDate,
+    externalAssemblyInspectionId, trackingCode, orderProjectId,
     clientId, orderId, createdAt, updatedAt, createdById,
     client:Client(id, name),
     order:salesOrders(id, orderCode, clientId, client:Client(id, name)),
@@ -66,6 +68,8 @@ let partRequestListLayoutBound = false;
 /** Temporário: permite editar vínculo e metadados em qualquer status (reverter depois). */
 const PART_REQUEST_TEMP_EDIT_ANY_STATUS = true;
 let partRequestOrderCombobox = null;
+/** Ao criar peça a partir da vistoria: reabre a lista ao salvar/fechar. */
+let partRequestExternalAssemblyContext = null;
 const partRequestModalOverlay = typeof createAppOverlayHelper === 'function'
     ? createAppOverlayHelper('part-request-modal', {
         closeButtonSelector: '#btn-part-request-close'
@@ -73,7 +77,44 @@ const partRequestModalOverlay = typeof createAppOverlayHelper === 'function'
     : null;
 
 function partRequestSqlHint() {
-    return 'Execute os scripts de PartRequest em supabase/feats/ (ver PENDING-PROD-SQL.md) no Supabase SQL Editor (DEV).';
+    return 'Execute os scripts em PENDING-PROD-SQL.md (DEV): part-request-external-assembly-inspection-id e requisition-tracking-code.';
+}
+
+async function ensurePartRequestTrackingCode(record) {
+    const existing = normalizeScannableTrackingCode(record?.trackingCode);
+    if (existing) return existing;
+    const id = Number(record?.id);
+    if (!id || typeof generatePartRequestTrackingCode !== 'function') return '';
+
+    const code = generatePartRequestTrackingCode();
+    const now = new Date().toISOString();
+    const { data, error } = await supabaseClient
+        .from('PartRequest')
+        .update({ trackingCode: code, updatedAt: now, updatedById: currentUser?.id || null })
+        .eq('id', id)
+        .is('trackingCode', null)
+        .select('trackingCode')
+        .maybeSingle();
+
+    if (error?.message?.includes('trackingCode')) {
+        console.warn('ensurePartRequestTrackingCode:', error.message);
+        return '';
+    }
+    if (error) throw error;
+
+    const saved = normalizeScannableTrackingCode(data?.trackingCode) || code;
+    if (record) record.trackingCode = saved;
+    const cached = partRequestsCache.find(item => Number(item.id) === id);
+    if (cached) cached.trackingCode = saved;
+    if (partRequestEditingRecord && Number(partRequestEditingRecord.id) === id) {
+        partRequestEditingRecord.trackingCode = saved;
+    }
+    return saved;
+}
+
+function isPartRequestExternalAssemblyLocked(record = partRequestEditingRecord) {
+    if (Number(record?.externalAssemblyInspectionId) > 0) return true;
+    return Number(partRequestExternalAssemblyContext?.externalAssemblyInspectionId) > 0;
 }
 
 function getPartRequestProjectOptionLabel(project) {
@@ -338,6 +379,7 @@ function isPartRequestTempEditAnyStatusEnabled() {
 }
 
 function canEditPartRequestClientOrder(record = partRequestEditingRecord) {
+    if (isPartRequestExternalAssemblyLocked(record)) return false;
     if (!canUsePartRequestScreen()) return false;
     if (!record?.id) return true;
     if (!isPartRequestTempEditAnyStatusEnabled()) {
@@ -749,9 +791,10 @@ function initPartRequestOrderCombobox(selectedOrderId = null, selectedOrderCode 
     const list = document.getElementById('part-request-order-list');
     if (!wrap || !input || !list || typeof mountOrderSearchCombobox !== 'function') return;
 
-    const canEditOrder = !partRequestEditingRecord
-        || canEditPartRequestClientOrder(partRequestEditingRecord)
-        || canEditPartRequestMetadata(partRequestEditingRecord);
+    const canEditOrder = !isPartRequestExternalAssemblyLocked()
+        && (!partRequestEditingRecord
+            || canEditPartRequestClientOrder(partRequestEditingRecord)
+            || canEditPartRequestMetadata(partRequestEditingRecord));
     input.disabled = !canEditOrder;
     input.readOnly = !canEditOrder;
 
@@ -1112,6 +1155,101 @@ function canUsePartRequestScreen() {
     return typeof canAccessRequisicoesPartRequest === 'function' && canAccessRequisicoesPartRequest();
 }
 
+async function fetchPartRequestRecordById(partRequestId) {
+    const key = Number(partRequestId);
+    if (!key) return null;
+
+    let result = await supabaseClient
+        .from('PartRequest')
+        .select(PART_REQUEST_SELECT)
+        .eq('id', key)
+        .maybeSingle();
+
+    if (result.error && /relationship|embed|FactoryEmployee|OrderProject|schema cache/i.test(result.error.message || '')) {
+        result = await supabaseClient
+            .from('PartRequest')
+            .select(PART_REQUEST_SELECT_FALLBACK)
+            .eq('id', key)
+            .maybeSingle();
+    }
+
+    if (result.error) {
+        console.warn('fetchPartRequestRecordById:', result.error);
+        return null;
+    }
+    return result.data || null;
+}
+
+async function fetchPartRequestsByExternalAssemblyInspectionId(inspectionId) {
+    const key = Number(inspectionId);
+    if (!key) return { rows: [], missingColumn: false, error: null };
+
+    let result = await supabaseClient
+        .from('PartRequest')
+        .select(PART_REQUEST_SELECT)
+        .eq('externalAssemblyInspectionId', key)
+        .order('id', { ascending: false });
+
+    if (result.error && /relationship|embed|FactoryEmployee|OrderProject|externalAssemblyInspectionId|schema cache/i.test(result.error.message || '')) {
+        result = await supabaseClient
+            .from('PartRequest')
+            .select(PART_REQUEST_SELECT_FALLBACK)
+            .eq('externalAssemblyInspectionId', key)
+            .order('id', { ascending: false });
+    }
+
+    if (result.error?.message?.includes('externalAssemblyInspectionId')) {
+        return { rows: [], missingColumn: true, error: null };
+    }
+    if (result.error) {
+        return { rows: [], missingColumn: false, error: result.error };
+    }
+    return { rows: result.data || [], missingColumn: false, error: null };
+}
+
+async function fetchPartRequestsByOrderProjectIds(orderProjectIds = []) {
+    const ids = [...new Set((orderProjectIds || []).map(id => Number(id)).filter(id => id > 0))];
+    if (!ids.length) return { rows: [], error: null };
+
+    let result = await supabaseClient
+        .from('PartRequest')
+        .select(PART_REQUEST_SELECT)
+        .in('orderProjectId', ids)
+        .order('id', { ascending: false });
+
+    if (result.error && /relationship|embed|FactoryEmployee|OrderProject|orderProjectId|schema cache/i.test(result.error.message || '')) {
+        result = await supabaseClient
+            .from('PartRequest')
+            .select(PART_REQUEST_SELECT_FALLBACK)
+            .in('orderProjectId', ids)
+            .order('id', { ascending: false });
+    }
+
+    if (result.error) {
+        return { rows: [], error: result.error };
+    }
+    return { rows: result.data || [], error: null };
+}
+
+async function openPartRequestFormFromExternalAssemblyInspection(draft = {}) {
+    const reopenList = typeof draft.reopenList === 'function'
+        ? draft.reopenList
+        : (typeof openExternalAssemblyInspectionPartRequestsModal === 'function'
+            ? () => openExternalAssemblyInspectionPartRequestsModal()
+            : null);
+    partRequestExternalAssemblyContext = {
+        externalAssemblyInspectionId: Number(draft.externalAssemblyInspectionId)
+            || Number(draft.record?.externalAssemblyInspectionId)
+            || null,
+        reopenList
+    };
+    const { record, ...createDraft } = draft;
+    if (reopenList) {
+        toggleModal('eai-part-requests-modal', false);
+    }
+    await openPartRequestForm(record || null, record ? null : createDraft);
+}
+
 async function loadPartRequests(options = {}) {
     if (!canUsePartRequestScreen()) {
         alertAppDialog('Você não tem acesso à solicitação de peça.');
@@ -1223,24 +1361,38 @@ function syncPartRequestFormReadOnly(readOnly) {
         deliveryInput.disabled = readOnly || !metaEditable;
         deliveryInput.readOnly = readOnly || !metaEditable;
     }
-    const clientOrderEditable = !partRequestEditingRecord
+    const lockedEai = isPartRequestExternalAssemblyLocked();
+    const clientOrderEditable = !lockedEai && (
+        !partRequestEditingRecord
         || canEditPartRequestClientOrder(partRequestEditingRecord)
-        || canEditPartRequestMetadata(partRequestEditingRecord);
+        || canEditPartRequestMetadata(partRequestEditingRecord)
+    );
     const clientPicker = document.getElementById('btn-part-request-client-picker');
     const clientActionsLocked = computePartRequestClientActionsLocked();
     if (clientPicker) {
-        clientPicker.disabled = partRequestEditingRecord ? clientActionsLocked : false;
+        clientPicker.disabled = lockedEai || (partRequestEditingRecord ? clientActionsLocked : false);
     }
     syncPartRequestClientClearButton(clientActionsLocked);
     const orderSearch = document.getElementById('part-request-order-search');
     if (orderSearch) {
-        const orderLocked = partRequestEditingRecord && (readOnly || !clientOrderEditable);
+        const orderLocked = lockedEai || (partRequestEditingRecord && (readOnly || !clientOrderEditable));
         orderSearch.disabled = orderLocked;
         orderSearch.readOnly = orderLocked;
+        if (orderLocked) {
+            orderSearch.classList.add('bg-slate-50', 'text-slate-700');
+        } else {
+            orderSearch.classList.remove('bg-slate-50', 'text-slate-700');
+        }
     }
     const projectSelect = document.getElementById('part-request-order-project-id');
-    if (projectSelect && partRequestEditingRecord) {
-        projectSelect.disabled = readOnly || !clientOrderEditable;
+    if (projectSelect) {
+        const projectLocked = lockedEai || (partRequestEditingRecord && (readOnly || !clientOrderEditable));
+        projectSelect.disabled = projectLocked;
+        if (projectLocked) {
+            projectSelect.classList.add('bg-slate-50', 'text-slate-700');
+        } else {
+            projectSelect.classList.remove('bg-slate-50', 'text-slate-700');
+        }
     }
     syncPartRequestModalChrome(partRequestEditingRecord);
     syncPartRequestPrintButton(partRequestEditingRecord);
@@ -1354,6 +1506,7 @@ function hasPartRequestOrderSelected() {
 }
 
 function computePartRequestClientActionsLocked() {
+    if (isPartRequestExternalAssemblyLocked()) return true;
     if (!partRequestEditingRecord) return false;
     const readOnly = !canEditPartRequestDrawing(partRequestEditingRecord);
     const clientOrderEditable = canEditPartRequestClientOrder(partRequestEditingRecord)
@@ -1372,6 +1525,7 @@ function syncPartRequestClientClearButton(clientActionsLocked = false) {
 }
 
 function clearPartRequestClient() {
+    if (isPartRequestExternalAssemblyLocked()) return;
     if (hasPartRequestOrderSelected()) {
         alertAppDialog('Limpe ou altere o pedido antes de remover o cliente.');
         return;
@@ -1424,7 +1578,7 @@ async function applyPartRequestOrder(order, selectedProjectId = null) {
     await refreshPartRequestOrderProjects(nextOrderId, keepProjectId);
 }
 
-async function openPartRequestForm(record = null) {
+async function openPartRequestForm(record = null, createDraft = null) {
     if (!canUsePartRequestScreen()) {
         alertAppDialog('Você não tem acesso à solicitação de peça.');
         return;
@@ -1486,6 +1640,20 @@ async function openPartRequestForm(record = null) {
             clearPartRequestOrderProjectUi();
             initPartRequestOrderCombobox();
         }
+    } else if (createDraft?.orderId) {
+        const clientId = Number(createDraft.clientId) || null;
+        const clientName = String(createDraft.clientName || '').trim();
+        if (clientId || clientName) {
+            setPartRequestClient({ id: clientId, name: clientName });
+        }
+        await ensurePartRequestOrderInComboboxCache(createDraft.orderId);
+        await applyPartRequestOrder({
+            id: createDraft.orderId,
+            orderCode: createDraft.orderCode,
+            clientId,
+            client: clientId ? { id: clientId, name: clientName } : null
+        }, createDraft.orderProjectId);
+        initPartRequestOrderCombobox(createDraft.orderId, createDraft.orderCode || '');
     } else {
         initPartRequestOrderCombobox();
     }
@@ -1534,6 +1702,12 @@ async function savePartRequest(event) {
     const payload = await collectPartRequestFormMeta();
     if (!payload) return;
 
+    if (isPartRequestExternalAssemblyLocked() && partRequestEditingId) {
+        delete payload.clientId;
+        delete payload.orderId;
+        delete payload.orderProjectId;
+    }
+
     const now = new Date().toISOString();
     const userId = currentUser?.id || null;
 
@@ -1553,18 +1727,41 @@ async function savePartRequest(event) {
                 .eq('id', partRequestEditingId);
             if (error) throw error;
         } else {
-            const { data: created, error } = await supabaseClient
+            const insertRow = {
+                ...payload,
+                status: PART_REQUEST_STATUS_OPEN,
+                trackingCode: typeof generatePartRequestTrackingCode === 'function'
+                    ? generatePartRequestTrackingCode()
+                    : null,
+                createdAt: now,
+                updatedAt: now,
+                createdById: userId,
+                updatedById: userId
+            };
+            const inspectionId = Number(partRequestExternalAssemblyContext?.externalAssemblyInspectionId);
+            if (inspectionId > 0) {
+                insertRow.externalAssemblyInspectionId = inspectionId;
+            }
+            let insertResult = await supabaseClient
                 .from('PartRequest')
-                .insert({
-                    ...payload,
-                    status: PART_REQUEST_STATUS_OPEN,
-                    createdAt: now,
-                    updatedAt: now,
-                    createdById: userId,
-                    updatedById: userId
-                })
+                .insert(insertRow)
                 .select('id')
                 .single();
+            if (insertResult.error?.message?.includes('externalAssemblyInspectionId')) {
+                throw new Error(`Coluna externalAssemblyInspectionId ausente. ${partRequestSqlHint()}`);
+            }
+            if (insertResult.error?.message?.includes('trackingCode')) {
+                delete insertRow.trackingCode;
+                insertResult = await supabaseClient
+                    .from('PartRequest')
+                    .insert(insertRow)
+                    .select('id')
+                    .single();
+            }
+            if (insertResult.error?.message?.includes('trackingCode')) {
+                throw new Error(`Coluna trackingCode ausente. ${partRequestSqlHint()}`);
+            }
+            const { data: created, error } = insertResult;
             if (error) throw error;
             savedId = created.id;
         }
@@ -1574,6 +1771,12 @@ async function savePartRequest(event) {
         setPartRequestModalLoading(false);
         if (typeof partRequestDrawioDispose === 'function') partRequestDrawioDispose();
         toggleModal('part-request-modal', false);
+        const eaiCtx = partRequestExternalAssemblyContext;
+        partRequestExternalAssemblyContext = null;
+        if (eaiCtx?.reopenList) {
+            await eaiCtx.reopenList();
+            return;
+        }
         await loadPartRequests({ silent: true });
     } catch (error) {
         setPartRequestModalLoading(false);
@@ -1629,7 +1832,10 @@ function buildPartRequestPrintMeta(record = null) {
             : '',
         projectCabinetMakerName: fromRecord
             ? getPartRequestProjectCabinetMakerNameFromRecord(record)
-            : ''
+            : '',
+        trackingCode: fromRecord
+            ? normalizeScannableTrackingCode(record.trackingCode)
+            : normalizeScannableTrackingCode(partRequestEditingRecord?.trackingCode)
     };
     const executorSelect = document.getElementById('part-request-executor-id');
     const executorOption = executorSelect?.selectedOptions?.[0];
@@ -1656,6 +1862,12 @@ function buildPartRequestPrintMeta(record = null) {
 }
 
 async function printPartRequestFromRecord(record) {
+    try {
+        await ensurePartRequestTrackingCode(record);
+    } catch (error) {
+        alertAppDialog(`Não foi possível gerar o código da requisição: ${error.message}`);
+        return;
+    }
     const xml = typeof partRequestDrawioExtractXmlFromRecord === 'function'
         ? partRequestDrawioExtractXmlFromRecord(record)
         : null;
@@ -1673,6 +1885,14 @@ async function printPartRequestFromForm() {
     }
     const printRecord = partRequestEditingRecord
         || (partRequestEditingId ? { id: partRequestEditingId } : null);
+    if (printRecord?.id) {
+        try {
+            await ensurePartRequestTrackingCode(printRecord);
+        } catch (error) {
+            alertAppDialog(`Não foi possível gerar o código da requisição: ${error.message}`);
+            return;
+        }
+    }
     const meta = buildPartRequestPrintMeta(printRecord);
     try {
         setPartRequestModalLoading(true, 'Gerando impressão...');
@@ -1728,9 +1948,12 @@ function bindPartRequestEvents() {
         if (targetStatus) void transitionPartRequestStatus(partRequestEditingRecord, targetStatus);
     });
     document.getElementById('btn-part-request-close')?.addEventListener('click', () => {
+        const eaiCtx = partRequestExternalAssemblyContext;
+        partRequestExternalAssemblyContext = null;
         destroyPartRequestOrderCombobox();
         if (typeof partRequestDrawioDispose === 'function') partRequestDrawioDispose();
         toggleModal('part-request-modal', false);
+        if (eaiCtx?.reopenList) void eaiCtx.reopenList();
     });
     document.getElementById('btn-part-request-print')?.addEventListener('click', () => {
         void printPartRequestFromForm();
@@ -1768,5 +1991,9 @@ function bindPartRequestEvents() {
 
 window.loadPartRequests = loadPartRequests;
 window.openPartRequestForm = openPartRequestForm;
+window.fetchPartRequestsByOrderProjectIds = fetchPartRequestsByOrderProjectIds;
+window.fetchPartRequestsByExternalAssemblyInspectionId = fetchPartRequestsByExternalAssemblyInspectionId;
+window.fetchPartRequestRecordById = fetchPartRequestRecordById;
+window.openPartRequestFormFromExternalAssemblyInspection = openPartRequestFormFromExternalAssemblyInspection;
 window.bindPartRequestEvents = bindPartRequestEvents;
 window.openPartRequestStatusHistoryModal = openPartRequestStatusHistoryModal;

@@ -1,18 +1,14 @@
-function generateExpeditionVolumeCode() {
-    const token = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()
-        : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`.toUpperCase();
-    return `VOL-${token}`;
-}
-
 function buildExpeditionVolumesForItem(volumeCount) {
     const count = Number(volumeCount);
     if (!Number.isInteger(count) || count < 1) return [];
+    const gen = typeof generateExpeditionVolumeCode === 'function'
+        ? generateExpeditionVolumeCode
+        : () => `VOL-${Date.now()}`;
     const volumes = [];
     for (let index = 1; index <= count; index += 1) {
         volumes.push({
             volumeIndex: index,
-            volumeCode: generateExpeditionVolumeCode()
+            volumeCode: gen()
         });
     }
     return volumes;
@@ -436,8 +432,78 @@ function printExpeditionVolumeLabels(route, volumes, options = {}) {
     }
 }
 
-window.generateExpeditionVolumeCode = generateExpeditionVolumeCode;
+function renderRequisitionTrackingLabelHtml(meta = {}) {
+    const trackingCode = String(meta.trackingCode || '').trim();
+    const title = escapeHtml(String(meta.title || 'Requisição').trim() || 'Requisição');
+    const subtitle = escapeHtml(String(meta.subtitle || '').trim());
+    const kind = escapeHtml(String(meta.kindLabel || '').trim());
+    return `
+        <section class="volume-label requisition-tracking-label">
+            <p class="volume-label__type">${kind || 'Requisição'}</p>
+            <p class="volume-label__entity">${title}</p>
+            ${subtitle ? `<p class="volume-label__addr">${subtitle}</p>` : ''}
+            <svg class="vol-barcode" data-barcode="${escapeExpeditionPrintAttr(trackingCode)}"></svg>
+            <p class="vol-barcode-fallback">${escapeHtml(trackingCode)}</p>
+        </section>
+    `;
+}
+
+function printRequisitionTrackingLabel(meta = {}) {
+    const trackingCode = String(meta.trackingCode || '').trim();
+    if (!trackingCode) {
+        alertAppDialog('Requisição sem código de expedição.');
+        return;
+    }
+    const printWindow = openExpeditionLabelsPrintShell();
+    if (!printWindow) {
+        alertAppDialog('Permita pop-ups para imprimir.');
+        return;
+    }
+    const jsBarcodeUrl = resolveExpeditionJsBarcodeScriptUrl();
+    const labelHtml = renderRequisitionTrackingLabelHtml(meta);
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <title>Código ${escapeHtml(trackingCode)}</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+        .volume-labels-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 210mm; margin: 0 auto; }
+        .volume-label { border: 1px dashed #334155; border-radius: 4px; padding: 8px; page-break-inside: avoid; }
+        .volume-label__type { font-size: 9px; text-transform: uppercase; color: #64748b; margin: 0 0 4px; }
+        .volume-label__entity { font-size: 12px; font-weight: 600; margin: 0 0 6px; }
+        .volume-label__addr { font-size: 10px; margin: 0 0 6px; color: #334155; }
+        .vol-barcode { width: 100%; height: auto; display: block; }
+        .vol-barcode-fallback { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-align: center; margin: 4px 0 0; }
+        .print-toolbar { text-align: center; padding: 8px; }
+        .print-toolbar button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 0; background: #0f172a; color: #fff; cursor: pointer; }
+        @media print { .print-toolbar { display: none; } }
+    </style>
+</head>
+<body>
+    <div class="print-toolbar"><button type="button" onclick="window.print()">Imprimir</button></div>
+    <div class="volume-labels-grid">${labelHtml}${labelHtml}</div>
+    <script src="${escapeExpeditionPrintAttr(jsBarcodeUrl)}"><\/script>
+    <script>
+        (function () {
+            document.querySelectorAll('.vol-barcode[data-barcode]').forEach(function (node) {
+                var code = node.getAttribute('data-barcode') || '';
+                if (code && typeof JsBarcode !== 'undefined') {
+                    try { JsBarcode(node, code, { format: 'CODE128', displayValue: true, margin: 6, width: 1.5, height: 48 }); } catch (e) {}
+                }
+            });
+        })();
+    <\/script>
+</body>
+</html>`;
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+}
+
 window.buildExpeditionVolumesForItem = buildExpeditionVolumesForItem;
 window.fetchExpeditionRouteVolumes = fetchExpeditionRouteVolumes;
 window.openExpeditionLabelsPrintShell = openExpeditionLabelsPrintShell;
 window.printExpeditionVolumeLabels = printExpeditionVolumeLabels;
+window.printRequisitionTrackingLabel = printRequisitionTrackingLabel;

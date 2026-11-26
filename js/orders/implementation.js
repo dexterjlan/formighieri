@@ -541,12 +541,16 @@ function renderImplantacaoTerceiroPurchaseItems() {
         ) || {};
         const sentToCommercial = isImplementationPurchaseItemSentToCompras(existing);
         const isRequired = isImplantacaoTerceiroSubtypeRequired(subtypeId);
-        const isApproved = thirdPartyProject.status === THIRD_PARTY_PROJECT_STATUS_APPROVED;
+        const canceledStatus = getImplantacaoThirdPartyStatusCanceled();
+        const isCanceled = thirdPartyProject.status === canceledStatus;
+        const isApproved = thirdPartyProject.status === getImplantacaoThirdPartyStatusApproved();
         const label = escapeHtml(subtype.name || 'Terceiros');
         const requiredMarker = isRequired
             ? '<span class="project-characteristic-third-party-marker" title="Projeto de terceiros vinculado — obrigatório para enviar às compras após aprovação do consultor">*</span>'
             : '';
-        const statusClass = isApproved ? 'text-emerald-700' : 'text-amber-700';
+        const statusClass = isApproved
+            ? 'text-emerald-700'
+            : (isCanceled ? 'text-rose-700' : 'text-amber-700');
         const statusHtml = `<span class="text-[10px] font-medium ${statusClass}">${escapeHtml(getImplantacaoTerceiroSubtypeThirdPartyStatusLabel(thirdPartyProject))}</span>`;
         const canMarkForComprasSend = isApproved && !sentToCommercial;
         const checkboxDisabled = !canMarkForComprasSend;
@@ -741,12 +745,43 @@ function canSendImplementationPurchaseItem(item) {
         && !isImplementationPurchaseItemSentToCompras(item);
 }
 
+function getImplantacaoThirdPartyStatusApproved() {
+    return typeof THIRD_PARTY_PROJECT_STATUS_APPROVED === 'string'
+        ? THIRD_PARTY_PROJECT_STATUS_APPROVED
+        : 'Approved';
+}
+
+function getImplantacaoThirdPartyStatusCanceled() {
+    return typeof THIRD_PARTY_PROJECT_STATUS_CANCELED === 'string'
+        ? THIRD_PARTY_PROJECT_STATUS_CANCELED
+        : 'Canceled';
+}
+
+function isImplantacaoThirdPartyProjectRequiredForClose(project) {
+    return isImplantacaoTerceiroSubtypeRequired(Number(project?.thirdPartySubtypeId));
+}
+
+function getImplantacaoBlockingCanceledThirdPartyProjects() {
+    const canceledStatus = getImplantacaoThirdPartyStatusCanceled();
+    return (activeImplantacaoThirdPartyProjects || []).filter(project => (
+        isImplantacaoThirdPartyProjectRequiredForClose(project)
+        && String(project.status || '') === canceledStatus
+    ));
+}
+
 function allImplantacaoThirdPartyProjectsApprovedAndSent() {
-    const projects = activeImplantacaoThirdPartyProjects || [];
+    if (getImplantacaoBlockingCanceledThirdPartyProjects().length) {
+        return false;
+    }
+
+    const approvedStatus = getImplantacaoThirdPartyStatusApproved();
+    const projects = (activeImplantacaoThirdPartyProjects || [])
+        .filter(isImplantacaoThirdPartyProjectRequiredForClose);
+
     if (!projects.length) return true;
 
     return projects.every(project => {
-        if (project.status !== THIRD_PARTY_PROJECT_STATUS_APPROVED) return false;
+        if (String(project.status || '') !== approvedStatus) return false;
 
         const purchaseItem = getImplantacaoTerceiroPurchaseItems().find(
             item => Number(item.thirdPartySubtypeId) === Number(project.thirdPartySubtypeId)
@@ -1904,8 +1939,20 @@ async function handleImplantacaoEncerrar() {
         return;
     }
 
+    const canceledBlocking = getImplantacaoBlockingCanceledThirdPartyProjects();
+    if (canceledBlocking.length) {
+        const labels = canceledBlocking.map(project => (
+            project.thirdPartySubtype?.name
+            || `Subtipo #${Number(project.thirdPartySubtypeId) || ''}`
+        )).join(', ');
+        alertAppDialog(
+            `Não é possível encerrar: há projeto de terceiros cancelado (${labels}). Crie um novo projeto para o subtipo ou regularize com o consultor.`
+        );
+        return;
+    }
+
     if (!allImplantacaoThirdPartyProjectsApprovedAndSent()) {
-        alertAppDialog('Todos os projetos de terceiros vinculados precisam estar aprovados pelo consultor e enviados para compras.');
+        alertAppDialog('Todos os projetos de terceiros obrigatórios precisam estar aprovados pelo consultor e enviados para compras.');
         return;
     }
 

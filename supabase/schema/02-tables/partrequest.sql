@@ -21,8 +21,18 @@ CREATE TABLE public."PartRequest" (
     "montadorId" bigint,
     "factoryEmployeeId" bigint,
     "orderProjectId" bigint,
+    "externalAssemblyInspectionId" bigint,
+    "trackingCode" text,
     CONSTRAINT "PartRequest_status_check" CHECK ((status = ANY (ARRAY['Open'::text, 'Manufacturing'::text, 'Quality'::text, 'Shipping'::text, 'Delivered'::text])))
 );
+
+-- Name: COLUMN "PartRequest"."externalAssemblyInspectionId"; Type: COMMENT; Schema: public; Owner: -
+
+--
+
+COMMENT ON COLUMN public."PartRequest"."externalAssemblyInspectionId" IS 'Part request created from external assembly inspection flow.';
+
+COMMENT ON COLUMN public."PartRequest"."trackingCode" IS 'Scannable code printed on the part request sheet; used as route volume code (RPP-…).';
 
 -- Name: PartRequest_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 

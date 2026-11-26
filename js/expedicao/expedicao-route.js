@@ -376,11 +376,13 @@ async function buildWizardStateFromRoute(routeId) {
             if (!isPickup && !itemVolumes.length && typeof buildExpeditionVolumesForItem === 'function') {
                 itemVolumes = buildExpeditionVolumesForItem(volumeCount);
             }
+            const isRequisition = typeof isExpeditionRequisitionEntityType === 'function'
+                && isExpeditionRequisitionEntityType(item.entityType);
             return {
                 entityType: item.entityType,
                 entityId: item.entityId,
                 label: item.entityLabel || '',
-                volumeCount,
+                volumeCount: isRequisition ? Math.max(1, Math.min(volumeCount, 1)) : volumeCount,
                 volumes: itemVolumes,
                 metadata: item.metadataJson || {}
             };

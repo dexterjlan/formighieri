@@ -19,6 +19,64 @@ const COMPRA_TIPO_TINTA = 'Tinta';
 const COMPRA_TIPO_TERCEIRO = 'Terceiro';
 
 let activeCompraRecord = null;
+
+async function ensurePurchaseTrackingCode(record) {
+    const existing = typeof normalizeScannableTrackingCode === 'function'
+        ? normalizeScannableTrackingCode(record?.trackingCode)
+        : String(record?.trackingCode || '').trim();
+    if (existing) return existing;
+    const id = Number(record?.id);
+    if (!id || typeof generatePurchaseTrackingCode !== 'function') return '';
+
+    const code = generatePurchaseTrackingCode();
+    const now = new Date().toISOString();
+    const { data, error } = await supabaseClient
+        .from('Purchase')
+        .update({ trackingCode: code, updatedAt: now, updatedById: currentUser?.id || null })
+        .eq('id', id)
+        .is('trackingCode', null)
+        .select('trackingCode')
+        .maybeSingle();
+
+    if (error?.message?.includes('trackingCode')) {
+        console.warn('ensurePurchaseTrackingCode:', error.message);
+        return '';
+    }
+    if (error) throw error;
+
+    const saved = (typeof normalizeScannableTrackingCode === 'function'
+        ? normalizeScannableTrackingCode(data?.trackingCode)
+        : String(data?.trackingCode || '').trim()) || code;
+    if (record) record.trackingCode = saved;
+    if (activeCompraRecord && Number(activeCompraRecord.id) === id) {
+        activeCompraRecord.trackingCode = saved;
+    }
+    return saved;
+}
+
+function printPurchaseTrackingLabelFromRecord(record) {
+    if (typeof printRequisitionTrackingLabel !== 'function') {
+        alertAppDialog('Impressão de código indisponível.');
+        return;
+    }
+    const trackingCode = typeof normalizeScannableTrackingCode === 'function'
+        ? normalizeScannableTrackingCode(record?.trackingCode)
+        : String(record?.trackingCode || '').trim();
+    const title = [
+        record?.orderCode ? `Pedido ${record.orderCode}` : '',
+        formatCompraModalTipoLabel(record)
+    ].filter(Boolean).join(' · ') || `Compra #${record?.id || ''}`;
+    const subtitle = [
+        record?.clientName,
+        record?.projectName
+    ].filter(Boolean).join(' · ');
+    printRequisitionTrackingLabel({
+        trackingCode,
+        title,
+        subtitle,
+        kindLabel: 'Req. compra'
+    });
+}
 let activeCompraThirdPartyDriveFile = null;
 let activeCompraModalReadOnly = false;
 let compraStatusesCache = [];
@@ -523,7 +581,8 @@ const PURCHASE_OPTIONAL_INSERT_COLUMNS = [
     'attachmentFileName',
     'fallbackPurchaseType',
     'externalAssemblyInspectionId',
-    'assistanceRequestId'
+    'assistanceRequestId',
+    'trackingCode'
 ];
 
 async function insertPurchaseRows(rows) {
@@ -531,6 +590,9 @@ async function insertPurchaseRows(rows) {
     let pending = rows.map(row => {
         const copy = { ...row };
         delete copy.fallbackPurchaseType;
+        if (!copy.trackingCode && typeof generatePurchaseTrackingCode === 'function') {
+            copy.trackingCode = generatePurchaseTrackingCode();
+        }
         return copy;
     });
     let result = await supabaseClient.from('Purchase').insert(pending).select('*');
@@ -912,6 +974,13 @@ function populateCompraForm(record) {
     }
 
     document.getElementById('compra-modal-order-code').textContent = record?.orderCode || '—';
+    const trackingCode = typeof normalizeScannableTrackingCode === 'function'
+        ? normalizeScannableTrackingCode(record?.trackingCode)
+        : String(record?.trackingCode || '').trim();
+    const trackingEl = document.getElementById('compra-modal-tracking-code');
+    if (trackingEl) trackingEl.textContent = trackingCode || '—';
+    const printTrackingBtn = document.getElementById('btn-compra-print-tracking');
+    if (printTrackingBtn) printTrackingBtn.disabled = !Number(record?.id);
     setCompraSummaryText('compra-modal-client-name', record?.clientName);
     setCompraSummaryText('compra-modal-project-name', record?.projectName);
     setCompraSummaryText('compra-modal-designer-name', designerName);
@@ -1112,6 +1181,11 @@ async function openPurchaseModal(compraId, options = {}) {
 
         activeCompraModalReadOnly = Boolean(options.readOnly);
         activeCompraRecord = await enrichCompraRecord(record);
+        try {
+            await ensurePurchaseTrackingCode(activeCompraRecord);
+        } catch (error) {
+            console.warn('openPurchaseModal trackingCode:', error);
+        }
         populateCompraForm(activeCompraRecord);
         syncCompraModalReadOnlyUi(activeCompraModalReadOnly);
         const compraModalEl = document.getElementById('compra-modal');
@@ -1257,6 +1331,16 @@ function bindPurchaseEvents() {
     });
 
     document.getElementById('btn-compra-salvar')?.addEventListener('click', handleCompraSalvar);
+    document.getElementById('btn-compra-print-tracking')?.addEventListener('click', async () => {
+        if (!activeCompraRecord?.id) return;
+        try {
+            await ensurePurchaseTrackingCode(activeCompraRecord);
+            populateCompraForm(activeCompraRecord);
+            printPurchaseTrackingLabelFromRecord(activeCompraRecord);
+        } catch (error) {
+            alertAppDialog(`Erro ao imprimir código: ${error.message}`);
+        }
+    });
 
     document.getElementById('btn-compra-third-party-open')?.addEventListener('click', openCompraThirdPartyDriveFileInNewTab);
     document.getElementById('btn-compra-third-party-download')?.addEventListener('click', downloadCompraThirdPartyDriveFile);

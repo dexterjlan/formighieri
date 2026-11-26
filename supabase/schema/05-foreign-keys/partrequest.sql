@@ -47,6 +47,13 @@ ALTER TABLE ONLY public."PartRequest"
 ALTER TABLE ONLY public."PartRequest"
     ADD CONSTRAINT "PartRequest_orderProjectId_fkey" FOREIGN KEY ("orderProjectId") REFERENCES public."OrderProject"(id) ON DELETE SET NULL;
 
+-- Name: PartRequest PartRequest_externalAssemblyInspectionId_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+
+--
+
+ALTER TABLE ONLY public."PartRequest"
+    ADD CONSTRAINT "PartRequest_externalAssemblyInspectionId_fkey" FOREIGN KEY ("externalAssemblyInspectionId") REFERENCES public."ExternalAssemblyInspection"(id) ON DELETE SET NULL;
+
 -- Name: PartRequest PartRequest_updatedById_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 
 --
