@@ -31,6 +31,11 @@ const MATRIX_ROOM_DEFINITIONS = [
         roomAlias: '#formighieri_revisoes:matrix.org'
     },
     {
+        key: 'routes',
+        label: 'Rotas',
+        roomAlias: '#formighieri_rotas:matrix.org'
+    },
+    {
         key: 'externalAssemblyInspection',
         label: 'Vistoria',
         roomAlias: '#formighieri_vistoria:matrix.org'
@@ -79,6 +84,7 @@ const MATRIX_PROJECTS_ROOM_ALIAS = getMatrixRoomAlias('projects');
 const MATRIX_DETAILING_ROOM_ALIAS = getMatrixRoomAlias('detailing');
 const MATRIX_FURNITURE_ROOM_ALIAS = getMatrixRoomAlias('furniture');
 const MATRIX_REVISIONS_ROOM_ALIAS = getMatrixRoomAlias('revisions');
+const MATRIX_ROUTES_ROOM_ALIAS = getMatrixRoomAlias('routes');
 
 window.MATRIX_ROOM_DEFINITIONS = MATRIX_ROOM_DEFINITIONS;
 window.MATRIX_ROOMS_BY_KEY = MATRIX_ROOMS_BY_KEY;
@@ -92,3 +98,4 @@ window.MATRIX_PROJECTS_ROOM_ALIAS = MATRIX_PROJECTS_ROOM_ALIAS;
 window.MATRIX_DETAILING_ROOM_ALIAS = MATRIX_DETAILING_ROOM_ALIAS;
 window.MATRIX_FURNITURE_ROOM_ALIAS = MATRIX_FURNITURE_ROOM_ALIAS;
 window.MATRIX_REVISIONS_ROOM_ALIAS = MATRIX_REVISIONS_ROOM_ALIAS;
+window.MATRIX_ROUTES_ROOM_ALIAS = MATRIX_ROUTES_ROOM_ALIAS;

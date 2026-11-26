@@ -37,6 +37,8 @@ const VIEW3D_IGNORED_NAME_FRAGMENTS = [
 ];
 /** Só na árvore do painel (malhas geométricas repetidas). */
 const VIEW3D_HIERARCHY_ONLY_NAME_FRAGMENTS = ['Geom3D'];
+/** Nó omitido na lista; filhos continuam no mesmo nível de indentação. */
+const VIEW3D_HIERARCHY_HIDDEN_EXACT_NAMES = ['Cena', 'Placa_4x', 'Porta_Madeira'];
 
 function view3dNameMatchesIgnoredFragments(rawName, extraFragments = []) {
     const name = String(rawName || '');
@@ -59,6 +61,20 @@ function isView3dIgnoredHierarchyNode(node) {
         return true;
     }
     return false;
+}
+
+function isView3dHierarchyHiddenByName(node) {
+    const name = String(node?.name || '').trim();
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    return VIEW3D_HIERARCHY_HIDDEN_EXACT_NAMES.some(hidden => hidden.toLowerCase() === lower);
+}
+
+function visitView3dHierarchyChildren(node, depth, visit) {
+    for (const child of node.children || []) {
+        if (isView3dIgnoredHierarchyNode(child)) continue;
+        visit(child, depth);
+    }
 }
 
 /** Destaque 3D: só ignora nó pelo name (malhas Geom3D continuam pintáveis). */
@@ -96,6 +112,10 @@ function countView3dHierarchyVisibleChildren(node, depth) {
     for (const child of node.children || []) {
         if (isView3dIgnoredHierarchyNode(child)) continue;
         const childDepth = depth + 1;
+        if (isView3dHierarchyHiddenByName(child)) {
+            count += countView3dHierarchyVisibleChildren(child, childDepth);
+            continue;
+        }
         if (isView3dUnnamedHierarchyNode(child) && shouldOmitUnnamedFromHierarchy(childDepth)) {
             count += countView3dHierarchyVisibleChildren(child, childDepth);
         } else {
@@ -813,11 +833,12 @@ class View3dThreeViewer {
 
         const visit = (node, depth) => {
             if (isView3dIgnoredHierarchyNode(node)) return;
+            if (isView3dHierarchyHiddenByName(node)) {
+                visitView3dHierarchyChildren(node, depth, visit);
+                return;
+            }
             if (isView3dUnnamedHierarchyNode(node) && shouldOmitUnnamedFromHierarchy(depth)) {
-                for (const child of node.children || []) {
-                    if (isView3dIgnoredHierarchyNode(child)) continue;
-                    visit(child, depth);
-                }
+                visitView3dHierarchyChildren(node, depth, visit);
                 return;
             }
             if (depth >= VIEW3D_HIERARCHY_MAX_DEPTH) return;
@@ -848,10 +869,7 @@ class View3dThreeViewer {
                 suffix
             });
             if (atDepthLimit) return;
-            for (const child of node.children || []) {
-                if (isView3dIgnoredHierarchyNode(child)) continue;
-                visit(child, depth + 1);
-            }
+            visitView3dHierarchyChildren(node, depth + 1, visit);
         };
 
         visit(this.model, 0);

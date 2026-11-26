@@ -71,6 +71,7 @@ const SCRIPTS = [
     'js/core/matrix-coordination-notifications.js',
     'js/core/matrix-wps-item-notifications.js',
     'js/core/matrix-detailing-notifications.js',
+    'js/core/matrix-expedition-notifications.js',
     'js/core/welcome.js',
     'js/comercial/comercial.js',
     'js/comercial/comercial-commissions.js',

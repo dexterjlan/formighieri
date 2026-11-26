@@ -161,13 +161,19 @@ async function promoteExpeditionRouteBoardingStarted(routeId) {
         .eq('id', key)
         .maybeSingle();
 
-    if (!route || route.status !== 'Printed') return;
+    if (!route || route.status !== 'Printed') return false;
 
     const now = new Date().toISOString();
-    await supabaseClient
+    const { error } = await supabaseClient
         .from('ExpeditionRoute')
         .update({ status: 'BoardingStarted', updatedAt: now })
         .eq('id', key);
+
+    if (error) {
+        console.warn('promoteExpeditionRouteBoardingStarted:', error);
+        return false;
+    }
+    return true;
 }
 
 async function tryCompleteExpeditionRouteBoarding(routeId, volumes) {
@@ -472,7 +478,11 @@ function applyLocalBoardedVolume(volumeId) {
 }
 
 async function finishExpeditionBoardingRouteFeedback(volumes, options) {
-    await tryCompleteExpeditionRouteBoarding(expedicaoBoardingRouteId, volumes);
+    const routeId = expedicaoBoardingRouteId;
+    const completed = await tryCompleteExpeditionRouteBoarding(routeId, volumes);
+    if (completed && routeId && typeof notifyMatrixExpeditionBoardingFinished === 'function') {
+        notifyMatrixExpeditionBoardingFinished(routeId);
+    }
     if (expedicaoBoardingDetail?.route) {
         expedicaoBoardingDetail.route.status = 'Boarded';
         expedicaoBoardingDetail.boardedCount = expedicaoBoardingDetail.totalCount || volumes.length;
@@ -538,7 +548,10 @@ async function openExpedicaoBoardingRoute(routeId) {
         expedicaoBoardingDetail = await fetchExpeditionBoardingRouteDetail(key);
         expedicaoBoardingRouteId = key;
         expedicaoBoardingView = 'detail';
-        await promoteExpeditionRouteBoardingStarted(key);
+        const boardingJustStarted = await promoteExpeditionRouteBoardingStarted(key);
+        if (boardingJustStarted && typeof notifyMatrixExpeditionBoardingStarted === 'function') {
+            notifyMatrixExpeditionBoardingStarted(key);
+        }
         expedicaoBoardingDetail.route.status = expedicaoBoardingDetail.route.status === 'Printed'
             ? 'BoardingStarted'
             : expedicaoBoardingDetail.route.status;

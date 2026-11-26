@@ -1147,8 +1147,20 @@ async function processExpedicaoUnloadingScanCode(rawCode, options = {}) {
 
         const stopIndexBefore = (expedicaoUnloadingDetail?.stops || [])
             .findIndex(s => Number(s.stopId) === Number(expedicaoUnloadingCurrentStopId)) + 1;
+        const currentStopBefore = getExpeditionUnloadingCurrentStop();
+        const pendingBeforeScan = currentStopBefore ? stopUnloadingPending(currentStopBefore).length : 0;
+        const totalAtStop = (currentStopBefore?.volumes || []).filter(vol => vol.boardedAt).length;
 
         await markExpeditionVolumeUnloaded(volume.id);
+
+        if (typeof notifyMatrixExpeditionUnloadingStopScanEvents === 'function') {
+            notifyMatrixExpeditionUnloadingStopScanEvents(
+                expedicaoUnloadingRouteId,
+                stopIndexBefore,
+                pendingBeforeScan,
+                totalAtStop
+            );
+        }
         await promoteExpeditionRouteUnloadingStarted(expedicaoUnloadingRouteId);
         applyLocalUnloadedVolume(volume.id);
 

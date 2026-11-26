@@ -6,6 +6,8 @@ let view3dOrderCombobox = null;
 let view3dThreeViewer = null;
 let view3dCurrentBlobUrl = null;
 let view3dThreeModulePromise = null;
+let view3dHierarchyCollapsedIndices = new Set();
+let view3dHierarchyReportKey = '';
 
 function setView3dThreeOverlay(active) {
     document.getElementById('view3d-three-overlay')?.classList.toggle('hidden', !active);
@@ -1155,6 +1157,19 @@ function bindView3dEvents() {
         applyView3dNameHighlight();
     });
     document.getElementById('view3d-hierarchy-tree')?.addEventListener('click', event => {
+        const toggle = event.target.closest('.view3d-hierarchy-toggle');
+        if (toggle && toggle.dataset.view3dHierarchyIndex != null) {
+            event.preventDefault();
+            const index = Number(toggle.dataset.view3dHierarchyIndex);
+            if (!Number.isFinite(index)) return;
+            if (view3dHierarchyCollapsedIndices.has(index)) {
+                view3dHierarchyCollapsedIndices.delete(index);
+            } else {
+                view3dHierarchyCollapsedIndices.add(index);
+            }
+            renderView3dHierarchyPanel();
+            return;
+        }
         const link = event.target.closest('.view3d-hierarchy-name-link');
         if (!link) return;
         const highlightName = link.dataset.view3dHighlightName;
@@ -1196,6 +1211,40 @@ function bindView3dEvents() {
     });
 }
 
+function view3dHierarchyEntryHasChildren(entries, index) {
+    const next = entries[index + 1];
+    return Boolean(next && next.depth > entries[index].depth);
+}
+
+function isView3dHierarchyEntryVisible(entries, index, collapsedSet) {
+    let depth = entries[index].depth;
+    for (let i = index - 1; i >= 0; i -= 1) {
+        if (entries[i].depth < depth) {
+            if (collapsedSet.has(i)) return false;
+            depth = entries[i].depth;
+        }
+    }
+    return true;
+}
+
+function getView3dHierarchyReportKey(report) {
+    const entries = report?.entries || [];
+    if (!entries.length) return '';
+    const first = entries[0];
+    const last = entries[entries.length - 1];
+    return `${report.nodeCount}|${entries.length}|${first.depth}:${first.label}|${last.depth}:${last.label}`;
+}
+
+function resetView3dHierarchyCollapseState(report) {
+    const entries = report?.entries || [];
+    view3dHierarchyCollapsedIndices = new Set();
+    for (let i = 0; i < entries.length; i += 1) {
+        if (view3dHierarchyEntryHasChildren(entries, i)) {
+            view3dHierarchyCollapsedIndices.add(i);
+        }
+    }
+}
+
 function renderView3dHierarchyPanel() {
     const treeEl = document.getElementById('view3d-hierarchy-tree');
     const statsEl = document.getElementById('view3d-hierarchy-stats');
@@ -1203,15 +1252,29 @@ function renderView3dHierarchyPanel() {
     if (!treeEl) return;
 
     if (!report) {
+        view3dHierarchyReportKey = '';
+        view3dHierarchyCollapsedIndices = new Set();
         if (statsEl) statsEl.textContent = '';
         treeEl.innerHTML = '';
         treeEl.textContent = 'Nenhum modelo carregado.';
         return;
     }
 
+    const entries = report.entries || [];
+    const reportKey = getView3dHierarchyReportKey(report);
+    if (reportKey !== view3dHierarchyReportKey) {
+        view3dHierarchyReportKey = reportKey;
+        resetView3dHierarchyCollapseState(report);
+    }
+
     const activeName = document.getElementById('view3d-highlight-name-input')?.value?.trim() || '';
-    const rows = (report.entries || []).map(entry => {
+    const rows = [];
+    for (let index = 0; index < entries.length; index += 1) {
+        if (!isView3dHierarchyEntryVisible(entries, index, view3dHierarchyCollapsedIndices)) continue;
+        const entry = entries[index];
         const pad = Math.max(0, entry.depth) * 0.65;
+        const hasChildren = view3dHierarchyEntryHasChildren(entries, index);
+        const collapsed = view3dHierarchyCollapsedIndices.has(index);
         const kind = escapeHtml(entry.kind);
         const label = escapeHtml(entry.label);
         const suffix = escapeHtml(entry.suffix || '');
@@ -1224,14 +1287,22 @@ function renderView3dHierarchyPanel() {
         const labelHtml = canHighlight
             ? `<button type="button" class="view3d-hierarchy-name-link${activeName === entry.highlightName ? ' is-active' : ''}" data-view3d-highlight-name="${nameAttr}">${nameEsc}</button>`
             : `<span class="text-slate-400">${label}</span>`;
-        return `<div class="view3d-hierarchy-row" style="padding-left:${pad}rem" role="treeitem">`
-            + `<span class="text-slate-500">${kind}:</span> ${labelHtml}`
+        const toggleHtml = hasChildren
+            ? `<button type="button" class="view3d-hierarchy-toggle" data-view3d-hierarchy-index="${index}" aria-expanded="${collapsed ? 'false' : 'true'}" title="${collapsed ? 'Expandir' : 'Recolher'}">${collapsed ? '▸' : '▾'}</button>`
+            : '<span class="view3d-hierarchy-toggle view3d-hierarchy-toggle--spacer" aria-hidden="true"></span>';
+        rows.push(
+            `<div class="view3d-hierarchy-row" style="padding-left:${pad}rem" role="treeitem" aria-expanded="${hasChildren && !collapsed}">`
+            + toggleHtml
+            + `<span class="view3d-hierarchy-row__body"><span class="text-slate-500">${kind}:</span> ${labelHtml}`
             + (suffix ? `<span class="view3d-hierarchy-row__meta">${suffix}</span>` : '')
-            + `</div>`;
-    });
+            + '</span></div>'
+        );
+    }
     treeEl.innerHTML = rows.join('');
+    treeEl.setAttribute('role', 'tree');
     if (statsEl) {
-        let stats = `${report.nodeCount} nós · ${report.meshCount} mesh${report.meshCount === 1 ? '' : 'es'}`;
+        const visibleCount = rows.length;
+        let stats = `${visibleCount} visíveis · ${report.nodeCount} nós · ${report.meshCount} mesh${report.meshCount === 1 ? '' : 'es'}`;
         if (report.truncated) stats += ' · truncado';
         statsEl.textContent = stats;
     }
@@ -1241,11 +1312,14 @@ function resetView3dHierarchyPanel() {
     const panel = document.getElementById('view3d-hierarchy-panel');
     panel?.classList.add('hidden');
     toggleView3dToolbarActive(document.getElementById('btn-view3d-toggle-hierarchy'), false);
+    view3dHierarchyReportKey = '';
+    view3dHierarchyCollapsedIndices = new Set();
     const treeEl = document.getElementById('view3d-hierarchy-tree');
     const statsEl = document.getElementById('view3d-hierarchy-stats');
     if (treeEl) {
         treeEl.innerHTML = '';
         treeEl.textContent = '';
+        treeEl.removeAttribute('role');
     }
     if (statsEl) statsEl.textContent = '';
     const inputEl = document.getElementById('view3d-highlight-name-input');
