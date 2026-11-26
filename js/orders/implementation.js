@@ -83,6 +83,7 @@ let activeImplantacaoCompraLinkedPurchaseItemIds = new Set();
 let activeImplantacaoCompraLockedStandardPurchaseTypes = new Set();
 let activeImplantacaoThirdPartyProjects = [];
 let activeImplantacaoOrderProjectRequiresMandatoryTintaList = false;
+let activeImplantacaoOrderProjectCharacteristicIds = new Set();
 let implantacaoThirdPartySubtypesCache = [];
 
 const IMPLANTACAO_STANDARD_PURCHASE_TYPES = new Set([
@@ -246,6 +247,28 @@ async function loadActiveImplantacaoOrderProjectMandatoryTintaFlag(orderProjectI
 
 async function loadActiveImplantacaoOrderProjectProvencalFlag(orderProjectId = activeImplantacaoOrderProjectId) {
     return loadActiveImplantacaoOrderProjectMandatoryTintaFlag(orderProjectId);
+}
+
+async function loadActiveImplantacaoOrderProjectCharacteristicIds(orderProjectId = activeImplantacaoOrderProjectId) {
+    activeImplantacaoOrderProjectCharacteristicIds = new Set();
+    const projectId = Number(orderProjectId || 0);
+    if (!projectId || typeof fetchOrderProjectCharacteristicsMap !== 'function') {
+        return activeImplantacaoOrderProjectCharacteristicIds;
+    }
+
+    const map = await fetchOrderProjectCharacteristicsMap([projectId]);
+    const rows = map.get(projectId) || [];
+    rows.forEach(row => {
+        const id = Number(row.characteristicId);
+        if (id) activeImplantacaoOrderProjectCharacteristicIds.add(id);
+    });
+    return activeImplantacaoOrderProjectCharacteristicIds;
+}
+
+function isImplantacaoOrderProjectCharacteristicActive(characteristicId) {
+    const id = Number(characteristicId);
+    if (!id) return true;
+    return activeImplantacaoOrderProjectCharacteristicIds.has(id);
 }
 
 function updateImplantacaoProvencalTintasSectionUi() {
@@ -757,38 +780,39 @@ function getImplantacaoThirdPartyStatusCanceled() {
         : 'Canceled';
 }
 
-function isImplantacaoThirdPartyProjectRequiredForClose(project) {
-    return isImplantacaoTerceiroSubtypeRequired(Number(project?.thirdPartySubtypeId));
-}
+function isImplantacaoThirdPartyProjectSatisfiedForClose(project) {
+    if (!project) return true;
 
-function getImplantacaoBlockingCanceledThirdPartyProjects() {
     const canceledStatus = getImplantacaoThirdPartyStatusCanceled();
-    return (activeImplantacaoThirdPartyProjects || []).filter(project => (
-        isImplantacaoThirdPartyProjectRequiredForClose(project)
-        && String(project.status || '') === canceledStatus
-    ));
-}
+    const status = String(project.status || '');
+    const subtypeId = Number(project.thirdPartySubtypeId);
 
-function allImplantacaoThirdPartyProjectsApprovedAndSent() {
-    if (getImplantacaoBlockingCanceledThirdPartyProjects().length) {
+    if (!isImplantacaoTerceiroSubtypeRequired(subtypeId)) {
+        return true;
+    }
+
+    if (status === canceledStatus) {
+        return true;
+    }
+
+    const characteristicId = Number(project.projectCharacteristicId);
+    if (characteristicId && !isImplantacaoOrderProjectCharacteristicActive(characteristicId)) {
         return false;
     }
 
     const approvedStatus = getImplantacaoThirdPartyStatusApproved();
-    const projects = (activeImplantacaoThirdPartyProjects || [])
-        .filter(isImplantacaoThirdPartyProjectRequiredForClose);
+    if (status !== approvedStatus) return false;
 
+    const purchaseItem = getImplantacaoTerceiroPurchaseItems().find(
+        item => Number(item.thirdPartySubtypeId) === subtypeId
+    );
+    return Boolean(purchaseItem?.sentToCommercial);
+}
+
+function allImplantacaoThirdPartyProjectsApprovedAndSent() {
+    const projects = activeImplantacaoThirdPartyProjects || [];
     if (!projects.length) return true;
-
-    return projects.every(project => {
-        if (String(project.status || '') !== approvedStatus) return false;
-
-        const purchaseItem = getImplantacaoTerceiroPurchaseItems().find(
-            item => Number(item.thirdPartySubtypeId) === Number(project.thirdPartySubtypeId)
-        );
-
-        return Boolean(purchaseItem?.sentToCommercial);
-    });
+    return projects.every(isImplantacaoThirdPartyProjectSatisfiedForClose);
 }
 
 function resolveImplantacaoStatusAfterReopen(record = activeImplantacaoRecord) {
@@ -1259,7 +1283,10 @@ async function refreshImplantacaoModalThirdPartyState() {
         );
     }
 
-    await loadActiveImplantacaoOrderProjectProvencalFlag(activeImplantacaoOrderProjectId);
+    await Promise.all([
+        loadActiveImplantacaoOrderProjectProvencalFlag(activeImplantacaoOrderProjectId),
+        loadActiveImplantacaoOrderProjectCharacteristicIds(activeImplantacaoOrderProjectId)
+    ]);
 
     populateImplantacaoForm(activeImplantacaoRecord);
     updateImplantacaoActionButtons(activeImplantacaoRecord);
@@ -1381,7 +1408,10 @@ async function openImplementationModal(orderProjectId, projectName = '', options
             activeImplantacaoThirdPartyProjects = [];
         }
 
-        await loadActiveImplantacaoOrderProjectProvencalFlag(activeImplantacaoOrderProjectId);
+        await Promise.all([
+            loadActiveImplantacaoOrderProjectProvencalFlag(activeImplantacaoOrderProjectId),
+            loadActiveImplantacaoOrderProjectCharacteristicIds(activeImplantacaoOrderProjectId)
+        ]);
 
         document.getElementById('implantacao-modal-project-name').textContent = activeImplantacaoProjectName;
         populateImplantacaoForm(activeImplantacaoRecord);
@@ -1420,6 +1450,7 @@ function closeImplementationModal() {
     activeImplantacaoCompraLockedStandardPurchaseTypes = new Set();
     activeImplantacaoThirdPartyProjects = [];
     activeImplantacaoOrderProjectRequiresMandatoryTintaList = false;
+    activeImplantacaoOrderProjectCharacteristicIds = new Set();
 }
 window.closeImplementationModal = closeImplementationModal;
 window.openImplementationModal = openImplementationModal;
@@ -1939,20 +1970,10 @@ async function handleImplantacaoEncerrar() {
         return;
     }
 
-    const canceledBlocking = getImplantacaoBlockingCanceledThirdPartyProjects();
-    if (canceledBlocking.length) {
-        const labels = canceledBlocking.map(project => (
-            project.thirdPartySubtype?.name
-            || `Subtipo #${Number(project.thirdPartySubtypeId) || ''}`
-        )).join(', ');
-        alertAppDialog(
-            `Não é possível encerrar: há projeto de terceiros cancelado (${labels}). Crie um novo projeto para o subtipo ou regularize com o consultor.`
-        );
-        return;
-    }
-
     if (!allImplantacaoThirdPartyProjectsApprovedAndSent()) {
-        alertAppDialog('Todos os projetos de terceiros obrigatórios precisam estar aprovados pelo consultor e enviados para compras.');
+        alertAppDialog(
+            'Projetos de terceiros obrigatórios precisam estar aprovados e enviados para compras, ou cancelados (por exemplo, após retirar a característica do projeto).'
+        );
         return;
     }
 
