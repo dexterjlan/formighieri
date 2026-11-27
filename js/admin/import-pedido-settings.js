@@ -12,6 +12,7 @@ function setSettingsNavActive(panelKey) {
         'lost-reasons': document.getElementById('settings-nav-lost-reasons'),
         'project-status': document.getElementById('settings-nav-project-status'),
         'create-detailing': document.getElementById('settings-nav-create-detailing'),
+        'cancel-detailing': document.getElementById('settings-nav-cancel-detailing'),
         'compra-status': document.getElementById('settings-nav-compra-status'),
         usuarios: document.getElementById('settings-nav-usuarios')
     };

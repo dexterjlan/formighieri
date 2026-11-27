@@ -305,6 +305,7 @@ function hideAllGestaoPanels() {
     document.getElementById('gestao-alterar-status-terceiros-panel')?.classList.add('hidden');
     document.getElementById('gestao-agrupar-projetos-panel')?.classList.add('hidden');
     document.getElementById('gestao-create-detailing-panel')?.classList.add('hidden');
+    document.getElementById('gestao-cancel-detailing-panel')?.classList.add('hidden');
     document.getElementById('gestao-clientes-panel')?.classList.add('hidden');
     document.getElementById('gestao-architects-panel')?.classList.add('hidden');
     document.getElementById('gestao-addr-panel')?.classList.add('hidden');

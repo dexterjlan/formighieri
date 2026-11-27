@@ -54,28 +54,70 @@ async function ensurePurchaseTrackingCode(record) {
     return saved;
 }
 
-function printPurchaseTrackingLabelFromRecord(record) {
-    if (typeof printRequisitionTrackingLabel !== 'function') {
-        alertAppDialog('Impressão de código indisponível.');
-        return;
+function buildPurchaseRequisitionPrintMeta(record) {
+    const fromImplementation = isCompraImplantacaoMotivo(record);
+    const designerName = String(record?.designerName || record?.thirdPartyDesignerName || '').trim();
+    const subtypeName = String(record?.subtypeName || '').trim();
+    const purchaseType = formatCompraModalTipoLabel(record);
+    const purchaseTypeLabel = purchaseType === COMPRA_TIPO_TERCEIRO && subtypeName
+        ? `${purchaseType} — ${subtypeName}`
+        : purchaseType;
+
+    const status = String(document.getElementById('compra-modal-status')?.value || record?.status || '').trim();
+    const expectedInput = document.getElementById('compra-modal-previsao-entrega')?.value;
+    let expectedDeliveryLabel = '—';
+    if (expectedInput && typeof formatDate === 'function') {
+        expectedDeliveryLabel = formatDate(expectedInput);
+    } else if (record?.expectedDeliveryAt && typeof formatDate === 'function') {
+        expectedDeliveryLabel = formatDate(record.expectedDeliveryAt);
+    } else if (expectedInput) {
+        expectedDeliveryLabel = expectedInput;
     }
+
+    const note = String(document.getElementById('compra-modal-observacao')?.value ?? record?.note ?? '').trim();
+    const requestObservation = fromImplementation
+        ? ''
+        : String(record?.requestObservation || '').trim();
+
+    const reasonName = String(record?.reasonName || '').trim()
+        || (fromImplementation ? 'Implantação' : '');
+
     const trackingCode = typeof normalizeScannableTrackingCode === 'function'
         ? normalizeScannableTrackingCode(record?.trackingCode)
         : String(record?.trackingCode || '').trim();
-    const title = [
-        record?.orderCode ? `Pedido ${record.orderCode}` : '',
-        formatCompraModalTipoLabel(record)
-    ].filter(Boolean).join(' · ') || `Compra #${record?.id || ''}`;
+
+    const title = reasonName ? `Compra — ${reasonName}` : 'Requisição de compra';
     const subtitle = [
         record?.clientName,
         record?.projectName
     ].filter(Boolean).join(' · ');
-    printRequisitionTrackingLabel({
+
+    return {
+        requestId: record?.id,
         trackingCode,
         title,
         subtitle,
-        kindLabel: 'Req. compra'
-    });
+        status: status || '—',
+        reasonName: reasonName || '—',
+        clientName: record?.clientName,
+        orderCode: record?.orderCode,
+        projectName: record?.projectName,
+        purchaseTypeLabel: purchaseTypeLabel || '—',
+        designerName,
+        ppcpName: fromImplementation ? String(record?.ppcpName || '').trim() : '',
+        requesterName: fromImplementation ? '' : String(record?.requesterName || '').trim(),
+        expectedDeliveryLabel,
+        requestObservation,
+        note
+    };
+}
+
+function printPurchaseTrackingLabelFromRecord(record) {
+    if (typeof printPurchaseRequisitionSummary !== 'function') {
+        alertAppDialog('Impressão indisponível.');
+        return;
+    }
+    printPurchaseRequisitionSummary(buildPurchaseRequisitionPrintMeta(record));
 }
 let activeCompraThirdPartyDriveFile = null;
 let activeCompraModalReadOnly = false;
@@ -955,6 +997,47 @@ function setCompraSummaryRowVisible(wrapId, visible) {
     document.getElementById(wrapId)?.classList.toggle('hidden', !visible);
 }
 
+function resetCompraModalExpeditionSummary() {
+    const routeWrap = document.getElementById('compra-modal-expedition-route-wrap');
+    routeWrap?.classList.add('hidden');
+    const routeEl = document.getElementById('compra-modal-expedition-route');
+    const volStatusEl = document.getElementById('compra-modal-expedition-volume-status');
+    if (routeEl) routeEl.textContent = '—';
+    if (volStatusEl) volStatusEl.textContent = '—';
+}
+
+function applyCompraModalExpeditionSummary(summary) {
+    const routeWrap = document.getElementById('compra-modal-expedition-route-wrap');
+    if (!routeWrap || !summary?.routeLabel) {
+        resetCompraModalExpeditionSummary();
+        return;
+    }
+    routeWrap.classList.remove('hidden');
+    const routeEl = document.getElementById('compra-modal-expedition-route');
+    const volStatusEl = document.getElementById('compra-modal-expedition-volume-status');
+    if (routeEl) routeEl.textContent = summary.routeLabel;
+    if (volStatusEl) {
+        volStatusEl.textContent = summary.volumeStatusLabel || 'Pendente embarque';
+    }
+}
+
+async function loadCompraModalExpeditionSummary(record) {
+    resetCompraModalExpeditionSummary();
+    const purchaseId = Number(record?.id);
+    if (!purchaseId || typeof fetchExpeditionRouteSummaryForPurchase !== 'function') return;
+
+    const trackingCode = typeof normalizeScannableTrackingCode === 'function'
+        ? normalizeScannableTrackingCode(record?.trackingCode)
+        : String(record?.trackingCode || '').trim();
+
+    try {
+        const summary = await fetchExpeditionRouteSummaryForPurchase(purchaseId, trackingCode);
+        applyCompraModalExpeditionSummary(summary);
+    } catch (error) {
+        console.warn('loadCompraModalExpeditionSummary:', error);
+    }
+}
+
 function populateCompraForm(record) {
     const purchaseDriveFile = record?.listaDriveFile || record?.thirdPartyDriveFile || null;
     activeCompraThirdPartyDriveFile = purchaseDriveFile;
@@ -1187,6 +1270,7 @@ async function openPurchaseModal(compraId, options = {}) {
             console.warn('openPurchaseModal trackingCode:', error);
         }
         populateCompraForm(activeCompraRecord);
+        await loadCompraModalExpeditionSummary(activeCompraRecord);
         syncCompraModalReadOnlyUi(activeCompraModalReadOnly);
         const compraModalEl = document.getElementById('compra-modal');
         if (activeCompraModalReadOnly && compraModalEl) {
@@ -1206,6 +1290,7 @@ async function openPurchaseModal(compraId, options = {}) {
 function closePurchaseModal() {
     setCompraModalLoading(false);
     toggleModal('compra-modal', false);
+    resetCompraModalExpeditionSummary();
     activeCompraRecord = null;
     activeCompraThirdPartyDriveFile = null;
     activeCompraModalReadOnly = false;
@@ -1338,7 +1423,7 @@ function bindPurchaseEvents() {
             populateCompraForm(activeCompraRecord);
             printPurchaseTrackingLabelFromRecord(activeCompraRecord);
         } catch (error) {
-            alertAppDialog(`Erro ao imprimir código: ${error.message}`);
+            alertAppDialog(`Erro ao imprimir requisição: ${error.message}`);
         }
     });
 

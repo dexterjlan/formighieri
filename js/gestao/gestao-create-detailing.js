@@ -172,7 +172,12 @@ function renderGestaoCreateDetailingProjectsList(projects = gestaoCreateDetailin
             ? getOrderProjectStatusBadgeClass(statusName)
             : 'bg-slate-100 text-slate-700';
         const projectName = project.name || '—';
-        const detailings = project.detailings || [];
+        const detailings = (project.detailings || []).filter(row => {
+            if (typeof isDetailingStatusCanceled === 'function') {
+                return !isDetailingStatusCanceled(row?.status);
+            }
+            return String(row?.status || '').trim() !== 'Cancelado';
+        });
         const actionButton = detailings.length
             ? detailings.map(row => {
                 const typeLabel = typeof formatDetailingTypeLabel === 'function'

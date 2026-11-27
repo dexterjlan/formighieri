@@ -27,12 +27,12 @@ function buildExpeditionPickupItemLabel(metadata = {}) {
     return ['Coleta', category, orderCode, desc].filter(Boolean).join(' · ');
 }
 
-function buildExpeditionPickupDriveFolderPath(orderCode, routeId, stopId) {
+function buildExpeditionPickupDriveFolderPath(routeId, stopLabel) {
+    if (typeof buildExpeditionRouteStopDriveFolderPath === 'function') {
+        return buildExpeditionRouteStopDriveFolderPath(routeId, stopLabel);
+    }
     const root = typeof getDriveRootFolderName === 'function' ? getDriveRootFolderName() : 'FGP';
-    const code = String(orderCode || '').trim();
-    const routeKey = Number(routeId) || 0;
-    const stopKey = Number(stopId) || 0;
-  return [root, code, 'coleta', `${routeKey}_${stopKey}`].filter(Boolean).join(' / ');
+    return [root, 'Rotas', String(routeId || ''), String(stopLabel || 'Parada')].join(' / ');
 }
 
 function expeditionPickupSqlHint() {
@@ -235,20 +235,21 @@ async function uploadExpeditionPickupPhoto(file, context = {}) {
 
     const routeId = Number(context.routeId) || 0;
     const stopId = Number(context.stopId) || 0;
-    const stopFolderKey = `${routeId}_${stopId}`;
+    const stopLabel = context.stopLabel
+        || (typeof formatExpeditionRouteStopDriveLabel === 'function'
+            ? formatExpeditionRouteStopDriveLabel(context.stopSortOrder, stopId)
+            : `Parada ${stopId}`);
 
     return saveDriveFileUpload(uploadFile, {
         folderKind,
         entityType: 'ExpeditionRouteStopItem',
         entityId: Number(context.stopItemId),
-        orderId: Number(context.orderId) || null,
-        orderCode: context.orderCode,
-        projectName: stopFolderKey,
-        folderPath: buildExpeditionPickupDriveFolderPath(
-            context.orderCode,
-            routeId,
-            stopId
-        ),
+        routeId,
+        expeditionRouteId: String(routeId),
+        expeditionStopLabel: stopLabel,
+        orderCode: String(routeId),
+        projectName: stopLabel,
+        folderPath: buildExpeditionPickupDriveFolderPath(routeId, stopLabel),
         fileName: context.fileName || `coleta-${routeId}-${stopId}.jpg`,
         replaceByEntity: true,
         preserveOriginalFileName: false
@@ -266,7 +267,7 @@ window.markExpeditionPickupUnloaded = markExpeditionPickupUnloaded;
 window.uploadExpeditionPickupPhoto = uploadExpeditionPickupPhoto;
 window.expeditionPickupSqlHint = expeditionPickupSqlHint;
 
-function groupExpeditionUnloadingStopsFromVolumesAndPickups(volumes = [], pickupItems = []) {
+function groupExpeditionUnloadingStopsFromVolumesAndPickups(volumes = [], pickupItems = [], fuelingItems = []) {
     const stopsMap = new Map();
 
     const ensureStop = (stopId, sortOrder, addr) => {
@@ -276,7 +277,8 @@ function groupExpeditionUnloadingStopsFromVolumesAndPickups(volumes = [], pickup
                 sortOrder: Number(sortOrder) || 0,
                 addr: addr || {},
                 volumes: [],
-                pickupItems: []
+                pickupItems: [],
+                fuelingItems: []
             });
         }
         return stopsMap.get(stopId);
@@ -297,6 +299,13 @@ function groupExpeditionUnloadingStopsFromVolumesAndPickups(volumes = [], pickup
         entry.pickupItems.push(item);
     });
 
+    (fuelingItems || []).forEach(item => {
+        const stopKey = Number(item.stopId || item.stop?.id);
+        if (!stopKey) return;
+        const entry = ensureStop(stopKey, item.stop?.sortOrder, item.stop?.addrSnapshot);
+        entry.fuelingItems.push(item);
+    });
+
     return [...stopsMap.values()]
         .sort((a, b) => a.sortOrder - b.sortOrder)
         .map(stop => ({
@@ -313,7 +322,8 @@ function groupExpeditionUnloadingStopsFromVolumesAndPickups(volumes = [], pickup
 function expeditionStopHasUnloadingPending(stop) {
     const volPending = (stop?.volumes || []).filter(vol => vol.boardedAt && !vol.unloadedAt).length;
     const pickupPending = (stop?.pickupItems || []).filter(item => !item.pickupUnloadedAt).length;
-    return volPending + pickupPending > 0;
+    const fuelingPending = (stop?.fuelingItems || []).filter(item => !item.pickupUnloadedAt).length;
+    return volPending + pickupPending + fuelingPending > 0;
 }
 
 function findNextExpeditionUnloadingStop(stops = []) {

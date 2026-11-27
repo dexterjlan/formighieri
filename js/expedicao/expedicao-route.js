@@ -185,12 +185,12 @@ function formatExpeditionStopItemInsertError(error, item) {
     }
     if (/ExpeditionRouteStopItem_entityType_check/i.test(message)) {
         return new Error(
-            'Tipo de parada não permitido no banco. Execute `supabase/feats/expedition-route-pickup-project.sql` no Supabase SQL Editor (DEV).'
+            'Tipo de parada não permitido no banco. Execute os scripts de expedição pendentes em PENDING-PROD-SQL.md no Supabase SQL Editor (DEV).'
         );
     }
     if (/ExpeditionRouteStopItem_volumeCount_check/i.test(message)) {
         return new Error(
-            'Quantidade de volumes inválida para este tipo de parada. Execute `supabase/feats/expedition-route-pickup-project.sql` no Supabase SQL Editor (DEV) (coleta usa 0 volumes).'
+            'Quantidade de volumes inválida para este tipo de parada. Coleta e abastecimento usam 0 volumes — veja PENDING-PROD-SQL.md (DEV).'
         );
     }
     return error;
@@ -368,12 +368,14 @@ async function buildWizardStateFromRoute(routeId) {
         addr: stop.addrSnapshot || {},
         items: (stop.items || []).map(item => {
             const savedVolumes = volumesByStopItemId.get(Number(item.id)) || [];
-            const isPickup = String(item.entityType) === 'Pickup';
-            const volumeCount = isPickup
+            const zeroVolume = typeof isExpeditionZeroVolumeRouteEntityType === 'function'
+                ? isExpeditionZeroVolumeRouteEntityType(item.entityType)
+                : String(item.entityType) === 'Pickup';
+            const volumeCount = zeroVolume
                 ? 0
                 : (Number(item.volumeCount) || savedVolumes.length || 1);
             let itemVolumes = savedVolumes.slice().sort((a, b) => a.volumeIndex - b.volumeIndex);
-            if (!isPickup && !itemVolumes.length && typeof buildExpeditionVolumesForItem === 'function') {
+            if (!zeroVolume && !itemVolumes.length && typeof buildExpeditionVolumesForItem === 'function') {
                 itemVolumes = buildExpeditionVolumesForItem(volumeCount);
             }
             const isRequisition = typeof isExpeditionRequisitionEntityType === 'function'

@@ -320,6 +320,14 @@ function isExpedicaoWizardPickupEntityType(entityType) {
     return String(entityType || '') === 'Pickup';
 }
 
+function isExpedicaoWizardFuelingEntityType(entityType) {
+    return String(entityType || '') === 'Fueling';
+}
+
+function isExpedicaoWizardCustomStopEntityType(entityType) {
+    return isExpedicaoWizardPickupEntityType(entityType) || isExpedicaoWizardFuelingEntityType(entityType);
+}
+
 function syncExpedicaoWizardModalAuxChrome(show = false) {
     const auxBar = document.getElementById('expedition-route-wizard-aux-bar');
     if (!auxBar) return;
@@ -605,7 +613,10 @@ function renderExpedicaoWizardStopsSummary(options = {}) {
                             <p class="text-slate-600 whitespace-pre-wrap">${escapeHtml(formatExpeditionAddressOneLine(stop.addr))}</p>
                             <ul class="mt-1 list-disc pl-4 text-slate-500">
                                 ${(stop.items || []).map(item => `
-                                    <li>${escapeHtml(item.label)} — ${item.entityType === 'Pickup' ? 'Coleta' : `${item.volumeCount} vol.`}</li>
+                                    <li>${escapeHtml(item.label)} — ${
+                                        item.entityType === 'Pickup' ? 'Coleta'
+                                            : item.entityType === 'Fueling' ? 'Abastecimento'
+                                                : `${item.volumeCount} vol.`}</li>
                                 `).join('')}
                             </ul>
                         </div>
@@ -711,6 +722,10 @@ async function renderExpedicaoRouteWizard() {
         const pickupSelected = isExpedicaoWizardPickupEntityType(
             expedicaoWizardState?.pickEntityType || EXPEDITION_ENTITY_TYPES[0]?.value
         );
+        const fuelingSelected = isExpedicaoWizardFuelingEntityType(
+            expedicaoWizardState?.pickEntityType || ''
+        );
+        const searchHidden = pickupSelected;
         mount.innerHTML = `
             <div class="space-y-4">
                 <p class="text-xs text-slate-500">Escolha o tipo e o item. Cada parada tem um endereço; itens no mesmo endereço podem ficar na mesma parada. Endereço diferente vira nova parada automaticamente.</p>
@@ -723,19 +738,25 @@ async function renderExpedicaoRouteWizard() {
                             `).join('')}
                         </select>
                     </div>
-                    <div id="expedition-wizard-search-field-wrap">
-                        <label class="block text-xs font-semibold text-slate-500 mb-1">Busca (código, nome)</label>
+                    <div id="expedition-wizard-search-field-wrap" class="${searchHidden ? 'hidden' : ''}">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">${fuelingSelected ? 'Busca (nome do posto)' : 'Busca (código, nome)'}</label>
                         <input type="text" id="expedition-wizard-entity-query"
-                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg" placeholder="Digite para buscar">
+                            class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg" placeholder="${fuelingSelected ? 'Nome do posto' : 'Digite para buscar'}">
                     </div>
                 </div>
                 <div id="expedition-wizard-pickup-panel" class="${pickupSelected ? '' : 'hidden'}">
                     ${renderExpedicaoWizardPickupFormHtml()}
                 </div>
-                <div id="expedition-wizard-search-panel" class="${pickupSelected ? 'hidden' : ''}">
+                <div id="expedition-wizard-search-panel" class="${searchHidden ? 'hidden' : ''}">
+                    ${fuelingSelected ? '<p class="text-xs font-semibold text-slate-600 mb-1">Postos cadastrados</p>' : ''}
                     <div id="expedition-wizard-search-results" class="border border-slate-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-slate-100">
-                        <p class="text-xs text-slate-400 p-3 text-center">Digite para buscar.</p>
+                        <p class="text-xs text-slate-400 p-3 text-center">${fuelingSelected ? 'Carregando postos...' : 'Digite para buscar.'}</p>
                     </div>
+                </div>
+                <div id="expedition-wizard-fueling-panel" class="${fuelingSelected && typeof renderExpedicaoWizardFuelingRegisterFormHtml === 'function' ? '' : 'hidden'}">
+                    ${fuelingSelected && typeof renderExpedicaoWizardFuelingRegisterFormHtml === 'function'
+            ? renderExpedicaoWizardFuelingRegisterFormHtml()
+            : ''}
                 </div>
                 <div>
                     <p class="text-xs font-semibold text-slate-600 mb-1">Paradas da rota</p>
@@ -749,10 +770,14 @@ async function renderExpedicaoRouteWizard() {
                 || '';
         }
         bindExpedicaoWizardEntitySearch();
+        if (fuelingSelected && typeof bindExpedicaoWizardFuelingRegisterForm === 'function') {
+            bindExpedicaoWizardFuelingRegisterForm();
+        }
         syncExpedicaoWizardModalAuxChrome(false);
         const footerButtons = [
             { id: 'expedition-wizard-back-meta', label: 'Voltar' },
-            ...(pickupSelected ? [{ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true }] : [])
+            ...(pickupSelected ? [{ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true }] : []),
+            ...(fuelingSelected ? [{ id: 'expedition-wizard-add-fueling-stop', label: 'Adicionar parada', primary: true }] : [])
         ];
         syncExpedicaoWizardFooter(footerButtons);
         return;
@@ -858,14 +883,26 @@ function bindExpedicaoWizardEntitySearch() {
         const entityType = typeSelect?.value || '';
         expedicaoWizardState.pickEntityType = entityType;
         const pickup = isExpedicaoWizardPickupEntityType(entityType);
+        const fueling = isExpedicaoWizardFuelingEntityType(entityType);
+        const hideSearch = pickup;
         document.getElementById('expedition-wizard-pickup-panel')?.classList.toggle('hidden', !pickup);
-        document.getElementById('expedition-wizard-search-panel')?.classList.toggle('hidden', pickup);
-        document.getElementById('expedition-wizard-search-field-wrap')?.classList.toggle('hidden', pickup);
+        document.getElementById('expedition-wizard-fueling-panel')?.classList.toggle('hidden', !fueling);
+        document.getElementById('expedition-wizard-search-panel')?.classList.toggle('hidden', hideSearch);
+        document.getElementById('expedition-wizard-search-field-wrap')?.classList.toggle('hidden', hideSearch);
         const footerButtons = [
             { id: 'expedition-wizard-back-meta', label: 'Voltar' },
-            ...(pickup ? [{ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true }] : [])
+            ...(pickup ? [{ id: 'expedition-wizard-add-pickup-stop', label: 'Adicionar parada', primary: true }] : []),
+            ...(fueling ? [{ id: 'expedition-wizard-add-fueling-stop', label: 'Adicionar parada', primary: true }] : [])
         ];
         syncExpedicaoWizardFooter(footerButtons);
+        if (fueling) {
+            if (expedicaoWizardState.fuelingRegisterOpen == null) {
+                expedicaoWizardState.fuelingRegisterOpen = false;
+            }
+            if (typeof bindExpedicaoWizardFuelingRegisterForm === 'function') {
+                bindExpedicaoWizardFuelingRegisterForm();
+            }
+        }
         if (wizardMount && !wizardMount.dataset.expeditionPickupPickerBound) {
             wizardMount.dataset.expeditionPickupPickerBound = '1';
             wizardMount.addEventListener('click', event => {
@@ -882,6 +919,7 @@ function bindExpedicaoWizardEntitySearch() {
         const entityType = typeSelect?.value;
         if (isExpedicaoWizardPickupEntityType(entityType)) return;
         const query = queryInput?.value || '';
+        const isFueling = isExpedicaoWizardFuelingEntityType(entityType);
         const mount = document.getElementById('expedition-wizard-search-results');
         if (!mount || !entityType) return;
 
@@ -889,21 +927,50 @@ function bindExpedicaoWizardEntitySearch() {
         try {
             const rawRows = await searchExpeditionEntities(entityType, query, 30);
             const excludeRouteId = expedicaoWizardState?.editingRouteId ?? null;
-            const routedEntityType = entityType === 'ExternalAssemblyInspection' ? 'Purchase' : entityType;
-            const routedIds = typeof fetchExpeditionEntityIdsAlreadyRouted === 'function'
-                ? await fetchExpeditionEntityIdsAlreadyRouted(routedEntityType, excludeRouteId)
-                : [];
-            const routedSet = new Set(routedIds.map(id => Number(id)));
-            const rows = (rawRows || []).filter(row => {
-                const id = Number(row.id);
-                if (!id) return false;
-                if (routedSet.has(id)) return false;
-                const routeEntityType = entityType === 'ExternalAssemblyInspection' ? 'Purchase' : entityType;
-                return !expeditionWizardEntityAlreadyInRoute(routeEntityType, id);
+            const pickTargets = (rawRows || []).map(row => (
+                typeof getExpeditionPickTarget === 'function'
+                    ? getExpeditionPickTarget(row, entityType)
+                    : { entityType, entityId: Number(row.id) }
+            ));
+            const routedTypes = [...new Set(pickTargets.map(pick => pick.entityType).filter(Boolean))]
+                .filter(typeKey => typeKey !== 'Fueling');
+            const routedByType = {};
+            await Promise.all(routedTypes.map(async typeKey => {
+                if (typeof fetchExpeditionEntityIdsAlreadyRouted !== 'function') {
+                    routedByType[typeKey] = new Set();
+                    return;
+                }
+                const ids = await fetchExpeditionEntityIdsAlreadyRouted(typeKey, excludeRouteId);
+                routedByType[typeKey] = new Set((ids || []).map(id => Number(id)));
+            }));
+            const rows = (rawRows || []).filter((row, index) => {
+                const pick = pickTargets[index];
+                const routeEntityType = pick?.entityType;
+                const entityId = Number(pick?.entityId);
+                if (!routeEntityType || !entityId) return false;
+                if (routeEntityType === 'Fueling') {
+                    return !expeditionWizardEntityAlreadyInRoute('Fueling', entityId);
+                }
+                if (routedByType[routeEntityType]?.has(entityId)) return false;
+                return !expeditionWizardEntityAlreadyInRoute(routeEntityType, entityId);
             }).slice(0, 20);
 
             if (!rawRows?.length) {
-                mount.innerHTML = '<p class="text-xs text-slate-400 p-3 text-center">Nenhum resultado.</p>';
+                if (isFueling) {
+                    if (!expedicaoWizardState.fuelingRegisterOpen) {
+                        expedicaoWizardState.fuelingRegisterOpen = true;
+                        renderExpedicaoRouteWizard();
+                        return;
+                    }
+                    mount.innerHTML = `
+                        <p class="text-xs text-slate-500 p-3 text-center leading-relaxed">
+                            Nenhum posto na lista.<br>
+                            Preencha o <strong>cadastro abaixo</strong> e toque em <strong>Salvar posto</strong>.
+                        </p>
+                    `;
+                } else {
+                    mount.innerHTML = '<p class="text-xs text-slate-400 p-3 text-center">Nenhum resultado.</p>';
+                }
                 return;
             }
             if (!rows.length) {
@@ -914,13 +981,18 @@ function bindExpedicaoWizardEntitySearch() {
                 ? renderExpeditionEntitySearchHeaderHtml(entityType)
                 : '';
             const listRows = rows.map(row => {
+                const pick = typeof getExpeditionPickTarget === 'function'
+                    ? getExpeditionPickTarget(row, entityType)
+                    : { entityType, entityId: Number(row.id) };
                 const body = typeof renderExpeditionEntitySearchRowHtml === 'function'
                     ? renderExpeditionEntitySearchRowHtml(row, entityType)
                     : `<p class="text-xs text-slate-700 px-1">${escapeHtml(formatExpeditionEntitySearchRowLabel(row, entityType))}</p>`;
+                const selected = isFueling && Number(expedicaoWizardState?.fuelingStationId) === Number(pick.entityId);
                 return `
                     <button type="button"
-                        class="expedition-wizard-pick-entity w-full text-left px-3 py-2.5 hover:bg-slate-50 active:bg-slate-100"
-                        data-entity-id="${row.id}">
+                        class="expedition-wizard-pick-entity w-full text-left px-3 py-2.5 hover:bg-slate-50 active:bg-slate-100 ${selected ? 'bg-amber-50 ring-1 ring-amber-300' : ''}"
+                        data-pick-entity-type="${escapeHtml(pick.entityType)}"
+                        data-pick-entity-id="${Number(pick.entityId)}">
                         ${body}
                     </button>
                 `;
@@ -935,10 +1007,13 @@ function bindExpedicaoWizardEntitySearch() {
             mount.querySelectorAll('.expedition-wizard-pick-entity').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     const entityTypeValue = typeSelect.value;
-                    const entityId = Number(btn.dataset.entityId);
-                    const resolveEntityType = entityTypeValue === 'ExternalAssemblyInspection'
-                        ? 'Purchase'
-                        : entityTypeValue;
+                    const resolveEntityType = String(btn.dataset.pickEntityType || entityTypeValue || '').trim();
+                    const entityId = Number(btn.dataset.pickEntityId);
+                    if (isExpedicaoWizardFuelingEntityType(resolveEntityType)) {
+                        expedicaoWizardState.fuelingStationId = entityId;
+                        renderExpedicaoRouteWizard();
+                        return;
+                    }
                     const routeEntityType = resolveEntityType;
                     expedicaoRouteWizardOverlay?.setLoading(true, 'Carregando endereço...');
                     try {
@@ -1067,6 +1142,48 @@ async function handleExpedicaoWizardAction(actionId) {
     if (actionId === 'expedition-wizard-back-meta') {
         expedicaoWizardState.step = 'meta';
         renderExpedicaoRouteWizard();
+        return;
+    }
+
+    if (actionId === 'expedition-wizard-add-fueling-stop') {
+        const stationId = Number(expedicaoWizardState?.fuelingStationId);
+        if (!stationId) {
+            alertAppDialog('Selecione um posto na lista ou cadastre um novo.');
+            return;
+        }
+        expedicaoRouteWizardOverlay?.setLoading(true, 'Validando posto...');
+        try {
+            const ctx = typeof resolveExpeditionFuelingContextById === 'function'
+                ? await resolveExpeditionFuelingContextById(stationId)
+                : { ok: false, message: 'Módulo de abastecimento indisponível.' };
+            if (!ctx.ok) {
+                alertAppDialog(ctx.message || 'Não foi possível incluir o abastecimento.');
+                return;
+            }
+            if (expeditionWizardEntityAlreadyInRoute('Fueling', stationId)) {
+                alertAppDialog('Este posto já está nesta rota.');
+                return;
+            }
+            const mergedIntoExisting = ensureWizardCurrentStopFromPendingItem(ctx);
+            const currentStop = getWizardCurrentStop();
+            if (mergedIntoExisting) {
+                notifyExpeditionWizardMergedIntoExistingStop(currentStop);
+            }
+            currentStop.items.push({
+                entityType: ctx.entityType,
+                entityId: ctx.entityId,
+                label: ctx.label,
+                volumeCount: 0,
+                volumes: [],
+                metadata: ctx.metadata || {}
+            });
+            expedicaoWizardState.currentStop = null;
+            expedicaoWizardState.fuelingStationId = null;
+            expedicaoWizardState.step = 'meta';
+            renderExpedicaoRouteWizard();
+        } finally {
+            expedicaoRouteWizardOverlay?.setLoading(false);
+        }
         return;
     }
 

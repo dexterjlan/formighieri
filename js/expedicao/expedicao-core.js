@@ -369,3 +369,28 @@ window.primeExpeditionScanFeedbackAudio = primeExpeditionScanFeedbackAudio;
 window.playExpeditionScanFeedbackSound = playExpeditionScanFeedbackSound;
 window.setExpeditionScanModalFeedbackActive = setExpeditionScanModalFeedbackActive;
 window.renderExpedicaoMobileSectionBar = renderExpedicaoMobileSectionBar;
+
+function formatExpeditionRouteStopDriveLabel(stopSortOrder, stopId) {
+    const sortOrder = Number(stopSortOrder);
+    if (Number.isFinite(sortOrder) && sortOrder >= 0) {
+        return `Parada ${sortOrder + 1}`;
+    }
+    const key = Number(stopId);
+    return key > 0 ? `Parada ${key}` : 'Parada';
+}
+
+function buildExpeditionRouteStopDriveFolderPath(routeId, stopLabel) {
+    const root = typeof getDriveRootFolderName === 'function' ? getDriveRootFolderName() : 'FGP';
+    const routeKey = String(routeId ?? '').trim();
+    const parada = String(stopLabel || '').trim() || 'Parada';
+    return [root, 'Rotas', routeKey, parada].filter(Boolean).join(' / ');
+}
+
+function isExpeditionRoutePhotoDriveFolderKind(folderKind) {
+    const key = String(folderKind || '').trim();
+    return key === 'expeditionPickup' || key === 'expeditionFueling';
+}
+
+window.formatExpeditionRouteStopDriveLabel = formatExpeditionRouteStopDriveLabel;
+window.buildExpeditionRouteStopDriveFolderPath = buildExpeditionRouteStopDriveFolderPath;
+window.isExpeditionRoutePhotoDriveFolderKind = isExpeditionRoutePhotoDriveFolderKind;

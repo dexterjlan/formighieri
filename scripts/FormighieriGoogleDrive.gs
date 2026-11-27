@@ -14,7 +14,8 @@
  * Pasta prod: FGP / {pedido} / {projeto} / {detalhamento|revisao|requisicao}
  * Descritivo:  FGP / {pedido} / descritivo (por pedido, sem pasta de projeto)
  * Pasta dev:  FGP-DEV / ...
- * Detalhamento: PDF/ZIP/RAR. Descritivo: só PDF. Requisição, revisão, vistoria ME e coleta expedição: imagem.
+ * Detalhamento: PDF/ZIP/RAR. Descritivo: só PDF. Requisição, revisão, vistoria: imagem.
+ * Coleta/abastecimento expedição: imagem em FGP / Rotas / {id rota} / Parada N (sem pasta de pedido).
  */
 
 var FGP_DRIVE_ROOT_FOLDER_NAME = 'FGP';
@@ -34,7 +35,8 @@ var FGP_DRIVE_FOLDER_KIND = {
   assistancequote: 'orcamento',
   externalassemblyinspection: 'vistoria',
   externalassemblyinspectionresponse: 'vistoria',
-  expeditionpickup: 'coleta'
+  expeditionpickup: 'coleta',
+  expeditionfueling: 'abastecimento'
 };
 
 function handleDrivePostRequest_(body) {
@@ -99,11 +101,13 @@ function isImageDriveFolderKind_(folderKind) {
     || folderKind === 'revision'
     || folderKind === 'externalassemblyinspection'
     || folderKind === 'externalassemblyinspectionresponse'
-    || folderKind === 'expeditionpickup';
+    || folderKind === 'expeditionpickup'
+    || folderKind === 'expeditionfueling';
 }
 
-function isExpeditionPickupFolderKind_(folderKind) {
-  return normalizeDriveFolderKind_(folderKind) === 'expeditionpickup';
+function isExpeditionRouteDriveFolderKind_(folderKind) {
+  var kind = normalizeDriveFolderKind_(folderKind);
+  return kind === 'expeditionpickup' || kind === 'expeditionfueling';
 }
 
 function maxDriveUploadBytesForFolderKind_(folderKind) {
@@ -111,7 +115,8 @@ function maxDriveUploadBytesForFolderKind_(folderKind) {
   if (folderKind === 'revision'
     || folderKind === 'externalassemblyinspection'
     || folderKind === 'externalassemblyinspectionresponse'
-    || folderKind === 'expeditionpickup') {
+    || folderKind === 'expeditionpickup'
+    || folderKind === 'expeditionfueling') {
     return 2 * 1024 * 1024;
   }
   return FGP_DRIVE_MAX_FILE_BYTES;
@@ -123,11 +128,11 @@ function isOrderLevelDriveFolderKind_(folderKind) {
 
 function isAllowedDriveUploadFileName_(fileName, folderKind) {
   var lower = String(fileName || '').toLowerCase();
-  var kind = String(folderKind || 'detailing').toLowerCase();
+  var kind = normalizeDriveFolderKind_(folderKind);
   if (kind === 'descriptive') {
     return /\.pdf$/.test(lower);
   }
-  if (isImageDriveFolderKind_(kind)) {
+  if (isExpeditionRouteDriveFolderKind_(kind) || isImageDriveFolderKind_(kind)) {
     return /\.(jpe?g|png|webp|gif|heic|heif)$/.test(lower);
   }
   if (kind === 'model3d') {
@@ -165,6 +170,7 @@ function sanitizeDriveFolderName_(name) {
 
 function normalizeDriveFolderKind_(folderKind) {
   var kind = String(folderKind || 'detailing').trim().toLowerCase();
+  if (kind === 'expeditionfueling' || kind === 'expeditionpickup') return kind;
   if (FGP_DRIVE_FOLDER_KIND[kind]) return kind;
   return 'detailing';
 }
@@ -196,14 +202,14 @@ function getOrCreateDriveRootFolder_(environment) {
 function getDriveFolder_(folderKind, orderCode, projectName, environment) {
   var kind = normalizeDriveFolderKind_(folderKind);
   var root = getOrCreateDriveRootFolder_(environment);
+  if (isExpeditionRouteDriveFolderKind_(kind)) {
+    var rotasFolder = getOrCreateChildFolder_(root, 'Rotas');
+    var routeFolder = getOrCreateChildFolder_(rotasFolder, sanitizeDriveFolderName_(orderCode || 'rota'));
+    return getOrCreateChildFolder_(routeFolder, sanitizeDriveFolderName_(projectName || 'Parada'));
+  }
   var orderFolder = getOrCreateChildFolder_(root, orderCode);
   if (isOrderLevelDriveFolderKind_(kind)) {
     return getOrCreateChildFolder_(orderFolder, folderKindToFolderName_(kind));
-  }
-  if (isExpeditionPickupFolderKind_(kind)) {
-    var coletaFolder = getOrCreateChildFolder_(orderFolder, 'coleta');
-    var stopKey = sanitizeDriveFolderName_(projectName || 'parada');
-    return getOrCreateChildFolder_(coletaFolder, stopKey);
   }
   var projectFolder = getOrCreateChildFolder_(orderFolder, projectName);
   return getOrCreateChildFolder_(projectFolder, folderKindToFolderName_(kind));
@@ -215,9 +221,13 @@ function buildDrivePath_(folderKind, orderCode, projectName, environment) {
     getDriveRootFolderName_(environment),
     sanitizeDriveFolderName_(orderCode)
   ];
-  if (isExpeditionPickupFolderKind_(kind)) {
-    parts.push('coleta');
-    parts.push(sanitizeDriveFolderName_(projectName || 'parada'));
+  if (isExpeditionRouteDriveFolderKind_(kind)) {
+    parts = [
+      getDriveRootFolderName_(environment),
+      'Rotas',
+      sanitizeDriveFolderName_(orderCode || 'rota'),
+      sanitizeDriveFolderName_(projectName || 'Parada')
+    ];
     return parts.join(' / ');
   }
   if (!isOrderLevelDriveFolderKind_(kind)) {
@@ -430,13 +440,23 @@ function resolveDriveUploadContext_(body) {
   var orderCode = String(body.orderCode || '').trim();
   var fileSize = Number(body.fileSizeBytes || 0);
   var folderKind = normalizeDriveFolderKind_(body.folderKind);
-  if (!orderCode) throw new Error('Pedido é obrigatório');
+  var isRoutePhoto = isExpeditionRouteDriveFolderKind_(folderKind);
+  var projectName = '';
+  if (isRoutePhoto) {
+    orderCode = String(body.expeditionRouteId || body.routeId || body.orderCode || '').trim();
+    if (!orderCode) throw new Error('ID da rota é obrigatório');
+    projectName = String(body.expeditionStopLabel || body.projectName || '').trim();
+    if (!projectName) throw new Error('Parada é obrigatória');
+  } else {
+    if (!orderCode) throw new Error('Pedido é obrigatório');
+    projectName = String(body.projectName || '').trim();
+  }
   if (!fileName || !isAllowedDriveUploadFileName_(fileName, folderKind)) {
     throw new Error(folderKind === 'descriptive'
       ? 'Envie apenas PDF'
       : (folderKind === 'model3d'
         ? 'Envie apenas GLB ou GLTF'
-        : (isImageDriveFolderKind_(folderKind)
+        : (isExpeditionRouteDriveFolderKind_(folderKind) || isImageDriveFolderKind_(folderKind)
           ? 'Envie apenas uma imagem (JPEG, PNG, WebP, GIF ou HEIC)'
           : 'Envie apenas PDF, ZIP ou RAR')));
   }
@@ -448,11 +468,11 @@ function resolveDriveUploadContext_(body) {
         || folderKind === 'externalassemblyinspection'
         || folderKind === 'externalassemblyinspectionresponse'
         || folderKind === 'expeditionpickup'
+        || folderKind === 'expeditionfueling'
         ? 'A imagem deve ter no máximo 2 MB'
         : 'Arquivo passa de 100 MB ou está vazio'));
   }
-  var projectName = String(body.projectName || '').trim();
-  if (!isOrderLevelDriveFolderKind_(folderKind) && !projectName) {
+  if (!isOrderLevelDriveFolderKind_(folderKind) && !isRoutePhoto && !projectName) {
     throw new Error('Nome do projeto é obrigatório');
   }
   return {

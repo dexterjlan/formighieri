@@ -145,6 +145,7 @@ const SETTINGS_CADASTRO_PANELS = {
     'lost-reasons': 'gestao-lost-reasons-panel',
     'project-status': 'gestao-project-status-panel',
     'create-detailing': 'gestao-create-detailing-panel',
+    'cancel-detailing': 'gestao-cancel-detailing-panel',
     'compra-status': 'gestao-compra-status-panel',
     usuarios: 'gestao-usuarios-panel'
 };
@@ -184,6 +185,10 @@ async function loadSettingsCadastroPanel(panelKey) {
     }
     if (panelKey === 'compra-status' && typeof loadGestaoCompraStatusList === 'function') {
         await loadGestaoCompraStatusList();
+        return;
+    }
+    if (panelKey === 'cancel-detailing' && typeof loadGestaoCancelDetailingList === 'function') {
+        await loadGestaoCancelDetailingList();
         return;
     }
     if (panelKey === 'usuarios' && typeof loadUsersAdminList === 'function') {

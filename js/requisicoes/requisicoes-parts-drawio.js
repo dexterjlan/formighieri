@@ -36,6 +36,7 @@ function partRequestDrawioBuildEmbedUrl(readOnly = false) {
         saveAndExit: '0',
         noSaveBtn: '1',
         noExitBtn: '1',
+        modified: '0',
         lang: 'pt-br',
         ui: 'min'
     });
@@ -111,8 +112,14 @@ function partRequestDrawioPostLoad(xml, readOnly = false) {
     partRequestDrawioPost({
         action: 'load',
         xml: xml || PART_REQUEST_DRAWIO_EMPTY_XML,
-        autosave: readOnly ? 0 : 1
+        autosave: 0,
+        modified: 0
     });
+}
+
+/** Limpa flag interna de alteração no embed (evita prompt “Sair do site?” ao fechar o modal). */
+function partRequestDrawioAckSaved(hostId = partRequestDrawioActiveHostId) {
+    partRequestDrawioPost({ action: 'status', modified: false }, hostId);
 }
 
 function partRequestDrawioWaitReady(timeoutMs = 25000) {
@@ -161,15 +168,33 @@ function partRequestDrawioInit(options = {}) {
     return true;
 }
 
-function partRequestDrawioDispose(hostId = partRequestDrawioActiveHostId) {
-    partRequestDrawioReady = false;
+function partRequestDrawioDispose(hostId = partRequestDrawioActiveHostId, options = {}) {
+    const clearModified = options.clearModified !== false;
     partRequestDrawioPendingLoad = null;
     if (partRequestDrawioExportResolver) {
         partRequestDrawioExportResolver = null;
     }
+
     const host = partRequestDrawioGetHost(hostId);
     const iframe = host?.querySelector('iframe.part-request-drawio-iframe');
-    if (iframe) iframe.src = 'about:blank';
+    const teardown = () => {
+        partRequestDrawioReady = false;
+        if (iframe?.parentNode) iframe.remove();
+    };
+
+    if (iframe?.contentWindow) {
+        if (clearModified) {
+            partRequestDrawioAckSaved(hostId);
+            // Aguarda o embed processar status antes de remover o iframe (evita beforeunload).
+            requestAnimationFrame(() => requestAnimationFrame(teardown));
+            return;
+        }
+        iframe.src = 'about:blank';
+        teardown();
+        return;
+    }
+
+    teardown();
 }
 
 function partRequestDrawioRequestExport(format) {
@@ -257,6 +282,8 @@ async function partRequestDrawioGetDocumentPayload() {
     await partRequestDrawioWaitReady();
     await partRequestDrawioWaitAfterLoad(400);
     const xml = await partRequestDrawioExportXml();
+    partRequestDrawioAckSaved();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     return partRequestDrawioBuildStoragePayload(xml);
 }
 
@@ -303,39 +330,40 @@ function partRequestDrawioPrintFieldBox(label, value) {
 function partRequestDrawioBuildPrintSheetHtml(meta = {}, options = {}) {
     const copyIndex = options.copyIndex != null ? Number(options.copyIndex) : null;
     const row = partRequestDrawioEscapePrintMeta(meta);
-    const defectBlock = row.description
-        ? `<div class="part-request-print-sheet__defect-box">
-            <span class="part-request-print-field__label">Defeito e contexto</span>
-            <p class="part-request-print-sheet__defect">${row.description}</p>
-          </div>`
-        : '';
-
     const requestKickerSuffix = row.requestId !== '—' ? ` · Nº ${row.requestId}` : '';
     const copySuffix = Number.isFinite(copyIndex) && copyIndex > 0 ? ` · Via ${copyIndex}` : '';
 
     const isCompact = Number.isFinite(copyIndex) && copyIndex > 0;
+    const trackingCodeRaw = typeof normalizeScannableTrackingCode === 'function'
+        ? normalizeScannableTrackingCode(meta.trackingCode)
+        : String(meta.trackingCode || '').trim();
+    const trackingCodeAttr = trackingCodeRaw
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+    const trackingBlock = isCompact && copyIndex === 1 && trackingCodeRaw
+        ? `<div class="part-request-print-sheet__tracking" aria-label="Código de expedição">
+            <span class="part-request-print-field__label">Código expedição (embarque / desembarque)</span>
+            <svg class="part-request-print-barcode" data-barcode="${trackingCodeAttr}"></svg>
+            <p class="part-request-print-sheet__tracking-code">${row.trackingCode}</p>
+           </div>`
+        : '';
+
     const fieldsHtml = isCompact
         ? [
-            partRequestDrawioPrintFieldBox('Nº', row.requestId),
-            partRequestDrawioPrintFieldBox('Status', row.statusLabel),
             partRequestDrawioPrintFieldBox('Pedido', row.orderCode),
             partRequestDrawioPrintFieldBox('Cliente', row.clientName),
             partRequestDrawioPrintFieldBox('Projeto', row.projectLabel),
-            partRequestDrawioPrintFieldBox('Marceneiro', row.projectCabinetMakerName),
             partRequestDrawioPrintFieldBox('Material', row.material),
             partRequestDrawioPrintFieldBox('Esp.', row.thickness),
             partRequestDrawioPrintFieldBox('Prazo', row.deliveryDueLabel),
             partRequestDrawioPrintFieldBox('Executor', row.executorName),
-            partRequestDrawioPrintFieldBox('Montador', row.montadorName),
-            partRequestDrawioPrintFieldBox('Cód. exp.', row.trackingCode)
+            partRequestDrawioPrintFieldBox('Montador', row.montadorName)
         ].join('')
         : [
-            partRequestDrawioPrintFieldBox('Requisição Nº', row.requestId),
-            partRequestDrawioPrintFieldBox('Status', row.statusLabel),
             partRequestDrawioPrintFieldBox('Cliente', row.clientName),
             partRequestDrawioPrintFieldBox('Pedido', row.orderCode),
             partRequestDrawioPrintFieldBox('Projeto', row.projectLabel),
-            partRequestDrawioPrintFieldBox('Marceneiro do projeto', row.projectCabinetMakerName),
             partRequestDrawioPrintFieldBox('Espessura', row.thickness),
             partRequestDrawioPrintFieldBox('Material', row.material),
             partRequestDrawioPrintFieldBox('Prazo de entrega', row.deliveryDueLabel),
@@ -344,14 +372,6 @@ function partRequestDrawioBuildPrintSheetHtml(meta = {}, options = {}) {
             partRequestDrawioPrintFieldBox('Criado em', row.createdLabel),
             partRequestDrawioPrintFieldBox('Solicitante', row.createdByName)
         ].join('');
-
-    const trackingBlock = row.trackingCode && row.trackingCode !== '—'
-        ? `<div class="part-request-print-sheet__tracking" aria-label="Código de expedição">
-            <span class="part-request-print-field__label">Código expedição (embarque / desembarque)</span>
-            <svg class="part-request-print-barcode" data-barcode="${row.trackingCode}"></svg>
-            <p class="part-request-print-sheet__tracking-code">${row.trackingCode}</p>
-           </div>`
-        : '';
 
     const printedAtBlock = isCompact
         ? ''
@@ -370,7 +390,6 @@ function partRequestDrawioBuildPrintSheetHtml(meta = {}, options = {}) {
                 <h1 class="part-request-print-sheet__title">${row.pieceName}</h1>
                 <div class="part-request-print-sheet__fields">${fieldsHtml}</div>
                 ${trackingBlock}
-                ${defectBlock}
                 ${printedAtBlock}
             </header>
             <section class="part-request-print-sheet__drawing" aria-label="Desenho da peça">
@@ -399,14 +418,20 @@ function partRequestDrawioBuildPrintPageHtml(meta = {}) {
 
 function partRequestDrawioEnsurePrintSurface() {
     let surface = document.getElementById('part-request-print-surface');
-    if (surface) return surface;
+    if (!surface) {
+        surface = document.createElement('div');
+        surface.id = 'part-request-print-surface';
+        surface.className = 'part-request-print-surface';
+        surface.hidden = true;
+        surface.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(surface);
+        return surface;
+    }
 
-    surface = document.createElement('div');
-    surface.id = 'part-request-print-surface';
-    surface.className = 'part-request-print-surface';
-    surface.hidden = true;
-    surface.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(surface);
+    // Fora de #app-root evita páginas em branco do shell na impressão do navegador.
+    if (surface.parentElement !== document.body) {
+        document.body.appendChild(surface);
+    }
     return surface;
 }
 
@@ -545,6 +570,7 @@ async function partRequestDrawioPrintWithXml(xml, meta) {
 
 window.partRequestDrawioInit = partRequestDrawioInit;
 window.partRequestDrawioDispose = partRequestDrawioDispose;
+window.partRequestDrawioAckSaved = partRequestDrawioAckSaved;
 window.partRequestDrawioGetDocumentPayload = partRequestDrawioGetDocumentPayload;
 window.partRequestDrawioExtractXmlFromRecord = partRequestDrawioExtractXmlFromRecord;
 window.partRequestDrawioExportPng = partRequestDrawioExportPng;

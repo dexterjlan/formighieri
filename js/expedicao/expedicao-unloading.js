@@ -110,11 +110,11 @@ function getExpeditionUnloadingCurrentStop() {
     return stops.find(stop => Number(stop.stopId) === Number(expedicaoUnloadingCurrentStopId)) || null;
 }
 
-function buildExpeditionUnloadingNextStopSummary(volumes = [], pickupItems = []) {
+function buildExpeditionUnloadingNextStopSummary(volumes = [], pickupItems = [], fuelingItems = []) {
     const groupFn = typeof groupExpeditionUnloadingStopsFromVolumesAndPickups === 'function'
         ? groupExpeditionUnloadingStopsFromVolumesAndPickups
         : groupExpeditionUnloadingStops;
-    const stops = groupFn(volumes, pickupItems);
+    const stops = groupFn(volumes, pickupItems, fuelingItems);
     const next = findNextUnloadingStop(stops);
     if (!next) {
         return {
@@ -207,9 +207,12 @@ async function enrichExpeditionUnloadingRoutesWithNextStop(rows = []) {
     const routeIds = (rows || []).map(row => Number(row.id)).filter(Boolean);
     if (!routeIds.length) return rows || [];
 
-    const [volumes, pickupItems] = await Promise.all([
+    const [volumes, pickupItems, fuelingItems] = await Promise.all([
         fetchExpeditionVolumesForRoutes(routeIds),
-        fetchExpeditionPickupStopItemsForRoutes(routeIds)
+        fetchExpeditionPickupStopItemsForRoutes(routeIds),
+        typeof fetchExpeditionFuelingStopItemsForRoutes === 'function'
+            ? fetchExpeditionFuelingStopItemsForRoutes(routeIds)
+            : Promise.resolve([])
     ]);
 
     const volumesByRoute = new Map();
@@ -227,11 +230,20 @@ async function enrichExpeditionUnloadingRoutesWithNextStop(rows = []) {
         pickupsByRoute.get(key).push(item);
     });
 
+    const fuelingByRoute = new Map();
+    (fuelingItems || []).forEach(item => {
+        const key = Number(item.routeId || item.stop?.routeId);
+        if (!key) return;
+        if (!fuelingByRoute.has(key)) fuelingByRoute.set(key, []);
+        fuelingByRoute.get(key).push(item);
+    });
+
     return (rows || []).map(row => ({
         ...row,
         nextStopSummary: buildExpeditionUnloadingNextStopSummary(
             volumesByRoute.get(Number(row.id)) || [],
-            pickupsByRoute.get(Number(row.id)) || []
+            pickupsByRoute.get(Number(row.id)) || [],
+            fuelingByRoute.get(Number(row.id)) || []
         )
     }));
 }
@@ -289,8 +301,11 @@ async function fetchExpeditionUnloadingRouteDetail(routeId, options = {}) {
     const pickupItems = typeof fetchExpeditionRoutePickupStopItems === 'function'
         ? await fetchExpeditionRoutePickupStopItems(key)
         : [];
+    const fuelingItems = typeof fetchExpeditionRouteFuelingStopItems === 'function'
+        ? await fetchExpeditionRouteFuelingStopItems(key)
+        : [];
 
-    if (!volumes.length && !pickupItems.length) throw new Error('Rota sem paradas.');
+    if (!volumes.length && !pickupItems.length && !fuelingItems.length) throw new Error('Rota sem paradas.');
 
     if (volumes.length) {
         const boarded = countBoardedVolumes(volumes);
@@ -300,18 +315,20 @@ async function fetchExpeditionUnloadingRouteDetail(routeId, options = {}) {
     }
 
     const stops = typeof groupExpeditionUnloadingStopsFromVolumesAndPickups === 'function'
-        ? groupExpeditionUnloadingStopsFromVolumesAndPickups(volumes, pickupItems)
+        ? groupExpeditionUnloadingStopsFromVolumesAndPickups(volumes, pickupItems, fuelingItems)
         : groupExpeditionUnloadingStops(volumes);
 
     const pickupDone = pickupItems.filter(item => item.pickupUnloadedAt).length;
+    const fuelingDone = fuelingItems.filter(item => item.pickupUnloadedAt).length;
 
     return {
         route,
         volumes,
         pickupItems,
+        fuelingItems,
         stops,
-        unloadedCount: countExpeditionUnloadedVolumes(volumes) + pickupDone,
-        totalCount: volumes.length + pickupItems.length
+        unloadedCount: countExpeditionUnloadedVolumes(volumes) + pickupDone + fuelingDone,
+        totalCount: volumes.length + pickupItems.length + fuelingItems.length
     };
 }
 
@@ -383,7 +400,7 @@ async function lookupExpeditionVolumeForUnloading(volumeCode) {
     const select = `
         id, volumeCode, routeId, boardedAt, unloadedAt, volumeIndex, stopItemId,
         stopItem:ExpeditionRouteStopItem(
-            id,
+            id, entityType, entityId,
             stop:ExpeditionRouteStop(id, sortOrder, addrSnapshot)
         )
     `;
@@ -555,10 +572,13 @@ function renderExpeditionUnloadingStopView(mount, detail) {
 
     const pending = stopUnloadingPending(current);
     const pickupItems = current.pickupItems || [];
+    const fuelingItems = current.fuelingItems || [];
     const pendingPickups = pickupItems.filter(item => !item.pickupUnloadedAt);
+    const pendingFuelings = fuelingItems.filter(item => !item.pickupUnloadedAt);
     const doneAtStop = (current.volumes || []).length - pending.length;
     const totalAtStop = (current.volumes || []).length;
     const pickupDoneAtStop = pickupItems.length - pendingPickups.length;
+    const fuelingDoneAtStop = fuelingItems.length - pendingFuelings.length;
     const addr = typeof formatExpeditionAddressOneLine === 'function'
         ? formatExpeditionAddressOneLine(current.addr)
         : '';
@@ -596,6 +616,19 @@ function renderExpeditionUnloadingStopView(mount, detail) {
 
     const showVolumeScanner = pending.length > 0;
     const showPickupCapture = pendingPickups.length > 0;
+    const showFuelingCapture = pendingFuelings.length > 0;
+
+    const fuelingHtml = fuelingItems.map(item => {
+        const meta = item.metadataJson || {};
+        const stationName = meta.fuelStationName || item.entityLabel || '—';
+        const done = Boolean(item.pickupUnloadedAt);
+        return `
+            <li class="text-[11px] py-2 border-b border-slate-100 last:border-0">
+                <p class="font-semibold text-amber-900">Abastecimento · ${escapeHtml(stationName)}</p>
+                <p class="font-semibold mt-1 ${done ? 'text-emerald-700' : 'text-amber-700'}">${done ? 'Painel registrado' : 'Aguardando foto do painel'}</p>
+            </li>
+        `;
+    }).join('');
 
     mount.innerHTML = `
         <div class="space-y-3 max-w-lg mx-auto w-full">
@@ -624,6 +657,12 @@ function renderExpeditionUnloadingStopView(mount, detail) {
                     <ul>${pickupHtml}</ul>
                 </div>
             ` : ''}
+            ${fuelingItems.length ? `
+                <div class="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+                    <p class="text-xs font-bold text-amber-900 mb-1">Abastecimento nesta parada (${fuelingDoneAtStop}/${fuelingItems.length})</p>
+                    <ul>${fuelingHtml}</ul>
+                </div>
+            ` : ''}
             ${showPickupCapture ? `
                 <div class="rounded-xl border border-indigo-300 bg-white p-3 space-y-2">
                     <p class="text-xs font-semibold text-indigo-900">Registre uma foto da coleta (obrigatório)</p>
@@ -637,6 +676,22 @@ function renderExpeditionUnloadingStopView(mount, detail) {
                     <button type="button" id="expedition-unloading-pickup-submit"
                         class="w-full text-sm bg-indigo-700 text-white px-4 py-3 rounded-xl font-bold min-h-[48px] touch-manipulation">
                         Enviar foto e concluir coleta
+                    </button>
+                </div>
+            ` : ''}
+            ${showFuelingCapture ? `
+                <div class="rounded-xl border border-amber-300 bg-white p-3 space-y-2">
+                    <p class="text-xs font-semibold text-amber-900">Foto do painel (nível cheio) — obrigatório</p>
+                    <input type="file" id="expedition-unloading-fueling-photo" accept="image/*" capture="environment"
+                        class="hidden">
+                    <button type="button" id="expedition-unloading-fueling-take-photo"
+                        class="w-full text-sm bg-white border border-amber-300 text-amber-900 px-4 py-3 rounded-xl font-bold min-h-[48px] touch-manipulation">
+                        Tirar foto do painel
+                    </button>
+                    <p id="expedition-unloading-fueling-photo-label" class="text-[10px] text-slate-500 text-center hidden"></p>
+                    <button type="button" id="expedition-unloading-fueling-submit"
+                        class="w-full text-sm bg-amber-700 text-white px-4 py-3 rounded-xl font-bold min-h-[48px] touch-manipulation">
+                        Abastecimento concluído
                     </button>
                 </div>
             ` : ''}
@@ -684,6 +739,94 @@ function bindExpeditionUnloadingStopEvents(mount) {
     mount.querySelector('#expedition-unloading-pickup-submit')?.addEventListener('click', () => {
         void submitExpeditionUnloadingPickupPhoto();
     });
+    mount.querySelector('#expedition-unloading-fueling-take-photo')?.addEventListener('click', () => {
+        document.getElementById('expedition-unloading-fueling-photo')?.click();
+    });
+    mount.querySelector('#expedition-unloading-fueling-photo')?.addEventListener('change', event => {
+        const file = event.target.files?.[0];
+        const label = document.getElementById('expedition-unloading-fueling-photo-label');
+        if (!label) return;
+        if (!file) {
+            label.textContent = '';
+            label.classList.add('hidden');
+            return;
+        }
+        label.textContent = file.name ? `Foto selecionada: ${file.name}` : 'Foto selecionada';
+        label.classList.remove('hidden');
+    });
+    mount.querySelector('#expedition-unloading-fueling-submit')?.addEventListener('click', () => {
+        void submitExpeditionUnloadingFuelingPhoto();
+    });
+}
+
+async function submitExpeditionUnloadingFuelingPhoto() {
+    const current = getExpeditionUnloadingCurrentStop();
+    const pendingFuelings = (current?.fuelingItems || []).filter(item => !item.pickupUnloadedAt);
+    if (!pendingFuelings.length) {
+        alertAppDialog('Não há abastecimento pendente nesta parada.');
+        return;
+    }
+
+    const fileInput = document.getElementById('expedition-unloading-fueling-photo');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+        alertAppDialog('Selecione ou tire a foto do painel.');
+        return;
+    }
+
+    const fueling = pendingFuelings[0];
+    const routeId = Number(expedicaoUnloadingRouteId);
+    const stopId = Number(current?.stopId);
+
+    setExpedicaoActionLoading(true, 'Enviando foto...');
+    try {
+        if (typeof primeGoogleDriveAppsScript === 'function') primeGoogleDriveAppsScript();
+        if (typeof ensureGoogleDriveAppsScriptReady === 'function') {
+            await ensureGoogleDriveAppsScriptReady();
+        }
+        await uploadExpeditionFuelingPhoto(file, {
+            stopItemId: fueling.id,
+            routeId,
+            stopId,
+            stopSortOrder: current?.sortOrder,
+            stopLabel: typeof formatExpeditionRouteStopDriveLabel === 'function'
+                ? formatExpeditionRouteStopDriveLabel(current?.sortOrder, stopId)
+                : undefined
+        });
+        await markExpeditionFuelingUnloaded(fueling.id);
+        fueling.pickupUnloadedAt = new Date().toISOString();
+
+        await reloadExpeditionUnloadingDetail(false);
+        const allDone = !(expedicaoUnloadingDetail?.stops || []).some(stop =>
+            typeof expeditionStopHasUnloadingPending === 'function'
+                ? expeditionStopHasUnloadingPending(stop)
+                : stopUnloadingPending(stop).length > 0
+        );
+
+        if (allDone) {
+            await finishExpeditionUnloadingRouteFeedback(expedicaoUnloadingDetail?.volumes || [], {});
+            await refreshExpeditionUnloadingStopView(false);
+            return;
+        }
+
+        const pendingAtStop = typeof expeditionStopHasUnloadingPending === 'function'
+            ? expeditionStopHasUnloadingPending(getExpeditionUnloadingCurrentStop())
+            : stopUnloadingPending(getExpeditionUnloadingCurrentStop()).length > 0;
+
+        if (!pendingAtStop) {
+            await refreshExpeditionUnloadingStopView(true);
+            alertAppDialog('Abastecimento registrado. Avance para a próxima parada.', { variant: 'success' });
+            return;
+        }
+
+        await refreshExpeditionUnloadingStopView(false);
+        alertAppDialog('Abastecimento concluído.', { variant: 'success' });
+    } catch (error) {
+        console.error('submitExpeditionUnloadingFuelingPhoto:', error);
+        alertAppDialog(error.message || 'Erro ao registrar abastecimento.');
+    } finally {
+        setExpedicaoActionLoading(false);
+    }
 }
 
 async function submitExpeditionUnloadingPickupPhoto() {
@@ -714,10 +857,12 @@ async function submitExpeditionUnloadingPickupPhoto() {
         }
         await uploadExpeditionPickupPhoto(file, {
             stopItemId: pickup.id,
-            orderId: meta.orderId,
-            orderCode: meta.orderCode,
             routeId,
-            stopId
+            stopId,
+            stopSortOrder: current?.sortOrder,
+            stopLabel: typeof formatExpeditionRouteStopDriveLabel === 'function'
+                ? formatExpeditionRouteStopDriveLabel(current?.sortOrder, stopId)
+                : undefined
         });
         await markExpeditionPickupUnloaded(pickup.id);
         pickup.pickupUnloadedAt = new Date().toISOString();
@@ -1152,6 +1297,15 @@ async function processExpedicaoUnloadingScanCode(rawCode, options = {}) {
         const totalAtStop = (currentStopBefore?.volumes || []).filter(vol => vol.boardedAt).length;
 
         await markExpeditionVolumeUnloaded(volume.id);
+
+        const stopItem = volume.stopItem;
+        if (stopItem?.entityType === 'PartRequest' && typeof tryMarkPartRequestDeliveredAfterExpeditionUnload === 'function') {
+            try {
+                await tryMarkPartRequestDeliveredAfterExpeditionUnload(stopItem.id, stopItem.entityId);
+            } catch (deliveredError) {
+                console.warn('tryMarkPartRequestDeliveredAfterExpeditionUnload:', deliveredError);
+            }
+        }
 
         if (typeof notifyMatrixExpeditionUnloadingStopScanEvents === 'function') {
             notifyMatrixExpeditionUnloadingStopScanEvents(

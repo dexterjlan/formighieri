@@ -75,6 +75,10 @@ function handleAppDialogKeydown(event) {
 function readAppDialogCheckboxSelection() {
     const listEl = document.getElementById('app-dialog-checkbox-list');
     if (!listEl || listEl.classList.contains('hidden')) return null;
+    const radios = [...listEl.querySelectorAll('input[type="radio"]:checked')];
+    if (radios.length) {
+        return radios.map(input => input.value);
+    }
     return [...listEl.querySelectorAll('input[type="checkbox"]:checked')]
         .map(input => input.value);
 }
@@ -140,6 +144,7 @@ function showAppDialog(options = {}) {
         confirmClass = '',
         focusCancel = variant === 'danger',
         checkboxItems = null,
+        singleSelect = false,
         validate = null
     } = options;
 
@@ -185,10 +190,20 @@ function showAppDialog(options = {}) {
         resetAppDialogCheckboxList();
         if (checkboxListEl && Array.isArray(checkboxItems) && checkboxItems.length) {
             checkboxListEl.classList.remove('hidden');
+            const useRadio = Boolean(singleSelect);
             checkboxListEl.innerHTML = checkboxItems.map(item => {
                 const id = String(item.id);
                 const label = String(item.label || id);
-                const checked = item.checked !== false;
+                const checked = item.checked === true;
+                if (useRadio) {
+                    return `
+                    <label class="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
+                        <input type="radio" name="app-dialog-single-select" class="mt-0.5 h-4 w-4 border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+                            value="${escapeHtml(id)}" ${checked ? 'checked' : ''}>
+                        <span>${escapeHtml(label)}</span>
+                    </label>
+                `;
+                }
                 return `
                     <label class="flex items-start gap-2 text-sm text-slate-700 cursor-pointer">
                         <input type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 shrink-0"

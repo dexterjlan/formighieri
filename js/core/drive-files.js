@@ -12,7 +12,8 @@ const DRIVE_FILE_FOLDER_KIND = {
     ASSISTANCE_QUOTE: 'assistanceQuote',
     EXTERNAL_ASSEMBLY_INSPECTION: 'externalAssemblyInspection',
     EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE: 'externalAssemblyInspectionResponse',
-    EXPEDITION_PICKUP: 'expeditionPickup'
+    EXPEDITION_PICKUP: 'expeditionPickup',
+    EXPEDITION_FUELING: 'expeditionFueling'
 };
 
 const DRIVE_FILE_ENTITY_TYPE = {
@@ -40,7 +41,8 @@ const DRIVE_FILE_FOLDER_NAMES = {
     [DRIVE_FILE_FOLDER_KIND.ASSISTANCE_QUOTE]: 'orcamento',
     [DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION]: 'vistoria',
     [DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE]: 'vistoria',
-    [DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP]: 'coleta'
+    [DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP]: 'coleta',
+    [DRIVE_FILE_FOLDER_KIND.EXPEDITION_FUELING]: 'abastecimento'
 };
 
 const DRIVE_FILE_IMPLEMENTATION_LIST_EXTENSIONS = ['pdf'];
@@ -101,7 +103,8 @@ function isImageDriveFolderKind(folderKind) {
         || folderKind === DRIVE_FILE_FOLDER_KIND.REVISION
         || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
         || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE
-        || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP;
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_FUELING;
 }
 
 function allowedDriveExtensionsForFolderKind(folderKind) {
@@ -128,7 +131,8 @@ function maxDriveUploadBytesForFolderKind(folderKind) {
     }
     if (folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
         || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE
-        || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP) {
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP
+        || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_FUELING) {
         return DRIVE_FILE_REVISION_IMAGE_MAX_BYTES;
     }
     return DRIVE_FILE_MAX_BYTES;
@@ -492,7 +496,11 @@ function validateDriveUploadFiles(files, folderKind = DRIVE_FILE_FOLDER_KIND.DET
     }
     const tooLarge = list.find(file => Number(file?.size) > maxBytes);
     if (tooLarge) {
-        if (folderKind === DRIVE_FILE_FOLDER_KIND.REVISION) {
+        if (folderKind === DRIVE_FILE_FOLDER_KIND.REVISION
+            || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_PICKUP
+            || folderKind === DRIVE_FILE_FOLDER_KIND.EXPEDITION_FUELING
+            || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION
+            || folderKind === DRIVE_FILE_FOLDER_KIND.EXTERNAL_ASSEMBLY_INSPECTION_RESPONSE) {
             return `A imagem "${tooLarge.name}" deve ter no máximo 2 MB.`;
         }
         if (folderKind === DRIVE_FILE_FOLDER_KIND.REQUEST) {
@@ -551,6 +559,9 @@ function driveFileMissingSetupMessage(error) {
     }
     if (message.includes('externalAssemblyInspection') || message.includes('ExternalAssemblyInspection')) {
         return 'Execute no SQL Editor (DEV): supabase/feats/drive-file-external-assembly-inspection.sql';
+    }
+    if (message.includes('expeditionFueling') || message.includes('expeditionfueling')) {
+        return 'Execute no SQL Editor (DEV): supabase/feats/add-expedition-fueling-fuel-station.sql';
     }
     return message || 'Erro ao enviar arquivo.';
 }
@@ -1071,6 +1082,9 @@ async function saveDriveFileUpload(file, context = {}, onProgress) {
         folderKind: context.folderKind,
         orderCode: context.orderCode,
         projectName: context.projectName,
+        expeditionRouteId: context.expeditionRouteId,
+        expeditionStopLabel: context.expeditionStopLabel,
+        routeId: context.routeId,
         folderLeafName: context.folderLeafName || driveFolderLeafName(context.folderKind),
         fileName,
         mimeType,

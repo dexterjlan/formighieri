@@ -36,8 +36,9 @@ const PART_REQUEST_STATUS_HISTORY_CHANGED_BY_EMBED =
 const PART_REQUEST_SELECT = `
     id, pieceName, description, thicknessMm, material, drawingJson, status,
     factoryEmployeeId, montadorId, deliveryDueDate, orderProjectId,
-    externalAssemblyInspectionId, trackingCode,
+    externalAssemblyInspectionId, assistanceRequestId, partRequestReasonId, trackingCode,
     clientId, orderId, createdAt, updatedAt, createdById,
+    partRequestReason:PurchaseReason(id, name, isSystem),
     client:Client(id, name),
     order:salesOrders(id, orderCode, clientId, client:Client(id, name)),
     orderProject:OrderProject(id, name, projectCode, cabinetMakerId, cabinetMaker:CabinetMaker(id, name)),
@@ -49,7 +50,7 @@ const PART_REQUEST_SELECT = `
 const PART_REQUEST_SELECT_FALLBACK = `
     id, pieceName, description, thicknessMm, material, drawingJson, status,
     factoryEmployeeId, cabinetMakerId, montadorId, deliveryDueDate,
-    externalAssemblyInspectionId, trackingCode, orderProjectId,
+    externalAssemblyInspectionId, assistanceRequestId, partRequestReasonId, trackingCode, orderProjectId,
     clientId, orderId, createdAt, updatedAt, createdById,
     client:Client(id, name),
     order:salesOrders(id, orderCode, clientId, client:Client(id, name)),
@@ -77,7 +78,120 @@ const partRequestModalOverlay = typeof createAppOverlayHelper === 'function'
     : null;
 
 function partRequestSqlHint() {
-    return 'Execute os scripts em PENDING-PROD-SQL.md (DEV): part-request-external-assembly-inspection-id e requisition-tracking-code.';
+    return 'Execute os scripts listados em PENDING-PROD-SQL.md no Supabase SQL Editor (DEV).';
+}
+
+async function loadPartRequestReasons() {
+    if (typeof loadRequisicoesPurchaseReasons === 'function') {
+        return loadRequisicoesPurchaseReasons();
+    }
+    const { data, error } = await supabaseClient
+        .from('PurchaseReason')
+        .select('id, name, isActive, isSystem, sortOrder')
+        .order('sortOrder', { ascending: true })
+        .order('name', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
+function filterPartRequestReasonsForManualForm(reasons = []) {
+    if (typeof filterPurchaseReasonsForManualRequest === 'function') {
+        return filterPurchaseReasonsForManualRequest(reasons);
+    }
+    return (reasons || []).filter(reason => !reason?.isSystem);
+}
+
+function getPartRequestReasonDisplayName(record) {
+  return String(record?.partRequestReason?.name || '').trim();
+}
+
+function isPartRequestVistoriaReason(record) {
+    if (typeof isRequisicoesPurchaseVistoriaReason === 'function') {
+        return isRequisicoesPurchaseVistoriaReason(record?.partRequestReason);
+    }
+    const name = String(record?.partRequestReason?.name || '').trim().toLowerCase();
+    return name === 'vistoria';
+}
+
+function isPartRequestAssistenciaReason(record) {
+    if (typeof isRequisicoesPurchaseAssistenciaReason === 'function') {
+        return isRequisicoesPurchaseAssistenciaReason(record?.partRequestReason);
+    }
+    const name = String(record?.partRequestReason?.name || '').trim().toLowerCase();
+    return name === 'assistência' || name === 'assistencia';
+}
+
+function isPartRequestOriginLinkedRow(record) {
+    if (!record) return false;
+    if (Number(record.externalAssemblyInspectionId) > 0) return true;
+    if (Number(record.assistanceRequestId) > 0) return true;
+    return isPartRequestVistoriaReason(record) || isPartRequestAssistenciaReason(record);
+}
+
+async function resolvePartRequestVistoriaReasonId() {
+    if (typeof resolveRequisicoesVistoriaPurchaseReasonId === 'function') {
+        return resolveRequisicoesVistoriaPurchaseReasonId();
+    }
+    return null;
+}
+
+async function resolvePartRequestAssistenciaReasonId() {
+    if (typeof resolveRequisicoesAssistenciaPurchaseReasonId === 'function') {
+        return resolveRequisicoesAssistenciaPurchaseReasonId();
+    }
+    return null;
+}
+
+function syncPartRequestReasonUi(record = null, createDraft = null) {
+    const manualWrap = document.getElementById('part-request-reason-wrap');
+    const lockedWrap = document.getElementById('part-request-reason-locked-wrap');
+    const select = document.getElementById('part-request-reason-select');
+    const lockedInput = document.getElementById('part-request-reason-locked');
+    const hidden = document.getElementById('part-request-reason-id');
+    const lockedEai = isPartRequestExternalAssemblyLocked(record);
+    const reasonId = Number(record?.partRequestReasonId)
+        || Number(createDraft?.partRequestReasonId)
+        || Number(partRequestExternalAssemblyContext?.partRequestReasonId)
+        || null;
+    const reasonLabel = getPartRequestReasonDisplayName(record)
+        || String(createDraft?.partRequestReasonLabel || '').trim()
+        || (lockedEai ? 'Vistoria' : '');
+
+    if (lockedWrap) lockedWrap.classList.toggle('hidden', !lockedEai);
+    if (manualWrap) manualWrap.classList.toggle('hidden', lockedEai);
+    if (lockedEai) {
+        if (lockedInput) lockedInput.value = reasonLabel || 'Vistoria';
+        if (hidden) hidden.value = reasonId ? String(reasonId) : '';
+        return;
+    }
+    if (hidden) hidden.value = '';
+    if (select && reasonId) select.value = String(reasonId);
+}
+
+async function ensurePartRequestReasonSelectPopulated(record = null) {
+    const select = document.getElementById('part-request-reason-select');
+    if (!select || isPartRequestExternalAssemblyLocked(record)) return;
+    try {
+        const reasons = await loadPartRequestReasons();
+        const options = filterPartRequestReasonsForManualForm(reasons);
+        select.innerHTML = `<option value="">Selecione…</option>${options.map(reason => `
+            <option value="${reason.id}">${escapeHtml(reason.name)}</option>
+        `).join('')}`;
+        const reasonId = Number(record?.partRequestReasonId);
+        if (reasonId) select.value = String(reasonId);
+    } catch (error) {
+        console.warn('ensurePartRequestReasonSelectPopulated:', error);
+    }
+}
+
+function resolvePartRequestReasonIdFromForm() {
+    if (isPartRequestExternalAssemblyLocked()) {
+        const hidden = Number(document.getElementById('part-request-reason-id')?.value);
+        if (Number.isFinite(hidden) && hidden > 0) return hidden;
+        return Number(partRequestExternalAssemblyContext?.partRequestReasonId) || null;
+    }
+    const selectVal = Number(document.getElementById('part-request-reason-select')?.value);
+    return Number.isFinite(selectVal) && selectVal > 0 ? selectVal : null;
 }
 
 async function ensurePartRequestTrackingCode(record) {
@@ -115,6 +229,52 @@ async function ensurePartRequestTrackingCode(record) {
 function isPartRequestExternalAssemblyLocked(record = partRequestEditingRecord) {
     if (Number(record?.externalAssemblyInspectionId) > 0) return true;
     return Number(partRequestExternalAssemblyContext?.externalAssemblyInspectionId) > 0;
+}
+
+function getPartRequestExternalAssemblyLockedProjectId() {
+    return Number(partRequestExternalAssemblyContext?.orderProjectId) || null;
+}
+
+function getPartRequestExternalAssemblyLockedProjectLabel() {
+    return String(partRequestExternalAssemblyContext?.projectLabel || '').trim();
+}
+
+async function ensurePartRequestOrderProjectInCache(orderProjectId, projectLabel = '') {
+    const normalizedId = Number(orderProjectId);
+    if (!normalizedId) return null;
+
+    const existing = partRequestOrderProjectsCache.find(row => Number(row.id) === normalizedId);
+    if (existing) return existing;
+
+    let result = await supabaseClient
+        .from('OrderProject')
+        .select('id, name, projectCode, cabinetMakerId, parentProjectId, replacedByProjectId, orderId, cabinetMaker:CabinetMaker(id, name)')
+        .eq('id', normalizedId)
+        .maybeSingle();
+
+    if (result.error?.message?.match(/cabinetMaker|relationship|schema cache/i)) {
+        result = await supabaseClient
+            .from('OrderProject')
+            .select('id, name, projectCode, cabinetMakerId, parentProjectId, replacedByProjectId, orderId')
+            .eq('id', normalizedId)
+            .maybeSingle();
+    }
+
+    let project = result.data || null;
+    if (!project && projectLabel) {
+        project = {
+            id: normalizedId,
+            name: projectLabel,
+            projectCode: ''
+        };
+    }
+    if (!project) return null;
+
+    partRequestOrderProjectsCache = [
+        project,
+        ...partRequestOrderProjectsCache.filter(row => Number(row.id) !== normalizedId)
+    ];
+    return project;
 }
 
 function getPartRequestProjectOptionLabel(project) {
@@ -225,6 +385,14 @@ async function refreshPartRequestOrderProjects(orderId, selectedProjectId = null
 
     partRequestOrderProjectsCache = await fetchPartRequestOrderProjects(normalizedOrderId);
 
+    const normalizedSelected = selectedProjectId != null ? Number(selectedProjectId) : null;
+    if (normalizedSelected) {
+        const labelHint = isPartRequestExternalAssemblyLocked()
+            ? getPartRequestExternalAssemblyLockedProjectLabel()
+            : '';
+        await ensurePartRequestOrderProjectInCache(normalizedSelected, labelHint);
+    }
+
     if (!partRequestOrderProjectsCache.length) {
         wrap.classList.remove('hidden');
         select.innerHTML = '<option value="">Nenhum projeto neste pedido</option>';
@@ -243,13 +411,12 @@ async function refreshPartRequestOrderProjects(orderId, selectedProjectId = null
     wrap.classList.remove('hidden');
     select.disabled = false;
 
-    const normalizedSelected = selectedProjectId != null
-        ? Number(selectedProjectId)
-        : (Number(select.value) || null);
-    if (normalizedSelected) {
-        select.value = String(normalizedSelected);
+    const selectionToApply = normalizedSelected
+        || (Number(select.value) || null);
+    if (selectionToApply) {
+        select.value = String(selectionToApply);
     }
-    syncPartRequestOrderProjectSelection(normalizedSelected);
+    syncPartRequestOrderProjectSelection(selectionToApply);
 }
 
 function getPartRequestOrderProjectLabelFromRecord(record = partRequestEditingRecord) {
@@ -813,12 +980,16 @@ function initPartRequestOrderCombobox(selectedOrderId = null, selectedOrderCode 
             const hidden = document.getElementById('part-request-order-id');
             if (hidden) hidden.value = order?.id ? String(order.id) : '';
             if (order) {
+                const lockedProjectId = isPartRequestExternalAssemblyLocked()
+                    ? (getPartRequestExternalAssemblyLockedProjectId()
+                        || Number(document.getElementById('part-request-order-project-id')?.value) || null)
+                    : null;
                 void applyPartRequestOrder({
                     id: order.id,
                     orderCode: order.orderCode,
                     clientId: order.clientId || order.client?.id,
                     client: order.client
-                });
+                }, lockedProjectId);
             } else {
                 clearPartRequestOrderProjectUi();
             }
@@ -869,6 +1040,7 @@ function mapPartRequestInteractiveRow(record) {
         thicknessLabel: record?.thicknessMm != null ? `${record.thicknessMm} mm` : '—',
         material: String(record?.material || '').trim() || '—',
         orderCode: record?.order?.orderCode || '—',
+        reasonName: getPartRequestReasonDisplayName(record) || '—',
         clientName: getPartRequestClientDisplayName(record),
         executorName: getPartRequestExecutorDisplayName(record),
         montadorName: record?.montador?.name || '—',
@@ -908,6 +1080,7 @@ function getRequisicoesPartRequestColumns() {
             cellClass: 'p-3 text-xs font-mono tabular-nums text-slate-600 whitespace-nowrap w-[4.75rem] max-w-[4.75rem]'
         },
         { key: 'clientName', label: 'Cliente', cellClass: 'p-3 text-xs text-slate-700' },
+        { key: 'reasonName', label: 'Motivo', cellClass: 'p-3 text-xs text-slate-600' },
         {
             key: 'deliveryDueLabel',
             label: 'Prazo entrega',
@@ -1237,10 +1410,21 @@ async function openPartRequestFormFromExternalAssemblyInspection(draft = {}) {
         : (typeof openExternalAssemblyInspectionPartRequestsModal === 'function'
             ? () => openExternalAssemblyInspectionPartRequestsModal()
             : null);
+    const vistoriaReasonId = await resolvePartRequestVistoriaReasonId().catch(() => null);
     partRequestExternalAssemblyContext = {
         externalAssemblyInspectionId: Number(draft.externalAssemblyInspectionId)
             || Number(draft.record?.externalAssemblyInspectionId)
             || null,
+        partRequestReasonId: Number(draft.record?.partRequestReasonId)
+            || vistoriaReasonId
+            || null,
+        partRequestReasonLabel: 'Vistoria',
+        orderProjectId: Number(draft.orderProjectId)
+            || Number(draft.record?.orderProjectId)
+            || Number(draft.record?.orderProject?.id)
+            || null,
+        projectLabel: String(draft.projectLabel || '').trim()
+            || getPartRequestOrderProjectLabelFromRecord(draft.record),
         reopenList
     };
     const { record, ...createDraft } = draft;
@@ -1266,7 +1450,7 @@ async function loadPartRequests(options = {}) {
         .select(PART_REQUEST_SELECT)
         .order('id', { ascending: false });
 
-    if (result.error && /relationship|embed|appUsers|FactoryEmployee|FactoryRole|CabinetMaker|Installer|OrderProject|factoryEmployeeId|orderProjectId|deliveryDueDate|montadorId|schema cache/i.test(result.error.message || '')) {
+    if (result.error && /relationship|embed|appUsers|FactoryEmployee|FactoryRole|CabinetMaker|Installer|OrderProject|partRequestReason|PurchaseReason|factoryEmployeeId|orderProjectId|deliveryDueDate|montadorId|schema cache/i.test(result.error.message || '')) {
         result = await supabaseClient
             .from('PartRequest')
             .select(PART_REQUEST_SELECT_FALLBACK)
@@ -1312,6 +1496,8 @@ function resetPartRequestForm() {
     if (statusActions) statusActions.innerHTML = '';
     document.getElementById('btn-part-request-status-history')?.classList.add('hidden');
     clearPartRequestOrderProjectUi();
+    syncPartRequestReasonUi();
+    void ensurePartRequestReasonSelectPopulated();
     syncPartRequestFormReadOnly(false);
     syncPartRequestPrintButton(null);
 }
@@ -1330,7 +1516,8 @@ function syncPartRequestFormReadOnly(readOnly) {
         'part-request-executor-id',
         'part-request-montador-id',
         'part-request-delivery-due-date',
-        'part-request-order-project-id'
+        'part-request-order-project-id',
+        'part-request-reason-select'
     ];
     ids.forEach(id => {
         const el = document.getElementById(id);
@@ -1443,10 +1630,15 @@ async function collectPartRequestFormMeta() {
     const deliveryDueDate = fromPartRequestDateInputValue(
         document.getElementById('part-request-delivery-due-date')?.value
     );
+    const partRequestReasonId = resolvePartRequestReasonIdFromForm();
 
     const metadataEditable = !partRequestEditingRecord || canEditPartRequestMetadata(partRequestEditingRecord);
     if (metadataEditable && !pieceName) {
         alertAppDialog('Informe o nome da peça.');
+        return null;
+    }
+    if (metadataEditable && !isPartRequestExternalAssemblyLocked() && !partRequestReasonId) {
+        alertAppDialog('Selecione o motivo da requisição.');
         return null;
     }
 
@@ -1469,7 +1661,8 @@ async function collectPartRequestFormMeta() {
         orderProjectId: orderId && Number.isFinite(orderProjectId) ? orderProjectId : null,
         factoryEmployeeId: Number.isFinite(factoryEmployeeId) ? factoryEmployeeId : null,
         montadorId: Number.isFinite(montadorId) ? montadorId : null,
-        deliveryDueDate
+        deliveryDueDate,
+        partRequestReasonId
     };
 
     if (partRequestEditingRecord && !canEditPartRequestMetadata(partRequestEditingRecord)) {
@@ -1584,6 +1777,7 @@ async function openPartRequestForm(record = null, createDraft = null) {
         return;
     }
     resetPartRequestForm();
+    await ensurePartRequestReasonSelectPopulated(record);
     const title = document.getElementById('part-request-modal-title');
     if (title) title.textContent = record
         ? 'Editar solicitação de fabricação'
@@ -1647,15 +1841,30 @@ async function openPartRequestForm(record = null, createDraft = null) {
             setPartRequestClient({ id: clientId, name: clientName });
         }
         await ensurePartRequestOrderInComboboxCache(createDraft.orderId);
+        const draftProjectId = Number(createDraft.orderProjectId)
+            || getPartRequestExternalAssemblyLockedProjectId()
+            || null;
         await applyPartRequestOrder({
             id: createDraft.orderId,
             orderCode: createDraft.orderCode,
             clientId,
             client: clientId ? { id: clientId, name: clientName } : null
-        }, createDraft.orderProjectId);
+        }, draftProjectId);
         initPartRequestOrderCombobox(createDraft.orderId, createDraft.orderCode || '');
+        if (isPartRequestExternalAssemblyLocked() && draftProjectId) {
+            await refreshPartRequestOrderProjects(createDraft.orderId, draftProjectId);
+        }
     } else {
         initPartRequestOrderCombobox();
+    }
+
+    syncPartRequestReasonUi(record, createDraft);
+    if (isPartRequestExternalAssemblyLocked() && !partRequestExternalAssemblyContext?.partRequestReasonId) {
+        const vistoriaReasonId = await resolvePartRequestVistoriaReasonId().catch(() => null);
+        if (vistoriaReasonId && partRequestExternalAssemblyContext) {
+            partRequestExternalAssemblyContext.partRequestReasonId = vistoriaReasonId;
+        }
+        syncPartRequestReasonUi(record, createDraft);
     }
 
     toggleModal('part-request-modal', true);
@@ -1742,6 +1951,12 @@ async function savePartRequest(event) {
             if (inspectionId > 0) {
                 insertRow.externalAssemblyInspectionId = inspectionId;
             }
+            if (payload.partRequestReasonId) {
+                insertRow.partRequestReasonId = payload.partRequestReasonId;
+            } else if (inspectionId > 0) {
+                const vistoriaReasonId = await resolvePartRequestVistoriaReasonId().catch(() => null);
+                if (vistoriaReasonId) insertRow.partRequestReasonId = vistoriaReasonId;
+            }
             let insertResult = await supabaseClient
                 .from('PartRequest')
                 .insert(insertRow)
@@ -1749,6 +1964,14 @@ async function savePartRequest(event) {
                 .single();
             if (insertResult.error?.message?.includes('externalAssemblyInspectionId')) {
                 throw new Error(`Coluna externalAssemblyInspectionId ausente. ${partRequestSqlHint()}`);
+            }
+            if (insertResult.error?.message?.includes('partRequestReasonId')) {
+                delete insertRow.partRequestReasonId;
+                insertResult = await supabaseClient
+                    .from('PartRequest')
+                    .insert(insertRow)
+                    .select('id')
+                    .single();
             }
             if (insertResult.error?.message?.includes('trackingCode')) {
                 delete insertRow.trackingCode;
@@ -1769,7 +1992,9 @@ async function savePartRequest(event) {
         setPartRequestModalLoading(true, 'Salvo!', 'success');
         await new Promise(resolve => setTimeout(resolve, 600));
         setPartRequestModalLoading(false);
+        if (typeof partRequestDrawioAckSaved === 'function') partRequestDrawioAckSaved();
         if (typeof partRequestDrawioDispose === 'function') partRequestDrawioDispose();
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         toggleModal('part-request-modal', false);
         const eaiCtx = partRequestExternalAssemblyContext;
         partRequestExternalAssemblyContext = null;
@@ -1951,7 +2176,9 @@ function bindPartRequestEvents() {
         const eaiCtx = partRequestExternalAssemblyContext;
         partRequestExternalAssemblyContext = null;
         destroyPartRequestOrderCombobox();
-        if (typeof partRequestDrawioDispose === 'function') partRequestDrawioDispose();
+        if (typeof partRequestDrawioDispose === 'function') {
+            partRequestDrawioDispose('part-request-drawio-host', { clearModified: false });
+        }
         toggleModal('part-request-modal', false);
         if (eaiCtx?.reopenList) void eaiCtx.reopenList();
     });
@@ -1995,5 +2222,6 @@ window.fetchPartRequestsByOrderProjectIds = fetchPartRequestsByOrderProjectIds;
 window.fetchPartRequestsByExternalAssemblyInspectionId = fetchPartRequestsByExternalAssemblyInspectionId;
 window.fetchPartRequestRecordById = fetchPartRequestRecordById;
 window.openPartRequestFormFromExternalAssemblyInspection = openPartRequestFormFromExternalAssemblyInspection;
+window.isPartRequestOriginLinkedRow = isPartRequestOriginLinkedRow;
 window.bindPartRequestEvents = bindPartRequestEvents;
 window.openPartRequestStatusHistoryModal = openPartRequestStatusHistoryModal;

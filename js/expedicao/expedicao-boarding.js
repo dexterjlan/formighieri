@@ -137,19 +137,25 @@ async function fetchExpeditionBoardingRouteDetail(routeId, options = {}) {
     const pickupItems = typeof fetchExpeditionRoutePickupStopItems === 'function'
         ? await fetchExpeditionRoutePickupStopItems(key)
         : [];
+    const fuelingItems = typeof fetchExpeditionRouteFuelingStopItems === 'function'
+        ? await fetchExpeditionRouteFuelingStopItems(key)
+        : [];
 
-    if (!volumes.length && !pickupItems.length) {
+    if (!volumes.length && !pickupItems.length && !fuelingItems.length) {
         throw new Error('Rota sem itens de embarque.');
     }
+
+  const zeroVolumeOnly = !volumes.length && (pickupItems.length > 0 || fuelingItems.length > 0);
 
     return {
         route,
         volumes,
         pickupItems,
+        fuelingItems,
         stops: groupExpeditionBoardingStops(volumes),
         boardedCount: countExpeditionBoardedVolumes(volumes),
         totalCount: volumes.length,
-        pickupOnly: !volumes.length && pickupItems.length > 0
+        pickupOnly: zeroVolumeOnly
     };
 }
 
@@ -183,7 +189,10 @@ async function tryCompleteExpeditionRouteBoarding(routeId, volumes) {
         const pickupItems = typeof fetchExpeditionRoutePickupStopItems === 'function'
             ? await fetchExpeditionRoutePickupStopItems(routeId)
             : [];
-        if (!pickupItems.length) return false;
+        const fuelingItems = typeof fetchExpeditionRouteFuelingStopItems === 'function'
+            ? await fetchExpeditionRouteFuelingStopItems(routeId)
+            : [];
+        if (!pickupItems.length && !fuelingItems.length) return false;
     } else if (boarded < total) {
         return false;
     }
@@ -458,11 +467,11 @@ function renderExpedicaoBoardingDetail(mount, detail) {
                     <div class="flex gap-2">
                         <input type="text" id="expedicao-boarding-manual-code" placeholder="VOL-..."
                             class="flex-1 px-3 py-2 text-xs border border-slate-200 rounded-lg uppercase">
-                        <button type="button" id="expedition-boarding-manual-submit"
+                        <button type="button" id="expedicao-boarding-manual-submit"
                             class="text-xs bg-white border border-slate-200 px-3 py-2 rounded-lg font-semibold">OK</button>
                     </div>
-                    <p id="expedition-boarding-manual-feedback"
-                        class="hidden expedition-boarding-manual-feedback mt-3 text-sm font-bold rounded-xl px-3 py-3" role="alert"></p>
+                    <p id="expedicao-boarding-manual-feedback"
+                        class="hidden expedicao-boarding-manual-feedback mt-3 text-sm font-bold rounded-xl px-3 py-3" role="alert"></p>
                 </div>`);
 }
 
@@ -661,7 +670,7 @@ function feedbackExpedicaoBoardingCodeResult({ success, message, allBoarded = fa
     setExpedicaoBoardingManualFeedback(message, success);
 
     if (success) {
-        const manualInput = document.getElementById('expedition-boarding-manual-code');
+        const manualInput = document.getElementById('expedicao-boarding-manual-code');
         if (manualInput) manualInput.value = '';
     }
 }

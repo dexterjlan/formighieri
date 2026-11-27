@@ -1010,7 +1010,7 @@
     <!-- MODAL: COMPRA -->
     <div id="compra-modal"
         class="hidden fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-xl shadow-xl max-h-[90vh] overflow-y-auto relative">
+        <div class="bg-white rounded-2xl w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col relative overflow-hidden">
             <div id="compra-modal-loading"
                 class="fm-app-overlay fm-app-overlay--contained hidden" role="alertdialog" aria-live="polite" aria-modal="true">
                 <div class="fm-app-overlay__card">
@@ -1020,7 +1020,7 @@
                     <p id="compra-modal-loading-msg" class="fm-app-overlay__message">Processando...</p>
                 </div>
             </div>
-            <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+            <div class="shrink-0 px-6 pt-6 pb-2 flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h3 id="compra-modal-title" class="font-bold text-base text-slate-900">Compra</h3>
                 </div>
@@ -1028,15 +1028,12 @@
                     class="text-[10px] px-2.5 py-1 rounded-full font-bold uppercase bg-slate-100 text-slate-700"></span>
             </div>
 
+            <div id="compra-modal-body" class="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-4">
             <div class="space-y-4">
                 <div class="border border-slate-200 rounded-xl p-3 space-y-2 bg-slate-50/50">
                     <div>
                         <p class="text-[10px] font-semibold uppercase text-slate-400">Código do Pedido</p>
                         <p id="compra-modal-order-code" class="text-sm font-mono font-semibold text-slate-800">—</p>
-                    </div>
-                    <div id="compra-modal-tracking-wrap">
-                        <p class="text-[10px] font-semibold uppercase text-slate-400">Código expedição</p>
-                        <p id="compra-modal-tracking-code" class="text-sm font-mono font-semibold text-slate-800">—</p>
                     </div>
                     <p class="text-sm text-slate-700">
                         <span class="font-semibold">Cliente:</span>
@@ -1142,17 +1139,36 @@
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600"></textarea>
                 </div>
 
+                <div id="compra-modal-expedition-wrap" class="border border-slate-200 rounded-xl p-3 space-y-2 bg-slate-50/50">
+                    <p class="text-xs font-semibold text-slate-500">Expedição</p>
+                    <div id="compra-modal-tracking-wrap">
+                        <p class="text-[10px] font-semibold uppercase text-slate-400">Código expedição</p>
+                        <p id="compra-modal-tracking-code" class="text-sm font-mono font-semibold text-slate-800">—</p>
+                    </div>
+                    <div id="compra-modal-expedition-route-wrap" class="hidden space-y-2 border-t border-slate-200 pt-2">
+                        <div>
+                            <p class="text-[10px] font-semibold uppercase text-slate-400">Rota</p>
+                            <p id="compra-modal-expedition-route" class="text-sm font-semibold text-slate-800">—</p>
+                        </div>
+                        <p class="text-sm text-slate-700">
+                            <span class="font-semibold">Status do volume:</span>
+                            <span id="compra-modal-expedition-volume-status">—</span>
+                        </p>
+                    </div>
+                </div>
+
                 <div>
                     <label for="compra-modal-orcamento-path" class="block text-xs font-semibold text-slate-500 mb-1">Caminho do arquivo do orçamento</label>
                     <input type="text" id="compra-modal-orcamento-path" placeholder="Caminho da pasta ou arquivo"
                         class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-amber-600">
                 </div>
             </div>
+            </div>
 
-            <div class="flex flex-wrap gap-2 pt-5 mt-5 border-t border-slate-100">
+            <div class="compra-modal__footer shrink-0 flex flex-wrap gap-2 px-6 py-4 border-t border-slate-100 bg-white">
                 <button type="button" id="btn-compra-print-tracking"
                     class="bg-indigo-700 text-white text-xs px-4 py-2 rounded-lg font-medium hover:bg-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Imprimir código
+                    Imprimir Requisição
                 </button>
                 <button type="button" id="btn-compra-salvar"
                     class="bg-amber-600 text-white text-xs px-4 py-2 rounded-lg font-medium hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -2784,6 +2800,20 @@
                     <span class="block text-xs font-semibold text-slate-500 mb-1">Marceneiro do projeto</span>
                     <p id="part-request-project-cabinet-maker-name"
                         class="text-sm text-slate-800 px-3 py-2.5 border border-slate-200 rounded-lg bg-slate-50"></p>
+                </div>
+                <div id="part-request-reason-wrap">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-reason-select">Motivo</label>
+                    <select id="part-request-reason-select"
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-slate-400">
+                        <option value="">Selecione…</option>
+                    </select>
+                </div>
+                <div id="part-request-reason-locked-wrap" class="hidden">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-reason-locked">Motivo</label>
+                    <input type="text" id="part-request-reason-locked" disabled
+                        class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-700"
+                        value="Vistoria">
+                    <input type="hidden" id="part-request-reason-id" value="">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 mb-1" for="part-request-description">Defeito e contexto</label>

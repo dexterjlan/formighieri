@@ -54,7 +54,8 @@ const REQUEST_TYPE_BADGE_CLASSES = {
 
 const DETALHAMENTO_STATUS_BADGE_CLASSES = {
     'Pronto': 'bg-emerald-100 text-emerald-800',
-    'Detalhamento': 'bg-violet-100 text-violet-800'
+    'Detalhamento': 'bg-violet-100 text-violet-800',
+    'Cancelado': 'bg-rose-100 text-rose-800'
 };
 
 const IMPLANTACAO_STATUS_BADGE_CLASSES = {

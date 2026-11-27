@@ -43,6 +43,15 @@ async function fetchExpeditionRouteVolumes(routeId) {
     return data || [];
 }
 
+function isExpeditionRouteVolumeLabelEntityType(entityType) {
+    return String(entityType || '').trim() === 'OrderProject';
+}
+
+function filterExpeditionVolumesForRouteLabels(volumes = []) {
+    return (volumes || []).filter(vol =>
+        isExpeditionRouteVolumeLabelEntityType(vol.stopItem?.entityType));
+}
+
 function sortExpeditionVolumesForPrint(volumes) {
     return (volumes || []).slice().sort((a, b) => {
         const stopA = Number(a.stopItem?.stop?.sortOrder);
@@ -234,14 +243,18 @@ function openExpeditionLabelsPrintShell() {
 
 function printExpeditionVolumeLabels(route, volumes, options = {}) {
     const printWindow = options.printWindow || null;
+    const allVolumes = volumes || [];
+    const labelVolumes = typeof filterExpeditionVolumesForRouteLabels === 'function'
+        ? filterExpeditionVolumesForRouteLabels(allVolumes)
+        : allVolumes.filter(vol => String(vol.stopItem?.entityType) === 'OrderProject');
 
-    if (!volumes?.length) {
+    if (!allVolumes.length) {
         alertAppDialog('Nenhum volume para imprimir.');
         if (printWindow && !printWindow.closed) printWindow.close();
         return;
     }
 
-    const summary = buildExpeditionPrintDriverSummary(volumes, route);
+    const summary = buildExpeditionPrintDriverSummary(allVolumes, route);
     const routeDate = route?.routeDate && typeof formatDate === 'function'
         ? formatDate(route.routeDate)
         : '';
@@ -249,16 +262,29 @@ function printExpeditionVolumeLabels(route, volumes, options = {}) {
         ? formatExpeditionRouteDisplayName(route)
         : `Rota ${route?.id || ''}`;
     const driverSheet = renderExpeditionDriverSummaryHtml(route, summary);
-    const volumeCards = summary.sortedVolumes
+    const sortedLabelVolumes = sortExpeditionVolumesForPrint(labelVolumes);
+    const volumeCards = sortedLabelVolumes
         .map(vol => renderExpeditionVolumeLabelHtml(vol))
         .join('');
-    const volumeGrid = `
+    const hasVolumeLabels = labelVolumes.length > 0;
+    const requisitionHint = hasVolumeLabels && allVolumes.length > labelVolumes.length
+        ? `<p class="volume-labels-hint requisition-hint">Requisições de peça e compra não entram nesta impressão — use a impressão da própria requisição (código RPP/RPC).</p>`
+        : '';
+    const volumeGrid = hasVolumeLabels
+        ? `
         <section class="volume-labels-sheet" aria-label="Etiquetas de volume">
-            <h2 class="volume-labels-title">Etiquetas de volume</h2>
-            <p class="volume-labels-hint">Impressão em A4 — recorte e cole nos volumes (etiqueta adesiva em versão futura).</p>
+            <h2 class="volume-labels-title">Etiquetas de volume (projeto)</h2>
+            <p class="volume-labels-hint">Impressão em A4 — recorte e cole nos volumes. Apenas itens do tipo <strong>Projeto</strong>.</p>
+            ${requisitionHint}
             <div class="volume-labels-grid">${volumeCards}</div>
         </section>
-    `;
+    `
+        : '';
+
+    const driverSheetHtml = driverSheet.replace(
+        'class="driver-sheet"',
+        `class="driver-sheet${hasVolumeLabels ? ' driver-sheet--with-labels' : ''}"`
+    );
 
     const jsBarcodeUrl = resolveExpeditionJsBarcodeScriptUrl();
 
@@ -340,7 +366,8 @@ function printExpeditionVolumeLabels(route, volumes, options = {}) {
             body { padding: 0; }
             .print-toolbar { display: none !important; }
             .volume-labels-hint { display: none; }
-            .driver-sheet { page-break-after: always; }
+            .driver-sheet--with-labels { page-break-after: always; }
+            .requisition-hint { page-break-before: avoid; }
         }
         @page { size: A4; margin: 10mm; }
     </style>
@@ -350,7 +377,7 @@ function printExpeditionVolumeLabels(route, volumes, options = {}) {
         <button type="button" id="expedition-labels-print-btn">Imprimir</button>
         <button type="button" class="secondary" id="expedition-labels-close-btn">Fechar</button>
     </div>
-    ${driverSheet}
+    ${driverSheetHtml}
     ${volumeGrid}
     <script src="${escapeExpeditionPrintAttr(jsBarcodeUrl)}"><\/script>
     <script>
@@ -448,6 +475,137 @@ function renderRequisitionTrackingLabelHtml(meta = {}) {
     `;
 }
 
+function requisitionSummaryPrintFieldBox(label, value) {
+    const safeLabel = escapeHtml(String(label || '').trim());
+    const safeValue = escapeHtml(String(value ?? '').trim() || '—');
+    return `<div class="req-summary-print-field">
+        <span class="req-summary-print-field__label">${safeLabel}</span>
+        <span class="req-summary-print-field__value">${safeValue}</span>
+    </div>`;
+}
+
+function buildPurchaseRequisitionSummaryPrintHtml(meta = {}) {
+    const trackingCode = String(meta.trackingCode || '').trim();
+    const requestId = Number(meta.requestId);
+    const requestIdLabel = Number.isFinite(requestId) && requestId > 0 ? String(requestId) : '—';
+    const title = escapeHtml(String(meta.title || 'Requisição de compra').trim() || 'Requisição de compra');
+    const subtitle = escapeHtml(String(meta.subtitle || '').trim());
+    const printedAt = escapeHtml(
+        typeof formatDateTime === 'function'
+            ? formatDateTime(new Date().toISOString())
+            : new Date().toLocaleString('pt-BR')
+    );
+
+    const fieldsHtml = [
+        requisitionSummaryPrintFieldBox('Requisição Nº', requestIdLabel),
+        requisitionSummaryPrintFieldBox('Status', meta.status),
+        requisitionSummaryPrintFieldBox('Motivo', meta.reasonName),
+        requisitionSummaryPrintFieldBox('Cliente', meta.clientName),
+        requisitionSummaryPrintFieldBox('Pedido', meta.orderCode),
+        requisitionSummaryPrintFieldBox('Projeto', meta.projectName),
+        requisitionSummaryPrintFieldBox('Tipo', meta.purchaseTypeLabel),
+        meta.designerName ? requisitionSummaryPrintFieldBox('Projetista', meta.designerName) : '',
+        meta.ppcpName ? requisitionSummaryPrintFieldBox('PPCP', meta.ppcpName) : '',
+        meta.requesterName ? requisitionSummaryPrintFieldBox('Solicitante', meta.requesterName) : '',
+        requisitionSummaryPrintFieldBox('Previsão de entrega', meta.expectedDeliveryLabel),
+        meta.requestObservation
+            ? `<div class="req-summary-print-obs">
+                <span class="req-summary-print-field__label">Observação da requisição</span>
+                <p class="req-summary-print-obs__text">${escapeHtml(meta.requestObservation)}</p>
+               </div>`
+            : '',
+        meta.note
+            ? `<div class="req-summary-print-obs">
+                <span class="req-summary-print-field__label">Observação (compras)</span>
+                <p class="req-summary-print-obs__text">${escapeHtml(meta.note)}</p>
+               </div>`
+            : ''
+    ].filter(Boolean).join('');
+
+    const trackingBlock = trackingCode
+        ? `<div class="req-summary-print-tracking" aria-label="Código de expedição">
+            <span class="req-summary-print-field__label">Código expedição (embarque / desembarque)</span>
+            <svg class="req-summary-print-barcode" data-barcode="${escapeExpeditionPrintAttr(trackingCode)}"></svg>
+            <p class="req-summary-print-tracking__code">${escapeHtml(trackingCode)}</p>
+           </div>`
+        : '';
+
+    return `
+        <article class="req-summary-print-sheet" role="document">
+            <header class="req-summary-print-sheet__header">
+                <p class="req-summary-print-sheet__kicker">FGP · Compra · Nº ${escapeHtml(requestIdLabel)}</p>
+                <h1 class="req-summary-print-sheet__title">${title}</h1>
+                ${subtitle ? `<p class="req-summary-print-sheet__subtitle">${subtitle}</p>` : ''}
+                <div class="req-summary-print-sheet__fields">${fieldsHtml}</div>
+                ${trackingBlock}
+                <p class="req-summary-print-sheet__printed-at">Impresso em: ${printedAt}</p>
+            </header>
+        </article>
+    `;
+}
+
+function printPurchaseRequisitionSummary(meta = {}) {
+    const trackingCode = String(meta.trackingCode || '').trim();
+    if (!trackingCode) {
+        alertAppDialog('Requisição sem código de expedição.');
+        return;
+    }
+    const printWindow = openExpeditionLabelsPrintShell();
+    if (!printWindow) {
+        alertAppDialog('Permita pop-ups para imprimir.');
+        return;
+    }
+    const jsBarcodeUrl = resolveExpeditionJsBarcodeScriptUrl();
+    const bodyHtml = buildPurchaseRequisitionSummaryPrintHtml(meta);
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <title>Requisição de compra ${escapeHtml(String(meta.requestId || ''))}</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; color: #0f172a; }
+        .req-summary-print-page { max-width: 210mm; margin: 0 auto; }
+        .req-summary-print-sheet__header { border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px 18px; }
+        .req-summary-print-sheet__kicker { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin: 0 0 6px; }
+        .req-summary-print-sheet__title { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+        .req-summary-print-sheet__subtitle { font-size: 12px; color: #475569; margin: 0 0 12px; }
+        .req-summary-print-sheet__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; margin-top: 12px; }
+        .req-summary-print-field { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .req-summary-print-field__label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b; }
+        .req-summary-print-field__value { font-size: 12px; font-weight: 600; word-break: break-word; }
+        .req-summary-print-obs { grid-column: 1 / -1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; background: #f8fafc; }
+        .req-summary-print-obs__text { font-size: 11px; margin: 4px 0 0; white-space: pre-wrap; line-height: 1.45; }
+        .req-summary-print-tracking { margin-top: 14px; padding-top: 12px; border-top: 1px dashed #cbd5e1; }
+        .req-summary-print-barcode { width: 100%; max-width: 280px; height: auto; display: block; margin-top: 6px; }
+        .req-summary-print-tracking__code { font-size: 12px; font-weight: 700; font-family: ui-monospace, monospace; letter-spacing: 0.06em; margin: 6px 0 0; }
+        .req-summary-print-sheet__printed-at { font-size: 10px; color: #64748b; margin: 12px 0 0; }
+        .print-toolbar { text-align: center; padding: 0 0 12px; }
+        .print-toolbar button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 0; background: #0f172a; color: #fff; cursor: pointer; }
+        @media print { .print-toolbar { display: none; } body { padding: 0; } }
+    </style>
+</head>
+<body>
+    <div class="print-toolbar"><button type="button" onclick="window.print()">Imprimir</button></div>
+    <div class="req-summary-print-page">${bodyHtml}</div>
+    <script src="${escapeExpeditionPrintAttr(jsBarcodeUrl)}"><\/script>
+    <script>
+        (function () {
+            document.querySelectorAll('.req-summary-print-barcode[data-barcode]').forEach(function (node) {
+                var code = node.getAttribute('data-barcode') || '';
+                if (code && typeof JsBarcode !== 'undefined') {
+                    try { JsBarcode(node, code, { format: 'CODE128', displayValue: true, margin: 6, width: 1.6, height: 52 }); } catch (e) {}
+                }
+            });
+        })();
+    <\/script>
+</body>
+</html>`;
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+}
+
 function printRequisitionTrackingLabel(meta = {}) {
     const trackingCode = String(meta.trackingCode || '').trim();
     if (!trackingCode) {
@@ -506,4 +664,7 @@ window.buildExpeditionVolumesForItem = buildExpeditionVolumesForItem;
 window.fetchExpeditionRouteVolumes = fetchExpeditionRouteVolumes;
 window.openExpeditionLabelsPrintShell = openExpeditionLabelsPrintShell;
 window.printExpeditionVolumeLabels = printExpeditionVolumeLabels;
+window.isExpeditionRouteVolumeLabelEntityType = isExpeditionRouteVolumeLabelEntityType;
+window.filterExpeditionVolumesForRouteLabels = filterExpeditionVolumesForRouteLabels;
 window.printRequisitionTrackingLabel = printRequisitionTrackingLabel;
+window.printPurchaseRequisitionSummary = printPurchaseRequisitionSummary;

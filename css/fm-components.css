@@ -834,6 +834,23 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
     text-align: center;
 }
 
+.part-request-print-sheet--compact .part-request-print-sheet__tracking {
+    margin-top: 2px;
+    padding-top: 2px;
+    border-top-width: 1px;
+}
+
+.part-request-print-sheet--compact .part-request-print-barcode {
+    max-width: 150px;
+    margin-top: 1px;
+}
+
+.part-request-print-sheet--compact .part-request-print-sheet__tracking-code {
+    font-size: 7px;
+    margin: 1px 0 0;
+    line-height: 1.1;
+}
+
 .part-request-print-barcode {
     width: 100%;
     max-width: 220px;
@@ -897,19 +914,15 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
         margin: 10mm;
     }
 
-    body.part-request-print-active * {
-        visibility: hidden !important;
-    }
-
-    body.part-request-print-active #part-request-print-surface,
-    body.part-request-print-active #part-request-print-surface * {
-        visibility: visible !important;
+    body.part-request-print-active > *:not(#part-request-print-surface) {
+        display: none !important;
     }
 
     body.part-request-print-active #part-request-print-surface {
-        position: absolute;
-        left: 0;
-        top: 0;
+        display: block !important;
+        position: static !important;
+        left: auto;
+        top: auto;
         width: 100%;
         height: auto;
         overflow: visible;
@@ -918,35 +931,57 @@ html[data-theme="formighieri-sage"] .fm-dialog-icon--success {
     }
 
     .part-request-print-page {
-        height: 277mm;
+        display: flex;
+        flex-direction: column;
+        height: auto;
         max-height: 277mm;
-        page-break-after: avoid;
+        overflow: hidden;
+        break-inside: avoid;
         page-break-inside: avoid;
+        page-break-after: avoid;
+        break-after: avoid;
     }
 
     .part-request-print-page__copy {
+        flex: 0 0 auto;
+        max-height: calc((277mm - 3mm) / 2);
+        overflow: hidden;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .part-request-print-page .part-request-print-sheet {
+        height: auto;
         max-height: calc((277mm - 3mm) / 2);
         overflow: hidden;
     }
 
-    .part-request-print-sheet__img-wrap {
-        min-height: auto;
-        max-height: calc(297mm - 95mm);
-    }
-
-    .part-request-print-sheet__img-wrap img {
-        max-height: calc(297mm - 95mm);
+    .part-request-print-page .part-request-print-sheet__drawing {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
     }
 
     .part-request-print-page .part-request-print-sheet__img-wrap {
         min-height: 0;
         max-height: none;
+        height: auto;
+        flex: 1 1 auto;
+        overflow: hidden;
     }
 
     .part-request-print-page .part-request-print-sheet__img-wrap img {
+        display: block;
+        width: auto;
         max-width: 100%;
-        max-height: 100%;
+        max-height: 92mm;
+        height: auto;
         object-fit: contain;
+        margin: 0 auto;
+    }
+
+    .part-request-print-page__copy:first-child .part-request-print-sheet__img-wrap img {
+        max-height: 86mm;
     }
 }
 

@@ -66,6 +66,8 @@ const eaiDetailOverlay = typeof createAppOverlayHelper === 'function'
     : null;
 
 let eaiDriveUploadBatch = null;
+let eaiPurchaseRequestsProjectContext = null;
+let eaiPartRequestsProjectContext = null;
 
 function setExternalAssemblyInspectionOverlayMessage(message, status) {
     const createModal = document.getElementById('external-assembly-inspection-create-modal');
@@ -485,16 +487,23 @@ function formatExternalAssemblyInspectionPurchaseTypeLabel(purchaseType) {
 
 function closeExternalAssemblyInspectionPurchaseRequestsModal() {
     toggleModal('eai-purchase-requests-modal', false);
+    eaiPurchaseRequestsProjectContext = null;
 }
 
 async function openExternalAssemblyInspectionPurchaseRequestsModal() {
     if (!eaiDetailState?.inspection?.id) return;
 
+    const projectCtx = await ensureExternalAssemblyInspectionPurchaseRequisitionProjectContext();
+    if (!projectCtx) return;
+
     const inspectionId = Number(eaiDetailState.inspection.id);
     const mount = document.getElementById('eai-purchase-requests-mount');
     const subtitle = document.getElementById('eai-purchase-requests-subtitle');
     if (subtitle) {
-        subtitle.textContent = `Vistoria #${inspectionId}`;
+        subtitle.textContent = formatExternalAssemblyInspectionRequisitionSubtitle(
+            inspectionId,
+            projectCtx.projectLabel
+        );
     }
     if (mount) {
         mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando requisições...</p>';
@@ -523,9 +532,14 @@ async function openExternalAssemblyInspectionPurchaseRequestsModal() {
         return;
     }
 
-    if (!rows.length) {
+    const projectRows = filterExternalAssemblyInspectionRequisitionRowsByProject(
+        rows,
+        projectCtx.orderProjectId
+    );
+
+    if (!projectRows.length) {
         if (mount) {
-            mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Nenhuma requisição de compra vinculada a esta vistoria.</p>';
+            mount.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Nenhuma requisição de compra para o projeto <strong>${escapeHtml(projectCtx.projectLabel)}</strong>.</p>`;
         }
         return;
     }
@@ -544,7 +558,7 @@ async function openExternalAssemblyInspectionPurchaseRequestsModal() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${rows.map(row => `
+                    ${projectRows.map(row => `
                         <tr class="border-t border-slate-100">
                             <td class="px-3 py-2 font-mono">${row.id}</td>
                             <td class="px-3 py-2">${escapeHtml(formatExternalAssemblyInspectionPurchaseTypeLabel(row.purchaseType))}</td>
@@ -584,6 +598,108 @@ function collectExternalAssemblyInspectionOrderProjectIds(detail = eaiDetailStat
     return [...new Set((detail?.projects || [])
         .map(row => Number(row.orderProjectId || row.orderProject?.id))
         .filter(id => id > 0))];
+}
+
+function listExternalAssemblyInspectionOrderProjectOptions(detail = eaiDetailState) {
+    const rows = detail?.projects || [];
+    const inspectionOrderId = Number(detail?.inspection?.orderId || 0);
+    const seen = new Set();
+    const options = [];
+
+    for (const row of rows) {
+        const meta = row.orderProject || {};
+        const orderProjectId = Number(meta.id || row.orderProjectId);
+        if (!orderProjectId || seen.has(orderProjectId)) continue;
+        seen.add(orderProjectId);
+        options.push({
+            orderProjectId,
+            orderId: Number(meta.orderId || row.orderId || inspectionOrderId) || null,
+            projectLabel: getExternalAssemblyInspectionProjectName(meta)
+        });
+    }
+
+    return options;
+}
+
+async function promptExternalAssemblyInspectionRequisitionProject(options, requestKind) {
+    if (!options?.length) return null;
+    if (options.length === 1) return options[0];
+
+    const kindLabel = requestKind === 'part' ? 'peça' : 'compra';
+    const result = await showAppDialog({
+        title: 'Selecionar projeto',
+        message: `Esta vistoria tem mais de um projeto. Selecione um projeto para ver ou criar requisição de ${kindLabel}.`,
+        confirmLabel: 'Continuar',
+        cancelLabel: 'Cancelar',
+        variant: 'confirm',
+        showCancel: true,
+        singleSelect: true,
+        checkboxItems: options.map(opt => ({
+            id: String(opt.orderProjectId),
+            label: opt.projectLabel,
+            checked: false
+        })),
+        validate: (values) => {
+            if (values.length === 1) return true;
+            alertAppDialog('Selecione um projeto.');
+            return false;
+        }
+    });
+
+    if (result === false || result == null || !Array.isArray(result) || !result.length) {
+        return null;
+    }
+
+    const pickedId = Number(result[0]);
+    return options.find(opt => opt.orderProjectId === pickedId) || null;
+}
+
+async function ensureExternalAssemblyInspectionPurchaseRequisitionProjectContext(forceRepick = false) {
+    const options = listExternalAssemblyInspectionOrderProjectOptions();
+    if (!options.length) {
+        alertAppDialog('Nenhum projeto vinculado a esta vistoria.');
+        return null;
+    }
+    if (!forceRepick && eaiPurchaseRequestsProjectContext) {
+        const stillValid = options.some(
+            row => row.orderProjectId === eaiPurchaseRequestsProjectContext.orderProjectId
+        );
+        if (stillValid) return eaiPurchaseRequestsProjectContext;
+    }
+    const picked = await promptExternalAssemblyInspectionRequisitionProject(options, 'purchase');
+    if (picked) eaiPurchaseRequestsProjectContext = picked;
+    return picked;
+}
+
+async function ensureExternalAssemblyInspectionPartRequisitionProjectContext(forceRepick = false) {
+    const options = listExternalAssemblyInspectionOrderProjectOptions();
+    if (!options.length) {
+        alertAppDialog('Nenhum projeto vinculado a esta vistoria.');
+        return null;
+    }
+    if (!forceRepick && eaiPartRequestsProjectContext) {
+        const stillValid = options.some(
+            row => row.orderProjectId === eaiPartRequestsProjectContext.orderProjectId
+        );
+        if (stillValid) return eaiPartRequestsProjectContext;
+    }
+    const picked = await promptExternalAssemblyInspectionRequisitionProject(options, 'part');
+    if (picked) eaiPartRequestsProjectContext = picked;
+    return picked;
+}
+
+function formatExternalAssemblyInspectionRequisitionSubtitle(inspectionId, projectLabel) {
+    const seq = Number(inspectionId);
+    const project = String(projectLabel || '').trim();
+    if (!seq) return project ? `Projeto: ${project}` : 'Vistoria';
+    if (!project) return `Vistoria #${seq}`;
+    return `Vistoria #${seq} · ${project}`;
+}
+
+function filterExternalAssemblyInspectionRequisitionRowsByProject(rows, orderProjectId) {
+    const projectKey = Number(orderProjectId);
+    if (!projectKey) return rows || [];
+    return (rows || []).filter(row => Number(row.orderProjectId) === projectKey);
 }
 
 async function resolveExternalAssemblyInspectionOrderContext(draftInput = {}) {
@@ -723,23 +839,37 @@ async function handleExternalAssemblyInspectionCreatePurchaseRequest() {
         return;
     }
 
+    const projectCtx = eaiPurchaseRequestsProjectContext
+        || await ensureExternalAssemblyInspectionPurchaseRequisitionProjectContext();
+    if (!projectCtx) return;
+
     await openExternalAssemblyInspectionPurchaseRequestFormModal({
-        externalAssemblyInspectionId: eaiDetailState.inspection.id
+        externalAssemblyInspectionId: eaiDetailState.inspection.id,
+        orderProjectId: projectCtx.orderProjectId,
+        orderId: projectCtx.orderId,
+        projectLabel: projectCtx.projectLabel
     });
 }
 
 function closeExternalAssemblyInspectionPartRequestsModal() {
     toggleModal('eai-part-requests-modal', false);
+    eaiPartRequestsProjectContext = null;
 }
 
 async function openExternalAssemblyInspectionPartRequestsModal() {
     if (!eaiDetailState?.inspection?.id) return;
 
+    const projectCtx = await ensureExternalAssemblyInspectionPartRequisitionProjectContext();
+    if (!projectCtx) return;
+
     const inspectionId = Number(eaiDetailState.inspection.id);
     const mount = document.getElementById('eai-part-requests-mount');
     const subtitle = document.getElementById('eai-part-requests-subtitle');
     if (subtitle) {
-        subtitle.textContent = `Vistoria #${inspectionId}`;
+        subtitle.textContent = formatExternalAssemblyInspectionRequisitionSubtitle(
+            inspectionId,
+            projectCtx.projectLabel
+        );
     }
     if (mount) {
         mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Carregando requisições...</p>';
@@ -768,9 +898,14 @@ async function openExternalAssemblyInspectionPartRequestsModal() {
         return;
     }
 
-    if (!rows.length) {
+    const projectRows = filterExternalAssemblyInspectionRequisitionRowsByProject(
+        rows,
+        projectCtx.orderProjectId
+    );
+
+    if (!projectRows.length) {
         if (mount) {
-            mount.innerHTML = '<p class="text-xs text-slate-400 text-center py-8">Nenhuma solicitação de peça vinculada a esta vistoria.</p>';
+            mount.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Nenhuma solicitação de peça para o projeto <strong>${escapeHtml(projectCtx.projectLabel)}</strong>.</p>`;
         }
         return;
     }
@@ -789,7 +924,7 @@ async function openExternalAssemblyInspectionPartRequestsModal() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${rows.map(row => `
+                    ${projectRows.map(row => `
                         <tr class="border-t border-slate-100">
                             <td class="px-3 py-2 font-mono">${row.id}</td>
                             <td class="px-3 py-2">${escapeHtml(row.pieceName || '—')}</td>
@@ -823,8 +958,15 @@ async function handleExternalAssemblyInspectionCreatePartRequest() {
         return;
     }
 
+    const projectCtx = eaiPartRequestsProjectContext
+        || await ensureExternalAssemblyInspectionPartRequisitionProjectContext();
+    if (!projectCtx) return;
+
     const context = await resolveExternalAssemblyInspectionOrderContext({
-        externalAssemblyInspectionId: eaiDetailState.inspection.id
+        externalAssemblyInspectionId: eaiDetailState.inspection.id,
+        orderProjectId: projectCtx.orderProjectId,
+        orderId: projectCtx.orderId,
+        projectLabel: projectCtx.projectLabel
     });
     if (!context) {
         alertAppDialog('Não foi possível identificar pedido e projeto desta vistoria.');

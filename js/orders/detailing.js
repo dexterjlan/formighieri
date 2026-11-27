@@ -1,6 +1,11 @@
 const DETALHAMENTO_STATUS_AGUARDANDO = 'Aguardando Detalhamento';
 const DETALHAMENTO_STATUS_EM_ANDAMENTO = 'Detalhamento';
 const DETALHAMENTO_STATUS_PRONTO = 'Pronto';
+const DETALHAMENTO_STATUS_CANCELADO = 'Cancelado';
+
+function isDetailingStatusCanceled(status) {
+    return String(status || '').trim() === DETALHAMENTO_STATUS_CANCELADO;
+}
 const DETALHAMENTO_PROJECT_STATUS_EM_PRODUCAO = 'Em Produção';
 const DETAILING_TYPE_ASSEMBLY = 'Assembly';
 const DETAILING_TYPE_PAINTING = 'Painting';
@@ -54,7 +59,7 @@ const DETAILING_EMBED_SELECT = '*, designer:appUsers!Detailing_designerId_fkey(i
 
 function pickDetailingFromRows(rows, detailingType = DETAILING_TYPE_ASSEMBLY) {
     const normalized = normalizeDetailingType(detailingType);
-    const list = rows || [];
+    const list = (rows || []).filter(row => !isDetailingStatusCanceled(row?.status));
     const match = list.find(row => normalizeDetailingType(row?.detailingType) === normalized);
     if (match) return match;
     if (normalized === DETAILING_TYPE_ASSEMBLY && list.length === 1) return list[0];
@@ -97,6 +102,7 @@ async function fetchDetailingByOrderProjectId(orderProjectId, options = {}) {
             .maybeSingle();
         if (error?.message?.includes('Detailing')) return null;
         if (error) throw error;
+        if (isDetailingStatusCanceled(data?.status) && !options.includeCanceled) return null;
         return data;
     }
 
@@ -121,7 +127,10 @@ async function fetchDetailingByOrderProjectId(orderProjectId, options = {}) {
 
     if (result.error?.message?.includes('Detailing')) return null;
     if (result.error) throw result.error;
-    if (result.data) return result.data;
+    if (result.data) {
+        if (isDetailingStatusCanceled(result.data.status) && !options.includeCanceled) return null;
+        return result.data;
+    }
 
     const rows = await fetchDetailingsByOrderProjectId(orderProjectId);
     return pickDetailingFromRows(rows, detailingType);
@@ -173,6 +182,8 @@ window.formatDetailingTypeLabel = formatDetailingTypeLabel;
 window.normalizeDetailingType = normalizeDetailingType;
 window.DETAILING_TYPE_ASSEMBLY = DETAILING_TYPE_ASSEMBLY;
 window.DETAILING_TYPE_PAINTING = DETAILING_TYPE_PAINTING;
+window.DETALHAMENTO_STATUS_CANCELADO = DETALHAMENTO_STATUS_CANCELADO;
+window.isDetailingStatusCanceled = isDetailingStatusCanceled;
 
 async function fetchDetalhamentoProjetoPathFromImplantacao(orderProjectId) {
     if (typeof fetchImplantacaoByOrderProjectId !== 'function') return '';
@@ -184,6 +195,32 @@ async function createDetalhamentoRecord(orderProjectId, detailingType = DETAILIN
     const projectFilePath = await fetchDetalhamentoProjetoPathFromImplantacao(orderProjectId);
     const now = new Date().toISOString();
     const normalizedType = normalizeDetailingType(detailingType);
+
+    const { data: existingRow } = await supabaseClient
+        .from('Detailing')
+        .select('id, status')
+        .eq('orderProjectId', orderProjectId)
+        .eq('detailingType', normalizedType)
+        .maybeSingle();
+
+    if (existingRow?.id && isDetailingStatusCanceled(existingRow.status)) {
+        const reactivate = await supabaseClient
+            .from('Detailing')
+            .update({
+                status: DETALHAMENTO_STATUS_AGUARDANDO,
+                projectFilePath: projectFilePath || null,
+                designerId: null,
+                startedAt: null,
+                completedAt: null,
+                updatedAt: now,
+                updatedById: currentUser?.id || null
+            })
+            .eq('id', existingRow.id)
+            .select(DETAILING_EMBED_SELECT)
+            .single();
+        if (reactivate.error) throw reactivate.error;
+        return reactivate.data;
+    }
 
     let payload = {
         orderProjectId,

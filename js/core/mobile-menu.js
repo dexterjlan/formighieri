@@ -64,6 +64,7 @@ const MOBILE_MENU_ICON_PATHS = {
     'settings-nav-lost-reasons': '<circle cx="12" cy="12" r="8"/><path d="M15 9l-6 6M9 9l6 6"/>',
     'settings-nav-project-status': '<path d="M4 7h16M4 12h10M4 17h13"/><circle cx="17" cy="7" r="1.5"/>',
     'settings-nav-create-detailing': '<path d="M12 3v18"/><path d="M5 10h14M5 14h10"/>',
+    'settings-nav-cancel-detailing': '<path d="M6 6l12 12M18 6 6 18"/><path d="M12 3v18" opacity="0.35"/>',
     'settings-nav-compra-status': '<path d="M6 6h15l-1.5 9H7.5L6 6Z"/><path d="M6 6 5 3H2"/><circle cx="9" cy="19" r="1"/><circle cx="17" cy="19" r="1"/>',
     'settings-nav-usuarios': '<path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="8" r="4"/>',
     'btn-programacao-montagem': '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M8 10h8M8 14h5"/>',
